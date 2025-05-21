@@ -25,21 +25,15 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
-from ...modeling_outputs import (
-    BaseModelOutput,
-    ModelOutput,
-)
+from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import auto_docstring, logging
 from .configuration_vits import VitsConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-# General docstring
-_CONFIG_FOR_DOC = "VitsConfig"
 
 
 @dataclass
@@ -68,8 +62,8 @@ class VitsModelOutput(ModelOutput):
             heads.
     """
 
-    waveform: torch.FloatTensor = None
-    sequence_lengths: torch.FloatTensor = None
+    waveform: Optional[torch.FloatTensor] = None
+    sequence_lengths: Optional[torch.FloatTensor] = None
     spectrogram: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -100,9 +94,9 @@ class VitsTextEncoderOutput(ModelOutput):
             heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    prior_means: torch.FloatTensor = None
-    prior_log_variances: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    prior_means: Optional[torch.FloatTensor] = None
+    prior_log_variances: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -461,10 +455,14 @@ class HifiGanResidualBlock(nn.Module):
         return (kernel_size * dilation - dilation) // 2
 
     def apply_weight_norm(self):
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
         for layer in self.convs1:
-            nn.utils.weight_norm(layer)
+            weight_norm(layer)
         for layer in self.convs2:
-            nn.utils.weight_norm(layer)
+            weight_norm(layer)
 
     def remove_weight_norm(self):
         for layer in self.convs1:
@@ -521,8 +519,12 @@ class VitsHifiGan(nn.Module):
             self.cond = nn.Conv1d(config.speaker_embedding_size, config.upsample_initial_channel, 1)
 
     def apply_weight_norm(self):
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
         for layer in self.upsampler:
-            nn.utils.weight_norm(layer)
+            weight_norm(layer)
         for layer in self.resblocks:
             layer.apply_weight_norm()
 
@@ -1131,7 +1133,7 @@ class VitsEncoder(nn.Module):
 
         hidden_states = hidden_states * padding_mask
 
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         for encoder_layer in self.layers:
             if output_hidden_states:
@@ -1141,8 +1143,8 @@ class VitsEncoder(nn.Module):
             dropout_probability = np.random.uniform(0, 1)
 
             skip_the_layer = self.training and (dropout_probability < self.layerdrop)
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
+            if not skip_the_layer or synced_gpus:
+                # under fsdp or deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self._gradient_checkpointing_func(
                         encoder_layer.__call__,
@@ -1237,12 +1239,8 @@ class VitsTextEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class VitsPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = VitsConfig
     base_model_prefix = "vits"
     main_input_name = "input_ids"
@@ -1268,57 +1266,10 @@ class VitsPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-VITS_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`VitsConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-VITS_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-            1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        speaker_id (`int`, *optional*):
-            Which speaker embedding to use. Only used for multispeaker models.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The complete VITS model, for text-to-speech synthesis.",
-    VITS_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The complete VITS model, for text-to-speech synthesis.
+    """
 )
 class VitsModel(VitsPreTrainedModel):
     def __init__(self, config: VitsConfig):
@@ -1350,8 +1301,7 @@ class VitsModel(VitsPreTrainedModel):
     def get_encoder(self):
         return self.text_encoder
 
-    @add_start_docstrings_to_model_forward(VITS_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=VitsModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1363,11 +1313,11 @@ class VitsModel(VitsPreTrainedModel):
         labels: Optional[torch.FloatTensor] = None,
     ) -> Union[Tuple[Any], VitsModelOutput]:
         r"""
+        speaker_id (`int`, *optional*):
+            Which speaker embedding to use. Only used for multispeaker models.
         labels (`torch.FloatTensor` of shape `(batch_size, config.spectrogram_bins, sequence_length)`, *optional*):
             Float values of target spectrogram. Timesteps set to `-100.0` are ignored (masked) for the loss
             computation.
-
-        Returns:
 
         Example:
 
@@ -1397,10 +1347,11 @@ class VitsModel(VitsPreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training of VITS is not supported yet.")
 
+        mask_dtype = self.text_encoder.embed_tokens.weight.dtype
         if attention_mask is not None:
-            input_padding_mask = attention_mask.unsqueeze(-1).float()
+            input_padding_mask = attention_mask.unsqueeze(-1).to(mask_dtype)
         else:
-            input_padding_mask = torch.ones_like(input_ids).unsqueeze(-1).float()
+            input_padding_mask = torch.ones_like(input_ids).unsqueeze(-1).to(mask_dtype)
 
         if self.config.num_speakers > 1 and speaker_id is not None:
             if not 0 <= speaker_id < self.config.num_speakers:
@@ -1478,3 +1429,6 @@ class VitsModel(VitsPreTrainedModel):
             hidden_states=text_encoder_output.hidden_states,
             attentions=text_encoder_output.attentions,
         )
+
+
+__all__ = ["VitsModel", "VitsPreTrainedModel"]

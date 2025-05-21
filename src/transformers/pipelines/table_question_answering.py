@@ -3,6 +3,7 @@ import types
 
 import numpy as np
 
+from ..generation import GenerationConfig
 from ..utils import (
     add_end_docstrings,
     is_tf_available,
@@ -88,6 +89,10 @@ class TableQuestionAnsweringPipeline(Pipeline):
     Table Question Answering pipeline using a `ModelForTableQuestionAnswering`. This pipeline is only available in
     PyTorch.
 
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+
     Example:
 
     ```python
@@ -115,6 +120,12 @@ class TableQuestionAnsweringPipeline(Pipeline):
     """
 
     default_input_names = "table,query"
+
+    _pipeline_calls_generate = True
+    # Make sure the docstring is updated when the default generation config is changed
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+    )
 
     def __init__(self, args_parser=TableQuestionAnsweringArgumentHandler(), *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -358,6 +369,13 @@ class TableQuestionAnsweringPipeline(Pipeline):
         forward_params = {}
         if sequential is not None:
             forward_params["sequential"] = sequential
+
+        if getattr(self, "assistant_model", None) is not None:
+            forward_params["assistant_model"] = self.assistant_model
+        if getattr(self, "assistant_tokenizer", None) is not None:
+            forward_params["tokenizer"] = self.tokenizer
+            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
+
         return preprocess_params, forward_params, {}
 
     def preprocess(self, pipeline_input, sequential=None, padding=True, truncation=None):
@@ -385,6 +403,10 @@ class TableQuestionAnsweringPipeline(Pipeline):
             else:
                 outputs = self.batch_inference(**model_inputs)
         else:
+            # User-defined `generation_config` passed to the pipeline call take precedence
+            if "generation_config" not in generate_kwargs:
+                generate_kwargs["generation_config"] = self.generation_config
+
             outputs = self.model.generate(**model_inputs, **generate_kwargs)
         model_outputs = {"model_inputs": model_inputs, "table": table, "outputs": outputs}
         return model_outputs

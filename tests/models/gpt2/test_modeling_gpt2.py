@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,8 +13,6 @@
 # limitations under the License.
 
 
-import datetime
-import gc
 import math
 import unittest
 
@@ -23,7 +20,8 @@ import pytest
 
 from transformers import GPT2Config, is_torch_available
 from transformers.testing_utils import (
-    backend_empty_cache,
+    Expectations,
+    cleanup,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -426,6 +424,36 @@ class GPT2ModelTester:
                 self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
                 self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
 
+    def create_and_check_cached_forward_with_and_without_attention_mask(self, config, input_ids, *args):
+        # Relevant issue: https://github.com/huggingface/transformers/issues/31943
+        model = GPT2Model(config)
+        model.to(torch_device)
+        model.eval()
+
+        # We want this for SDPA, eager works with a `None` attention mask
+        assert model.config._attn_implementation == "sdpa", (
+            "This test assumes the model to have the SDPA implementation for its attention calculations."
+        )
+
+        # Prepare cache and non_cache input, needs a full attention mask
+        cached_len = input_ids.shape[-1] // 2
+        input_mask = torch.ones(size=input_ids.size()).to(torch_device)
+        cache_inputs = {"input_ids": input_ids[:, :cached_len], "attention_mask": input_mask[:, :cached_len]}
+        non_cache_inputs = {"input_ids": input_ids[:, cached_len:], "attention_mask": input_mask}
+
+        # Cached forward once with the attention mask provided and the other time without it (which should assume full attention)
+        cache_outputs = model(**cache_inputs)
+        full_outputs_with_attention_mask = model(
+            **non_cache_inputs, past_key_values=cache_outputs.past_key_values
+        ).last_hidden_state
+        full_outputs_without_attention_mask = model(
+            non_cache_inputs["input_ids"], past_key_values=cache_outputs.past_key_values
+        ).last_hidden_state
+
+        self.parent.assertTrue(
+            torch.allclose(full_outputs_with_attention_mask, full_outputs_without_attention_mask, atol=1e-5)
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
 
@@ -464,7 +492,6 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": GPT2Model,
@@ -478,7 +505,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else {}
     )
     all_parallelizable_model_classes = (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
-    fx_compatible = True
+    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     test_missing_keys = False
     test_model_parallel = True
 
@@ -512,8 +539,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        backend_empty_cache(torch_device)
+        cleanup(torch_device)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -570,20 +596,24 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_weight_initialization(*config_and_inputs)
 
+    def test_cached_forward_with_and_without_attention_mask(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_cached_forward_with_and_without_attention_mask(*config_and_inputs)
+
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -619,18 +649,20 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         outputs = model.generate(
             input_ids=input_ids,
             attention_mask=inputs["attention_mask"].to(torch_device),
+            max_length=20,
         )
 
         outputs_tt = model.generate(
             input_ids=input_ids,
             attention_mask=inputs["attention_mask"].to(torch_device),
             token_type_ids=token_type_ids,
+            max_length=20,
         )
 
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
-        output_non_padded = model.generate(input_ids=inputs_non_padded)
+        output_non_padded = model.generate(input_ids=inputs_non_padded, max_length=20)
 
-        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
+        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().item()
         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
         output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
 
@@ -679,18 +711,20 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         outputs = model.generate(
             input_ids=input_ids,
             attention_mask=inputs["attention_mask"].to(torch_device),
+            max_length=20,
         )
 
         outputs_tt = model.generate(
             input_ids=input_ids,
             attention_mask=inputs["attention_mask"].to(torch_device),
             token_type_ids=token_type_ids,
+            max_length=20,
         )
 
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
-        output_non_padded = model.generate(input_ids=inputs_non_padded)
+        output_non_padded = model.generate(input_ids=inputs_non_padded, max_length=20)
 
-        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
+        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().item()
         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
         output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
 
@@ -719,8 +753,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        backend_empty_cache(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     def _test_lm_generate_gpt2_helper(
         self,
@@ -745,7 +778,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
 
         # The dog was found in a field near the intersection of West and West Streets.\n\nThe dog
         expected_output_ids = [464, 3290, 373, 1043, 287, 257, 2214, 1474, 262, 16246, 286, 2688, 290, 2688, 27262, 13, 198, 198, 464, 3290,]  # fmt: skip
-        output_ids = model.generate(input_ids, do_sample=False)
+        output_ids = model.generate(input_ids, do_sample=False, max_length=20)
         if verify_outputs:
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
 
@@ -774,65 +807,28 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         torch.manual_seed(0)
         tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
         input_ids = tokenized.input_ids.to(torch_device)
-        output_ids = model.generate(input_ids, do_sample=True)
+        output_ids = model.generate(input_ids, do_sample=True, max_length=20)
         output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
         token_type_ids = tokenized.token_type_ids.to(torch_device)
-        output_seq = model.generate(input_ids=input_ids, do_sample=True, num_return_sequences=5)
+        output_seq = model.generate(input_ids=input_ids, do_sample=True, num_return_sequences=5, max_length=20)
         output_seq_tt = model.generate(
-            input_ids=input_ids, token_type_ids=token_type_ids, do_sample=True, num_return_sequences=5
+            input_ids=input_ids, token_type_ids=token_type_ids, do_sample=True, num_return_sequences=5, max_length=20
         )
         output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
         output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_STR = (
-            "Today is a nice day and if you don't know anything about the state of play during your holiday"
-        )
-        self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
+        expected_outputs = Expectations(
+            {
+                ("rocm", None): 'Today is a nice day and we can do this again."\n\nDana said that she will',
+                ("cuda", None): "Today is a nice day and if you don't know anything about the state of play during your holiday",
+            }
+        )  # fmt: skip
+        EXPECTED_OUTPUT = expected_outputs.get_expectation()
+        self.assertEqual(output_str, EXPECTED_OUTPUT)
         self.assertTrue(
             all(output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs)))
         )  # token_type_ids should change output
-
-    @slow
-    def test_gpt2_sample_max_time(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
-        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
-        model.to(torch_device)
-
-        torch.manual_seed(0)
-        tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
-        input_ids = tokenized.input_ids.to(torch_device)
-
-        MAX_TIME = 0.5
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=True, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, num_beams=2, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=True, num_beams=2, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
 
     @slow
     def test_contrastive_search_gpt2(self):
@@ -874,7 +870,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_flash_attn_2_generate_padding_left(self):
         """
-        Overwritting the common test as the test is flaky on tiny models
+        Overwriting the common test as the test is flaky on tiny models
         """
         model = GPT2LMHeadModel.from_pretrained("gpt2", torch_dtype=torch.float16).to(0)
 

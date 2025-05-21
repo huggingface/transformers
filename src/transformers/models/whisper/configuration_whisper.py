@@ -131,7 +131,7 @@ class WhisperConfig(PretrainedConfig):
             function. NON_SPEECH_TOKENS and NON_SPEECH_TOKENS_MULTI each correspond to the `english-only` and the
             `multilingual` model.
         begin_suppress_tokens (`List[int]`, *optional*, defaults to `[220,50256]`):
-            A list containing tokens that will be supressed at the beginning of the sampling process. Initialized as
+            A list containing tokens that will be suppressed at the beginning of the sampling process. Initialized as
             the token for `" "` (`blank_token_id`) and the `eos_token_id`
         use_weighted_layer_sum (`bool`, *optional*, defaults to `False`):
             Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
@@ -145,8 +145,8 @@ class WhisperConfig(PretrainedConfig):
             Recognition](https://arxiv.org/abs/1904.08779).
         mask_time_prob (`float`, *optional*, defaults to 0.05):
             Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
-            procecure generates `mask_time_prob*len(time_axis)/mask_time_length` independent masks over the axis. If
-            reasoning from the propability of each feature vector to be chosen as the start of the vector span to be
+            procedure generates `mask_time_prob*len(time_axis)/mask_time_length` independent masks over the axis. If
+            reasoning from the probability of each feature vector to be chosen as the start of the vector span to be
             masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease the
             actual percentage of masked vectors. This is only relevant if `apply_spec_augment == True`.
         mask_time_length (`int`, *optional*, defaults to 10):
@@ -157,8 +157,8 @@ class WhisperConfig(PretrainedConfig):
             mask_time_min_masks''
         mask_feature_prob (`float`, *optional*, defaults to 0.0):
             Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
-            masking procecure generates `mask_feature_prob*len(feature_axis)/mask_time_length` independent masks over
-            the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector
+            masking procedure generates `mask_feature_prob*len(feature_axis)/mask_time_length` independent masks over
+            the axis. If reasoning from the probability of each feature vector to be chosen as the start of the vector
             span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
             may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is
             True`.
@@ -189,7 +189,11 @@ class WhisperConfig(PretrainedConfig):
 
     model_type = "whisper"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
+    attribute_map = {
+        "num_key_value_heads": "encoder_attention_heads",
+        "num_attention_heads": "encoder_attention_heads",
+        "hidden_size": "d_model",
+    }
 
     def __init__(
         self,
@@ -338,3 +342,6 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def atol_for_validation(self) -> float:
         return 1e-3
+
+
+__all__ = ["WhisperConfig", "WhisperOnnxConfig"]

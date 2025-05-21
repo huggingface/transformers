@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -87,7 +86,7 @@ class TFBartModelTester:
             clip_value_min=self.eos_token_id + 1,
             clip_value_max=self.vocab_size + 1,
         )
-        # Explicity add "end of sequence" to the inputs
+        # Explicitly add "end of sequence" to the inputs
         eos_tensor = tf.expand_dims(tf.constant([self.eos_token_id] * self.batch_size), 1)
         input_ids = tf.concat([input_ids, eos_tensor], axis=1)
 
@@ -120,11 +119,10 @@ class TFBartModelTester:
 
         input_ids = input_ids[:1, :]
         attention_mask = inputs_dict["attention_mask"][:1, :]
-        head_mask = inputs_dict["head_mask"]
         self.batch_size = 1
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
+        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
         output, past_key_values = outputs.to_tuple()
 
@@ -159,9 +157,6 @@ def prepare_bart_inputs_dict(
     decoder_input_ids,
     attention_mask=None,
     decoder_attention_mask=None,
-    head_mask=None,
-    decoder_head_mask=None,
-    cross_attn_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
@@ -173,20 +168,11 @@ def prepare_bart_inputs_dict(
             ],
             axis=-1,
         )
-    if head_mask is None:
-        head_mask = tf.ones((config.encoder_layers, config.encoder_attention_heads))
-    if decoder_head_mask is None:
-        decoder_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
-    if cross_attn_head_mask is None:
-        cross_attn_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
         "attention_mask": attention_mask,
         "decoder_attention_mask": decoder_attention_mask,
-        "head_mask": head_mask,
-        "decoder_head_mask": decoder_head_mask,
-        "cross_attn_head_mask": cross_attn_head_mask,
     }
 
 
@@ -225,7 +211,7 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
         self.model_tester.check_decoder_model_past_large_inputs(*config_and_inputs)
 
     # TODO (Joao): fix me
-    @unittest.skip("Onnx compliancy broke with TF 2.10")
+    @unittest.skip("Onnx compliance broke with TF 2.10")
     def test_onnx_compliancy(self):
         pass
 

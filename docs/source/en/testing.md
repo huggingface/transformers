@@ -184,16 +184,16 @@ pytest -k "test and ada" tests/test_optimization.py
 Sometimes you need to run `accelerate` tests on your models. For that you can just add `-m accelerate_tests` to your command, if let's say you want to run these tests on `OPT` run:
 
 ```bash
-RUN_SLOW=1 pytest -m accelerate_tests tests/models/opt/test_modeling_opt.py 
+RUN_SLOW=1 pytest -m accelerate_tests tests/models/opt/test_modeling_opt.py
 ```
 
 
-### Run documentation tests 
+### Run documentation tests
 
-In order to test whether the documentation examples are correct, you should check that the `doctests` are passing. 
-As an example, let's use [`WhisperModel.forward`'s docstring](https://github.com/huggingface/transformers/blob/main/src/transformers/models/whisper/modeling_whisper.py#L1017-L1035): 
+In order to test whether the documentation examples are correct, you should check that the `doctests` are passing.
+As an example, let's use [`WhisperModel.forward`'s docstring](https://github.com/huggingface/transformers/blob/1124d95dbb1a3512d3e80791d73d0f541d1d7e9f/src/transformers/models/whisper/modeling_whisper.py#L1591-L1609)
 
-```python 
+```python
 r"""
 Returns:
 
@@ -216,11 +216,11 @@ Example:
 
 ```
 
-Just run the following line to automatically test every docstring example in the desired file: 
-```bash 
+Just run the following line to automatically test every docstring example in the desired file:
+```bash
 pytest --doctest-modules <path_to_file_or_dir>
 ```
-If the file has a markdown extention, you should add the `--doctest-glob="*.md"` argument.
+If the file has a markdown extension, you should add the `--doctest-glob="*.md"` argument.
 
 ### Run only modified tests
 
@@ -428,7 +428,7 @@ pytest --instafail
 
 ### To GPU or not to GPU
 
-On a GPU-enabled setup, to test in CPU-only mode add `CUDA_VISIBLE_DEVICES=""`:
+On a GPU-enabled setup, to test in CPU-only mode add `CUDA_VISIBLE_DEVICES=""` for CUDA GPUs:
 
 ```bash
 CUDA_VISIBLE_DEVICES="" pytest tests/utils/test_logging.py
@@ -441,10 +441,12 @@ second gpu if you have gpus `0` and `1`, you can run:
 CUDA_VISIBLE_DEVICES="1" pytest tests/utils/test_logging.py
 ```
 
+For Intel GPUs, use `ZE_AFFINITY_MASK` instead of `CUDA_VISIBLE_DEVICES` in the above example.
+
 This is handy when you want to run different tasks on different GPUs.
 
 Some tests must be run on CPU-only, others on either CPU or GPU or TPU, yet others on multiple-GPUs. The following skip
-decorators are used to set the requirements of tests CPU/GPU/TPU-wise:
+decorators are used to set the requirements of tests CPU/GPU/XPU/TPU-wise:
 
 - `require_torch` - this test will run only under torch
 - `require_torch_gpu` - as `require_torch` plus requires at least 1 GPU
@@ -881,7 +883,7 @@ code that's buggy causes some bad state that will affect other tests, do not use
 - Here is how to skip whole test unconditionally:
 
 ```python no-style
-@unittest.skip("this bug needs to be fixed")
+@unittest.skip(reason="this bug needs to be fixed")
 def test_feature_x():
 ```
 
@@ -1011,7 +1013,7 @@ slow models to do qualitative testing. To see the use of these simply look for *
 grep tiny tests examples
 ```
 
-Here is a an example of a [script](https://github.com/huggingface/transformers/tree/main/scripts/fsmt/fsmt-make-tiny-model.py) that created the tiny model
+Here is an example of a [script](https://github.com/huggingface/transformers/tree/main/scripts/fsmt/fsmt-make-tiny-model.py) that created the tiny model
 [stas/tiny-wmt19-en-de](https://huggingface.co/stas/tiny-wmt19-en-de). You can easily adjust it to your specific
 model's architecture.
 
@@ -1226,6 +1228,8 @@ import numpy as np
 np.random.seed(seed)
 
 # tf RNG
+import tensorflow as tf 
+
 tf.random.set_seed(seed)
 ```
 

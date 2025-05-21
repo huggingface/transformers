@@ -151,7 +151,7 @@ class CodeGenOnnxConfig(OnnxConfigWithPast):
         self,
         config: PretrainedConfig,
         task: str = "default",
-        patching_specs: List[PatchingSpec] = None,
+        patching_specs: Optional[List[PatchingSpec]] = None,
         use_past: bool = False,
     ):
         super().__init__(config, task=task, patching_specs=patching_specs, use_past=use_past)
@@ -225,3 +225,6 @@ class CodeGenOnnxConfig(OnnxConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
+
+
+__all__ = ["CodeGenConfig", "CodeGenOnnxConfig"]

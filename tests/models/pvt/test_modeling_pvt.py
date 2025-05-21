@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -121,24 +120,6 @@ class PvtModelTester:
         result = model(pixel_values)
         self.parent.assertIsNotNone(result.last_hidden_state)
 
-    def create_and_check_for_image_classification(self, config, pixel_values, labels):
-        config.num_labels = self.type_sequence_label_size
-        model = PvtForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
-
-        # test greyscale images
-        config.num_channels = 1
-        model = PvtForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
-
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
-        result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, labels = config_and_inputs
@@ -166,6 +147,7 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_torchscript = False
     has_attentions = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = PvtModelTester(self)
@@ -178,11 +160,11 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip("Pvt does not use inputs_embeds")
+    @unittest.skip(reason="Pvt does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("Pvt does not have get_input_embeddings method and get_output_embeddings methods")
+    @unittest.skip(reason="Pvt does not have get_input_embeddings method and get_output_embeddings methods")
     def test_model_get_set_embeddings(self):
         pass
 
@@ -235,7 +217,7 @@ class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -277,7 +259,7 @@ class PvtModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-1.4192, -1.9158, -0.9702]).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_model(self):
@@ -300,7 +282,7 @@ class PvtModelIntegrationTest(unittest.TestCase):
             [[-0.3086, 1.0402, 1.1816], [-0.2880, 0.5781, 0.6124], [0.1480, 0.6129, -0.0590]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     @require_accelerate

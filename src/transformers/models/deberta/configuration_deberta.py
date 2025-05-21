@@ -40,7 +40,7 @@ class DebertaConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Arguments:
-        vocab_size (`int`, *optional*, defaults to 30522):
+        vocab_size (`int`, *optional*, defaults to 50265):
             Vocabulary size of the DeBERTa model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`DebertaModel`] or [`TFDebertaModel`].
         hidden_size (`int`, *optional*, defaults to 768):
@@ -62,7 +62,7 @@ class DebertaConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (`int`, *optional*, defaults to 2):
+        type_vocab_size (`int`, *optional*, defaults to 0):
             The vocabulary size of the `token_type_ids` passed when calling [`DebertaModel`] or [`TFDebertaModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -80,8 +80,11 @@ class DebertaConfig(PretrainedConfig):
         pos_att_type (`List[str]`, *optional*):
             The type of relative position attention, it can be a combination of `["p2c", "c2p"]`, e.g. `["p2c"]`,
             `["p2c", "c2p"]`.
-        layer_norm_eps (`float`, optional, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        legacy (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should use the legacy `LegacyDebertaOnlyMLMHead`, which does not work properly
+            for mask infilling tasks.
 
     Example:
 
@@ -121,6 +124,7 @@ class DebertaConfig(PretrainedConfig):
         pos_att_type=None,
         pooler_dropout=0,
         pooler_hidden_act="gelu",
+        legacy=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -151,6 +155,7 @@ class DebertaConfig(PretrainedConfig):
         self.pooler_hidden_size = kwargs.get("pooler_hidden_size", hidden_size)
         self.pooler_dropout = pooler_dropout
         self.pooler_hidden_act = pooler_hidden_act
+        self.legacy = legacy
 
 
 # Copied from transformers.models.deberta_v2.configuration_deberta_v2.DebertaV2OnnxConfig
@@ -189,3 +194,6 @@ class DebertaOnnxConfig(OnnxConfig):
         if self._config.type_vocab_size == 0 and "token_type_ids" in dummy_inputs:
             del dummy_inputs["token_type_ids"]
         return dummy_inputs
+
+
+__all__ = ["DebertaConfig", "DebertaOnnxConfig"]

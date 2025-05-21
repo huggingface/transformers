@@ -15,7 +15,7 @@
 """BARK model generation configuration"""
 
 import copy
-from typing import Dict
+from typing import Dict, Optional
 
 from ...generation.configuration_utils import GenerationConfig
 from ...utils import logging
@@ -56,9 +56,9 @@ class BarkSemanticGenerationConfig(GenerationConfig):
             eos_token_id (`int`, *optional*, defaults to 10_000):
                 The id of the *end-of-sequence* token.
             renormalize_logits (`bool`, *optional*, defaults to `True`):
-                Whether to renormalize the logits after applying all the logits processors or warpers (including the
+                Whether to renormalize the logits after applying all the logits processors (including the
                 custom ones). It's highly recommended to set this flag to `True` as the search algorithms suppose the
-                score logits are normalized but some logit processors or warpers break the normalization.
+                score logits are normalized but some logit processors break the normalization.
             max_new_tokens (`int`, *optional*, defaults to 768):
                 The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
             output_scores (`bool`, *optional*, defaults to `False`):
@@ -143,9 +143,9 @@ class BarkCoarseGenerationConfig(GenerationConfig):
 
         Args:
             renormalize_logits (`bool`, *optional*, defaults to `True`):
-                Whether to renormalize the logits after applying all the logits processors or warpers (including the
+                Whether to renormalize the logits after applying all the logits processors (including the
                 custom ones). It's highly recommended to set this flag to `True` as the search algorithms suppose the
-                score logits are normalized but some logit processors or warpers break the normalization.
+                score logits are normalized but some logit processors break the normalization.
             output_scores (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
             return_dict_in_generate (`bool`, *optional*, defaults to `False`):
@@ -240,15 +240,14 @@ class BarkFineGenerationConfig(GenerationConfig):
 
 class BarkGenerationConfig(GenerationConfig):
     model_type = "bark"
-    is_composition = True
 
     # TODO (joao): nested from_dict
 
     def __init__(
         self,
-        semantic_config: Dict = None,
-        coarse_acoustics_config: Dict = None,
-        fine_acoustics_config: Dict = None,
+        semantic_config: Optional[Dict] = None,
+        coarse_acoustics_config: Optional[Dict] = None,
+        fine_acoustics_config: Optional[Dict] = None,
         sample_rate=24_000,
         codebook_size=1024,
         **kwargs,

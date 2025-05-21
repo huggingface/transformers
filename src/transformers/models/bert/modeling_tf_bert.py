@@ -161,10 +161,10 @@ class TFBertEmbeddings(keras.layers.Layer):
 
     def call(
         self,
-        input_ids: tf.Tensor = None,
-        position_ids: tf.Tensor = None,
-        token_type_ids: tf.Tensor = None,
-        inputs_embeds: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         past_key_values_length=0,
         training: bool = False,
     ) -> tf.Tensor:
@@ -1048,8 +1048,8 @@ class TFBertForPreTrainingOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    prediction_logits: tf.Tensor = None
-    seq_relationship_logits: tf.Tensor = None
+    prediction_logits: Optional[tf.Tensor] = None
+    seq_relationship_logits: Optional[tf.Tensor] = None
     hidden_states: Optional[Union[Tuple[tf.Tensor], tf.Tensor]] = None
     attentions: Optional[Union[Tuple[tf.Tensor], tf.Tensor]] = None
 
@@ -1291,7 +1291,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
 
             - 0 indicates sequence B is a continuation of sequence A,
             - 1 indicates sequence B is a random sequence.
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
 
         Return:
@@ -2108,3 +2108,19 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFBertEmbeddings",
+    "TFBertForMaskedLM",
+    "TFBertForMultipleChoice",
+    "TFBertForNextSentencePrediction",
+    "TFBertForPreTraining",
+    "TFBertForQuestionAnswering",
+    "TFBertForSequenceClassification",
+    "TFBertForTokenClassification",
+    "TFBertLMHeadModel",
+    "TFBertMainLayer",
+    "TFBertModel",
+    "TFBertPreTrainedModel",
+]

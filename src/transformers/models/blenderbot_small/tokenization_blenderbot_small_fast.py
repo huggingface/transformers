@@ -99,17 +99,5 @@ class BlenderbotSmallTokenizerFast(PreTrainedTokenizerFast):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
-    @property
-    # Copied from transformers.models.blenderbot.tokenization_blenderbot.BlenderbotTokenizer.default_chat_template
-    def default_chat_template(self):
-        """
-        A very simple chat template that just adds whitespace between messages.
-        """
-        return (
-            "{% for message in messages %}"
-            "{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}"
-            "{{ message['content'] }}"
-            "{% if not loop.last %}{{ '  ' }}{% endif %}"
-            "{% endfor %}"
-            "{{ eos_token }}"
-        )
+
+__all__ = ["BlenderbotSmallTokenizerFast"]

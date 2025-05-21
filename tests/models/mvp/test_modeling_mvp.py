@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -418,7 +417,6 @@ class MvpModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (MvpForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": MvpModel,
@@ -441,10 +439,17 @@ class MvpModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         if (
-            pipeline_test_casse_name == "QAPipelineTests"
+            pipeline_test_case_name == "QAPipelineTests"
             and tokenizer_name is not None
             and not tokenizer_name.endswith("Fast")
         ):
@@ -564,7 +569,7 @@ class MvpModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor(
             [[0.3461, 0.3624, 0.2689], [0.3461, 0.3624, 0.2689], [-0.1562, 1.1637, -0.3784]], device=torch_device
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_summarization_inference(self):
@@ -796,7 +801,6 @@ class MvpStandaloneDecoderModelTester:
 @require_torch
 class MvpStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (MvpDecoder, MvpForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (MvpForCausalLM,) if is_torch_available() else ()
     fx_comptatible = True
     test_pruning = False
     is_encoder_decoder = False
@@ -818,6 +822,6 @@ class MvpStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, uni
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
 
+    @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         return

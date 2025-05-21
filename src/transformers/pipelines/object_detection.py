@@ -74,7 +74,7 @@ class ObjectDetectionPipeline(Pipeline):
         Detect objects (bounding boxes & classes) in the image(s) passed as inputs.
 
         Args:
-            images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            inputs (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing an HTTP(S) link pointing to an image
@@ -100,13 +100,17 @@ class ObjectDetectionPipeline(Pipeline):
             - **score** (`float`) -- The score attributed by the model for that label.
             - **box** (`List[Dict[str, int]]`) -- The bounding box of detected object in image's original size.
         """
-
+        # After deprecation of this is completed, remove the default `None` value for `images`
+        if "images" in kwargs and "inputs" not in kwargs:
+            kwargs["inputs"] = kwargs.pop("images")
         return super().__call__(*args, **kwargs)
 
     def preprocess(self, image, timeout=None):
         image = load_image(image, timeout=timeout)
         target_size = torch.IntTensor([[image.height, image.width]])
         inputs = self.image_processor(images=[image], return_tensors="pt")
+        if self.framework == "pt":
+            inputs = inputs.to(self.torch_dtype)
         if self.tokenizer is not None:
             inputs = self.tokenizer(text=inputs["words"], boxes=inputs["boxes"], return_tensors="pt")
         inputs["target_size"] = target_size

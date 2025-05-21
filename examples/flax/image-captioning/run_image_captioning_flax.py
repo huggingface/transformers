@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -195,9 +194,9 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-                "execute code present on the Hub on your local machine."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -458,6 +457,7 @@ def main():
             keep_in_memory=False,
             data_dir=data_args.data_dir,
             token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         data_files = {}
@@ -832,8 +832,7 @@ def main():
             # No need to shuffle here
             loader = data_loader(rng, _ds, batch_size=batch_size, shuffle=False)
 
-            for batch in loader:
-                yield batch
+            yield from loader
 
     # Metric
     metric = evaluate.load("rouge", cache_dir=model_args.cache_dir)

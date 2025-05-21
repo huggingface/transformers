@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -47,10 +46,10 @@ from transformers import (
     Trainer,
     TrainingArguments,
     default_data_collator,
-    is_deepspeed_zero3_enabled,
-    is_torch_tpu_available,
+    is_torch_xla_available,
     set_seed,
 )
+from transformers.integrations import is_deepspeed_zero3_enabled
 from transformers.testing_utils import CaptureLogger
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
@@ -58,7 +57,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.42.0.dev0")
+check_min_version("4.53.0.dev0")
 
 require_version("datasets>=2.14.0", "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt")
 
@@ -127,9 +126,9 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-                "execute code present on the Hub on your local machine."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -265,8 +264,7 @@ class DataTrainingArguments:
         default="<fim_pad>",
         metadata={
             "help": (
-                "Fill-in-Middle Pad token. Used only when 'truncate_or_pad' is set to True. "
-                "Defaults to '<fim_pad>'."
+                "Fill-in-Middle Pad token. Used only when 'truncate_or_pad' is set to True. Defaults to '<fim_pad>'."
             )
         },
     )
@@ -382,6 +380,7 @@ def main():
             cache_dir=model_args.cache_dir,
             token=model_args.token,
             streaming=data_args.streaming,
+            trust_remote_code=model_args.trust_remote_code,
         )
         if "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(
@@ -391,6 +390,7 @@ def main():
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
                 streaming=data_args.streaming,
+                trust_remote_code=model_args.trust_remote_code,
             )
             raw_datasets["train"] = load_dataset(
                 data_args.dataset_name,
@@ -399,6 +399,7 @@ def main():
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
                 streaming=data_args.streaming,
+                trust_remote_code=model_args.trust_remote_code,
             )
     else:
         data_files = {}
@@ -511,7 +512,7 @@ def main():
             attn_implementation=model_args.attn_implementation,
         )
         n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
-        logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
+        logger.info(f"Training new model from scratch - Total size={n_params / 2**20:.2f}M params")
 
     # Add the new FIM tokens to the tokenizer and resize model's vocab embeddings
     special_tokens = [data_args.fim_prefix_token, data_args.fim_middle_token, data_args.fim_suffix_token]
@@ -523,7 +524,7 @@ def main():
     if torch.cuda.is_availble():
         pad_factor = 8
 
-    elif is_torch_tpu_available():
+    elif is_torch_xla_available(check_is_tpu=True):
         pad_factor = 128
 
     # Add the new tokens to the tokenizer
@@ -549,7 +550,7 @@ def main():
                 covariance_matrix=1e-5 * sigma,
             )
             new_token_embeddings = torch.stack(
-                tuple((dist.sample() for _ in range(len(special_tokens)))),
+                tuple(dist.sample() for _ in range(len(special_tokens))),
                 dim=0,
             )
     else:
@@ -569,7 +570,7 @@ def main():
             covariance_matrix=1e-5 * sigma,
         )
         new_token_embeddings = torch.stack(
-            tuple((dist.sample() for _ in range(len(special_tokens)))),
+            tuple(dist.sample() for _ in range(len(special_tokens))),
             dim=0,
         )
 
@@ -790,12 +791,16 @@ def main():
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
         eval_dataset=eval_dataset if training_args.do_eval else None,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         # Data collator will default to DataCollatorWithPadding, so we change it.
         data_collator=default_data_collator,
-        compute_metrics=compute_metrics if training_args.do_eval and not is_torch_tpu_available() else None,
+        compute_metrics=compute_metrics
+        if training_args.do_eval and not is_torch_xla_available(check_is_tpu=True)
+        else None,
         preprocess_logits_for_metrics=(
-            preprocess_logits_for_metrics if training_args.do_eval and not is_torch_tpu_available() else None
+            preprocess_logits_for_metrics
+            if training_args.do_eval and not is_torch_xla_available(check_is_tpu=True)
+            else None
         ),
     )
 

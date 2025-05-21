@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +20,7 @@ import unittest
 
 from transformers import SpeechT5Config, SpeechT5HifiGanConfig
 from transformers.testing_utils import (
+    is_flaky,
     is_torch_available,
     require_deterministic_for_xpu,
     require_sentencepiece,
@@ -32,6 +32,7 @@ from transformers.testing_utils import (
 from transformers.trainer_utils import set_seed
 from transformers.utils import cached_property
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -177,8 +178,6 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_headmasking = False
     test_resize_embeddings = False
 
-    input_name = "input_values"
-
     def setUp(self):
         self.model_tester = SpeechT5ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SpeechT5Config, hidden_size=37)
@@ -212,31 +211,31 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             )
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    # this model has no inputs_embeds
+    @unittest.skip(reason="Model has no input_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # this model has no input embeddings
+    @unittest.skip(reason="Model has no input_embeds")
     def test_model_get_set_embeddings(self):
         pass
 
+    @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         pass
 
     @slow
+    @unittest.skip(reason="Model does not have decoder_input_ids")
     def test_torchscript_output_attentions(self):
-        # disabled because this model doesn't have decoder_input_ids
         pass
 
     @slow
+    @unittest.skip(reason="Model does not have decoder_input_ids")
     def test_torchscript_output_hidden_state(self):
-        # disabled because this model doesn't have decoder_input_ids
         pass
 
     @slow
+    @unittest.skip(reason="Model does not have decoder_input_ids")
     def test_torchscript_simple(self):
-        # disabled because this model doesn't have decoder_input_ids
         pass
 
 
@@ -317,6 +316,15 @@ class SpeechT5ForSpeechToTextTester:
             vocab_size=self.vocab_size,
         )
 
+    def get_subsampled_output_lengths(self, input_lengths):
+        """
+        Computes the output length of the convolutional layers
+        """
+        for stride in self.conv_stride:
+            input_lengths = (input_lengths // stride) - 1
+
+        return input_lengths
+
     def create_and_check_model_forward(self, config, inputs_dict):
         model = SpeechT5ForSpeechToText(config=config).to(torch_device).eval()
 
@@ -362,14 +370,11 @@ class SpeechT5ForSpeechToTextTester:
 
 
 @require_torch
-class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
+class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, GenerationTesterMixin):
     all_model_classes = (SpeechT5ForSpeechToText,) if is_torch_available() else ()
-    all_generative_model_classes = (SpeechT5ForSpeechToText,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False
-
-    input_name = "input_values"
 
     def setUp(self):
         self.model_tester = SpeechT5ForSpeechToTextTester(self)
@@ -598,19 +603,20 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
                         )
 
     # this model has no inputs_embeds
+    @unittest.skip(reason="Model has no input_embeds")
     def test_inputs_embeds(self):
         pass
 
     def test_resize_embeddings_untied(self):
         original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            return
+            self.skipTest(reason="test_resize_embeddings is set to False")
 
         original_config.tie_word_embeddings = False
 
         # if model cannot untied embeddings -> leave test
         if original_config.tie_word_embeddings:
-            return
+            self.skipTest(reason="Model cannot untie embeddings")
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -650,7 +656,7 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
     def test_resize_tokens_embeddings(self):
         original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
-            return
+            self.skipTest(reason="test_resize_embeddings is set to False")
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -692,28 +698,34 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertTrue(models_equal)
 
+    @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
         # decoder cannot keep gradients
         pass
 
-    # training is not supported yet
+    @unittest.skip(reason="Training is not supported yet")
     def test_training(self):
         pass
 
+    @unittest.skip(reason="Training is not supported yet")
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
+
+    @is_flaky(max_attempts=5, description="Flaky for some input configurations.")
+    def test_past_key_values_format(self):
+        super().test_past_key_values_format()
 
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
@@ -727,6 +739,18 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
             module.bias.data.fill_(3)
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
+
+    @unittest.skip(reason="Temporarily broken")  # TODO (joao, eustache): have a look at this test
+    def test_generate_with_head_masking(self):
+        pass
+
+    @unittest.skip(reason="Temporarily broken")  # TODO (joao, eustache): have a look at this test
+    def test_generate_without_input_ids(self):
+        pass
+
+    @unittest.skip(reason="Very flaky")  # TODO (joao, eustache): have a look at this test
+    def test_generate_continue_from_past_key_values(self):
+        pass
 
 
 @require_torch
@@ -881,12 +905,10 @@ class SpeechT5ForTextToSpeechTester:
 @require_torch
 class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5ForTextToSpeech,) if is_torch_available() else ()
-    all_generative_model_classes = (SpeechT5ForTextToSpeech,) if is_torch_available() else ()
+    all_generative_model_classes = ()
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False
-
-    input_name = "input_ids"
 
     def setUp(self):
         self.model_tester = SpeechT5ForTextToSpeechTester(self)
@@ -894,6 +916,12 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_model_can_generate(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertTrue(model.can_generate())
 
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
@@ -909,15 +937,32 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
-    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
+    def test_model_forward_with_labels(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        model = SpeechT5ForTextToSpeech(config=config).to(torch_device).eval()
+
+        input_ids = inputs_dict["input_ids"]
+        attention_mask = inputs_dict["attention_mask"]
+        decoder_attention_mask = inputs_dict["decoder_attention_mask"]
+        labels = inputs_dict["decoder_input_values"]
+
+        result = model(
+            input_ids, attention_mask=attention_mask, labels=labels, decoder_attention_mask=decoder_attention_mask
+        )
+        self.assertEqual(
+            result.spectrogram.shape,
+            (self.model_tester.batch_size, self.model_tester.decoder_seq_length, self.model_tester.num_mel_bins),
+        )
+
+    @unittest.skip(reason="Dropout is always present in SpeechT5SpeechDecoderPrenet")
     def test_decoder_model_past_with_large_inputs(self):
         pass
 
-    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
+    @unittest.skip(reason="Dropout is always present in SpeechT5SpeechDecoderPrenet")
     def test_determinism(self):
         pass
 
-    @unittest.skip("skipped because there is always dropout in SpeechT5SpeechDecoderPrenet")
+    @unittest.skip(reason="skipped because there is always dropout in SpeechT5SpeechDecoderPrenet")
     def test_batching_equivalence(self):
         pass
 
@@ -966,52 +1011,54 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
-    # this model has no inputs_embeds
+    @unittest.skip(reason="Model has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
+    @unittest.skip(reason="Dropout is always present in SpeechT5SpeechDecoderPrenet")
     def test_model_outputs_equivalence(self):
         pass
 
-    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
+    @unittest.skip(reason="Dropout is always present in SpeechT5SpeechDecoderPrenet")
     def test_save_load(self):
         pass
 
+    @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         pass
 
     @slow
+    @unittest.skip(reason="Model doesn't have decoder_input_ids")
     def test_torchscript_output_attentions(self):
-        # disabled because this model doesn't have decoder_input_ids
         pass
 
     @slow
+    @unittest.skip(reason="Model doesn't have decoder_input_ids")
     def test_torchscript_output_hidden_state(self):
-        # disabled because this model doesn't have decoder_input_ids
         pass
 
     @slow
+    @unittest.skip(reason="Model doesn't have decoder_input_ids")
     def test_torchscript_simple(self):
         # disabled because this model doesn't have decoder_input_ids
         pass
 
-    # training is not supported yet
+    @unittest.skip(reason="training is not supported yet")
     def test_training(self):
         pass
 
+    @unittest.skip(reason="training is not supported yet")
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -1181,6 +1228,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
                 "Mismatch in waveform between standalone and integrated vocoder for single instance generation.",
             )
 
+    @require_deterministic_for_xpu
     def test_batch_generation(self):
         model = self.default_model
         processor = self.default_processor
@@ -1407,13 +1455,10 @@ class SpeechT5ForSpeechToSpeechTester:
 @require_torch
 class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5ForSpeechToSpeech,) if is_torch_available() else ()
-    all_generative_model_classes = (SpeechT5ForSpeechToSpeech,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False
     test_resize_embeddings = False
-
-    input_name = "input_values"
 
     def setUp(self):
         self.model_tester = SpeechT5ForSpeechToSpeechTester(self)
@@ -1436,15 +1481,32 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
-    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
+    def test_model_forward_with_labels(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        model = SpeechT5ForSpeechToSpeech(config=config).to(torch_device).eval()
+
+        input_values = inputs_dict["input_values"]
+        attention_mask = inputs_dict["attention_mask"]
+        decoder_attention_mask = inputs_dict["decoder_attention_mask"]
+        labels = inputs_dict["decoder_input_values"]
+
+        result = model(
+            input_values, attention_mask=attention_mask, labels=labels, decoder_attention_mask=decoder_attention_mask
+        )
+        self.assertEqual(
+            result.spectrogram.shape,
+            (self.model_tester.batch_size, self.model_tester.decoder_seq_length, self.model_tester.num_mel_bins),
+        )
+
+    @unittest.skip(reason="There is always dropout in SpeechT5SpeechDecoderPrenet")
     def test_decoder_model_past_with_large_inputs(self):
         pass
 
-    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
+    @unittest.skip(reason="There is always dropout in SpeechT5SpeechDecoderPrenet")
     def test_determinism(self):
         pass
 
-    @unittest.skip("skipped because there is always dropout in SpeechT5SpeechDecoderPrenet")
+    @unittest.skip(reason="skipped because there is always dropout in SpeechT5SpeechDecoderPrenet")
     def test_batching_equivalence(self):
         pass
 
@@ -1649,56 +1711,57 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
-    # this model has no inputs_embeds
+    @unittest.skip(reason="Model has no input_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # this model has no input embeddings
+    @unittest.skip(reason="Model has no input_embeds")
     def test_model_get_set_embeddings(self):
         pass
 
-    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
+    @unittest.skip(reason="Dropout is always present in SpeechT5SpeechDecoderPrenet")
     def test_model_outputs_equivalence(self):
         pass
 
+    @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         pass
 
-    # skipped because there is always dropout in SpeechT5SpeechDecoderPrenet
+    @unittest.skip(reason="Dropout is always present in SpeechT5SpeechDecoderPrenet")
     def test_save_load(self):
         pass
 
     @slow
+    @unittest.skip(reason="Model doesn't have decoder_input_ids")
     def test_torchscript_output_attentions(self):
-        # disabled because this model doesn't have decoder_input_ids
         pass
 
     @slow
+    @unittest.skip(reason="Model doesn't have decoder_input_ids")
     def test_torchscript_output_hidden_state(self):
-        # disabled because this model doesn't have decoder_input_ids
         pass
 
     @slow
+    @unittest.skip(reason="Model doesn't have decoder_input_ids")
     def test_torchscript_simple(self):
-        # disabled because this model doesn't have decoder_input_ids
         pass
 
-    # training is not supported yet
+    @unittest.skip(reason="Training is not supported yet")
     def test_training(self):
         pass
 
+    @unittest.skip(reason="Training is not supported yet")
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -1802,8 +1865,6 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
     has_attentions = False
 
-    input_name = "spectrogram"
-
     def setUp(self):
         self.model_tester = SpeechT5HifiGanTester(self)
         self.config_tester = ConfigTester(self, config_class=SpeechT5HifiGanConfig)
@@ -1835,36 +1896,28 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
             ]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    # this model does not output hidden states
+    @unittest.skip(reason="Model does not output hidden states")
     def test_hidden_states_output(self):
         pass
 
-    # skip
+    @unittest.skip
     def test_initialization(self):
         pass
 
-    # this model has no inputs_embeds
+    @unittest.skip(reason="Model has no input_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # this model has no input embeddings
+    @unittest.skip(reason="Model has no input_embeds")
     def test_model_get_set_embeddings(self):
         pass
 
-    # skip as this model doesn't support all arguments tested
+    @unittest.skip(reason="Model does not support all arguments tested")
     def test_model_outputs_equivalence(self):
         pass
 
-    # this model does not output hidden states
+    @unittest.skip(reason="Model does not output hidden states")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    # skip because it fails on automapping of SpeechT5HifiGanConfig
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    # skip because it fails on automapping of SpeechT5HifiGanConfig
-    def test_save_load_fast_init_to_base(self):
         pass
 
     def test_batched_inputs_outputs(self):

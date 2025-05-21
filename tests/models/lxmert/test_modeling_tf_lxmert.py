@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,7 +33,7 @@ if is_tf_available():
     from transformers.models.lxmert.modeling_tf_lxmert import TFLxmertForPreTraining, TFLxmertModel
 
 
-class TFLxmertModelTester(object):
+class TFLxmertModelTester:
     def __init__(
         self,
         parent,

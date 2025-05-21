@@ -16,6 +16,12 @@ rendered properly in your Markdown viewer.
 
 # SEW
 
+<div class="flex flex-wrap space-x-1">
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+</div>
+
 ## Overview
 
 SEW (Squeezed and Efficient Wav2Vec) was proposed in [Performance-Efficiency Trade-offs in Unsupervised Pre-training
@@ -39,6 +45,9 @@ This model was contributed by [anton-l](https://huggingface.co/anton-l).
 - SEW is a speech model that accepts a float array corresponding to the raw waveform of the speech signal.
 - SEWForCTC is fine-tuned using connectionist temporal classification (CTC) so the model output has to be decoded using
   [`Wav2Vec2CTCTokenizer`].
+
+> [!NOTE]
+> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
 
 ## Resources
 

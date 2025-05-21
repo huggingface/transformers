@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,6 +22,7 @@ import numpy as np
 from tests.test_modeling_common import floats_tensor
 from transformers import OneFormerConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
+    is_flaky,
     require_timm,
     require_torch,
     require_torch_accelerator,
@@ -172,7 +172,7 @@ class OneFormerModelTester:
 
             output = model(pixel_values=pixel_values, task_inputs=task_inputs, pixel_mask=pixel_mask)
             output = model(pixel_values, task_inputs=task_inputs, output_hidden_states=True)
-        # the correct shape of output.transformer_decoder_hidden_states ensure the correcteness of the
+        # the correct shape of output.transformer_decoder_hidden_states ensure the correctness of the
         # encoder and pixel decoder
         self.parent.assertEqual(
             output.transformer_decoder_object_queries.shape,
@@ -247,9 +247,16 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        if pipeline_test_casse_name == "FeatureExtractionPipelineTests":
+        if pipeline_test_case_name == "FeatureExtractionPipelineTests":
             return True
 
         return False
@@ -260,6 +267,12 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @is_flaky(
+        description="The `attention_mask` computed with `< 0.5` in `OneFormerTransformerDecoder.forward_prediction_heads` is sensitive to input values."
+    )
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
 
     def test_oneformer_model(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -377,7 +390,7 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
         # only OneFormerForUniversalSegmentation has the loss
         model_class = self.all_model_classes[1]
         (
@@ -515,32 +528,22 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        expected_slice_hidden_state = torch.tensor(
-            [[0.2723, 0.8280, 0.6026], [1.2699, 1.1257, 1.1444], [1.1344, 0.6153, 0.4177]]
-        ).to(torch_device)
-        self.assertTrue(
-            torch.allclose(
-                outputs.encoder_hidden_states[-1][0, 0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE
-            )
-        )
+        expected_slice_hidden_state = [[0.2723, 0.8280, 0.6026], [1.2699, 1.1257, 1.1444], [1.1344, 0.6153, 0.4177]]
+        expected_slice_hidden_state = torch.tensor(expected_slice_hidden_state).to(torch_device)
+        slice_hidden_state = outputs.encoder_hidden_states[-1][0, 0, :3, :3]
+        torch.testing.assert_close(slice_hidden_state, expected_slice_hidden_state, atol=TOLERANCE, rtol=TOLERANCE)
 
-        expected_slice_hidden_state = torch.tensor(
-            [[1.0581, 1.2276, 1.2003], [1.1903, 1.2925, 1.2862], [1.158, 1.2559, 1.3216]]
-        ).to(torch_device)
-        self.assertTrue(
-            torch.allclose(
-                outputs.pixel_decoder_hidden_states[0][0, 0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE
-            )
-        )
+        expected_slice_hidden_state = [[1.0581, 1.2276, 1.2003], [1.1903, 1.2925, 1.2862], [1.158, 1.2559, 1.3216]]
+        expected_slice_hidden_state = torch.tensor(expected_slice_hidden_state).to(torch_device)
+        slice_hidden_state = outputs.pixel_decoder_hidden_states[0][0, 0, :3, :3]
+        torch.testing.assert_close(slice_hidden_state, expected_slice_hidden_state, atol=TOLERANCE, rtol=TOLERANCE)
 
-        expected_slice_hidden_state = torch.tensor(
-            [[3.0668, -1.1833, -5.1103], [3.344, -3.362, -5.1101], [2.6017, -4.3613, -4.1444]]
-        ).to(torch_device)
-        self.assertTrue(
-            torch.allclose(
-                outputs.transformer_decoder_class_predictions[0, :3, :3], expected_slice_hidden_state, atol=TOLERANCE
-            )
-        )
+        # fmt: off
+        expected_slice_hidden_state = [[3.0668, -1.1833, -5.1103], [3.344, -3.362, -5.1101], [2.6017, -4.3613, -4.1444]]
+        expected_slice_hidden_state = torch.tensor(expected_slice_hidden_state).to(torch_device)
+        slice_hidden_state = outputs.transformer_decoder_class_predictions[0, :3, :3]
+        torch.testing.assert_close(slice_hidden_state, expected_slice_hidden_state, atol=TOLERANCE, rtol=TOLERANCE)
+        # fmt: on
 
     def test_inference_universal_segmentation_head(self):
         model = OneFormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
@@ -560,19 +563,19 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
             masks_queries_logits.shape,
             (1, model.config.num_queries, inputs_shape[-2] // 4, (inputs_shape[-1] + 2) // 4),
         )
-        expected_slice = [[[3.1848, 4.2141, 4.1993], [2.9000, 3.5721, 3.6603], [2.5358, 3.0883, 3.6168]]]
+        expected_slice = [[3.1848, 4.2141, 4.1993], [2.9000, 3.5721, 3.6603], [2.5358, 3.0883, 3.6168]]
         expected_slice = torch.tensor(expected_slice).to(torch_device)
-        self.assertTrue(torch.allclose(masks_queries_logits[0, 0, :3, :3], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(masks_queries_logits[0, 0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
+
         # class_queries_logits
         class_queries_logits = outputs.class_queries_logits
         self.assertEqual(
             class_queries_logits.shape,
             (1, model.config.num_queries, model.config.num_labels + 1),
         )
-        expected_slice = torch.tensor(
-            [[3.0668, -1.1833, -5.1103], [3.3440, -3.3620, -5.1101], [2.6017, -4.3613, -4.1444]]
-        ).to(torch_device)
-        self.assertTrue(torch.allclose(class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
+        expected_slice = [[3.0668, -1.1833, -5.1103], [3.3440, -3.3620, -5.1101], [2.6017, -4.3613, -4.1444]]
+        expected_slice = torch.tensor(expected_slice).to(torch_device)
+        torch.testing.assert_close(class_queries_logits[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     @require_torch_accelerator
     @require_torch_fp16

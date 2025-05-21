@@ -406,16 +406,5 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
         """
         return token_ids_0 + [self.eos_token_id]
 
-    @property
-    def default_chat_template(self):
-        """
-        A very simple chat template that just adds whitespace between messages.
-        """
-        return (
-            "{% for message in messages %}"
-            "{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}"
-            "{{ message['content'] }}"
-            "{% if not loop.last %}{{ '  ' }}{% endif %}"
-            "{% endfor %}"
-            "{{ eos_token }}"
-        )
+
+__all__ = ["BlenderbotTokenizer"]

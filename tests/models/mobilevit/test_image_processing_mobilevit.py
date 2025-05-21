@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,7 +32,7 @@ if is_vision_available():
     from transformers import MobileViTImageProcessor
 
 
-class MobileViTImageProcessingTester(unittest.TestCase):
+class MobileViTImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -87,7 +86,7 @@ class MobileViTImageProcessingTester(unittest.TestCase):
 
 
 def prepare_semantic_single_inputs():
-    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
 
     image = Image.open(dataset[0]["file"])
     map = Image.open(dataset[1]["file"])
@@ -96,7 +95,7 @@ def prepare_semantic_single_inputs():
 
 
 def prepare_semantic_batch_inputs():
-    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+    dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
 
     image1 = Image.open(dataset[0]["file"])
     map1 = Image.open(dataset[1]["file"])
@@ -112,6 +111,7 @@ class MobileViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = MobileViTImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = MobileViTImageProcessingTester(self)
 
     @property

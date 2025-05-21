@@ -37,7 +37,7 @@ if is_flax_available():
 
 
 # Copied from tests.models.roberta.test_modeling_flax_roberta.FlaxRobertaModelTester with Roberta->RobertaPreLayerNorm
-class FlaxRobertaPreLayerNormModelTester(unittest.TestCase):
+class FlaxRobertaPreLayerNormModelTester:
     def __init__(
         self,
         parent,

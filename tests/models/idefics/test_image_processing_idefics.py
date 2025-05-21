@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +15,8 @@
 
 import unittest
 
+import numpy as np
+
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
@@ -26,7 +27,7 @@ if is_torch_available():
     import torch
 
 if is_torchvision_available():
-    import torchvision.transforms as transforms
+    from torchvision import transforms
 
 if is_vision_available():
     from PIL import Image
@@ -34,7 +35,7 @@ if is_vision_available():
     from transformers import IdeficsImageProcessor
 
 
-class IdeficsImageProcessingTester(unittest.TestCase):
+class IdeficsImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -75,6 +76,8 @@ class IdeficsImageProcessingTester(unittest.TestCase):
             image = image_inputs[0]
             if isinstance(image, Image.Image):
                 w, h = image.size
+            elif isinstance(image, np.ndarray):
+                h, w = image.shape[0], image.shape[1]
             else:
                 h, w = image.shape[1], image.shape[2]
             scale = size / min(w, h)
@@ -127,6 +130,7 @@ class IdeficsImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = IdeficsImageProcessor if is_vision_available() else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = IdeficsImageProcessingTester(self)
 
     @property
@@ -186,18 +190,18 @@ class IdeficsImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         torch.testing.assert_close(pixel_values_transform_implied, pixel_values_transform_supplied, rtol=0.0, atol=0.0)
 
-    @unittest.skip("not supported")
+    @unittest.skip(reason="not supported")
     def test_call_numpy(self):
         pass
 
-    @unittest.skip("not supported")
+    @unittest.skip(reason="not supported")
     def test_call_numpy_4_channels(self):
         pass
 
-    @unittest.skip("not supported")
+    @unittest.skip(reason="not supported")
     def test_call_pil(self):
         pass
 
-    @unittest.skip("not supported")
+    @unittest.skip(reason="not supported")
     def test_call_pytorch(self):
         pass

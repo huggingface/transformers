@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -84,7 +83,7 @@ class TFMobileBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
 
         return inputs_dict
 
-    class TFMobileBertModelTester(object):
+    class TFMobileBertModelTester:
         def __init__(
             self,
             parent,

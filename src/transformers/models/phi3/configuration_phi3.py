@@ -47,7 +47,7 @@ class Phi3Config(PretrainedConfig):
         num_key_value_heads (`int`, *optional*):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
@@ -78,9 +78,11 @@ class Phi3Config(PretrainedConfig):
             The base period of the RoPE embeddings.
         rope_scaling (`dict`, *optional*):
             The scaling strategy for the RoPE embeddings. If `None`, no scaling is applied. If a dictionary, it must
-            contain the following keys: `type`, `short_factor` and `long_factor`. The `type` must be either `su` or `yarn` and
+            contain the following keys: `type`, `short_factor` and `long_factor`. The `type` must be `longrope` and
             the `short_factor` and `long_factor` must be lists of numbers with the same length as the hidden size
             divided by the number of attention heads divided by 2.
+        partial_rotary_factor (`float`, *optional*, defaults to 1.0):
+            Percentage of the query and keys which will have rotary embedding. Must be between 0.0 and 1.0.
         bos_token_id (`int`, *optional*, defaults to 1):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 32000):
@@ -107,6 +109,17 @@ class Phi3Config(PretrainedConfig):
 
     model_type = "phi3"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.self_attn.qkv_proj": "colwise_rep",  # we need to replicate here due to the slicing of qkv
+        "layers.*.self_attn.o_proj": "rowwise_rep",  # we need to replicate here due to the slicing of qkv
+        "layers.*.mlp.gate_up_proj": "colwise_rep",  # we need to replicate here due to the `chunk` operation
+        "layers.*.mlp.down_proj": "rowwise_rep",  # we need to replicate here due to the `chunk` operation
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
 
     def __init__(
         self,
@@ -128,6 +141,7 @@ class Phi3Config(PretrainedConfig):
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
+        partial_rotary_factor=1.0,
         bos_token_id=1,
         eos_token_id=32000,
         pad_token_id=32000,
@@ -155,6 +169,8 @@ class Phi3Config(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
+        self.partial_rotary_factor = partial_rotary_factor
+        self._rope_scaling_adjustment()
         self._rope_scaling_validation()
         self.sliding_window = sliding_window
 
@@ -165,6 +181,19 @@ class Phi3Config(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+    def _rope_scaling_adjustment(self):
+        """
+        Adjust the `type` of the `rope_scaling` configuration for backward compatibility.
+        """
+        if self.rope_scaling is None:
+            return
+
+        rope_scaling_type = self.rope_scaling.get("type", None)
+
+        # For backward compatibility if previous version used "su" or "yarn"
+        if rope_scaling_type is not None and rope_scaling_type in ["su", "yarn"]:
+            self.rope_scaling["type"] = "longrope"
 
     def _rope_scaling_validation(self):
         """
@@ -181,8 +210,8 @@ class Phi3Config(PretrainedConfig):
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_short_factor = self.rope_scaling.get("short_factor", None)
         rope_scaling_long_factor = self.rope_scaling.get("long_factor", None)
-        if rope_scaling_type is None or rope_scaling_type not in ["su", "yarn"]:
-            raise ValueError(f"`rope_scaling`'s type field must be one of ['su', 'yarn'], got {rope_scaling_type}")
+        if rope_scaling_type is None or rope_scaling_type not in ["longrope"]:
+            raise ValueError(f"`rope_scaling`'s type field must be one of ['longrope'], got {rope_scaling_type}")
         if not (
             isinstance(rope_scaling_short_factor, list)
             and all(isinstance(x, (int, float)) for x in rope_scaling_short_factor)
@@ -190,9 +219,10 @@ class Phi3Config(PretrainedConfig):
             raise ValueError(
                 f"`rope_scaling`'s short_factor field must be a list of numbers, got {rope_scaling_short_factor}"
             )
-        if not len(rope_scaling_short_factor) == self.hidden_size // self.num_attention_heads // 2:
+        rotary_ndims = int(self.hidden_size // self.num_attention_heads * self.partial_rotary_factor)
+        if not len(rope_scaling_short_factor) == rotary_ndims // 2:
             raise ValueError(
-                f"`rope_scaling`'s short_factor field must have length {self.hidden_size // self.num_attention_heads // 2}, got {len(rope_scaling_short_factor)}"
+                f"`rope_scaling`'s short_factor field must have length {rotary_ndims // 2}, got {len(rope_scaling_short_factor)}"
             )
         if not (
             isinstance(rope_scaling_long_factor, list)
@@ -201,7 +231,10 @@ class Phi3Config(PretrainedConfig):
             raise ValueError(
                 f"`rope_scaling`'s long_factor field must be a list of numbers, got {rope_scaling_long_factor}"
             )
-        if not len(rope_scaling_long_factor) == self.hidden_size // self.num_attention_heads // 2:
+        if not len(rope_scaling_long_factor) == rotary_ndims // 2:
             raise ValueError(
-                f"`rope_scaling`'s long_factor field must have length {self.hidden_size // self.num_attention_heads // 2}, got {len(rope_scaling_long_factor)}"
+                f"`rope_scaling`'s long_factor field must have length {rotary_ndims // 2}, got {len(rope_scaling_long_factor)}"
             )
+
+
+__all__ = ["Phi3Config"]

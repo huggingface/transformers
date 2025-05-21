@@ -14,12 +14,11 @@
 # limitations under the License.
 """Image processor class for Segformer."""
 
-import warnings
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_processing_utils import INIT_SERVICE_KWARGS, BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
@@ -32,10 +31,18 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_torch_available, is_torch_tensor, is_vision_available, logging
+from ...utils import (
+    TensorType,
+    filter_out_non_signature_kwargs,
+    is_torch_available,
+    is_torch_tensor,
+    is_vision_available,
+    logging,
+)
+from ...utils.deprecation import deprecate_kwarg
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
@@ -48,6 +55,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class SegformerImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Segformer image processor.
@@ -86,10 +94,12 @@ class SegformerImageProcessor(BaseImageProcessor):
 
     model_input_names = ["pixel_values"]
 
+    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.41.0")
+    @filter_out_non_signature_kwargs(extra=INIT_SERVICE_KWARGS)
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -99,14 +109,6 @@ class SegformerImageProcessor(BaseImageProcessor):
         do_reduce_labels: bool = False,
         **kwargs,
     ) -> None:
-        if "reduce_labels" in kwargs:
-            warnings.warn(
-                "The `reduce_labels` parameter is deprecated and will be removed in a future version. Please use "
-                "`do_reduce_labels` instead.",
-                FutureWarning,
-            )
-            do_reduce_labels = kwargs.pop("reduce_labels")
-
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 512, "width": 512}
         size = get_size_dict(size)
@@ -119,33 +121,15 @@ class SegformerImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_reduce_labels = do_reduce_labels
-        self._valid_processor_keys = [
-            "images",
-            "segmentation_maps",
-            "do_resize",
-            "size",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "do_reduce_labels",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
-        Overrides the `from_dict` method from the base class to make sure `do_reduce_labels` is updated if image
-        processor is created using from_dict and kwargs e.g. `SegformerImageProcessor.from_pretrained(checkpoint,
-        reduce_labels=True)`
+        Overrides the `from_dict` method from the base class to save support of deprecated `reduce_labels` in old configs
         """
         image_processor_dict = image_processor_dict.copy()
-        if "reduce_labels" in kwargs:
-            image_processor_dict["reduce_labels"] = kwargs.pop("reduce_labels")
+        if "reduce_labels" in image_processor_dict:
+            image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
         return super().from_dict(image_processor_dict, **kwargs)
 
     # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
@@ -237,12 +221,12 @@ class SegformerImageProcessor(BaseImageProcessor):
     def _preprocess_image(
         self,
         image: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -251,7 +235,7 @@ class SegformerImageProcessor(BaseImageProcessor):
         """Preprocesses a single image."""
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
-        if is_scaled_image(image) and do_rescale:
+        if do_rescale and is_scaled_image(image):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -278,9 +262,9 @@ class SegformerImageProcessor(BaseImageProcessor):
     def _preprocess_mask(
         self,
         segmentation_map: ImageInput,
-        do_reduce_labels: bool = None,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
+        do_reduce_labels: Optional[bool] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[Dict[str, int]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
         """Preprocesses a single mask."""
@@ -320,6 +304,8 @@ class SegformerImageProcessor(BaseImageProcessor):
         """
         return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
 
+    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.41.0")
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -336,7 +322,6 @@ class SegformerImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -398,8 +383,6 @@ class SegformerImageProcessor(BaseImageProcessor):
 
         images = make_list_of_images(images)
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
         if segmentation_maps is not None:
             segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
 
@@ -454,7 +437,7 @@ class SegformerImageProcessor(BaseImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->Segformer
-    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple]] = None):
         """
         Converts the output of [`SegformerForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
@@ -496,3 +479,6 @@ class SegformerImageProcessor(BaseImageProcessor):
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
         return semantic_segmentation
+
+
+__all__ = ["SegformerImageProcessor"]

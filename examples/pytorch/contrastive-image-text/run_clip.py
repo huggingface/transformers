@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -54,7 +53,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.42.0.dev0")
+check_min_version("4.53.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/contrastive-image-text/requirements.txt")
 
@@ -99,9 +98,9 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-                "execute code present on the Hub on your local machine."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -140,10 +139,6 @@ class DataTrainingArguments:
     validation_file: Optional[str] = field(
         default=None,
         metadata={"help": "An optional input evaluation data file (a jsonlines file)."},
-    )
-    test_file: Optional[str] = field(
-        default=None,
-        metadata={"help": "An optional input testing data file (a jsonlines file)."},
     )
     max_seq_length: Optional[int] = field(
         default=128,
@@ -190,9 +185,6 @@ class DataTrainingArguments:
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
                 assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
-            if self.validation_file is not None:
-                extension = self.validation_file.split(".")[-1]
-                assert extension == "json", "`validation_file` should be a json file."
 
 
 dataset_name_mapping = {
@@ -305,6 +297,7 @@ def main():
             keep_in_memory=False,
             data_dir=data_args.data_dir,
             token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         data_files = {}
@@ -314,9 +307,6 @@ def main():
         if data_args.validation_file is not None:
             data_files["validation"] = data_args.validation_file
             extension = data_args.validation_file.split(".")[-1]
-        if data_args.test_file is not None:
-            data_files["test"] = data_args.test_file
-            extension = data_args.test_file.split(".")[-1]
         dataset = load_dataset(
             extension,
             data_files=data_files,
@@ -386,8 +376,6 @@ def main():
         column_names = dataset["train"].column_names
     elif training_args.do_eval:
         column_names = dataset["validation"].column_names
-    elif training_args.do_predict:
-        column_names = dataset["test"].column_names
     else:
         logger.info("There is nothing to do. Please pass `do_train`, `do_eval` and/or `do_predict`.")
         return
@@ -488,29 +476,6 @@ def main():
 
         # Transform images on the fly as doing it on the whole dataset takes too much time.
         eval_dataset.set_transform(transform_images)
-
-    if training_args.do_predict:
-        if "test" not in dataset:
-            raise ValueError("--do_predict requires a test dataset")
-        test_dataset = dataset["test"]
-        if data_args.max_eval_samples is not None:
-            max_eval_samples = min(len(test_dataset), data_args.max_eval_samples)
-            test_dataset = test_dataset.select(range(max_eval_samples))
-
-        test_dataset = test_dataset.filter(
-            filter_corrupt_images, batched=True, num_proc=data_args.preprocessing_num_workers
-        )
-        test_dataset = test_dataset.map(
-            function=tokenize_captions,
-            batched=True,
-            num_proc=data_args.preprocessing_num_workers,
-            remove_columns=[col for col in column_names if col != image_column],
-            load_from_cache_file=not data_args.overwrite_cache,
-            desc="Running tokenizer on test dataset",
-        )
-
-        # Transform images on the fly as doing it on the whole dataset takes too much time.
-        test_dataset.set_transform(transform_images)
 
     # 8. Initialize our trainer
     trainer = Trainer(

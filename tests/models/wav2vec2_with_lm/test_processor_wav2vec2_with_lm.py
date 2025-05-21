@@ -463,7 +463,9 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
     def test_word_time_stamp_integration(self):
         import torch
 
-        ds = load_dataset("mozilla-foundation/common_voice_11_0", "en", split="train", streaming=True)
+        ds = load_dataset(
+            "mozilla-foundation/common_voice_11_0", "en", split="train", streaming=True, trust_remote_code=True
+        )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
         ds_iter = iter(ds)
         sample = next(ds_iter)
@@ -504,5 +506,5 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         expected_end_tensor = torch.tensor([0.7800, 1.1000, 1.6600, 1.9200, 2.0400, 2.8000, 3.3000, 3.8800, 4.2800])
         # fmt: on
 
-        self.assertTrue(torch.allclose(start_times, expected_start_tensor, atol=0.01))
-        self.assertTrue(torch.allclose(end_times, expected_end_tensor, atol=0.01))
+        torch.testing.assert_close(start_times, expected_start_tensor, rtol=0.01, atol=0.01)
+        torch.testing.assert_close(end_times, expected_end_tensor, rtol=0.01, atol=0.01)

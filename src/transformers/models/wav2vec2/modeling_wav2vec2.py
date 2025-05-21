@@ -21,13 +21,14 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.fsdp import is_fsdp_managed_module
+from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_outputs import (
     BaseModelOutput,
     CausalLMOutput,
@@ -38,19 +39,14 @@ from ...modeling_outputs import (
     XVectorOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import is_torch_greater_or_equal_than_1_13
 from ...utils import (
     ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     cached_file,
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
+    check_torch_load_is_safe,
     is_peft_available,
     is_safetensors_available,
     logging,
-    replace_return_docstrings,
 )
 from .configuration_wav2vec2 import Wav2Vec2Config
 
@@ -62,51 +58,14 @@ if is_safetensors_available():
     from safetensors.torch import load_file as safe_load_file
 
 
-if is_flash_attn_2_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
+if is_flash_attn_available():
+    from ...modeling_flash_attention_utils import _flash_attention_forward
+
 
 logger = logging.get_logger(__name__)
 
 
 _HIDDEN_STATES_START_POSITION = 2
-
-# General docstring
-_CONFIG_FOR_DOC = "Wav2Vec2Config"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
-_EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
-
-# CTC docstring
-_CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
-_CTC_EXPECTED_LOSS = 53.48
-
-# Audio class docstring
-_SEQ_CLASS_CHECKPOINT = "superb/wav2vec2-base-superb-ks"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
-_SEQ_CLASS_EXPECTED_LOSS = 6.54
-
-# Frame class docstring
-_FRAME_CLASS_CHECKPOINT = "anton-l/wav2vec2-base-superb-sd"
-_FRAME_EXPECTED_OUTPUT = [0, 0]
-
-# Speaker Verification docstring
-_XVECTOR_CHECKPOINT = "anton-l/wav2vec2-base-superb-sv"
-_XVECTOR_EXPECTED_OUTPUT = 0.98
-
-
-# Copied from transformers.models.llama.modeling_llama._get_unpad_data
-def _get_unpad_data(attention_mask):
-    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
-    return (
-        indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
-    )
 
 
 @dataclass
@@ -142,9 +101,9 @@ class Wav2Vec2ForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    projected_states: torch.FloatTensor = None
-    projected_quantized_states: torch.FloatTensor = None
-    codevector_perplexity: torch.FloatTensor = None
+    projected_states: Optional[torch.FloatTensor] = None
+    projected_quantized_states: Optional[torch.FloatTensor] = None
+    codevector_perplexity: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     contrastive_loss: Optional[torch.FloatTensor] = None
@@ -206,7 +165,7 @@ def _compute_mask_indices(
 
     # compute number of masked spans in batch
     input_lengths = (
-        attention_mask.sum(-1).detach().tolist()
+        attention_mask.detach().sum(-1).tolist()
         if attention_mask is not None
         else [sequence_length for _ in range(batch_size)]
     )
@@ -506,7 +465,7 @@ class Wav2Vec2FeatureProjection(nn.Module):
         return hidden_states, norm_hidden_states
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Wav2Vec2
+# Copied from transformers.models.hubert.modeling_hubert.HubertAttention with Hubert->Wav2Vec2
 class Wav2Vec2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -665,7 +624,7 @@ class Wav2Vec2Attention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Copied from transformers.models.bart.modeling_bart.BartFlashAttention2 with Bart->Wav2Vec2
+# Copied from transformers.models.hubert.modeling_hubert.HubertFlashAttention2 with Hubert->Wav2Vec2
 class Wav2Vec2FlashAttention2(Wav2Vec2Attention):
     """
     Wav2Vec2 flash attention module. This module inherits from `Wav2Vec2Attention` as the weights of the module stays
@@ -673,14 +632,13 @@ class Wav2Vec2FlashAttention2(Wav2Vec2Attention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
 
     def _reshape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
@@ -694,10 +652,6 @@ class Wav2Vec2FlashAttention2(Wav2Vec2Attention):
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        # Wav2Vec2FlashAttention2 attention does not support output_attentions
-        if output_attentions:
-            raise ValueError("Wav2Vec2FlashAttention2 attention does not support output_attentions")
-
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
@@ -773,8 +727,15 @@ class Wav2Vec2FlashAttention2(Wav2Vec2Attention):
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
 
-        attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len, dropout=self.dropout
+        attn_output = _flash_attention_forward(
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            q_len,
+            dropout=self.dropout if self.training else 0.0,
+            is_causal=self.is_causal,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
 
         attn_output = attn_output.reshape(bsz, q_len, -1)
@@ -785,108 +746,9 @@ class Wav2Vec2FlashAttention2(Wav2Vec2Attention):
 
         return attn_output, attn_weights, past_key_value
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
-    def _flash_attention_forward(
-        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
-    ):
-        """
-        Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
-        first unpad the input, then computes the attention scores and pad the final attention scores.
-
-        Args:
-            query_states (`torch.Tensor`):
-                Input query states to be passed to Flash Attention API
-            key_states (`torch.Tensor`):
-                Input key states to be passed to Flash Attention API
-            value_states (`torch.Tensor`):
-                Input value states to be passed to Flash Attention API
-            attention_mask (`torch.Tensor`):
-                The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
-                position of padding tokens and 1 for the position of non-padding tokens.
-            dropout (`float`):
-                Attention dropout
-            softmax_scale (`float`, *optional*):
-                The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
-        """
-        if not self._flash_attn_uses_top_left_mask:
-            causal = self.is_causal
-        else:
-            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
-            causal = self.is_causal and query_length != 1
-
-        # Contains at least one padding token in the sequence
-        if attention_mask is not None:
-            batch_size = query_states.shape[0]
-            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-                query_states, key_states, value_states, attention_mask, query_length
-            )
-
-            cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-            max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
-
-            attn_output_unpad = flash_attn_varlen_func(
-                query_states,
-                key_states,
-                value_states,
-                cu_seqlens_q=cu_seqlens_q,
-                cu_seqlens_k=cu_seqlens_k,
-                max_seqlen_q=max_seqlen_in_batch_q,
-                max_seqlen_k=max_seqlen_in_batch_k,
-                dropout_p=dropout,
-                softmax_scale=softmax_scale,
-                causal=causal,
-            )
-
-            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
-        else:
-            attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
-            )
-
-        return attn_output
-
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
-    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
-        indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
-        batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
-
-        key_layer = index_first_axis(
-            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
-        )
-        value_layer = index_first_axis(
-            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
-        )
-        if query_length == kv_seq_len:
-            query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
-            )
-            cu_seqlens_q = cu_seqlens_k
-            max_seqlen_in_batch_q = max_seqlen_in_batch_k
-            indices_q = indices_k
-        elif query_length == 1:
-            max_seqlen_in_batch_q = 1
-            cu_seqlens_q = torch.arange(
-                batch_size + 1, dtype=torch.int32, device=query_layer.device
-            )  # There is a memcpy here, that is very bad.
-            indices_q = cu_seqlens_q[:-1]
-            query_layer = query_layer.squeeze(1)
-        else:
-            # The -q_len: slice assumes left padding.
-            attention_mask = attention_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
-
-        return (
-            query_layer,
-            key_layer,
-            value_layer,
-            indices_q,
-            (cu_seqlens_q, cu_seqlens_k),
-            (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
-        )
-
 
 class Wav2Vec2SdpaAttention(Wav2Vec2Attention):
-    # Copied from transformers.models.bart.modeling_bart.BartSdpaAttention.forward with Bart->Wav2Vec2
+    # Copied from transformers.models.hubert.modeling_hubert.HubertSdpaAttention.forward with Hubert->Wav2Vec2
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -897,10 +759,10 @@ class Wav2Vec2SdpaAttention(Wav2Vec2Attention):
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
-        if output_attentions or layer_head_mask is not None:
+        if output_attentions:
             # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
-                "Wav2Vec2Model is using Wav2Vec2SdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` or `layer_head_mask` not None. Falling back to the manual attention"
+                "Wav2Vec2Model is using Wav2Vec2SdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` . Falling back to the manual attention"
                 ' implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
             )
             return super().forward(
@@ -908,7 +770,6 @@ class Wav2Vec2SdpaAttention(Wav2Vec2Attention):
                 key_value_states=key_value_states,
                 past_key_value=past_key_value,
                 attention_mask=attention_mask,
-                layer_head_mask=layer_head_mask,
                 output_attentions=output_attentions,
             )
 
@@ -1145,7 +1006,7 @@ class Wav2Vec2Encoder(nn.Module):
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         for layer in self.layers:
             if output_hidden_states:
@@ -1155,8 +1016,8 @@ class Wav2Vec2Encoder(nn.Module):
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
+            if not skip_the_layer or synced_gpus:
+                # under fsdp or deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self._gradient_checkpointing_func(
                         layer.__call__,
@@ -1215,7 +1076,7 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
         if attention_mask is not None:
             # make sure padded tokens are not attended to
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-            hidden_states[~expand_attention_mask] = 0
+            hidden_states = hidden_states * expand_attention_mask.to(dtype=hidden_states.dtype)
             if self._use_flash_attention_2:
                 # 2d mask is passed through the layers
                 attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
@@ -1231,7 +1092,7 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
         hidden_states = hidden_states + position_embeddings
         hidden_states = self.dropout(hidden_states)
 
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         for layer in self.layers:
             if output_hidden_states:
@@ -1241,8 +1102,8 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
+            if not skip_the_layer or synced_gpus:
+                # under fsdp or deepspeed zero3 all gpus must run in sync
                 # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
                 if self.gradient_checkpointing and self.training:
                     layer_outputs = self._gradient_checkpointing_func(
@@ -1427,12 +1288,8 @@ class Wav2Vec2AttnAdapterLayer(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 class Wav2Vec2PreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = Wav2Vec2Config
     base_model_prefix = "wav2vec2"
     main_input_name = "input_values"
@@ -1585,7 +1442,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
                 <Tip>
 
-                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
 
                 </Tip>
 
@@ -1697,16 +1554,19 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
                     cache_dir=cache_dir,
                 )
 
-                weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
+                check_torch_load_is_safe()
                 state_dict = torch.load(
                     weight_path,
                     map_location="cpu",
-                    **weights_only_kwarg,
+                    weights_only=True,
                 )
 
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
                 # to the original exception.
+                raise
+
+            except ValueError:
                 raise
 
             except Exception:
@@ -1739,71 +1599,11 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         state_dict = {k: v.to(adapter_weights[k]) for k, v in state_dict.items()}
         self.load_state_dict(state_dict, strict=False)
 
-        # set target language corectly
+        # set target language correctly
         self.target_lang = target_lang
 
 
-WAV_2_VEC_2_START_DOCSTRING = r"""
-    Wav2Vec2 was proposed in [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech
-    Representations](https://arxiv.org/abs/2006.11477) by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael
-    Auli.
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving etc.).
-
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`Wav2Vec2Config`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
-    Args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
-        attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-            1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-            <Tip warning={true}>
-
-            `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
-            True`. For all models whose processor has `config.return_attention_mask == False`, such as
-            [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base-960h), `attention_mask` should **not** be
-            passed to avoid degraded performance when doing batched inference. For such models `input_values` should
-            simply be padded with 0 and passed without `attention_mask`. Be aware that these models also yield slightly
-            different results depending on whether `input_values` is padded or not.
-
-            </Tip>
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare Wav2Vec2 Model transformer outputting raw hidden-states without any specific head on top.",
-    WAV_2_VEC_2_START_DOCSTRING,
-)
+@auto_docstring
 class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
     def __init__(self, config: Wav2Vec2Config):
         super().__init__(config)
@@ -1890,14 +1690,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         return hidden_states
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Wav2Vec2BaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1907,6 +1700,11 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Wav2Vec2BaseModelOutput]:
+        r"""
+        mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
+            masked extracted features in *config.proj_codevector_dim* space.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1951,7 +1749,11 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         )
 
 
-@add_start_docstrings("""Wav2Vec2 Model with a quantizer and `VQ` head on top.""", WAV_2_VEC_2_START_DOCSTRING)
+@auto_docstring(
+    custom_intro="""
+    Wav2Vec2 Model with a quantizer and `VQ` head on top.
+    """
+)
 class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
     def __init__(self, config: Wav2Vec2Config):
         super().__init__(config)
@@ -2012,8 +1814,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         logits = logits / temperature
         return logits
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Wav2Vec2ForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -2031,8 +1832,6 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         sampled_negative_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_negatives)`, *optional*):
             Indices indicating which quantized target vectors are used as negative sampled vectors in contrastive loss.
             Required input for pre-training.
-
-        Returns:
 
         Example:
 
@@ -2102,7 +1901,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         extract_features = self.dropout_features(outputs[1])
 
         if attention_mask is not None:
-            # compute reduced attention_mask correponding to feature vectors
+            # compute reduced attention_mask corresponding to feature vectors
             attention_mask = self._get_feature_vector_attention_mask(
                 extract_features.shape[1], attention_mask, add_adapter=False
             )
@@ -2175,7 +1974,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         )
 
 
-@add_start_docstrings("""Wav2Vec2 Model with a `language modeling` head on top.""", WAV_2_VEC_2_START_DOCSTRING)
+@auto_docstring
 class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2191,7 +1990,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_values: torch.FloatTensor,
@@ -2221,18 +2020,19 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         return MaskedLMOutput(logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
 
 
-@add_start_docstrings(
-    """Wav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
-    WAV_2_VEC_2_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    Wav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
     """
+)
+class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
+    def __init__(self, config, target_lang: Optional[str] = None):
+        r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
             adapter.<lang>.bin. Only relevant when using an instance of [`Wav2Vec2ForCTC`] with adapters. Uses 'eng' by
             default.
-    """,
-)
-class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
-    def __init__(self, config, target_lang: Optional[str] = None):
+        """
         super().__init__(config)
 
         self.wav2vec2 = Wav2Vec2Model(config)
@@ -2303,14 +2103,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         for param in self.wav2vec2.parameters():
             param.requires_grad = False
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_CTC_EXPECTED_OUTPUT,
-        expected_loss=_CTC_EXPECTED_LOSS,
-    )
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -2382,12 +2175,11 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Wav2Vec2 Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
     SUPERB Keyword Spotting.
-    """,
-    WAV_2_VEC_2_START_DOCSTRING,
+    """
 )
 class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
     def __init__(self, config):
@@ -2434,15 +2226,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         for param in self.wav2vec2.parameters():
             param.requires_grad = False
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_SEQ_CLASS_CHECKPOINT,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
-    )
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -2453,6 +2237,11 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, SequenceClassifierOutput]:
         r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -2483,7 +2272,8 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
             pooled_output = hidden_states.mean(dim=1)
         else:
             padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
-            hidden_states[~padding_mask] = 0.0
+            expand_padding_mask = padding_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            hidden_states[~expand_padding_mask] = 0.0
             pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
 
         logits = self.classifier(pooled_output)
@@ -2505,12 +2295,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    Wav2Vec2 Model with a frame classification head on top for tasks like Speaker Diarization.
-    """,
-    WAV_2_VEC_2_START_DOCSTRING,
-)
+@auto_docstring
 class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2555,14 +2340,7 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
         for param in self.wav2vec2.parameters():
             param.requires_grad = False
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_FRAME_CLASS_CHECKPOINT,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_FRAME_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -2573,6 +2351,11 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -2655,6 +2438,7 @@ class TDNNLayer(nn.Module):
         if is_peft_available():
             from peft.tuners.lora import LoraLayer
 
+        if is_peft_available():
             if isinstance(self.kernel, LoraLayer):
                 warnings.warn(
                     "Detected LoRA on TDNNLayer. LoRA weights won't be applied due to optimization. "
@@ -2671,11 +2455,10 @@ class TDNNLayer(nn.Module):
         return hidden_states
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Wav2Vec2 Model with an XVector feature extraction head on top for tasks like Speaker Verification.
-    """,
-    WAV_2_VEC_2_START_DOCSTRING,
+    """
 )
 class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
     def __init__(self, config):
@@ -2739,14 +2522,7 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
 
         return input_lengths
 
-    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_XVECTOR_CHECKPOINT,
-        output_type=XVectorOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_XVECTOR_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -2757,6 +2533,11 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
         labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, XVectorOutput]:
         r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -2821,3 +2602,15 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "Wav2Vec2ForAudioFrameClassification",
+    "Wav2Vec2ForCTC",
+    "Wav2Vec2ForMaskedLM",
+    "Wav2Vec2ForPreTraining",
+    "Wav2Vec2ForSequenceClassification",
+    "Wav2Vec2ForXVector",
+    "Wav2Vec2Model",
+    "Wav2Vec2PreTrainedModel",
+]

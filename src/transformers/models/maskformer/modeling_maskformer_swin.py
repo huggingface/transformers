@@ -29,6 +29,7 @@ from ...file_utils import ModelOutput
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
+from ...utils import torch_int
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_maskformer_swin import MaskFormerSwinConfig
 
@@ -60,8 +61,8 @@ class MaskFormerSwinModelOutputWithPooling(ModelOutput):
             heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    pooler_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states_spatial_dimensions: Tuple[Tuple[int, int]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -92,7 +93,7 @@ class MaskFormerSwinBaseModelOutput(ModelOutput):
             heads.
     """
 
-    last_hidden_state: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states_spatial_dimensions: Tuple[Tuple[int, int]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -162,38 +163,48 @@ class MaskFormerSwinEmbeddings(nn.Module):
 
         self.norm = nn.LayerNorm(config.embed_dim)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.patch_size = config.patch_size
 
+    # Copied from transformers.models.vit.modeling_vit.ViTEmbeddings.interpolate_pos_encoding
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
-        resolution images.
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing.
 
-        Source:
-        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
         """
 
         num_patches = embeddings.shape[1] - 1
         num_positions = self.position_embeddings.shape[1] - 1
-        if num_patches == num_positions and height == width:
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
             return self.position_embeddings
-        class_pos_embed = self.position_embeddings[:, 0]
+
+        class_pos_embed = self.position_embeddings[:, :1]
         patch_pos_embed = self.position_embeddings[:, 1:]
+
         dim = embeddings.shape[-1]
-        h0 = height // self.config.patch_size
-        w0 = width // self.config.patch_size
-        # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
-        h0, w0 = h0 + 0.1, w0 + 0.1
-        patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed,
-            scale_factor=(h0 / math.sqrt(num_positions), w0 / math.sqrt(num_positions)),
+            size=(new_height, new_width),
             mode="bicubic",
             align_corners=False,
         )
+
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
     def forward(self, pixel_values, interpolate_pos_encoding):
         _, num_channels, height, width = pixel_values.shape
@@ -509,16 +520,14 @@ class MaskFormerSwinOutput(nn.Module):
 
 
 class MaskFormerSwinLayer(nn.Module):
-    def __init__(self, config, dim, input_resolution, num_heads, shift_size=0):
+    def __init__(self, config, dim, input_resolution, num_heads, drop_path_rate=0.0, shift_size=0):
         super().__init__()
         self.shift_size = shift_size
         self.window_size = config.window_size
         self.input_resolution = input_resolution
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = MaskFormerSwinAttention(config, dim, num_heads, self.window_size)
-        self.drop_path = (
-            MaskFormerSwinDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-        )
+        self.drop_path = MaskFormerSwinDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.intermediate = MaskFormerSwinIntermediate(config, dim)
         self.output = MaskFormerSwinOutput(config, dim)
@@ -633,6 +642,7 @@ class MaskFormerSwinStage(nn.Module):
                     dim=dim,
                     input_resolution=input_resolution,
                     num_heads=num_heads,
+                    drop_path_rate=drop_path[i],
                     shift_size=0 if (i % 2 == 0) else config.window_size // 2,
                 )
                 for i in range(depth)
@@ -682,7 +692,7 @@ class MaskFormerSwinEncoder(nn.Module):
         super().__init__()
         self.num_layers = len(config.depths)
         self.config = config
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
         self.layers = nn.ModuleList(
             [
                 MaskFormerSwinStage(
@@ -756,7 +766,6 @@ class MaskFormerSwinEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->MaskFormerSwin, swin->model
 class MaskFormerSwinPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -780,6 +789,11 @@ class MaskFormerSwinPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, MaskFormerSwinEmbeddings):
+            if module.position_embeddings is not None:
+                module.position_embeddings.data.zero_()
+        elif isinstance(module, MaskFormerSwinSelfAttention):
+            module.relative_position_bias_table.data.zero_()
 
 
 class MaskFormerSwinModel(MaskFormerSwinPreTrainedModel):
@@ -921,7 +935,7 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
             zip(hidden_states, self.stage_names[1:], spatial_dimensions)
         ):
             norm = self.hidden_states_norms[i]
-            # the last element corespond to the layer's last block output but before patch merging
+            # the last element correspond to the layer's last block output but before patch merging
             hidden_state_unpolled = hidden_state[-1]
             hidden_state_norm = norm(hidden_state_unpolled)
             # the pixel decoder (FPN) expects 3D tensors (features)
@@ -946,3 +960,6 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["MaskFormerSwinBackbone", "MaskFormerSwinModel", "MaskFormerSwinPreTrainedModel"]

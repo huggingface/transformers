@@ -18,6 +18,9 @@ on:
       quantization_matrix:
         required: true
         type: string
+      ci_event:
+        required: true
+        type: string
 
 env:
   TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
@@ -36,6 +39,21 @@ jobs:
 
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
+
+      - name: Prepare some setup values
+        run: |
+          if [ -f setup_values/prev_workflow_run_id.txt ]; then
+            echo "PREV_WORKFLOW_RUN_ID=$(cat setup_values/prev_workflow_run_id.txt)" >> $GITHUB_ENV
+          else
+            echo "PREV_WORKFLOW_RUN_ID=" >> $GITHUB_ENV
+          fi
+
+          if [ -f setup_values/other_workflow_run_id.txt ]; then
+            echo "OTHER_WORKFLOW_RUN_ID=$(cat setup_values/other_workflow_run_id.txt)" >> $GITHUB_ENV
+          else
+            echo "OTHER_WORKFLOW_RUN_ID=" >> $GITHUB_ENV
+          fi
+
       - name: Send message to Slack
         if: ${{ inputs.job != 'run_quantization_torch_gpu' }}
         env:
@@ -45,9 +63,8 @@ jobs:
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
           SLACK_REPORT_CHANNEL: ${{ inputs.slack_report_channel }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
-          CI_EVENT: scheduled
+          CI_EVENT: ${{ inputs.ci_event }}
           CI_SHA: ${{ github.sha }}
-          CI_WORKFLOW_REF: ${{ github.workflow_ref }}
           CI_TEST_JOB: ${{ inputs.job }}
           SETUP_STATUS: ${{ inputs.setup_status }}
         # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
@@ -55,7 +72,6 @@ jobs:
         # For a job that doesn't depend on (i.e. `needs`) `setup`, the value for `inputs.folder_slices` would be an
         # empty string, and the called script still get one argument (which is the emtpy string).
         run: |
-          sudo apt-get install -y curl
           pip install huggingface_hub
           pip install slack_sdk
           pip show slack_sdk
@@ -67,7 +83,7 @@ jobs:
         with:
           name: ci_results_${{ inputs.job }}
           path: ci_results_${{ inputs.job }}
-      
+
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
       - name: Send message to Slack for quantization workflow
@@ -76,18 +92,17 @@ jobs:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           SLACK_REPORT_CHANNEL: ${{ inputs.slack_report_channel }}
-          CI_EVENT: scheduled
+          CI_EVENT: ${{ inputs.ci_event }}
           CI_SHA: ${{ github.sha }}
           CI_TEST_JOB: ${{ inputs.job }}
           SETUP_STATUS: ${{ inputs.setup_status }}
         # We pass `needs.setup.outputs.quantization_matrix` as the argument. A processing in `notification_service_quantization.py` to change
         # `quantization/bnb` to `quantization_bnb` is required, as the artifact names use `_` instead of `/`.
         run: |
-          sudo apt-get install -y curl
           pip install huggingface_hub
           pip install slack_sdk
           pip show slack_sdk
-          python utils/notification_service_quantization.py "${{ inputs.quantization_matrix }}" 
+          python utils/notification_service_quantization.py "${{ inputs.quantization_matrix }}"
 
       # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
       - name: Failure table artifacts

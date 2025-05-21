@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020, The RAG Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,6 @@
 # limitations under the License.
 
 
-import gc
 import json
 import os
 import shutil
@@ -29,11 +27,12 @@ from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_
 from transformers.models.dpr.tokenization_dpr import DPRContextEncoderTokenizer, DPRQuestionEncoderTokenizer
 from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 from transformers.testing_utils import (
+    cleanup,
     get_tests_dir,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
-    require_torch_non_multi_gpu,
+    require_torch_non_multi_accelerator,
     slow,
     torch_device,
 )
@@ -68,7 +67,7 @@ if is_torch_available() and is_datasets_available() and is_faiss_available():
 
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
-    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
+    """If tensors not close, or a and b aren't both tensors, raise a nice Assertion error."""
     if a is None and b is None:
         return True
     try:
@@ -91,7 +90,7 @@ def require_retrieval(test_case):
 
     """
     if not (is_torch_available() and is_datasets_available() and is_faiss_available()):
-        test_case = unittest.skip("test requires PyTorch, datasets and faiss")(test_case)
+        test_case = unittest.skip(reason="test requires PyTorch, datasets and faiss")(test_case)
     return test_case
 
 
@@ -196,8 +195,7 @@ class RagTestMixin:
         shutil.rmtree(self.tmpdirname)
 
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device)
 
     def get_retriever(self, config):
         dataset = Dataset.from_dict(
@@ -312,7 +310,7 @@ class RagTestMixin:
 
             out = retriever(
                 input_ids,
-                question_hidden_states.cpu().detach().to(torch.float32).numpy(),
+                question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
                 prefix=config.generator.prefix,
                 return_tensors="pt",
             )
@@ -380,7 +378,7 @@ class RagTestMixin:
 
             out = retriever(
                 input_ids,
-                question_hidden_states.cpu().detach().to(torch.float32).numpy(),
+                question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
                 prefix=config.generator.prefix,
                 return_tensors="pt",
             )
@@ -439,7 +437,7 @@ class RagTestMixin:
 
             out = retriever(
                 input_ids,
-                question_hidden_states.cpu().detach().to(torch.float32).numpy(),
+                question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
                 prefix=config.generator.prefix,
                 return_tensors="pt",
                 n_docs=n_docs,
@@ -508,7 +506,7 @@ class RagTestMixin:
 
             out = retriever(
                 input_ids,
-                question_hidden_states.cpu().detach().to(torch.float32).numpy(),
+                question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
                 prefix=config.generator.prefix,
                 return_tensors="pt",
                 n_docs=retriever_n_docs,
@@ -653,7 +651,7 @@ class RagDPRT5Test(RagTestMixin, unittest.TestCase):
     def config_and_inputs(self):
         question_encoder_tester = DPRModelTester(self)
         dpr_config_and_inputs = question_encoder_tester.prepare_config_and_inputs()
-        generator_tester = T5ModelTester(self, vocab_size=1100)
+        generator_tester = T5ModelTester(self, vocab_size=1101)
         t5_config_and_inputs = generator_tester.prepare_config_and_inputs()
 
         (question_encoder_config, input_ids, _, input_mask, _, _, _) = dpr_config_and_inputs
@@ -679,13 +677,12 @@ class RagDPRT5Test(RagTestMixin, unittest.TestCase):
 @require_retrieval
 @require_sentencepiece
 @require_tokenizers
-@require_torch_non_multi_gpu
+@require_torch_non_multi_accelerator
 class RagModelIntegrationTests(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @cached_property
     def sequence_model(self):
@@ -966,7 +963,7 @@ class RagModelIntegrationTests(unittest.TestCase):
 
         question_hidden_states = rag_sequence.question_encoder(input_ids, attention_mask=attention_mask)[0]
         docs_dict = retriever(
-            input_ids.cpu().detach().numpy(), question_hidden_states.cpu().detach().numpy(), return_tensors="pt"
+            input_ids.detach().cpu().numpy(), question_hidden_states.detach().cpu().numpy(), return_tensors="pt"
         )
         doc_scores = torch.bmm(
             question_hidden_states.unsqueeze(1),
@@ -1004,7 +1001,7 @@ class RagModelIntegrationTests(unittest.TestCase):
             torch_device
         )
 
-        if torch_device == "cuda":
+        if torch_device != "cpu":
             rag_token.half()
 
         input_dict = tokenizer(
@@ -1043,8 +1040,7 @@ class RagModelSaveLoadTests(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     def get_rag_config(self):
         question_encoder_config = AutoConfig.from_pretrained("facebook/dpr-question_encoder-single-nq-base")

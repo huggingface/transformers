@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -113,12 +112,6 @@ class BlenderbotSmallModelTester:
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
 
-        # forcing a certain token to be generated, sets all other tokens to -inf
-        # if however the token to be generated is already at -inf then it can lead token
-        # `nan` values and thus break generation
-        self.forced_bos_token_id = None
-        self.forced_eos_token_id = None
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
             3,
@@ -147,8 +140,6 @@ class BlenderbotSmallModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
-            forced_bos_token_id=self.forced_bos_token_id,
-            forced_eos_token_id=self.forced_eos_token_id,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -225,7 +216,6 @@ class BlenderbotSmallModelTester:
 @require_torch
 class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (BlenderbotSmallModel, BlenderbotSmallForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (BlenderbotSmallForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": BlenderbotSmallModel,
@@ -244,9 +234,16 @@ class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        return pipeline_test_casse_name == "TextGenerationPipelineTests"
+        return pipeline_test_case_name == "TextGenerationPipelineTests"
 
     def setUp(self):
         self.model_tester = BlenderbotSmallModelTester(self)
@@ -369,7 +366,7 @@ class BlenderbotSmallStandaloneDecoderModelTester:
         decoder_layers=2,
         encoder_attention_heads=4,
         decoder_attention_heads=4,
-        max_position_embeddings=30,
+        max_position_embeddings=50,
         is_encoder_decoder=False,
         pad_token_id=0,
         bos_token_id=1,
@@ -512,9 +509,9 @@ class BlenderbotSmallStandaloneDecoderModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values, attention_mask=attn_mask)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(
+            next_tokens, past_key_values=past_key_values, attention_mask=attn_mask, use_cache=True
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -543,7 +540,6 @@ class BlenderbotSmallStandaloneDecoderModelTester:
 @require_torch
 class BlenderbotSmallStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BlenderbotSmallDecoder, BlenderbotSmallForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (BlenderbotSmallForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     is_encoder_decoder = False
 
@@ -564,6 +560,6 @@ class BlenderbotSmallStandaloneDecoderModelTest(ModelTesterMixin, GenerationTest
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
 
+    @unittest.skip(reason="decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         return

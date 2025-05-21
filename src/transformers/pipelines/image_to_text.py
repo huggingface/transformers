@@ -15,6 +15,7 @@
 
 from typing import List, Union
 
+from ..generation import GenerationConfig
 from ..utils import (
     add_end_docstrings,
     is_tf_available,
@@ -47,6 +48,10 @@ class ImageToTextPipeline(Pipeline):
     """
     Image To Text pipeline using a `AutoModelForVision2Seq`. This pipeline predicts a caption for a given image.
 
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+
     Example:
 
     ```python
@@ -65,6 +70,12 @@ class ImageToTextPipeline(Pipeline):
     See the list of available models on
     [huggingface.co/models](https://huggingface.co/models?pipeline_tag=image-to-text).
     """
+
+    _pipeline_calls_generate = True
+    # Make sure the docstring is updated when the default generation config is changed
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -92,14 +103,20 @@ class ImageToTextPipeline(Pipeline):
                 )
             forward_params.update(generate_kwargs)
 
+        if self.assistant_model is not None:
+            forward_params["assistant_model"] = self.assistant_model
+        if self.assistant_tokenizer is not None:
+            forward_params["tokenizer"] = self.tokenizer
+            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
+
         return preprocess_params, forward_params, {}
 
-    def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs):
+    def __call__(self, inputs: Union[str, List[str], "Image.Image", List["Image.Image"]] = None, **kwargs):
         """
         Assign labels to the image(s) passed as inputs.
 
         Args:
-            images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            inputs (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing a HTTP(s) link pointing to an image
@@ -113,6 +130,7 @@ class ImageToTextPipeline(Pipeline):
 
             generate_kwargs (`Dict`, *optional*):
                 Pass it to send all of these arguments directly to `generate` allowing full control of this function.
+
             timeout (`float`, *optional*, defaults to None):
                 The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
                 the call may block forever.
@@ -122,12 +140,21 @@ class ImageToTextPipeline(Pipeline):
 
             - **generated_text** (`str`) -- The generated text.
         """
-        return super().__call__(images, **kwargs)
+        # After deprecation of this is completed, remove the default `None` value for `images`
+        if "images" in kwargs:
+            inputs = kwargs.pop("images")
+        if inputs is None:
+            raise ValueError("Cannot call the image-to-text pipeline without an inputs argument!")
+        return super().__call__(inputs, **kwargs)
 
     def preprocess(self, image, prompt=None, timeout=None):
         image = load_image(image, timeout=timeout)
 
         if prompt is not None:
+            logger.warning_once(
+                "Passing `prompt` to the `image-to-text` pipeline is deprecated and will be removed in version 4.48"
+                " of 🤗 Transformers. Use the `image-text-to-text` pipeline instead",
+            )
             if not isinstance(prompt, str):
                 raise ValueError(
                     f"Received an invalid text input, got - {type(prompt)} - but expected a single string. "
@@ -138,6 +165,8 @@ class ImageToTextPipeline(Pipeline):
 
             if model_type == "git":
                 model_inputs = self.image_processor(images=image, return_tensors=self.framework)
+                if self.framework == "pt":
+                    model_inputs = model_inputs.to(self.torch_dtype)
                 input_ids = self.tokenizer(text=prompt, add_special_tokens=False).input_ids
                 input_ids = [self.tokenizer.cls_token_id] + input_ids
                 input_ids = torch.tensor(input_ids).unsqueeze(0)
@@ -145,10 +174,14 @@ class ImageToTextPipeline(Pipeline):
 
             elif model_type == "pix2struct":
                 model_inputs = self.image_processor(images=image, header_text=prompt, return_tensors=self.framework)
+                if self.framework == "pt":
+                    model_inputs = model_inputs.to(self.torch_dtype)
 
             elif model_type != "vision-encoder-decoder":
                 # vision-encoder-decoder does not support conditional generation
                 model_inputs = self.image_processor(images=image, return_tensors=self.framework)
+                if self.framework == "pt":
+                    model_inputs = model_inputs.to(self.torch_dtype)
                 text_inputs = self.tokenizer(prompt, return_tensors=self.framework)
                 model_inputs.update(text_inputs)
 
@@ -157,6 +190,8 @@ class ImageToTextPipeline(Pipeline):
 
         else:
             model_inputs = self.image_processor(images=image, return_tensors=self.framework)
+            if self.framework == "pt":
+                model_inputs = model_inputs.to(self.torch_dtype)
 
         if self.model.config.model_type == "git" and prompt is None:
             model_inputs["input_ids"] = None
@@ -172,6 +207,10 @@ class ImageToTextPipeline(Pipeline):
             and all(x is None for x in model_inputs["input_ids"])
         ):
             model_inputs["input_ids"] = None
+
+        # User-defined `generation_config` passed to the pipeline call take precedence
+        if "generation_config" not in generate_kwargs:
+            generate_kwargs["generation_config"] = self.generation_config
 
         # FIXME: We need to pop here due to a difference in how `generation.py` and `generation.tf_utils.py`
         #  parse inputs. In the Tensorflow version, `generate` raises an error if we don't use `input_ids` whereas

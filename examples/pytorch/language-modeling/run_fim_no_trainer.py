@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -52,15 +51,15 @@ from transformers import (
     SchedulerType,
     default_data_collator,
     get_scheduler,
-    is_deepspeed_zero3_enabled,
-    is_torch_tpu_available,
+    is_torch_xla_available,
 )
+from transformers.integrations import is_deepspeed_zero3_enabled
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.42.0.dev0")
+check_min_version("4.53.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -234,9 +233,7 @@ def parse_args():
         "--fim_pad_token",
         type=str,
         default="<fim_pad>",
-        help=(
-            "Fill-in-Middle Pad token. Used only when 'truncate_or_pad' is set to True." " Defaults to '<fim_pad>'."
-        ),
+        help=("Fill-in-Middle Pad token. Used only when 'truncate_or_pad' is set to True. Defaults to '<fim_pad>'."),
     )
     parser.add_argument(
         "--preprocessing_num_workers",
@@ -257,12 +254,11 @@ def parse_args():
     parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
     parser.add_argument(
         "--trust_remote_code",
-        type=bool,
-        default=False,
+        action="store_true",
         help=(
-            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
-            "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-            "execute code present on the Hub on your local machine."
+            "Whether to trust the execution of code from datasets/models defined on the Hub."
+            " This option should only be set to `True` for repositories you trust and in which you have read the"
+            " code, as it will execute code present on the Hub on your local machine."
         ),
     )
     parser.add_argument(
@@ -395,17 +391,21 @@ def main():
     # download the dataset.
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        raw_datasets = load_dataset(args.dataset_name, args.dataset_config_name)
+        raw_datasets = load_dataset(
+            args.dataset_name, args.dataset_config_name, trust_remote_code=args.trust_remote_code
+        )
         if "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(
                 args.dataset_name,
                 args.dataset_config_name,
                 split=f"train[:{args.validation_split_percentage}%]",
+                trust_remote_code=args.trust_remote_code,
             )
             raw_datasets["train"] = load_dataset(
                 args.dataset_name,
                 args.dataset_config_name,
                 split=f"train[{args.validation_split_percentage}%:]",
+                trust_remote_code=args.trust_remote_code,
             )
     else:
         data_files = {}
@@ -491,7 +491,7 @@ def main():
     if torch.cuda.is_availble():
         pad_factor = 8
 
-    elif is_torch_tpu_available():
+    elif is_torch_xla_available(check_is_tpu=True):
         pad_factor = 128
 
     # Add the new tokens to the tokenizer
@@ -517,7 +517,7 @@ def main():
                 covariance_matrix=1e-5 * sigma,
             )
             new_token_embeddings = torch.stack(
-                tuple((dist.sample() for _ in range(len(special_tokens)))),
+                tuple(dist.sample() for _ in range(len(special_tokens))),
                 dim=0,
             )
     else:
@@ -537,7 +537,7 @@ def main():
             covariance_matrix=1e-5 * sigma,
         )
         new_token_embeddings = torch.stack(
-            tuple((dist.sample() for _ in range(len(special_tokens)))),
+            tuple(dist.sample() for _ in range(len(special_tokens))),
             dim=0,
         )
 
@@ -835,7 +835,7 @@ def main():
                 completed_steps += 1
 
             if isinstance(checkpointing_steps, int):
-                if completed_steps % checkpointing_steps == 0:
+                if completed_steps % checkpointing_steps == 0 and accelerator.sync_gradients:
                     output_dir = f"step_{completed_steps}"
                     if args.output_dir is not None:
                         output_dir = os.path.join(args.output_dir, output_dir)
@@ -891,9 +891,6 @@ def main():
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
 
-    if args.with_tracking:
-        accelerator.end_training()
-
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
@@ -907,6 +904,9 @@ def main():
 
             with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
                 json.dump({"perplexity": perplexity}, f)
+
+    accelerator.wait_for_everyone()
+    accelerator.end_training()
 
 
 if __name__ == "__main__":

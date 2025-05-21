@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,12 +17,13 @@ import json
 import os
 import re
 import unittest
+from functools import lru_cache
 
 from transformers import CodeGenTokenizer, CodeGenTokenizerFast
 from transformers.models.codegen.tokenization_codegen import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers, slow
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 @require_tokenizers
@@ -35,8 +35,9 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_kwargs = {"add_prefix_space": True}
     test_seq2seq = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
         vocab = [
@@ -64,22 +65,30 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
-        self.special_tokens_map = {"unk_token": "<unk>"}
+        cls.special_tokens_map = {"unk_token": "<unk>"}
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        cls.merges_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
+        with open(cls.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
-    def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return CodeGenTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return CodeGenTokenizer.from_pretrained(pretrained_name, **kwargs)
 
-    def get_rust_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return CodeGenTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return CodeGenTokenizerFast.from_pretrained(pretrained_name, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
@@ -99,7 +108,7 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer(add_prefix_space=True)
@@ -127,6 +136,7 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_bpe_tokens = [14, 15, 10, 9, 3, 2, 15, 19]
         self.assertListEqual(rust_tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
+    @unittest.skip
     def test_pretokenized_inputs(self, *args, **kwargs):
         # It's very difficult to mix/test pretokenization with byte-level
         # And get both CodeGen and Roberta to work at the same time (mostly an issue of adding a space before the string)
@@ -135,7 +145,7 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_padding(self, max_length=15):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
 
                 # Simple input
                 s = "This is a simple input"
@@ -253,15 +263,16 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = CodeGenTokenizer.from_pretrained("Salesforce/codegen-350M-mono")
 
         text = "\nif len_a > len_b:\n    result = a\nelse:\n    result = b\n\n\n\n#"
-        expected_trucated_text = "\nif len_a > len_b:      result = a\nelse:      result = b"
+        expected_truncated_text = "\nif len_a > len_b:\n      result = a\nelse:\n      result = b"
 
         input_ids = tokenizer.encode(text)
         truncation_pattern = ["^#", re.escape("<|endoftext|>"), "^'''", '^"""', "\n\n\n"]
         decoded_text = tokenizer.decode(input_ids, truncate_before_pattern=truncation_pattern)
-        self.assertEqual(decoded_text, expected_trucated_text)
+        self.assertEqual(decoded_text, expected_truncated_text)
         # TODO @ArthurZ outputs of the fast tokenizer are different in this case, un-related to the PR
 
     # tokenizer has no padding token
+    @unittest.skip(reason="tokenizer has no padding token")
     def test_padding_different_model_input_name(self):
         pass
 

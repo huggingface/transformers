@@ -14,10 +14,7 @@
 # limitations under the License.
 """Tokenization classes for OpenAI GPT."""
 
-import json
 from typing import Optional, Tuple
-
-from tokenizers import pre_tokenizers
 
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -97,8 +94,8 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         **kwargs,
     ):
         super().__init__(
-            vocab_file,
-            merges_file,
+            vocab_file=vocab_file,
+            merges_file=merges_file,
             tokenizer_file=tokenizer_file,
             unk_token=unk_token,
             bos_token=bos_token,
@@ -108,14 +105,6 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         )
 
         self.add_bos_token = kwargs.pop("add_bos_token", False)
-
-        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
-            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
-            pre_tok_state["add_prefix_space"] = add_prefix_space
-            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
-
-        self.add_prefix_space = add_prefix_space
 
     def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
         is_split_into_words = kwargs.get("is_split_into_words", False)
@@ -140,11 +129,5 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 
-    @property
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.default_chat_template
-    def default_chat_template(self):
-        """
-        A simple chat template that ignores role information and just concatenates messages with EOS tokens.
-        """
 
-        return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
+__all__ = ["GPT2TokenizerFast"]

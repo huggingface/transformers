@@ -89,7 +89,7 @@ class TvpConfig(PretrainedConfig):
             The dropout probability of hidden layers.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
+            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -196,3 +196,6 @@ class TvpConfig(PretrainedConfig):
             output["backbone_config"] = self.backbone_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
+
+
+__all__ = ["TvpConfig"]

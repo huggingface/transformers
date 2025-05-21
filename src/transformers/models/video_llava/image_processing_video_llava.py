@@ -31,37 +31,18 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    VideoInput,
     infer_channel_dimension_format,
     is_scaled_image,
-    is_valid_image,
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, logging
+from ...video_utils import VideoInput, make_batched_videos
 
 
 logger = logging.get_logger(__name__)
-
-
-if is_vision_available():
-    import PIL
-
-
-def make_batched_videos(videos) -> List[VideoInput]:
-    if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
-        return videos
-
-    elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]) and len(videos[0].shape) == 4:
-        return [list(video) for video in videos]
-
-    elif is_valid_image(videos) and len(videos.shape) == 4:
-        return [list(videos)]
-
-    raise ValueError(f"Could not make batched video from {videos}")
 
 
 class VideoLlavaImageProcessor(BaseImageProcessor):
@@ -108,10 +89,10 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_center_crop: bool = True,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[Dict[str, int]] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -137,24 +118,6 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_convert_rgb = do_convert_rgb
-        self._valid_processor_keys = [
-            "images",
-            "videos",
-            "do_resize",
-            "size",
-            "resample",
-            "do_center_crop",
-            "crop_size",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "do_convert_rgb",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     def resize(
         self,
@@ -205,26 +168,26 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
-        images: List[ImageInput] = None,
-        videos: List[VideoInput] = None,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
+        images: Optional[List[ImageInput]] = None,
+        videos: Optional[List[VideoInput]] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
-        do_center_crop: bool = None,
-        crop_size: int = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
+        do_center_crop: Optional[bool] = None,
+        crop_size: Optional[int] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = None,
+        do_convert_rgb: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ) -> PIL.Image.Image:
+    ) -> BatchFeature:
         """
         Preprocess an image or batch of images.
 
@@ -295,12 +258,8 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
 
         if images is not None:
             images = make_list_of_images(images)
-        if videos is not None:
-            videos = make_batched_videos(videos)
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
-        if (videos is not None and not valid_images(videos)) or (images is not None and not valid_images(images)):
+        if images is not None and not valid_images(images):
             raise ValueError(
                 "Invalid input type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
@@ -308,6 +267,12 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
 
         data = {}
         if videos is not None:
+            logger.warning(
+                "`VideoLlavaImageProcessor` works only with image inputs and doesn't process videos anymore. "
+                "This is a deprecated behavior and will be removed in v5.0. "
+                "Your videos should be forwarded to `VideoLlavaVideoProcessor`. "
+            )
+            videos = make_batched_videos(videos)
             pixel_values_videos = [
                 [
                     self._preprocess_image(
@@ -369,9 +334,9 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_center_crop: bool = None,
-        crop_size: int = None,
-        do_convert_rgb: bool = None,
+        do_center_crop: Optional[bool] = None,
+        crop_size: Optional[int] = None,
+        do_convert_rgb: Optional[bool] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
@@ -395,7 +360,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
 
-        if is_scaled_image(image) and do_rescale:
+        if do_rescale and is_scaled_image(image):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images/video frames. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -420,3 +385,6 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
 
         return image
+
+
+__all__ = ["VideoLlavaImageProcessor"]

@@ -156,9 +156,9 @@ class LegacyIndex(Index):
             )
         with open(resolved_meta_path, "rb") as metadata_file:
             self.index_id_to_db_id = pickle.load(metadata_file)
-        assert (
-            len(self.index_id_to_db_id) == self.index.ntotal
-        ), "Deserialized index_id_to_db_id should match faiss index size"
+        assert len(self.index_id_to_db_id) == self.index.ntotal, (
+            "Deserialized index_id_to_db_id should match faiss index size"
+        )
 
     def is_initialized(self):
         return self._index_initialized
@@ -204,7 +204,7 @@ class HFIndexBase(Index):
 
     def _check_dataset_format(self, with_index: bool):
         if not isinstance(self.dataset, Dataset):
-            raise ValueError(f"Dataset should be a datasets.Dataset object, but got {type(self.dataset)}")
+            raise TypeError(f"Dataset should be a datasets.Dataset object, but got {type(self.dataset)}")
         if len({"title", "text", "embeddings"} - set(self.dataset.column_names)) > 0:
             raise ValueError(
                 "Dataset should be a dataset with the following columns: "
@@ -672,3 +672,6 @@ class RagRetriever:
                 },
                 tensor_type=return_tensors,
             )
+
+
+__all__ = ["RagRetriever"]

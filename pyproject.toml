@@ -1,10 +1,28 @@
+[tool.coverage.run]
+source = ["transformers"]
+omit = [
+    "*/convert_*",
+    "*/__main__.py"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise",
+    "except",
+    "register_parameter"
+]
+
 [tool.ruff]
+target-version = "py39"
 line-length = 119
 
 [tool.ruff.lint]
 # Never enforce `E501` (line length violations).
 ignore = ["C901", "E501", "E741", "F402", "F823" ]
-select = ["C", "E", "F", "I", "W"]
+# RUF013: Checks for the use of implicit Optional
+#  in type annotations when the default parameter value is None.
+select = ["C", "E", "F", "I", "W", "RUF013"]
 
 # Ignore import violations in all `__init__.py` files.
 [tool.ruff.lint.per-file-ignores]
@@ -30,9 +48,13 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.pytest.ini_options]
+addopts = "--doctest-glob='**/*.md'"
 doctest_optionflags="NUMBER NORMALIZE_WHITESPACE ELLIPSIS"
-doctest_glob="**/*.md"
 markers = [
     "flash_attn_test: marks tests related to flash attention (deselect with '-m \"not flash_attn_test\"')",
     "bitsandbytes: select (or deselect with `not`) bitsandbytes integration tests",
+    "generate: marks tests that use the GenerationTesterMixin"
 ]
+log_cli = 1
+log_cli_level = "WARNING"
+asyncio_default_fixture_loop_scope = "function"

@@ -1,5 +1,6 @@
-from typing import List, Union
+from typing import List, Optional, Union
 
+from ..generation import GenerationConfig
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging
 from .base import Pipeline, build_pipeline_init_args
 
@@ -21,6 +22,10 @@ class VisualQuestionAnsweringPipeline(Pipeline):
     """
     Visual Question Answering pipeline using a `AutoModelForVisualQuestionAnswering`. This pipeline is currently only
     available in PyTorch.
+
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
 
     Example:
 
@@ -52,6 +57,12 @@ class VisualQuestionAnsweringPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=visual-question-answering).
     """
 
+    _pipeline_calls_generate = True
+    # Make sure the docstring is updated when the default generation config is changed
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.check_model_type(MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES)
@@ -66,12 +77,20 @@ class VisualQuestionAnsweringPipeline(Pipeline):
             preprocess_params["timeout"] = timeout
         if top_k is not None:
             postprocess_params["top_k"] = top_k
-        return preprocess_params, {}, postprocess_params
+
+        forward_params = {}
+        if getattr(self, "assistant_model", None) is not None:
+            forward_params["assistant_model"] = self.assistant_model
+        if getattr(self, "assistant_tokenizer", None) is not None:
+            forward_params["tokenizer"] = self.tokenizer
+            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
+
+        return preprocess_params, forward_params, postprocess_params
 
     def __call__(
         self,
         image: Union["Image.Image", str, List["Image.Image"], List[str], "KeyDataset"],
-        question: Union[str, List[str]] = None,
+        question: Optional[Union[str, List[str]]] = None,
         **kwargs,
     ):
         r"""
@@ -155,11 +174,17 @@ class VisualQuestionAnsweringPipeline(Pipeline):
             truncation=truncation,
         )
         image_features = self.image_processor(images=image, return_tensors=self.framework)
+        if self.framework == "pt":
+            image_features = image_features.to(self.torch_dtype)
         model_inputs.update(image_features)
         return model_inputs
 
     def _forward(self, model_inputs, **generate_kwargs):
         if self.model.can_generate():
+            # User-defined `generation_config` passed to the pipeline call take precedence
+            if "generation_config" not in generate_kwargs:
+                generate_kwargs["generation_config"] = self.generation_config
+
             model_outputs = self.model.generate(**model_inputs, **generate_kwargs)
         else:
             model_outputs = self.model(**model_inputs)

@@ -74,7 +74,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         self.stride = stride
 
         mel_filters = mel_filter_bank(
-            num_frequency_bins=256,
+            num_frequency_bins=257,
             num_mel_filters=self.num_mel_bins,
             min_frequency=20,
             max_frequency=sampling_rate // 2,
@@ -84,7 +84,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             triangularize_in_mel_space=True,
         )
 
-        self.mel_filters = np.pad(mel_filters, ((0, 1), (0, 0)))
+        self.mel_filters = mel_filters
         self.window = window_function(400, "povey", periodic=False)
 
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -225,7 +225,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
                 )
         else:
             logger.warning(
-                "It is strongly recommended to pass the `sampling_rate` argument to this function. "
+                f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
@@ -286,14 +286,14 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
 
         remainder = num_frames % self.stride
         if remainder != 0:
-            input_features = input_features[:, :num_frames, :]
-            attention_mask = attention_mask[:, :num_frames]
+            input_features = input_features[:, : num_frames - remainder, :]
+            attention_mask = attention_mask[:, : num_frames - remainder]
 
         input_features = np.reshape(
             input_features, (batch_size, num_frames // self.stride, num_channels * self.stride)
         )
 
-        indices = np.arange(0, num_frames)
+        indices = np.arange(0, num_frames - remainder)
         attention_mask = attention_mask[:, indices % self.stride == 1]
 
         padded_inputs["input_features"] = input_features
@@ -304,3 +304,6 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
+
+
+__all__ = ["SeamlessM4TFeatureExtractor"]

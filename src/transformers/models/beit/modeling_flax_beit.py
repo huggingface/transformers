@@ -271,7 +271,7 @@ class FlaxBeitSelfAttention(nn.Module):
             self.config, "embedding_size"
         ):
             raise ValueError(
-                f"The hidden size {self.config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {self.config.hidden_size} is not a multiple of the number of attention "
                 f"heads {self.config.num_attention_heads}."
             )
 
@@ -634,7 +634,7 @@ class FlaxBeitPreTrainedModel(FlaxPreTrainedModel):
         self,
         pixel_values,
         bool_masked_pos=None,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
@@ -946,3 +946,11 @@ overwrite_call_docstring(FlaxBeitForImageClassification, FLAX_BEIT_CLASSIF_DOCST
 append_replace_return_docstrings(
     FlaxBeitForImageClassification, output_type=FlaxSequenceClassifierOutput, config_class=BeitConfig
 )
+
+
+__all__ = [
+    "FlaxBeitForImageClassification",
+    "FlaxBeitForMaskedImageModeling",
+    "FlaxBeitModel",
+    "FlaxBeitPreTrainedModel",
+]

@@ -90,8 +90,8 @@ class TFData2VecVisionModelOutputWithPooling(TFBaseModelOutputWithPooling):
             heads.
     """
 
-    last_hidden_state: tf.Tensor = None
-    pooler_output: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
+    pooler_output: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
 
@@ -1491,7 +1491,7 @@ class TFData2VecVisionFCNHead(keras.layers.Layer):
                     kernel_size=kernel_size,
                     padding="same",
                     dilation=dilation,
-                    name=f"conv_module_{i+2}",
+                    name=f"conv_module_{i + 2}",
                 )
             )
         if self.num_convs == 0:
@@ -1666,7 +1666,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
             features[i + 2] = ops[i + 2](features[i + 2])
 
         logits = self.decode_head(features)
-        # Tranpose the logits to maintain consistency in the output formats.
+        # Transpose the logits to maintain consistency in the output formats.
         transposed_logits = tf.transpose(logits, perm=[0, 3, 1, 2])
 
         auxiliary_logits = None
@@ -1714,3 +1714,11 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         if getattr(self, "fpn2", None) is not None:
             with tf.name_scope(self.fpn2[0].name):
                 self.fpn2[0].build([None, None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFData2VecVisionForImageClassification",
+    "TFData2VecVisionForSemanticSegmentation",
+    "TFData2VecVisionModel",
+    "TFData2VecVisionPreTrainedModel",
+]

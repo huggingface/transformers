@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -275,14 +274,6 @@ class BloomModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
-    def create_and_check_question_answering_model(self, config, input_ids, input_mask, *args):
-        model = BloomForQuestionAnswering(config)
-        model.to(torch_device)
-        model.eval()
-
-        result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
-
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, *args, gradient_checkpointing=False
     ):
@@ -328,7 +319,6 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         else ()
     )
 
-    all_generative_model_classes = (BloomForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": BloomModel,
@@ -344,7 +334,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     fx_compatible = True
     test_missing_keys = False
     test_pruning = False
-    test_torchscript = True  # torch.autograd functions seems to be not supported
+    test_torchscript = True  # torch.autograd functions seems not to be supported
 
     def setUp(self):
         self.model_tester = BloomModelTester(self)
@@ -388,10 +378,6 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_bloom_weight_initialization(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bloom_weight_initialization(*config_and_inputs)
-
-    @unittest.skip("Bloom has a non-standard KV cache format.")
-    def test_past_key_values_format(self):
-        pass
 
     @slow
     def test_model_from_pretrained(self):
@@ -513,6 +499,10 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         ]
 
         self.assertListEqual(generated_text, EXPECTED_GENERATIONS)
+
+    @unittest.skip("Bloom needs a 2D attention for alibi")
+    def test_custom_4d_attention_mask(self):
+        pass
 
 
 @require_torch

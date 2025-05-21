@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,6 @@ from __future__ import annotations
 
 import inspect
 import unittest
-from typing import List, Tuple
 
 from transformers import RegNetConfig
 from transformers.testing_utils import require_tf, require_vision, slow
@@ -211,7 +209,7 @@ class TFRegNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             dict_output = model(dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
             def recursive_check(tuple_object, dict_object):
-                if isinstance(tuple_object, (List, Tuple)):
+                if isinstance(tuple_object, (list, tuple)):
                     for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                         recursive_check(tuple_iterable_value, dict_iterable_value)
                 elif tuple_object is None:

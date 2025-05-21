@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +27,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Optional
 
 import datasets
 import evaluate
@@ -61,7 +60,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.42.0.dev0")
+check_min_version("4.53.0.dev0")
 
 Array = Any
 Dataset = datasets.arrow_dataset.Dataset
@@ -168,9 +167,9 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-                "execute code present on the Hub on your local machine."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -498,6 +497,7 @@ def main():
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
             token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         # Loading the dataset from local csv or json file.
@@ -907,8 +907,8 @@ def main():
 
     # region Define train step functions
     def train_step(
-        state: train_state.TrainState, batch: Dict[str, Array], dropout_rng: PRNGKey
-    ) -> Tuple[train_state.TrainState, float]:
+        state: train_state.TrainState, batch: dict[str, Array], dropout_rng: PRNGKey
+    ) -> tuple[train_state.TrainState, float]:
         """Trains model with an optimizer (both in `state`) on `batch`, returning a pair `(new_state, loss)`."""
         dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
         start_positions = batch.pop("start_positions")

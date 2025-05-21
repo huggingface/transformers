@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,14 +16,14 @@
 import json
 import os
 import unittest
-from typing import Tuple
+from functools import lru_cache
 
 from transformers import Wav2Vec2PhonemeCTCTokenizer
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
 from transformers.models.wav2vec2_phoneme.tokenization_wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizerOutput
 from transformers.testing_utils import require_phonemizer
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 @require_phonemizer
@@ -33,8 +32,9 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = Wav2Vec2PhonemeCTCTokenizer
     test_rust_tokenizer = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         vocab = (
             "<s> <pad> </s> <unk> n s t ə l a i k d m ɛ ɾ e ɪ p o ɐ z ð f j v b ɹ ʁ ʊ iː r w ʌ u ɡ æ aɪ ʃ h ɔ ɑː "
@@ -53,14 +53,14 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         ).split(" ")
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
 
-        self.special_tokens_map = {"pad_token": "<pad>", "unk_token": "<unk>", "bos_token": "<s>", "eos_token": "</s>"}
+        cls.special_tokens_map = {"pad_token": "<pad>", "unk_token": "<unk>", "bos_token": "<s>", "eos_token": "</s>"}
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
 
     # overwrite since phonemes require specific creation
-    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> Tuple[str, list]:
+    def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> tuple[str, list]:
         toks = [(i, tokenizer.decode([i], clean_up_tokenization_spaces=False)) for i in range(len(tokenizer))]
         toks = list(filter(lambda t: [t[0]] == tokenizer.encode(t[1], do_phonemize=False), toks))
         if max_length is not None and len(toks) > max_length:
@@ -84,9 +84,13 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         output_ids = tokenizer.encode(output_txt, add_special_tokens=False)
         return output_txt, output_ids
 
-    def get_tokenizer(self, **kwargs):
-        kwargs.update(self.special_tokens_map)
-        return Wav2Vec2PhonemeCTCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs):
+        kwargs.update(cls.special_tokens_map)
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return Wav2Vec2PhonemeCTCTokenizer.from_pretrained(pretrained_name, **kwargs)
 
     def test_tokenizer_add_new_tokens(self):
         tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
@@ -249,7 +253,7 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
         batch_tokens = tokenizer.batch_decode(sample_ids)
-        self.assertEqual(batch_tokens, ["k s ɾ ɾ l ɭʲ!?!? $$$", "j ð s j ð s oːɹ $$$"])
+        self.assertEqual(batch_tokens, ["k s ɾ ɾ l ɭʲ ! ? ! ? $$$", "j ð s j ð s oːɹ $$$"])
 
     @staticmethod
     def get_from_offsets(offsets, key):
@@ -325,19 +329,21 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         outputs_char = [tokenizer.decode(ids, output_char_offsets=True) for ids in sample_ids]
         check_list_tuples_equal(outputs_char_batch, outputs_char)
 
-    @unittest.skip("Wav2Vec2PhonemeTokenizer always lower cases letters to correctly map to phonemes")
+    @unittest.skip(reason="Wav2Vec2PhonemeTokenizer always lower cases letters to correctly map to phonemes")
     def test_added_tokens_do_lower_case(self):
         pass
 
-    @unittest.skip("Wav2Vec2PhonemeTokenizer always puts spaces between phonemes")
+    @unittest.skip(reason="Wav2Vec2PhonemeTokenizer always puts spaces between phonemes")
     def test_encode_decode_with_spaces(self):
         pass
 
-    @unittest.skip("encodes to text to ids, but decodes ids to phonemes -> not possible to have internal consistency")
+    @unittest.skip(
+        reason="encodes to text to ids, but decodes ids to phonemes -> not possible to have internal consistency"
+    )
     def test_internal_consistency(self):
         pass
 
-    @unittest.skip("Wav2Vec2PhonemeModel has no max model length => no testing")
+    @unittest.skip(reason="Wav2Vec2PhonemeModel has no max model length => no testing")
     def test_add_tokens_tokenizer(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
@@ -389,11 +395,11 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(tokens[0], tokenizer.eos_token_id)
                 self.assertEqual(tokens[-3], tokenizer.pad_token_id)
 
-    @unittest.skip("The tokenizer shouldn't be used to encode input IDs (except for labels), only to decode.")
+    @unittest.skip(reason="The tokenizer shouldn't be used to encode input IDs (except for labels), only to decode.")
     def test_tf_encode_plus_sent_to_model(self):
         pass
 
-    @unittest.skip("The tokenizer shouldn't be used to encode input IDs (except for labels), only to decode.")
+    @unittest.skip(reason="The tokenizer shouldn't be used to encode input IDs (except for labels), only to decode.")
     def test_torch_encode_plus_sent_to_model(self):
         pass
 

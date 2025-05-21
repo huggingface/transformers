@@ -19,7 +19,6 @@ import timeout_decorator  # noqa
 from transformers import OPTConfig, is_flax_available
 from transformers.testing_utils import require_flax, require_sentencepiece, slow
 
-from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
@@ -70,6 +69,7 @@ class FlaxOPTModelTester:
         embed_dim=16,
         word_embed_proj_dim=16,
         initializer_range=0.02,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -92,6 +92,7 @@ class FlaxOPTModelTester:
         self.word_embed_proj_dim = word_embed_proj_dim
         self.initializer_range = initializer_range
         self.is_encoder_decoder = False
+        self.attn_implementation = attn_implementation
 
     def prepare_config_and_inputs(self):
         input_ids = np.clip(ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size), 3, self.vocab_size)
@@ -114,6 +115,7 @@ class FlaxOPTModelTester:
             word_embed_proj_dim=self.word_embed_proj_dim,
             initializer_range=self.initializer_range,
             use_cache=False,
+            attn_implementation=self.attn_implementation,
         )
         inputs_dict = prepare_opt_inputs_dict(config, input_ids)
         return config, inputs_dict
@@ -153,7 +155,7 @@ class FlaxOPTModelTester:
 
         outputs = model(input_ids)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(np.abs(outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
     def check_use_cache_forward_with_attn_mask(self, model_class_name, config, inputs_dict):
@@ -195,14 +197,13 @@ class FlaxOPTModelTester:
 
         outputs = model(input_ids, attention_mask=attention_mask)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(np.abs(outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
 
 @require_flax
-class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTesterMixin):
+class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase):
     all_model_classes = (FlaxOPTModel, FlaxOPTForCausalLM) if is_flax_available() else ()
-    all_generative_model_classes = () if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxOPTModelTester(self)

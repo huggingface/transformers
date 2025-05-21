@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,8 +26,10 @@ from transformers import (
     AutoImageProcessor,
     CLIPConfig,
     CLIPImageProcessor,
+    ViTImageProcessor,
+    ViTImageProcessorFast,
 )
-from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER
+from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_torchvision, require_vision
 
 
 sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
@@ -65,6 +66,19 @@ class AutoImageProcessorTest(unittest.TestCase):
             config_tmpfile = Path(tmpdirname) / "config.json"
             json.dump(
                 {"feature_extractor_type": "CLIPFeatureExtractor", "processor_class": "CLIPProcessor"},
+                open(processor_tmpfile, "w"),
+            )
+            json.dump({"model_type": "clip"}, open(config_tmpfile, "w"))
+
+            config = AutoImageProcessor.from_pretrained(tmpdirname)
+            self.assertIsInstance(config, CLIPImageProcessor)
+
+    def test_image_processor_from_new_filename(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+            config_tmpfile = Path(tmpdirname) / "config.json"
+            json.dump(
+                {"image_processor_type": "CLIPImageProcessor", "processor_class": "CLIPProcessor"},
                 open(processor_tmpfile, "w"),
             )
             json.dump({"model_type": "clip"}, open(config_tmpfile, "w"))
@@ -133,6 +147,24 @@ class AutoImageProcessorTest(unittest.TestCase):
         ):
             _ = AutoImageProcessor.from_pretrained("hf-internal-testing/config-no-model")
 
+    @require_vision
+    @require_torchvision
+    def test_use_fast_selection(self):
+        checkpoint = "hf-internal-testing/tiny-random-vit"
+
+        # TODO: @yoni, change in v4.48 (when use_fast set to True by default)
+        # Slow image processor is selected by default
+        image_processor = AutoImageProcessor.from_pretrained(checkpoint)
+        self.assertIsInstance(image_processor, ViTImageProcessor)
+
+        # Fast image processor is selected when use_fast=True
+        image_processor = AutoImageProcessor.from_pretrained(checkpoint, use_fast=True)
+        self.assertIsInstance(image_processor, ViTImageProcessorFast)
+
+        # Slow image processor is selected when use_fast=False
+        image_processor = AutoImageProcessor.from_pretrained(checkpoint, use_fast=False)
+        self.assertIsInstance(image_processor, ViTImageProcessor)
+
     def test_from_pretrained_dynamic_image_processor(self):
         # If remote code is not set, we will time out when asking whether to load the model.
         with self.assertRaises(ValueError):
@@ -148,11 +180,28 @@ class AutoImageProcessorTest(unittest.TestCase):
         )
         self.assertEqual(image_processor.__class__.__name__, "NewImageProcessor")
 
+        # Test the dynamic module is loaded only once.
+        reloaded_image_processor = AutoImageProcessor.from_pretrained(
+            "hf-internal-testing/test_dynamic_image_processor", trust_remote_code=True
+        )
+        self.assertIs(image_processor.__class__, reloaded_image_processor.__class__)
+
         # Test image processor can be reloaded.
         with tempfile.TemporaryDirectory() as tmp_dir:
             image_processor.save_pretrained(tmp_dir)
             reloaded_image_processor = AutoImageProcessor.from_pretrained(tmp_dir, trust_remote_code=True)
         self.assertEqual(reloaded_image_processor.__class__.__name__, "NewImageProcessor")
+
+        # The image processor file is cached in the snapshot directory. So the module file is not changed after dumping
+        # to a temp dir. Because the revision of the module file is not changed.
+        # Test the dynamic module is loaded only once if the module file is not changed.
+        self.assertIs(image_processor.__class__, reloaded_image_processor.__class__)
+
+        # Test the dynamic module is reloaded if we force it.
+        reloaded_image_processor = AutoImageProcessor.from_pretrained(
+            "hf-internal-testing/test_dynamic_image_processor", trust_remote_code=True, force_download=True
+        )
+        self.assertIsNot(image_processor.__class__, reloaded_image_processor.__class__)
 
     def test_new_image_processor_registration(self):
         try:

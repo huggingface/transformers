@@ -156,9 +156,9 @@ class TFRoFormerEmbeddings(keras.layers.Layer):
 
     def call(
         self,
-        input_ids: tf.Tensor = None,
-        token_type_ids: tf.Tensor = None,
-        inputs_embeds: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         training: bool = False,
     ) -> tf.Tensor:
         """
@@ -911,7 +911,7 @@ ROFORMER_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare RoFormer Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare RoFormer Model transformer outputting raw hidden-states without any specific head on top.",
     ROFORMER_START_DOCSTRING,
 )
 class TFRoFormerModel(TFRoFormerPreTrainedModel):
@@ -1532,3 +1532,16 @@ class TFRoFormerForQuestionAnswering(TFRoFormerPreTrainedModel, TFQuestionAnswer
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFRoFormerForCausalLM",
+    "TFRoFormerForMaskedLM",
+    "TFRoFormerForMultipleChoice",
+    "TFRoFormerForQuestionAnswering",
+    "TFRoFormerForSequenceClassification",
+    "TFRoFormerForTokenClassification",
+    "TFRoFormerLayer",
+    "TFRoFormerModel",
+    "TFRoFormerPreTrainedModel",
+]

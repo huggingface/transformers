@@ -16,7 +16,8 @@ jobs:
       fail-fast: false
       matrix:
         version: ["1.13", "1.12", "1.11"]
-    runs-on: [intel-cpu, 8-cpu, ci]
+    runs-on:
+      group: aws-general-8-plus
     steps:
       -
         name: Set up Docker Buildx
@@ -60,7 +61,8 @@ jobs:
       fail-fast: false
       matrix:
         version: ["2.11", "2.10", "2.9", "2.8", "2.7", "2.6", "2.5"]
-    runs-on: [intel-cpu, 8-cpu, ci]
+    runs-on:
+      group: aws-general-8-plus
     steps:
       -
         name: Set up Docker Buildx

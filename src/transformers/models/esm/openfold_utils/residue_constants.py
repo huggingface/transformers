@@ -394,18 +394,16 @@ def map_structure_with_atom_order(in_list: list, first_call: bool = True) -> lis
         elif isinstance(in_list[i], str):
             in_list[i] = atom_order[in_list[i]]
         else:
-            raise ValueError("Unexpected type when mapping nested lists!")
+            raise TypeError("Unexpected type when mapping nested lists!")
     return in_list
 
 
 @functools.lru_cache(maxsize=None)
-def load_stereo_chemical_props() -> (
-    Tuple[
-        Mapping[str, List[Bond]],
-        Mapping[str, List[Bond]],
-        Mapping[str, List[BondAngle]],
-    ]
-):
+def load_stereo_chemical_props() -> Tuple[
+    Mapping[str, List[Bond]],
+    Mapping[str, List[Bond]],
+    Mapping[str, List[BondAngle]],
+]:
     """Load stereo_chemical_props.txt into a nice structure.
 
     Load literature values for bond lengths and bond angles and translate bond angles into the length of the opposite

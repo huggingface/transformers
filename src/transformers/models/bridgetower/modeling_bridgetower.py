@@ -34,86 +34,13 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import auto_docstring, logging, torch_int
 from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig, BridgeTowerVisionConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "BridgeTowerConfig"
-_CHECKPOINT_FOR_DOC = "BridgeTower/bridgetower-base"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
-
-
-BRIDGETOWER_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ subclass. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`BridgeTowerConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-BRIDGETOWER_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
-            IDs?](../glossary#input-ids)
-
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-            [What are attention masks?](../glossary#attention-mask)
-
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-            [What are token type IDs?](../glossary#token-type-ids)
-
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`BridgeTowerImageProcessor`]. See
-            [`BridgeTowerImageProcessor.__call__`] for details.
-
-        pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
-
-            - 1 for pixels that are real (i.e. **not masked**),
-            - 0 for pixels that are padding (i.e. **masked**).
-            `What are attention masks? <../glossary.html#attention-mask>`__
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
-            Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `pixel_values` into patch embeddings.
-
-        image_token_type_idx (`int`, *optional*):
-            - The token type ids for images.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
 
 
 @dataclass
@@ -141,9 +68,9 @@ class BridgeTowerModelOutput(ModelOutput):
             heads.
     """
 
-    text_features: torch.FloatTensor = None
-    image_features: torch.FloatTensor = None
-    pooler_output: torch.FloatTensor = None
+    text_features: Optional[torch.FloatTensor] = None
+    image_features: Optional[torch.FloatTensor] = None
+    pooler_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -174,7 +101,7 @@ class BridgeTowerContrastiveOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     text_embeds: Optional[Tuple[torch.FloatTensor]] = None
     image_embeds: Optional[Tuple[torch.FloatTensor]] = None
     cross_embeds: Optional[Tuple[torch.FloatTensor]] = None
@@ -217,7 +144,7 @@ class BridgeTowerResidualAttention(nn.Module):
             key_padding_mask=attention_mask,
         )[0]
 
-    def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor = None):
+    def forward(self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
         residual_state = hidden_state + self.attention(self.ln_1(hidden_state), attention_mask)
         hidden_state = self.ln_2(residual_state)
         for _, layer in self.mlp.items():
@@ -276,15 +203,63 @@ class BridgeTowerVisionEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
-        batch_size = pixel_values.shape[0]
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+
+        num_patches = embeddings.shape[1] - 1
+        position_embedding = self.position_embedding.weight.unsqueeze(0)
+        num_positions = position_embedding.shape[1] - 1
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+            return self.position_embedding(self.position_ids)
+
+        class_pos_embed = position_embedding[:, :1]
+        patch_pos_embed = position_embedding[:, 1:]
+
+        dim = embeddings.shape[-1]
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            size=(new_height, new_width),
+            mode="bicubic",
+            align_corners=False,
+        )
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
+
+    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
+        batch_size, _, height, width = pixel_values.shape
+        if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size}*{self.image_size})."
+            )
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding(self.position_ids)
+        if interpolate_pos_encoding:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            embeddings = embeddings + self.position_embedding(self.position_ids)
         return embeddings
 
 
@@ -302,8 +277,13 @@ class BridgeTowerVisionTransformer(nn.Module):
                 [nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) for _ in range(config.num_hidden_layers)]
             )
 
-    def forward(self, pixel_values: torch.Tensor, attention_mask):
-        hidden_states = self.embeddings(pixel_values)
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        attention_mask,
+        interpolate_pos_encoding: bool = False,
+    ):
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding)
         hidden_states = self.ln_pre(hidden_states)
         # NLD -> LND
         hidden_states = hidden_states.permute(1, 0, 2)
@@ -324,8 +304,12 @@ class BridgeTowerVisionTransformer(nn.Module):
             hidden_states = torch.stack(hidden_states_stack, dim=0)
         return hidden_states
 
-    def forward_pre(self, pixel_values: torch.Tensor):
-        hidden_states = self.embeddings(pixel_values)
+    def forward_pre(
+        self,
+        pixel_values: torch.Tensor,
+        interpolate_pos_encoding: bool = False,
+    ):
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         hidden_states = self.ln_pre(hidden_states)
         # NLD -> LND
         hidden_states = hidden_states.permute(1, 0, 2)
@@ -965,12 +949,8 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     return incremental_indices.long() + padding_idx
 
 
+@auto_docstring
 class BridgeTowerPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = BridgeTowerConfig
     base_model_prefix = "bridgetower"
     supports_gradient_checkpointing = False
@@ -1015,13 +995,12 @@ class BridgeTowerVisionModel(BridgeTowerPreTrainedModel):
     def dtype(self):
         return self.visual.embeddings.patch_embedding.weight.dtype
 
-    def forward(self, image, image_mask=None):
-        return self.visual(image.type(self.dtype), image_mask)
+    def forward(self, image, image_mask=None, interpolate_pos_encoding=False):
+        return self.visual(image.type(self.dtype), image_mask, interpolate_pos_encoding)
 
 
-class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
-    """
-
+@auto_docstring(
+    custom_intro="""
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in *Attention is
     all you need*_ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
@@ -1032,12 +1011,16 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
 
     .. _*Attention is all you need*: https://arxiv.org/abs/1706.03762
-
     """
-
+)
+class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
     config_class = BridgeTowerTextConfig
 
     def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
+        """
         super().__init__(config)
         self.config = config
 
@@ -1063,7 +1046,8 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    # Copied from transformers.models.roberta.modeling_roberta.RobertaModel.forward
+    @auto_docstring
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1080,26 +1064,6 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
-        r"""
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1195,10 +1159,10 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    "The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on"
-    " top.",
-    BRIDGETOWER_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The bare BridgeTower Model transformer outputting BridgeTowerModelOutput object without any specific head on
+    """
 )
 class BridgeTowerModel(BridgeTowerPreTrainedModel):
     def __init__(self, config):
@@ -1263,8 +1227,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
 
-    @add_start_docstrings_to_model_forward(BRIDGETOWER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BridgeTowerModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1280,8 +1243,14 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
+        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple[torch.Tensor], BridgeTowerModelOutput]:
         r"""
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
+            Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `pixel_values` into patch embeddings.
+        image_token_type_idx (`int`, *optional*):
+            - The token type ids for images.
         output_hidden_states (`bool`, *optional*):
             If set to `True`, hidden states are returned as a list containing the hidden states of text, image, and
             cross-modal components respectively. i.e. `(hidden_states_text, hidden_states_image,
@@ -1291,7 +1260,6 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             `cross_modal_image_hidden_states` of each brdige layer.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels are currently not supported.
-        Returns:
 
         Examples:
 
@@ -1352,7 +1320,9 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 all_hidden_states_text += (text_embeds,)
 
         if image_embeds is None:
-            image_embeds = self.vision_model.visual.forward_pre(pixel_values.type(self.vision_model.dtype))
+            image_embeds = self.vision_model.visual.forward_pre(
+                pixel_values.type(self.vision_model.dtype), interpolate_pos_encoding=interpolate_pos_encoding
+            )
         else:
             # Permute as BridgeTowerResidualAttention has batch_first=True
             image_embeds = image_embeds.permute(1, 0, 2)
@@ -1544,11 +1514,10 @@ class BridgeTowerITMHead(nn.Module):
         return itm_score
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     BridgeTower Model with a language modeling head on top as done during pretraining.
-    """,
-    BRIDGETOWER_START_DOCSTRING,
+    """
 )
 class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
     _tied_weights_keys = ["mlm_score.decoder.weight"]
@@ -1568,8 +1537,7 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.mlm_score.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(BRIDGETOWER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1586,11 +1554,13 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[MaskedLMOutput, Tuple[torch.FloatTensor]]:
         r"""
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
+            Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `pixel_values` into patch embeddings.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        Returns:
 
         Examples:
 
@@ -1652,12 +1622,11 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     BridgeTower Model transformer with a classifier head on top (a linear layer on top of the final hidden state of the
     [CLS] token) for image-to-text matching.
-    """,
-    BRIDGETOWER_START_DOCSTRING,
+    """
 )
 class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
     def __init__(self, config):
@@ -1670,8 +1639,7 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(BRIDGETOWER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1688,10 +1656,12 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[SequenceClassifierOutput, Tuple[torch.FloatTensor]]:
         r"""
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
+            Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `pixel_values` into patch embeddings.
         labels (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
             Labels for computing the image-text matching loss. 0 means the pairs don't match and 1 means they match.
             The pairs with 0 will be skipped for calculation.
-        Returns:
 
         Examples:
 
@@ -1764,11 +1734,10 @@ class BridgeTowerContrastiveHead(nn.Module):
         return x
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     BridgeTower Model with a image-text contrastive head on top computing image-text contrastive loss.
-    """,
-    BRIDGETOWER_START_DOCSTRING,
+    """
 )
 class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
     def __init__(self, config):
@@ -1784,8 +1753,7 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(BRIDGETOWER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BridgeTowerContrastiveOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1802,9 +1770,11 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
         return_loss: Optional[bool] = None,
     ) -> Union[BridgeTowerContrastiveOutput, Tuple[torch.FloatTensor]]:
         r"""
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
+            Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `pixel_values` into patch embeddings.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
-        Returns:
 
         Examples:
 
@@ -1905,3 +1875,12 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "BridgeTowerForContrastiveLearning",
+    "BridgeTowerForImageAndTextRetrieval",
+    "BridgeTowerForMaskedLM",
+    "BridgeTowerModel",
+    "BridgeTowerPreTrainedModel",
+]

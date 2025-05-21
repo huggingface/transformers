@@ -21,6 +21,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, BatchEncoding, PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -46,6 +47,7 @@ FAIRSEQ_LANGUAGE_CODES_MAP = {
 }
 
 
+@requires(backends=("sentencepiece",))
 class PLBartTokenizer(PreTrainedTokenizer):
     """
     Construct an PLBART tokenizer.
@@ -130,6 +132,7 @@ class PLBartTokenizer(PreTrainedTokenizer):
         tgt_lang=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         additional_special_tokens=None,
+        clean_up_tokenization_spaces=True,
         **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
@@ -200,6 +203,7 @@ class PLBartTokenizer(PreTrainedTokenizer):
             tgt_lang=tgt_lang,
             additional_special_tokens=_additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
 
@@ -423,3 +427,6 @@ class PLBartTokenizer(PreTrainedTokenizer):
         """Convert Language Codes to format tokenizer uses if required"""
         lang = FAIRSEQ_LANGUAGE_CODES_MAP[lang] if lang in FAIRSEQ_LANGUAGE_CODES_MAP.keys() else lang
         return lang
+
+
+__all__ = ["PLBartTokenizer"]

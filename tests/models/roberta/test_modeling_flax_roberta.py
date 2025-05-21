@@ -34,7 +34,7 @@ if is_flax_available():
     )
 
 
-class FlaxRobertaModelTester(unittest.TestCase):
+class FlaxRobertaModelTester:
     def __init__(
         self,
         parent,

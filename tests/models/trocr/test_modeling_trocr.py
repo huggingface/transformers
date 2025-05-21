@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -161,7 +160,6 @@ class TrOCRStandaloneDecoderModelTester:
 @require_torch
 class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TrOCRDecoder, TrOCRForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (TrOCRForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = {"text-generation": TrOCRForCausalLM} if is_torch_available() else {}
     fx_compatible = True
     test_pruning = False
@@ -170,16 +168,8 @@ class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, P
         self.model_tester = TrOCRStandaloneDecoderModelTester(self, is_training=False)
         self.config_tester = ConfigTester(self, config_class=TrOCRConfig)
 
-    # not implemented currently
+    @unittest.skip(reason="Not yet implemented")
     def test_inputs_embeds(self):
-        pass
-
-    # trocr has no base model
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    # trocr has no base model
-    def test_save_load_fast_init_to_base(self):
         pass
 
     def test_config(self):
@@ -189,10 +179,10 @@ class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, P
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past(*config_and_inputs)
 
-    # decoder cannot keep gradients
+    @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
         return
 
-    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
+    @unittest.skip(reason="The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
     def test_left_padding_compatibility(self):
         pass

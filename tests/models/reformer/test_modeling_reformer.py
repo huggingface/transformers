@@ -1,4 +1,3 @@
-# coding=utf-8 # Copyright 2020 Huggingface
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -40,11 +39,11 @@ if is_torch_available():
         ReformerForMaskedLM,
         ReformerForQuestionAnswering,
         ReformerForSequenceClassification,
-        ReformerLayer,
         ReformerModel,
         ReformerModelWithLMHead,
         ReformerTokenizer,
     )
+    from transformers.models.reformer.modeling_reformer import ReformerLayer
 
 
 class ReformerModelTester:
@@ -53,6 +52,7 @@ class ReformerModelTester:
         parent,
         batch_size=13,
         seq_length=32,
+        text_seq_length=None,
         is_training=True,
         is_decoder=True,
         use_input_mask=True,
@@ -128,6 +128,7 @@ class ReformerModelTester:
         self.attn_layers = attn_layers
         self.pad_token_id = pad_token_id
         self.hash_seed = hash_seed
+        self.text_seq_length = text_seq_length or seq_length
 
         attn_chunk_length = local_attn_chunk_length if local_attn_chunk_length is not None else lsh_attn_chunk_length
         num_chunks_after = local_num_chunks_after if local_num_chunks_after is not None else lsh_num_chunks_after
@@ -208,9 +209,6 @@ class ReformerModelTester:
         )
 
     def create_and_check_reformer_model_with_lm_backward(self, config, input_ids, input_mask, choice_labels):
-        if not self.is_training:
-            return
-
         config.is_decoder = False
         config.lsh_num_chunks_after = 1
         model = ReformerForMaskedLM(config=config)
@@ -250,7 +248,7 @@ class ReformerModelTester:
         model = ReformerModel(config=config)
         model.to(torch_device)
         model.eval()
-        # set all position encodings to zero so that postions don't matter
+        # set all position encodings to zero so that positions don't matter
         with torch.no_grad():
             embedding = model.embeddings.position_embeddings.embedding
             embedding.weight = nn.Parameter(torch.zeros(embedding.weight.shape).to(torch_device))
@@ -328,9 +326,6 @@ class ReformerModelTester:
         )
 
     def create_and_check_reformer_feed_backward_chunking(self, config, input_ids, input_mask, choice_labels):
-        if not self.is_training:
-            return
-
         # disable dropout
         config.hidden_dropout_prob = 0
         config.local_attention_probs_dropout_prob = 0
@@ -517,6 +512,8 @@ class ReformerTesterMixin:
         self.model_tester.create_and_check_reformer_model(*config_and_inputs)
 
     def test_reformer_lm_model_backward(self):
+        if not self.model_tester.is_training:
+            self.skipTest(reason="model_tester.is_training is set to False")
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_model_with_lm_backward(*config_and_inputs)
 
@@ -539,6 +536,8 @@ class ReformerTesterMixin:
         self.model_tester.create_and_check_reformer_layer_dropout_seed(*config_and_inputs, is_decoder=False)
 
     def test_reformer_chunking_backward_equality(self):
+        if not self.model_tester.is_training:
+            self.skipTest(reason="model_tester.is_training is set to False")
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_feed_backward_chunking(*config_and_inputs)
 
@@ -587,12 +586,12 @@ class ReformerTesterMixin:
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_for_sequence_classification(*config_and_inputs, is_decoder=False)
 
+    @unittest.skip(reason="Reformer cannot keep gradients in attentions or hidden states")
     def test_retain_grad_hidden_states_attentions(self):
-        # reformer cannot keep gradients in attentions or hidden states
         return
 
+    @unittest.skip(reason="Reformer cannot resize embeddings that easily")
     def test_resize_embeddings_untied(self):
-        # reformer cannot resize embeddings that easily
         return
 
 
@@ -603,14 +602,13 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
     test_sequence_classification_problem_types = True
 
     def setUp(self):
-        self.model_tester = ReformerModelTester(self)
+        self.model_tester = ReformerModelTester(self, text_seq_length=16)
         self.config_tester = ConfigTester(self, config_class=ReformerConfig, hidden_size=37)
 
     @slow
@@ -620,36 +618,42 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         self.assertIsNotNone(model)
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
+        # NOTE (joao): this function is substancially different from the original, the attention has different
+        # *number* of shapes in certain conditions
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [isinstance(iter_attentions, list) for iter_attentions in attentions], [True] * len(attentions)
         )
-        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
+        self.assertEqual(len(attentions), (output_length - prompt_length))
 
-        for idx, iter_attentions in enumerate(attentions):
-            tgt_len = min_length + idx if not use_cache else 1
-            num_chunks = tgt_len // config.local_attn_chunk_length + (tgt_len % config.local_attn_chunk_length != 0)
-            tgt_chunk_len = config.local_attn_chunk_length
-            src_chunk_len = config.local_attn_chunk_length * (
+        for generated_length, iter_attentions in enumerate(attentions):
+            use_cache = decoder_past_key_values is not None and generated_length > 0
+
+            model_input_length = prompt_length + generated_length if not use_cache else 1
+            num_chunks = model_input_length // config.local_attn_chunk_length + (
+                model_input_length % config.local_attn_chunk_length != 0
+            )
+            model_input_chunk_len = config.local_attn_chunk_length
+            query_chunk_len = config.local_attn_chunk_length * (
                 1 + config.local_num_chunks_after + config.local_num_chunks_before
             )
 
             if use_cache:
                 expected_shape = (
-                    batch_size * num_beam_groups,
+                    batch_size,
                     config.num_attention_heads,
-                    tgt_len,
-                    min_length // config.local_attn_chunk_length + 1 + idx,
+                    model_input_length,
+                    prompt_length // config.local_attn_chunk_length + generated_length,
                 )
             else:
                 expected_shape = (
-                    batch_size * num_beam_groups,
+                    batch_size,
                     config.num_attention_heads,
                     num_chunks,
-                    tgt_chunk_len,
-                    src_chunk_len,
+                    model_input_chunk_len,
+                    query_chunk_len,
                 )
             # check attn size
             self.assertListEqual(
@@ -657,46 +661,48 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
             )
 
     def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
     ):
+        # NOTE (joao): this function is substancially different from the original, the hidden states have different
+        # length in certain conditions
         self.assertIsInstance(hidden_states, tuple)
         self.assertListEqual(
             [isinstance(iter_hidden_states, list) for iter_hidden_states in hidden_states],
             [True] * len(hidden_states),
         )
-        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
+        self.assertEqual(len(hidden_states), (output_length - prompt_length))
 
-        for idx, iter_hidden_states in enumerate(hidden_states):
-            seq_len = min_length + idx
-            seq_len = config.local_attn_chunk_length * (
-                seq_len // config.local_attn_chunk_length + (seq_len % config.local_attn_chunk_length != 0)
+        for generation_length, iter_hidden_states in enumerate(hidden_states):
+            use_cache_this_iter = use_cache and generation_length > 0
+            model_input_length = prompt_length + generation_length
+            model_output_length = config.local_attn_chunk_length * (
+                model_input_length // config.local_attn_chunk_length
+                + (model_input_length % config.local_attn_chunk_length != 0)
             )
 
-            if use_cache:
-                seq_len = 1
+            if use_cache_this_iter:
+                model_output_length = 1
 
-            expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
+            expected_shape = (batch_size, model_output_length, config.hidden_size)
             # check hidden size
             self.assertListEqual(
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
                 [expected_shape] * len(iter_hidden_states),
             )
 
-    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
+    @unittest.skip(reason="The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
     def test_left_padding_compatibility(self):
         pass
 
-    def _get_input_ids_and_config(self, batch_size=2):
-        # override because overwise we hit max possible seq length for model (4*8=32)
+    def prepare_config_and_inputs_for_generate(self, *args, **kwargs):
+        # override because otherwise we hit max possible seq length for model (4*8=32)
         # decreasing the seq_length in tester causes errors for "training_tests", those need exactly max seq length
         # NOTE: seq_length has to be multiple of 4, otherwise it fails for other tests
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict[self.input_name]
-        input_ids = input_ids[:batch_size, :16]
-        attention_mask = torch.ones_like(input_ids, dtype=torch.long)[:batch_size, :16]
-        config.eos_token_id = None
-        config.forced_eos_token_id = None
-        return config, input_ids, attention_mask
+        original_sequence_length = self.model_tester.seq_length
+        self.model_tester.seq_length = self.model_tester.text_seq_length
+        test_inputs = super().prepare_config_and_inputs_for_generate(*args, **kwargs)
+        self.model_tester.seq_length = original_sequence_length
+        return test_inputs
 
 
 @require_torch
@@ -708,7 +714,6 @@ class ReformerLSHAttnModelTest(
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": ReformerModel,
@@ -727,10 +732,17 @@ class ReformerLSHAttnModelTest(
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         if (
-            pipeline_test_casse_name == "QAPipelineTests"
+            pipeline_test_case_name == "QAPipelineTests"
             and tokenizer_name is not None
             and not tokenizer_name.endswith("Fast")
         ):
@@ -784,37 +796,42 @@ class ReformerLSHAttnModelTest(
         self.config_tester = ConfigTester(self, config_class=ReformerConfig, hidden_size=37)
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
+        # NOTE (joao): this function is substancially different from the original, the attention has different
+        # *number* of shapes in certain conditions
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [isinstance(iter_attentions, list) for iter_attentions in attentions], [True] * len(attentions)
         )
-        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
+        self.assertEqual(len(attentions), (output_length - prompt_length))
 
-        for idx, iter_attentions in enumerate(attentions):
-            tgt_len = min_length + idx if not use_cache else 1
-            num_chunks = tgt_len // config.lsh_attn_chunk_length + (tgt_len % config.lsh_attn_chunk_length != 0)
-            tgt_chunk_len = config.lsh_attn_chunk_length
-            src_chunk_len = config.lsh_attn_chunk_length * (
+        for generated_length, iter_attentions in enumerate(attentions):
+            use_cache = decoder_past_key_values is not None and generated_length > 0
+            model_input_len = prompt_length + generated_length if not use_cache else 1
+            num_chunks = model_input_len // config.lsh_attn_chunk_length + (
+                model_input_len % config.lsh_attn_chunk_length != 0
+            )
+            model_input_chunk_len = config.lsh_attn_chunk_length
+            query_chunk_len = config.lsh_attn_chunk_length * (
                 1 + config.lsh_num_chunks_after + config.lsh_num_chunks_before
             )
 
             if use_cache:
                 expected_shape = (
-                    batch_size * num_beam_groups,
+                    batch_size,
                     config.num_attention_heads,
                     config.num_hashes,
-                    tgt_len,
+                    model_input_len,
                     config.num_hashes * (1 + config.lsh_num_chunks_after + config.lsh_num_chunks_before),
                 )
             else:
                 expected_shape = (
-                    batch_size * num_beam_groups,
+                    batch_size,
                     config.num_attention_heads,
                     num_chunks * config.num_hashes,
-                    tgt_chunk_len,
-                    src_chunk_len,
+                    model_input_chunk_len,
+                    query_chunk_len,
                 )
             # check attn size
             self.assertListEqual(
@@ -822,40 +839,44 @@ class ReformerLSHAttnModelTest(
             )
 
     def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
     ):
+        # NOTE (joao): this function is substancially different from the original, the hidden states have different
+        # length in certain conditions
         self.assertIsInstance(hidden_states, tuple)
         self.assertListEqual(
             [isinstance(iter_hidden_states, list) for iter_hidden_states in hidden_states],
             [True] * len(hidden_states),
         )
-        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
+        self.assertEqual(len(hidden_states), (output_length - prompt_length))
 
-        for idx, iter_hidden_states in enumerate(hidden_states):
-            seq_len = min_length + idx if not use_cache else 1
-            seq_len = config.lsh_attn_chunk_length * (
-                seq_len // config.lsh_attn_chunk_length + (seq_len % config.lsh_attn_chunk_length != 0)
+        for generation_length, iter_hidden_states in enumerate(hidden_states):
+            use_cache_this_iter = use_cache and generation_length > 0
+            model_input_length = prompt_length + generation_length
+            model_output_length = config.local_attn_chunk_length * (
+                model_input_length // config.local_attn_chunk_length
+                + (model_input_length % config.local_attn_chunk_length != 0)
             )
 
-            if use_cache:
-                seq_len = 1
+            if use_cache_this_iter:
+                model_output_length = 1
 
-            expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
+            expected_shape = (batch_size, model_output_length, config.hidden_size)
             # check hidden size
             self.assertListEqual(
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
                 [expected_shape] * len(iter_hidden_states),
             )
 
-    @unittest.skip("Fails because the sequence length is not a multiple of 4")
+    @unittest.skip(reason="Fails because the sequence length is not a multiple of 4")
     def test_problem_types(self):
         pass
 
-    @unittest.skip("Fails because the sequence length is not a multiple of 4")
+    @unittest.skip(reason="Fails because the sequence length is not a multiple of 4")
     def test_past_key_values_format(self):
         pass
 
-    @unittest.skip("The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
+    @unittest.skip(reason="The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
     def test_left_padding_compatibility(self):
         pass
 
@@ -865,7 +886,7 @@ class ReformerLSHAttnModelTest(
 @require_tokenizers
 class ReformerIntegrationTests(unittest.TestCase):
     """
-    These integration tests test the current layer activations and gradients againts the output of the Hugging Face Reformer model at time of integration: 29/06/2020. During integration, the model was tested against the output of the official Trax ReformerLM model for various cases ("lsh" only, "lsh" only, masked / non-masked, different chunk length, ....). In order to recover the original trax integration tests, one should use patrickvonplaten's fork of trax and the code that lives on the branch `reformer_trax_tests`.
+    These integration tests test the current layer activations and gradients against the output of the Hugging Face Reformer model at time of integration: 29/06/2020. During integration, the model was tested against the output of the official Trax ReformerLM model for various cases ("lsh" only, "lsh" only, masked / non-masked, different chunk length, ....). In order to recover the original trax integration tests, one should use patrickvonplaten's fork of trax and the code that lives on the branch `reformer_trax_tests`.
     """
 
     def _get_basic_config_and_input(self):
@@ -1090,7 +1111,7 @@ class ReformerIntegrationTests(unittest.TestCase):
             dtype=torch.float,
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(output_slice, expected_output_slice, atol=1e-3))
+        torch.testing.assert_close(output_slice, expected_output_slice, rtol=1e-3, atol=1e-3)
 
     def test_lsh_layer_forward_complex(self):
         config = self._get_basic_config_and_input()
@@ -1113,7 +1134,7 @@ class ReformerIntegrationTests(unittest.TestCase):
             dtype=torch.float,
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(output_slice, expected_output_slice, atol=1e-3))
+        torch.testing.assert_close(output_slice, expected_output_slice, rtol=1e-3, atol=1e-3)
 
     def test_local_layer_forward(self):
         config = self._get_basic_config_and_input()
@@ -1131,7 +1152,7 @@ class ReformerIntegrationTests(unittest.TestCase):
             dtype=torch.float,
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(output_slice, expected_output_slice, atol=1e-3))
+        torch.testing.assert_close(output_slice, expected_output_slice, rtol=1e-3, atol=1e-3)
 
     def test_local_layer_forward_complex(self):
         config = self._get_basic_config_and_input()
@@ -1153,7 +1174,7 @@ class ReformerIntegrationTests(unittest.TestCase):
             dtype=torch.float,
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(output_slice, expected_output_slice, atol=1e-3))
+        torch.testing.assert_close(output_slice, expected_output_slice, rtol=1e-3, atol=1e-3)
 
     def test_lsh_model_forward(self):
         config = self._get_basic_config_and_input()
@@ -1170,7 +1191,7 @@ class ReformerIntegrationTests(unittest.TestCase):
             dtype=torch.float,
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(output_slice, expected_output_slice, atol=1e-3))
+        torch.testing.assert_close(output_slice, expected_output_slice, rtol=1e-3, atol=1e-3)
 
     def test_local_model_forward(self):
         config = self._get_basic_config_and_input()
@@ -1186,7 +1207,7 @@ class ReformerIntegrationTests(unittest.TestCase):
             dtype=torch.float,
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(output_slice, expected_output_slice, atol=1e-3))
+        torch.testing.assert_close(output_slice, expected_output_slice, rtol=1e-3, atol=1e-3)
 
     def test_lm_model_forward(self):
         config = self._get_basic_config_and_input()
@@ -1205,7 +1226,7 @@ class ReformerIntegrationTests(unittest.TestCase):
             device=torch_device,
         )
 
-        self.assertTrue(torch.allclose(output_slice, expected_output_slice, atol=1e-3))
+        torch.testing.assert_close(output_slice, expected_output_slice, rtol=1e-3, atol=1e-3)
 
     def test_local_lm_model_grad(self):
         config = self._get_basic_config_and_input()
@@ -1219,10 +1240,12 @@ class ReformerIntegrationTests(unittest.TestCase):
         input_ids, _ = self._get_input_ids_and_mask()
         loss = model(input_ids=input_ids, labels=input_ids)[0]
 
-        self.assertTrue(torch.allclose(loss, torch.tensor(5.8019, dtype=torch.float, device=torch_device), atol=1e-3))
+        torch.testing.assert_close(
+            loss, torch.tensor(5.8019, dtype=torch.float, device=torch_device), rtol=1e-3, atol=1e-3
+        )
         loss.backward()
 
-        # check last grads to cover all proable errors
+        # check last grads to cover all probable errors
         grad_slice_word = model.reformer.embeddings.word_embeddings.weight.grad[0, :5]
         expected_grad_slice_word = torch.tensor(
             [-0.0005, -0.0001, -0.0002, -0.0006, -0.0006],
@@ -1241,9 +1264,9 @@ class ReformerIntegrationTests(unittest.TestCase):
             dtype=torch.float,
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(grad_slice_word, expected_grad_slice_word, atol=1e-3))
-        self.assertTrue(torch.allclose(grad_slice_position_factor_1, expected_grad_slice_pos_fac_1, atol=1e-3))
-        self.assertTrue(torch.allclose(grad_slice_position_factor_2, expected_grad_slice_pos_fac_2, atol=1e-3))
+        torch.testing.assert_close(grad_slice_word, expected_grad_slice_word, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(grad_slice_position_factor_1, expected_grad_slice_pos_fac_1, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(grad_slice_position_factor_2, expected_grad_slice_pos_fac_2, rtol=1e-3, atol=1e-3)
 
     def test_lsh_lm_model_grad(self):
         config = self._get_basic_config_and_input()
@@ -1259,9 +1282,11 @@ class ReformerIntegrationTests(unittest.TestCase):
         input_ids, _ = self._get_input_ids_and_mask()
         loss = model(input_ids=input_ids, labels=input_ids)[0]
 
-        self.assertTrue(torch.allclose(loss, torch.tensor(5.7854, dtype=torch.float, device=torch_device), atol=1e-3))
+        torch.testing.assert_close(
+            loss, torch.tensor(5.7854, dtype=torch.float, device=torch_device), rtol=1e-3, atol=1e-3
+        )
         loss.backward()
-        # check last grads to cover all proable errors
+        # check last grads to cover all probable errors
         grad_slice_word = model.reformer.embeddings.word_embeddings.weight.grad[0, :5]
         expected_grad_slice_word = torch.tensor(
             [0.0004, 0.0003, 0.0006, -0.0004, 0.0002],
@@ -1280,9 +1305,9 @@ class ReformerIntegrationTests(unittest.TestCase):
             dtype=torch.float,
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(grad_slice_word, expected_grad_slice_word, atol=1e-3))
-        self.assertTrue(torch.allclose(grad_slice_position_factor_1, expected_grad_slice_pos_fac_1, atol=1e-3))
-        self.assertTrue(torch.allclose(grad_slice_position_factor_2, expected_grad_slice_pos_fac_2, atol=1e-3))
+        torch.testing.assert_close(grad_slice_word, expected_grad_slice_word, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(grad_slice_position_factor_1, expected_grad_slice_pos_fac_1, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(grad_slice_position_factor_2, expected_grad_slice_pos_fac_2, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_pretrained_generate_crime_and_punish(self):

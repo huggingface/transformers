@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,7 +32,7 @@ from itertools import chain
 
 # You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import flax
 import jax
@@ -188,9 +187,9 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-                "execute code present on the Hub on your local machine."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -302,7 +301,7 @@ class FlaxDataCollatorForLanguageModeling:
                 "You should pass `mlm=False` to train on causal language modeling instead."
             )
 
-    def __call__(self, examples: List[Dict[str, np.ndarray]], pad_to_multiple_of: int) -> Dict[str, np.ndarray]:
+    def __call__(self, examples: list[dict[str, np.ndarray]], pad_to_multiple_of: int) -> dict[str, np.ndarray]:
         # Handle dict or lists with proper padding and conversion to tensor.
         batch = self.tokenizer.pad(examples, pad_to_multiple_of=pad_to_multiple_of, return_tensors=TensorType.NUMPY)
 
@@ -316,7 +315,7 @@ class FlaxDataCollatorForLanguageModeling:
 
     def mask_tokens(
         self, inputs: np.ndarray, special_tokens_mask: Optional[np.ndarray]
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray]:
         """
         Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
         """
@@ -446,6 +445,7 @@ def main():
             cache_dir=model_args.cache_dir,
             token=model_args.token,
             num_proc=data_args.preprocessing_num_workers,
+            trust_remote_code=model_args.trust_remote_code,
         )
 
         if "validation" not in datasets.keys():
@@ -456,6 +456,7 @@ def main():
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
                 num_proc=data_args.preprocessing_num_workers,
+                trust_remote_code=model_args.trust_remote_code,
             )
             datasets["train"] = load_dataset(
                 data_args.dataset_name,
@@ -464,6 +465,7 @@ def main():
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
                 num_proc=data_args.preprocessing_num_workers,
+                trust_remote_code=model_args.trust_remote_code,
             )
     else:
         data_files = {}

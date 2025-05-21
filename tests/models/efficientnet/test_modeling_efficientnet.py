@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -83,6 +82,7 @@ class EfficientNetModelTester:
 
     def get_config(self):
         return EfficientNetConfig(
+            image_size=self.image_size,
             num_channels=self.num_channels,
             kernel_sizes=self.kernel_sizes,
             in_channels=self.in_channels,
@@ -138,24 +138,20 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = EfficientNetModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=EfficientNetConfig, has_text_modality=False, hidden_size=37
+            self,
+            config_class=EfficientNetConfig,
+            has_text_modality=False,
+            hidden_size=37,
+            common_properties=["num_channels", "image_size", "hidden_dim"],
         )
 
     def test_config(self):
-        self.create_and_test_config_common_properties()
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
-
-    def create_and_test_config_common_properties(self):
-        return
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="EfficientNet does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -223,6 +219,12 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     @is_pipeline_test
     @require_vision
     @slow
+    def test_pipeline_image_feature_extraction_fp16(self):
+        super().test_pipeline_image_feature_extraction_fp16()
+
+    @is_pipeline_test
+    @require_vision
+    @slow
     def test_pipeline_image_classification(self):
         super().test_pipeline_image_classification()
 
@@ -257,4 +259,4 @@ class EfficientNetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor([-0.2962, 0.4487, 0.4499]).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)

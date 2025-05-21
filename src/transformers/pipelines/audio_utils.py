@@ -50,9 +50,35 @@ def ffmpeg_microphone(
     sampling_rate: int,
     chunk_length_s: float,
     format_for_conversion: str = "f32le",
+    ffmpeg_input_device: Optional[str] = None,
+    ffmpeg_additional_args: Optional[list[str]] = None,
 ):
     """
-    Helper function to read raw microphone data.
+    Helper function to read audio from a microphone using ffmpeg. The default input device will be used unless another
+    input device is specified using the `ffmpeg_input_device` argument. Uses 'alsa' on Linux, 'avfoundation' on MacOS and
+    'dshow' on Windows.
+
+    Arguments:
+        sampling_rate (`int`):
+            The sampling_rate to use when reading the data from the microphone. Try using the model's sampling_rate to
+            avoid resampling later.
+        chunk_length_s (`float` or `int`):
+            The length of the maximum chunk of audio to be sent returned.
+        format_for_conversion (`str`, defaults to `f32le`):
+            The name of the format of the audio samples to be returned by ffmpeg. The standard is `f32le`, `s16le`
+            could also be used.
+        ffmpeg_input_device (`str`, *optional*):
+            The identifier of the input device to be used by ffmpeg (i.e. ffmpeg's '-i' argument). If unset,
+            the default input device will be used. See `https://www.ffmpeg.org/ffmpeg-devices.html#Input-Devices`
+            for how to specify and list input devices.
+        ffmpeg_additional_args (`list[str]`, *optional*):
+            Additional arguments to pass to ffmpeg, can include arguments like -nostdin for running as a background
+            process. For example, to pass -nostdin to the ffmpeg process, pass in ["-nostdin"]. If passing in flags
+            with multiple arguments, use the following convention (eg ["flag", "arg1", "arg2]).
+
+    Returns:
+        A generator yielding audio chunks of `chunk_length_s` seconds as `bytes` objects of length
+        `int(round(sampling_rate * chunk_length_s)) * size_of_sample`.
     """
     ar = f"{sampling_rate}"
     ac = "1"
@@ -64,15 +90,18 @@ def ffmpeg_microphone(
         raise ValueError(f"Unhandled format `{format_for_conversion}`. Please use `s16le` or `f32le`")
 
     system = platform.system()
+
     if system == "Linux":
         format_ = "alsa"
-        input_ = "default"
+        input_ = ffmpeg_input_device or "default"
     elif system == "Darwin":
         format_ = "avfoundation"
-        input_ = ":0"
+        input_ = ffmpeg_input_device or ":default"
     elif system == "Windows":
         format_ = "dshow"
-        input_ = _get_microphone_name()
+        input_ = ffmpeg_input_device or _get_microphone_name()
+
+    ffmpeg_additional_args = [] if ffmpeg_additional_args is None else ffmpeg_additional_args
 
     ffmpeg_command = [
         "ffmpeg",
@@ -93,6 +122,9 @@ def ffmpeg_microphone(
         "quiet",
         "pipe:1",
     ]
+
+    ffmpeg_command.extend(ffmpeg_additional_args)
+
     chunk_len = int(round(sampling_rate * chunk_length_s)) * size_of_sample
     iterator = _ffmpeg_stream(ffmpeg_command, chunk_len)
     for item in iterator:
@@ -105,11 +137,14 @@ def ffmpeg_microphone_live(
     stream_chunk_s: Optional[int] = None,
     stride_length_s: Optional[Union[Tuple[float, float], float]] = None,
     format_for_conversion: str = "f32le",
+    ffmpeg_input_device: Optional[str] = None,
+    ffmpeg_additional_args: Optional[list[str]] = None,
 ):
     """
-    Helper function to read audio from the microphone file through ffmpeg. This will output `partial` overlapping
-    chunks starting from `stream_chunk_s` (if it is defined) until `chunk_length_s` is reached. It will make use of
-    striding to avoid errors on the "sides" of the various chunks.
+    Helper function to read audio from a microphone using ffmpeg. This will output `partial` overlapping chunks starting
+    from `stream_chunk_s` (if it is defined) until `chunk_length_s` is reached. It will make use of striding to avoid
+    errors on the "sides" of the various chunks. The default input device will be used unless another input device is
+    specified using the `ffmpeg_input_device` argument. Uses 'alsa' on Linux, 'avfoundation' on MacOS and 'dshow' on Windows.
 
     Arguments:
         sampling_rate (`int`):
@@ -117,32 +152,46 @@ def ffmpeg_microphone_live(
             avoid resampling later.
         chunk_length_s (`float` or `int`):
             The length of the maximum chunk of audio to be sent returned. This includes the eventual striding.
-        stream_chunk_s (`float` or `int`)
+        stream_chunk_s (`float` or `int`):
             The length of the minimal temporary audio to be returned.
-        stride_length_s (`float` or `int` or `(float, float)`, *optional*, defaults to `None`)
+        stride_length_s (`float` or `int` or `(float, float)`, *optional*):
             The length of the striding to be used. Stride is used to provide context to a model on the (left, right) of
             an audio sample but without using that part to actually make the prediction. Setting this does not change
             the length of the chunk.
-        format_for_conversion (`str`, defalts to `f32le`)
+        format_for_conversion (`str`, *optional*, defaults to `f32le`):
             The name of the format of the audio samples to be returned by ffmpeg. The standard is `f32le`, `s16le`
             could also be used.
+        ffmpeg_input_device (`str`, *optional*):
+            The identifier of the input device to be used by ffmpeg (i.e. ffmpeg's '-i' argument). If unset,
+            the default input device will be used. See `https://www.ffmpeg.org/ffmpeg-devices.html#Input-Devices`
+            for how to specify and list input devices.
+        ffmpeg_additional_args (`list[str]`, *optional*):
+            Additional arguments to pass to ffmpeg, can include arguments like -nostdin for running as a background
+            process. For example, to pass -nostdin to the ffmpeg process, pass in ["-nostdin"]. If passing in flags
+            with multiple arguments, use the following convention (eg ["flag", "arg1", "arg2]).
+
     Return:
         A generator yielding dictionaries of the following form
 
-        `{"sampling_rate": int, "raw": np.array(), "partial" bool}` With optionnally a `"stride" (int, int)` key if
+        `{"sampling_rate": int, "raw": np.array(), "partial" bool}` With optionally a `"stride" (int, int)` key if
         `stride_length_s` is defined.
 
         `stride` and `raw` are all expressed in `samples`, and `partial` is a boolean saying if the current yield item
         is a whole chunk, or a partial temporary result to be later replaced by another larger chunk.
-
-
     """
     if stream_chunk_s is not None:
         chunk_s = stream_chunk_s
     else:
         chunk_s = chunk_length_s
 
-    microphone = ffmpeg_microphone(sampling_rate, chunk_s, format_for_conversion=format_for_conversion)
+    microphone = ffmpeg_microphone(
+        sampling_rate,
+        chunk_s,
+        format_for_conversion=format_for_conversion,
+        ffmpeg_input_device=ffmpeg_input_device,
+        ffmpeg_additional_args=[] if ffmpeg_additional_args is None else ffmpeg_additional_args,
+    )
+
     if format_for_conversion == "s16le":
         dtype = np.int16
         size_of_sample = 2

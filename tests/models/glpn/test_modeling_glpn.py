@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -152,6 +151,7 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = GLPNModelTester(self)
@@ -168,11 +168,11 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_depth_estimation(*config_and_inputs)
 
-    @unittest.skip("GLPN does not use inputs_embeds")
+    @unittest.skip(reason="GLPN does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("GLPN does not have get_input_embeddings method and get_output_embeddings methods")
+    @unittest.skip(reason="GLPN does not have get_input_embeddings method and get_output_embeddings methods")
     def test_model_get_set_embeddings(self):
         pass
 
@@ -283,7 +283,7 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -342,4 +342,4 @@ class GLPNModelIntegrationTest(unittest.TestCase):
             [[3.4291, 2.7865, 2.5151], [3.2841, 2.7021, 2.3502], [3.1147, 2.4625, 2.2481]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

@@ -137,6 +137,7 @@ class SplinterTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             cls_token=cls_token,
             mask_token=mask_token,
+            question_token=question_token,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
             **kwargs,
@@ -297,7 +298,7 @@ class SplinterTokenizer(PreTrainedTokenizer):
         return (vocab_file,)
 
 
-class BasicTokenizer(object):
+class BasicTokenizer:
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
@@ -446,7 +447,7 @@ class BasicTokenizer(object):
         return "".join(output)
 
 
-class WordpieceTokenizer(object):
+class WordpieceTokenizer:
     """Runs WordPiece tokenization."""
 
     def __init__(self, vocab, unk_token, max_input_chars_per_word=100):
@@ -459,7 +460,7 @@ class WordpieceTokenizer(object):
         Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
         tokenization using the given vocabulary.
 
-        For example, `input = "unaffable"` wil return as output `["un", "##aff", "##able"]`.
+        For example, `input = "unaffable"` will return as output `["un", "##aff", "##able"]`.
 
         Args:
           text: A single token or whitespace separated tokens. This should have
@@ -501,3 +502,6 @@ class WordpieceTokenizer(object):
             else:
                 output_tokens.extend(sub_tokens)
         return output_tokens
+
+
+__all__ = ["SplinterTokenizer"]

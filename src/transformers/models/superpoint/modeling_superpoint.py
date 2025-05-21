@@ -25,20 +25,14 @@ from transformers.modeling_outputs import (
 )
 from transformers.models.superpoint.configuration_superpoint import SuperPointConfig
 
-from ...pytorch_utils import is_torch_greater_or_equal_than_1_13
 from ...utils import (
     ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     logging,
 )
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "SuperPointConfig"
-
-_CHECKPOINT_FOR_DOC = "magic-leap-community/superpoint"
 
 
 def remove_keypoints_from_borders(
@@ -239,7 +233,10 @@ class SuperPointInterestPointDecoder(nn.Module):
         return scores
 
     def _extract_keypoints(self, scores: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Based on their scores, extract the pixels that represent the keypoints that will be used for descriptors computation"""
+        """
+        Based on their scores, extract the pixels that represent the keypoints that will be used for descriptors computation.
+        The keypoints are in the form of relative (x, y) coordinates.
+        """
         _, height, width = scores.shape
 
         # Threshold keypoints by score value
@@ -311,7 +308,7 @@ class SuperPointDescriptorDecoder(nn.Module):
         divisor = divisor.to(keypoints)
         keypoints /= divisor
         keypoints = keypoints * 2 - 1  # normalize to (-1, 1)
-        kwargs = {"align_corners": True} if is_torch_greater_or_equal_than_1_13 else {}
+        kwargs = {"align_corners": True}
         # [batch_size, num_channels, num_keypoints, 2] -> [batch_size, num_channels, num_keypoints, 2]
         keypoints = keypoints.view(batch_size, 1, -1, 2)
         descriptors = nn.functional.grid_sample(descriptors, keypoints, mode="bilinear", **kwargs)
@@ -321,12 +318,8 @@ class SuperPointDescriptorDecoder(nn.Module):
         return descriptors
 
 
+@auto_docstring
 class SuperPointPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = SuperPointConfig
     base_model_prefix = "superpoint"
     main_input_name = "pixel_values"
@@ -361,33 +354,10 @@ class SuperPointPreTrainedModel(PreTrainedModel):
         return pixel_values[:, 0, :, :][:, None, :, :]
 
 
-SUPERPOINT_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`SuperPointConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+@auto_docstring(
+    custom_intro="""
+    SuperPoint model outputting keypoints and descriptors.
     """
-
-SUPERPOINT_INPUTS_DOCSTRING = r"""
-Args:
-    pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-        Pixel values. Pixel values can be obtained using [`SuperPointImageProcessor`]. See
-        [`SuperPointImageProcessor.__call__`] for details.
-    output_hidden_states (`bool`, *optional*):
-        Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for more
-        detail.
-    return_dict (`bool`, *optional*):
-        Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-    """
-
-
-@add_start_docstrings(
-    "SuperPoint model outputting keypoints and descriptors.",
-    SUPERPOINT_START_DOCSTRING,
 )
 class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
     """
@@ -410,7 +380,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
 
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(SUPERPOINT_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -418,7 +388,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SuperPointKeypointDescriptionOutput]:
-        """
+        r"""
         Examples:
 
         ```python
@@ -447,7 +417,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
 
         pixel_values = self.extract_one_channel_pixel_values(pixel_values)
 
-        batch_size = pixel_values.shape[0]
+        batch_size, _, height, width = pixel_values.shape
 
         encoder_outputs = self.encoder(
             pixel_values,
@@ -485,6 +455,9 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
             descriptors[i, : _descriptors.shape[0]] = _descriptors
             mask[i, : _scores.shape[0]] = 1
 
+        # Convert to relative coordinates
+        keypoints = keypoints / torch.tensor([width, height], device=keypoints.device)
+
         hidden_states = encoder_outputs[1] if output_hidden_states else None
         if not return_dict:
             return tuple(v for v in [loss, keypoints, scores, descriptors, mask, hidden_states] if v is not None)
@@ -497,3 +470,6 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
             mask=mask,
             hidden_states=hidden_states,
         )
+
+
+__all__ = ["SuperPointForKeypointDetection", "SuperPointPreTrainedModel"]

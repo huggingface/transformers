@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +25,6 @@ from transformers import (
     AddedToken,
     CodeLlamaTokenizer,
     CodeLlamaTokenizerFast,
-    is_torch_available,
 )
 from transformers.convert_slow_tokenizer import convert_slow_tokenizer
 from transformers.testing_utils import (
@@ -44,10 +42,6 @@ from ...test_tokenization_common import TokenizerTesterMixin
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
-if is_torch_available():
-    pass
-
-
 @require_sentencepiece
 @require_tokenizers
 class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -58,15 +52,16 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_sentencepiece = True
     from_pretrained_kwargs = {}
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # We have a SentencePiece fixture for testing
         tokenizer = CodeLlamaTokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
-    def get_tokenizers(self, **kwargs):
+    def get_tokenizers(cls, **kwargs):
         kwargs.update({"pad_token": "<PAD>"})
         return super().get_tokenizers(**kwargs)
 
@@ -156,8 +151,8 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 tmpdirname2 = tempfile.mkdtemp()
 
@@ -220,7 +215,7 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @require_torch
     def test_batch_tokenization(self):
         if not self.test_seq2seq:
-            return
+            self.skipTest(reason="test_seq2seq is False")
 
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
@@ -240,7 +235,7 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                         return_tensors="pt",
                     )
                 except NotImplementedError:
-                    return
+                    self.skipTest(reason="Encountered NotImplementedError when calling tokenizer")
                 self.assertEqual(batch.input_ids.shape[1], 3)
                 # max_target_length will default to max_length if not specified
                 batch = tokenizer(text, max_length=3, return_tensors="pt")
@@ -251,7 +246,7 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(batch_encoder_only.attention_mask.shape[1], 3)
                 self.assertNotIn("decoder_input_ids", batch_encoder_only)
 
-    @unittest.skip("Unfortunately way too slow to build a BPE with SentencePiece.")
+    @unittest.skip(reason="Unfortunately way too slow to build a BPE with SentencePiece.")
     def test_save_slow_from_fast_and_reload_fast(self):
         pass
 
@@ -260,7 +255,7 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 added_tokens = [AddedToken("<special>", lstrip=True)]
 
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                tokenizer_r = self.get_rust_tokenizer(
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs
                 )
                 r_output = tokenizer_r.encode("Hey this is a <special> token")
@@ -270,7 +265,7 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(special_token_id in r_output)
 
                 if self.test_slow_tokenizer:
-                    tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
+                    tokenizer_cr = self.get_rust_tokenizer(
                         pretrained_name,
                         additional_special_tokens=added_tokens,
                         **kwargs,  # , from_slow=True <- unfortunately too slow to convert
@@ -306,11 +301,11 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             pickled_tokenizer = pickle.dumps(tokenizer)
         pickle.loads(pickled_tokenizer)
 
-    @unittest.skip("worker 'gw4' crashed on CI, passing locally.")
+    @unittest.skip(reason="worker 'gw4' crashed on CI, passing locally.")
     def test_pickle_subword_regularization_tokenizer(self):
         pass
 
-    @unittest.skip("worker 'gw4' crashed on CI, passing locally.")
+    @unittest.skip(reason="worker 'gw4' crashed on CI, passing locally.")
     def test_subword_regularization_tokenizer(self):
         pass
 
@@ -385,14 +380,14 @@ class LlamaIntegrationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as dirname:
             self.rust_tokenizer.save_pretrained(dirname)
 
-            with open(os.path.join(dirname, "tokenizer.json"), "r") as f:
+            with open(os.path.join(dirname, "tokenizer.json")) as f:
                 old_serialized = f.read()
 
         new_tokenizer = convert_slow_tokenizer(self.tokenizer)
         with tempfile.NamedTemporaryFile() as f:
             new_tokenizer.save(f.name)
             # Re-opening since `f` is in bytes.
-            new_serialized = open(f.name, "r").read()
+            new_serialized = open(f.name).read()
             with open("out_tokenizer.json", "w") as g:
                 g.write(new_serialized)
 
@@ -493,7 +488,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         pyth_tokenizer = self.tokenizer
         rust_tokenizer = self.rust_tokenizer
 
-        dataset = load_dataset("code_x_glue_ct_code_to_text", "go")
+        dataset = load_dataset("google/code_x_glue_ct_code_to_text", "go")
         for item in tqdm.tqdm(dataset["validation"]):
             string = item["code"]
             encoded1 = pyth_tokenizer.encode(string)
@@ -506,7 +501,7 @@ class LlamaIntegrationTest(unittest.TestCase):
 
             self.assertEqual(decoded1, decoded2)
 
-        dataset = load_dataset("xnli", "all_languages")
+        dataset = load_dataset("facebook/xnli", "all_languages")
 
         for item in tqdm.tqdm(dataset["train"]):
             for string in item["premise"].values():

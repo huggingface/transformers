@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import collections
 import unittest
-from typing import Dict, List, Tuple
 
 from transformers import MaskFormerSwinConfig
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, torch_device
@@ -181,10 +179,17 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = MaskFormerSwinModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MaskFormerSwinConfig, embed_dim=37)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=MaskFormerSwinConfig,
+            has_text_modality=False,
+            embed_dim=37,
+            common_properties=["image_size", "patch_size", "num_channels"],
+        )
 
     @require_torch_multi_gpu
     @unittest.skip(
@@ -197,16 +202,7 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         pass
 
     def test_config(self):
-        self.create_and_test_config_common_properties()
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
-
-    def create_and_test_config_common_properties(self):
-        return
+        self.config_tester.run_common_tests()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -216,11 +212,11 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_backbone(*config_and_inputs)
 
-    @unittest.skip("Swin does not use inputs_embeds")
+    @unittest.skip(reason="Swin does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("Swin does not support feedforward chunking")
+    @unittest.skip(reason="Swin does not support feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
 
@@ -235,10 +231,6 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     @unittest.skip(reason="MaskFormerSwin is only used as backbone and doesn't support output_attentions")
     def test_attention_outputs(self):
-        pass
-
-    @unittest.skip(reason="MaskFormerSwin is only used as an internal backbone")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     def check_hidden_states_output(self, inputs_dict, config, model_class, image_size):
@@ -341,10 +333,10 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
+                    if isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):

@@ -1104,7 +1104,7 @@ class TFFunnelForPreTrainingOutput(ModelOutput):
             heads.
     """
 
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
 
@@ -1865,3 +1865,16 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFFunnelBaseModel",
+    "TFFunnelForMaskedLM",
+    "TFFunnelForMultipleChoice",
+    "TFFunnelForPreTraining",
+    "TFFunnelForQuestionAnswering",
+    "TFFunnelForSequenceClassification",
+    "TFFunnelForTokenClassification",
+    "TFFunnelModel",
+    "TFFunnelPreTrainedModel",
+]

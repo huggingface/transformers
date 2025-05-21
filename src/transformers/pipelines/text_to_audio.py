@@ -13,11 +13,14 @@
 # limitations under the License.from typing import List, Union
 from typing import List, Union
 
+from ..generation import GenerationConfig
 from ..utils import is_torch_available
 from .base import Pipeline
 
 
 if is_torch_available():
+    import torch
+
     from ..models.auto.modeling_auto import MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING
     from ..models.speecht5.modeling_speecht5 import SpeechT5HifiGan
 
@@ -28,6 +31,10 @@ class TextToAudioPipeline(Pipeline):
     """
     Text-to-audio generation pipeline using any `AutoModelForTextToWaveform` or `AutoModelForTextToSpectrogram`. This
     pipeline generates an audio file from an input text and optional other conditional inputs.
+
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
 
     Example:
 
@@ -73,6 +80,12 @@ class TextToAudioPipeline(Pipeline):
     See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=text-to-speech).
     """
 
+    _pipeline_calls_generate = True
+    # Make sure the docstring is updated when the default generation config is changed
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+    )
+
     def __init__(self, *args, vocoder=None, sampling_rate=None, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -111,7 +124,7 @@ class TextToAudioPipeline(Pipeline):
         if self.model.config.model_type == "bark":
             # bark Tokenizer is called with BarkProcessor which uses those kwargs
             new_kwargs = {
-                "max_length": self.model.generation_config.semantic_config.get("max_input_semantic_length", 256),
+                "max_length": self.generation_config.semantic_config.get("max_input_semantic_length", 256),
                 "add_special_tokens": False,
                 "return_attention_mask": True,
                 "return_token_type_ids": False,
@@ -137,6 +150,10 @@ class TextToAudioPipeline(Pipeline):
             # we expect some kwargs to be additional tensors which need to be on the right device
             generate_kwargs = self._ensure_tensor_on_device(generate_kwargs, device=self.device)
 
+            # User-defined `generation_config` passed to the pipeline call take precedence
+            if "generation_config" not in generate_kwargs:
+                generate_kwargs["generation_config"] = self.generation_config
+
             # generate_kwargs get priority over forward_params
             forward_params.update(generate_kwargs)
 
@@ -144,10 +161,9 @@ class TextToAudioPipeline(Pipeline):
         else:
             if len(generate_kwargs):
                 raise ValueError(
-                    f"""You're using the `TextToAudioPipeline` with a forward-only model, but `generate_kwargs` is non empty.
-                                 For forward-only TTA models, please use `forward_params` instead of of
-                                 `generate_kwargs`. For reference, here are the `generate_kwargs` used here:
-                                 {generate_kwargs.keys()}"""
+                    "You're using the `TextToAudioPipeline` with a forward-only model, but `generate_kwargs` is non "
+                    "empty. For forward-only TTA models, please use `forward_params` instead of `generate_kwargs`. "
+                    f"For reference, the `generate_kwargs` used here are: {generate_kwargs.keys()}"
                 )
             output = self.model(**model_inputs, **forward_params)[0]
 
@@ -187,6 +203,12 @@ class TextToAudioPipeline(Pipeline):
         forward_params=None,
         generate_kwargs=None,
     ):
+        if getattr(self, "assistant_model", None) is not None:
+            generate_kwargs["assistant_model"] = self.assistant_model
+        if getattr(self, "assistant_tokenizer", None) is not None:
+            generate_kwargs["tokenizer"] = self.tokenizer
+            generate_kwargs["assistant_tokenizer"] = self.assistant_tokenizer
+
         params = {
             "forward_params": forward_params if forward_params else {},
             "generate_kwargs": generate_kwargs if generate_kwargs else {},
@@ -204,7 +226,7 @@ class TextToAudioPipeline(Pipeline):
             waveform = waveform["waveform"]
         elif isinstance(waveform, tuple):
             waveform = waveform[0]
-        output_dict["audio"] = waveform.cpu().float().numpy()
+        output_dict["audio"] = waveform.to(device="cpu", dtype=torch.float).numpy()
         output_dict["sampling_rate"] = self.sampling_rate
 
         return output_dict

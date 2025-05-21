@@ -47,12 +47,13 @@ class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = True
     test_sentencepiece = True
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         # We have a SentencePiece fixture for testing
         tokenizer = MBartTokenizer(SAMPLE_VOCAB, keep_accents=True)
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def test_full_tokenizer(self):
         tokenizer = MBartTokenizer(SAMPLE_VOCAB, keep_accents=True)
@@ -134,13 +135,13 @@ class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_save_pretrained(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         self.tokenizers_list[0] = (self.rust_tokenizer_class, "hf-internal-testing/tiny-random-mbart", {})
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
+                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
 
                 tmpdirname2 = tempfile.mkdtemp()
 
@@ -202,7 +203,7 @@ class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 shutil.rmtree(tmpdirname2)
 
-    @unittest.skip("Need to fix this after #26538")
+    @unittest.skip(reason="Need to fix this after #26538")
     def test_training_new_tokenizer(self):
         pass
 

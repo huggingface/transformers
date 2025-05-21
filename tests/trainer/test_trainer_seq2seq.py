@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -43,8 +42,8 @@ class Seq2seqTrainerTester(TestCasePlus):
         bert2bert.config.decoder_start_token_id = tokenizer.cls_token_id
         bert2bert.config.max_length = 128
 
-        train_dataset = datasets.load_dataset("cnn_dailymail", "3.0.0", split="train[:1%]")
-        val_dataset = datasets.load_dataset("cnn_dailymail", "3.0.0", split="validation[:1%]")
+        train_dataset = datasets.load_dataset("abisee/cnn_dailymail", "3.0.0", split="train[:1%]")
+        val_dataset = datasets.load_dataset("abisee/cnn_dailymail", "3.0.0", split="validation[:1%]")
 
         train_dataset = train_dataset.select(range(32))
         val_dataset = val_dataset.select(range(16))
@@ -129,7 +128,7 @@ class Seq2seqTrainerTester(TestCasePlus):
             compute_metrics=_compute_metrics,
             train_dataset=train_dataset,
             eval_dataset=val_dataset,
-            tokenizer=tokenizer,
+            processing_class=tokenizer,
         )
 
         # start training
@@ -145,7 +144,7 @@ class Seq2seqTrainerTester(TestCasePlus):
         MAX_INPUT_LENGTH = 256
         MAX_TARGET_LENGTH = 256
 
-        dataset = datasets.load_dataset("gsm8k", "main", split="train[:38]")
+        dataset = datasets.load_dataset("openai/gsm8k", "main", split="train[:38]")
         model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small")
         tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
         data_collator = DataCollatorForSeq2Seq(tokenizer, model=model, return_tensors="pt", padding="longest")
@@ -158,7 +157,7 @@ class Seq2seqTrainerTester(TestCasePlus):
         trainer = Seq2SeqTrainer(
             model=model,
             args=training_args,
-            tokenizer=tokenizer,
+            processing_class=tokenizer,
             data_collator=data_collator,
             compute_metrics=lambda x: {"samples": x[0].shape[0]},
         )
@@ -180,13 +179,13 @@ class Seq2seqTrainerTester(TestCasePlus):
         for num_return_sequences in range(3, 0, -1):
             gen_config.num_return_sequences = num_return_sequences
             metrics = trainer.evaluate(eval_dataset=prepared_dataset, generation_config=gen_config)
-            assert (
-                metrics["eval_samples"] == dataset_len * num_return_sequences
-            ), f"Got {metrics['eval_samples']}, expected: {dataset_len * num_return_sequences}"
+            assert metrics["eval_samples"] == dataset_len * num_return_sequences, (
+                f"Got {metrics['eval_samples']}, expected: {dataset_len * num_return_sequences}"
+            )
 
     @require_torch
     def test_bad_generation_config_fail_early(self):
-        # Tests that a bad geneartion config causes the trainer to fail early
+        # Tests that a bad generation config causes the trainer to fail early
         model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small")
         tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
         data_collator = DataCollatorForSeq2Seq(tokenizer, model=model, return_tensors="pt", padding="longest")
@@ -199,8 +198,8 @@ class Seq2seqTrainerTester(TestCasePlus):
             _ = Seq2SeqTrainer(
                 model=model,
                 args=training_args,
-                tokenizer=tokenizer,
+                processing_class=tokenizer,
                 data_collator=data_collator,
                 compute_metrics=lambda x: {"samples": x[0].shape[0]},
             )
-        self.assertIn("The loaded generation config instance is invalid", str(exc.exception))
+        self.assertIn("Fix these issues to train your model", str(exc.exception))

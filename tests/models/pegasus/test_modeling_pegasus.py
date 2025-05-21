@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -112,12 +111,6 @@ class PegasusModelTester:
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
 
-        # forcing a certain token to be generated, sets all other tokens to -inf
-        # if however the token to be generated is already at -inf then it can lead token
-        # `nan` values and thus break generation
-        self.forced_bos_token_id = None
-        self.forced_eos_token_id = None
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
@@ -165,8 +158,6 @@ class PegasusModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
-            forced_bos_token_id=self.forced_bos_token_id,
-            forced_eos_token_id=self.forced_eos_token_id,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -243,7 +234,6 @@ class PegasusModelTester:
 @require_torch
 class PegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (PegasusModel, PegasusForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (PegasusForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": PegasusModel,
@@ -297,19 +287,19 @@ class PegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -356,6 +346,19 @@ class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
     @cached_property
     def model(self):
         return AutoModelForSeq2SeqLM.from_pretrained(self.checkpoint_name).to(torch_device)
+
+    @slow
+    def test_device_map(self):
+        model_no_device_map = AutoModelForSeq2SeqLM.from_pretrained(self.checkpoint_name).to(torch_device)
+        model_with_device_map = AutoModelForSeq2SeqLM.from_pretrained(self.checkpoint_name, device_map="auto")
+        assert torch.equal(
+            model_no_device_map.model.decoder.embed_positions.weight,
+            model_with_device_map.model.decoder.embed_positions.weight,
+        )
+        assert torch.equal(
+            model_no_device_map.model.encoder.embed_positions.weight,
+            model_with_device_map.model.encoder.embed_positions.weight,
+        )
 
     @slow
     @require_torch_fp16
@@ -539,9 +542,9 @@ class PegasusStandaloneDecoderModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=attn_mask, past_key_values=past_key_values)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(
+            next_tokens, attention_mask=attn_mask, past_key_values=past_key_values, use_cache=True
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -570,7 +573,6 @@ class PegasusStandaloneDecoderModelTester:
 @require_torch
 class PegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (PegasusDecoder, PegasusForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (PegasusForCausalLM,) if is_torch_available() else ()
     test_resize_position_embeddings = True
     test_pruning = False
     is_encoder_decoder = False
@@ -592,6 +594,6 @@ class PegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
 
+    @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         return

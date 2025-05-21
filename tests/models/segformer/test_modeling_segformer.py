@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -180,6 +179,7 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = SegformerModelTester(self)
@@ -200,11 +200,11 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_segmentation(*config_and_inputs)
 
-    @unittest.skip("SegFormer does not use inputs_embeds")
+    @unittest.skip(reason="SegFormer does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("SegFormer does not have get_input_embeddings method and get_output_embeddings methods")
+    @unittest.skip(reason="SegFormer does not have get_input_embeddings method and get_output_embeddings methods")
     def test_model_get_set_embeddings(self):
         pass
 
@@ -315,7 +315,7 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -373,7 +373,7 @@ class SegformerModelIntegrationTest(unittest.TestCase):
                 [[-12.5134, -13.4686, -14.4915], [-12.8669, -14.4343, -14.7758], [-13.2523, -14.5819, -15.0694]],
             ]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_image_segmentation_city(self):
@@ -402,7 +402,7 @@ class SegformerModelIntegrationTest(unittest.TestCase):
                 [[-3.6456, -3.0209, -1.4203], [-3.0797, -3.1959, -2.0000], [-1.8757, -1.9217, -1.6997]],
             ]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3, :3], expected_slice, atol=1e-1))
+        torch.testing.assert_close(outputs.logits[0, :3, :3, :3], expected_slice, rtol=1e-1, atol=1e-1)
 
     @slow
     def test_post_processing_semantic_segmentation(self):

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -38,7 +37,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class MaskFormerImageProcessingTester(unittest.TestCase):
+class MaskFormerImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -98,6 +97,8 @@ class MaskFormerImageProcessingTester(unittest.TestCase):
             image = image_inputs[0]
             if isinstance(image, Image.Image):
                 w, h = image.size
+            elif isinstance(image, np.ndarray):
+                h, w = image.shape[0], image.shape[1]
             else:
                 h, w = image.shape[1], image.shape[2]
             if w < h:
@@ -149,6 +150,7 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     image_processing_class = MaskFormerImageProcessor if (is_vision_available() and is_torch_available()) else None
 
     def setUp(self):
+        super().setUp()
         self.image_processor_tester = MaskFormerImageProcessingTester(self)
 
     @property
@@ -266,7 +268,7 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             inst2class = {}
             for label in class_labels:
                 instance_ids = np.unique(instance_seg[class_id_map == label])
-                inst2class.update({i: label for i in instance_ids})
+                inst2class.update(dict.fromkeys(instance_ids, label))
 
             return instance_seg, inst2class
 
@@ -274,7 +276,7 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         instance_seg2, inst2class2 = get_instance_segmentation_and_mapping(annotation2)
 
         # create a image processor
-        image_processing = MaskFormerImageProcessor(reduce_labels=True, ignore_index=255, size=(512, 512))
+        image_processing = MaskFormerImageProcessor(do_reduce_labels=True, ignore_index=255, size=(512, 512))
 
         # prepare the images and annotations
         inputs = image_processing(
@@ -290,8 +292,8 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
         # verify the class labels
         self.assertEqual(len(inputs["class_labels"]), 2)
-        self.assertTrue(torch.allclose(inputs["class_labels"][0], torch.tensor([30, 55])))
-        self.assertTrue(torch.allclose(inputs["class_labels"][1], torch.tensor([4, 4, 23, 55])))
+        torch.testing.assert_close(inputs["class_labels"][0], torch.tensor([30, 55]))
+        torch.testing.assert_close(inputs["class_labels"][1], torch.tensor([4, 4, 23, 55]))
 
         # verify the mask labels
         self.assertEqual(len(inputs["mask_labels"]), 2)
@@ -317,7 +319,7 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         )
 
         # create a image processor
-        image_processing = MaskFormerImageProcessor(reduce_labels=True, ignore_index=255, size=(512, 512))
+        image_processing = MaskFormerImageProcessor(do_reduce_labels=True, ignore_index=255, size=(512, 512))
 
         # prepare the images and annotations
         inputs = image_processing(
@@ -332,8 +334,8 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
         # verify the class labels
         self.assertEqual(len(inputs["class_labels"]), 2)
-        self.assertTrue(torch.allclose(inputs["class_labels"][0], torch.tensor([2, 4, 60])))
-        self.assertTrue(torch.allclose(inputs["class_labels"][1], torch.tensor([0, 3, 7, 8, 15, 28, 30, 143])))
+        torch.testing.assert_close(inputs["class_labels"][0], torch.tensor([2, 4, 60]))
+        torch.testing.assert_close(inputs["class_labels"][1], torch.tensor([0, 3, 7, 8, 15, 28, 30, 143]))
 
         # verify the mask labels
         self.assertEqual(len(inputs["mask_labels"]), 2)
@@ -392,9 +394,9 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         # verify the class labels
         self.assertEqual(len(inputs["class_labels"]), 2)
         expected_class_labels = torch.tensor([4, 17, 32, 42, 42, 42, 42, 42, 42, 42, 32, 12, 12, 12, 12, 12, 42, 42, 12, 12, 12, 42, 12, 12, 12, 12, 12, 3, 12, 12, 12, 12, 42, 42, 42, 12, 42, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 5, 12, 12, 12, 12, 12, 12, 12, 0, 43, 43, 43, 96, 43, 104, 43, 31, 125, 31, 125, 138, 87, 125, 149, 138, 125, 87, 87])  # fmt: skip
-        self.assertTrue(torch.allclose(inputs["class_labels"][0], torch.tensor(expected_class_labels)))
+        torch.testing.assert_close(inputs["class_labels"][0], torch.tensor(expected_class_labels))
         expected_class_labels = torch.tensor([19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 67, 82, 19, 19, 17, 19, 19, 19, 19, 19, 19, 19, 19, 19, 12, 12, 42, 12, 12, 12, 12, 3, 14, 12, 12, 12, 12, 12, 12, 12, 12, 14, 5, 12, 12, 0, 115, 43, 43, 115, 43, 43, 43, 8, 8, 8, 138, 138, 125, 143])  # fmt: skip
-        self.assertTrue(torch.allclose(inputs["class_labels"][1], expected_class_labels))
+        torch.testing.assert_close(inputs["class_labels"][1], expected_class_labels)
 
         # verify the mask labels
         self.assertEqual(len(inputs["mask_labels"]), 2)
@@ -525,3 +527,16 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             expected_num_segments = max([el["id"] for el in el_unfused]) - num_to_fuse
             num_segments_fused = max([el["id"] for el in el_fused])
             self.assertEqual(num_segments_fused, expected_num_segments)
+
+    def test_removed_deprecated_kwargs(self):
+        image_processor_dict = dict(self.image_processor_dict)
+        image_processor_dict.pop("do_reduce_labels", None)
+        image_processor_dict["reduce_labels"] = True
+
+        # test we are able to create the image processor with the deprecated kwargs
+        image_processor = self.image_processing_class(**image_processor_dict)
+        self.assertEqual(image_processor.do_reduce_labels, True)
+
+        # test we still support reduce_labels with config
+        image_processor = self.image_processing_class.from_dict(image_processor_dict)
+        self.assertEqual(image_processor.do_reduce_labels, True)

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -146,32 +145,6 @@ class SEWModelTester:
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
         )
-
-    def create_and_check_batch_inference(self, config, input_values, *args):
-        # test does not pass for models making use of `group_norm`
-        # check: https://github.com/pytorch/fairseq/issues/3227
-        model = SEWModel(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.bool)
-
-        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-
-        # pad input
-        for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
-            attention_mask[i, input_lengths[i] :] = 0.0
-
-        batch_outputs = model(input_values, attention_mask=attention_mask).last_hidden_state
-
-        for i in range(input_values.shape[0]):
-            input_slice = input_values[i : i + 1, : input_lengths[i]]
-            output = model(input_slice).last_hidden_state
-
-            batch_output = batch_outputs[i : i + 1, : output.shape[1]]
-            self.parent.assertTrue(torch.allclose(output, batch_output, atol=1e-3))
 
     def check_ctc_loss(self, config, input_values, *args):
         model = SEWForCTC(config=config)
@@ -336,34 +309,31 @@ class SEWModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # Hubert has no inputs_embeds
+    @unittest.skip(reason="Sew has no inputs_embeds.")
     def test_inputs_embeds(self):
         pass
 
-    # `input_ids` is renamed to `input_values`
+    @unittest.skip(reason="Sew has input_values instead of input_ids.")
     def test_forward_signature(self):
         pass
 
-    # SEW cannot resize token embeddings
-    # since it has no tokens embeddings
+    @unittest.skip(reason="Sew has no token embeddings.")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # SEW has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
+    @unittest.skip(reason="Sew has no inputs_embeds.")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage(self):
         pass
 
-    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage_checkpoints(self):
         pass
 
-    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         pass
 
@@ -423,6 +393,7 @@ class SEWModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 uniform_init_parms = [
+                    "conv.parametrizations.weight",
                     "conv.weight",
                     "masked_spec_embed",
                     "quantizer.weight_proj.weight",
@@ -555,8 +526,8 @@ class SEWModelIntegrationTest(unittest.TestCase):
         )
         expected_output_sum = 62146.7422
 
-        self.assertTrue(torch.allclose(outputs[:, :4, :4], expected_outputs_first, atol=5e-3))
-        self.assertTrue(torch.allclose(outputs[:, -4:, -4:], expected_outputs_last, atol=5e-3))
+        torch.testing.assert_close(outputs[:, :4, :4], expected_outputs_first, rtol=5e-3, atol=5e-3)
+        torch.testing.assert_close(outputs[:, -4:, -4:], expected_outputs_last, rtol=5e-3, atol=5e-3)
         self.assertTrue(abs(outputs.sum() - expected_output_sum) < 5)
 
     def test_inference_ctc_batched(self):

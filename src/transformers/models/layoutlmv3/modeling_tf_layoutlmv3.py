@@ -231,7 +231,7 @@ class TFLayoutLMv3TextEmbeddings(keras.layers.Layer):
     def call(
         self,
         input_ids: tf.Tensor | None = None,
-        bbox: tf.Tensor = None,
+        bbox: Optional[tf.Tensor] = None,
         token_type_ids: tf.Tensor | None = None,
         position_ids: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
@@ -1296,7 +1296,7 @@ class TFLayoutLMv3Model(TFLayoutLMv3PreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = TFAutoModel.from_pretrained("microsoft/layoutlmv3-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]
@@ -1439,7 +1439,7 @@ class TFLayoutLMv3ForSequenceClassification(TFLayoutLMv3PreTrainedModel, TFSeque
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = TFAutoModelForSequenceClassification.from_pretrained("microsoft/layoutlmv3-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]
@@ -1566,7 +1566,7 @@ class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenCla
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = TFAutoModelForTokenClassification.from_pretrained("microsoft/layoutlmv3-base", num_labels=7)
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> words = example["tokens"]
@@ -1703,7 +1703,7 @@ class TFLayoutLMv3ForQuestionAnswering(TFLayoutLMv3PreTrainedModel, TFQuestionAn
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = TFAutoModelForQuestionAnswering.from_pretrained("microsoft/layoutlmv3-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> image = example["image"]
         >>> question = "what's his name?"
@@ -1772,3 +1772,12 @@ class TFLayoutLMv3ForQuestionAnswering(TFLayoutLMv3PreTrainedModel, TFQuestionAn
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build(None)
+
+
+__all__ = [
+    "TFLayoutLMv3ForQuestionAnswering",
+    "TFLayoutLMv3ForSequenceClassification",
+    "TFLayoutLMv3ForTokenClassification",
+    "TFLayoutLMv3Model",
+    "TFLayoutLMv3PreTrainedModel",
+]

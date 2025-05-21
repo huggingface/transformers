@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,9 +17,10 @@
 import logging
 import os
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Optional
 
 import albumentations as A
 import numpy as np
@@ -46,7 +46,8 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.42.0.dev0")
+check_min_version("4.53.0.dev0")
+
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/instance-segmentation/requirements.txt")
 
 
@@ -66,6 +67,16 @@ class Arguments:
         default="qubvel-hf/ade20k-mini",
         metadata={
             "help": "Name of a dataset from the hub (could be your own, possibly private dataset hosted on the hub)."
+        },
+    )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
+            )
         },
     )
     image_height: Optional[int] = field(default=512, metadata={"help": "Image height after resizing."})
@@ -189,7 +200,7 @@ class Evaluator:
     def reset_metric(self):
         self.metric.reset()
 
-    def postprocess_target_batch(self, target_batch) -> List[Dict[str, torch.Tensor]]:
+    def postprocess_target_batch(self, target_batch) -> list[dict[str, torch.Tensor]]:
         """Collect targets in a form of list of dictionaries with keys "masks", "labels"."""
         batch_masks = target_batch[0]
         batch_labels = target_batch[1]
@@ -203,13 +214,13 @@ class Evaluator:
             )
         return post_processed_targets
 
-    def get_target_sizes(self, post_processed_targets) -> List[List[int]]:
+    def get_target_sizes(self, post_processed_targets) -> list[list[int]]:
         target_sizes = []
         for target in post_processed_targets:
             target_sizes.append(target["masks"].shape[-2:])
         return target_sizes
 
-    def postprocess_prediction_batch(self, prediction_batch, target_sizes) -> List[Dict[str, torch.Tensor]]:
+    def postprocess_prediction_batch(self, prediction_batch, target_sizes) -> list[dict[str, torch.Tensor]]:
         """Collect predictions in a form of list of dictionaries with keys "masks", "labels", "scores"."""
 
         model_output = ModelOutput(class_queries_logits=prediction_batch[0], masks_queries_logits=prediction_batch[1])
@@ -364,7 +375,7 @@ def main():
     # Load dataset, prepare splits
     # ------------------------------------------------------------------------------------------------
 
-    dataset = load_dataset(args.dataset_name)
+    dataset = load_dataset(args.dataset_name, trust_remote_code=args.trust_remote_code)
 
     # We need to specify the label2id mapping for the model
     # it is a mapping from semantic class name to class index.
@@ -434,7 +445,7 @@ def main():
         args=training_args,
         train_dataset=dataset["train"] if training_args.do_train else None,
         eval_dataset=dataset["validation"] if training_args.do_eval else None,
-        tokenizer=image_processor,
+        processing_class=image_processor,
         data_collator=collate_fn,
         compute_metrics=compute_metrics,
     )

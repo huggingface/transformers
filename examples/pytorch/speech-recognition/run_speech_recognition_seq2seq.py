@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +22,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import datasets
 import evaluate
@@ -48,7 +47,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.42.0.dev0")
+check_min_version("4.53.0.dev0")
 
 require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
 
@@ -98,9 +97,9 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-                "execute code present on the Hub on your local machine."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -110,11 +109,11 @@ class ModelArguments:
     freeze_encoder: bool = field(
         default=False, metadata={"help": "Whether to freeze the entire encoder of the seq2seq model."}
     )
-    forced_decoder_ids: List[List[int]] = field(
+    forced_decoder_ids: list[list[int]] = field(
         default=None,
         metadata={"help": "Deprecated. Please use the `language` and `task` arguments instead."},
     )
-    suppress_tokens: List[int] = field(
+    suppress_tokens: list[int] = field(
         default=None,
         metadata={
             "help": (
@@ -247,7 +246,7 @@ class DataCollatorSpeechSeq2SeqWithPadding:
     decoder_start_token_id: int
     forward_attention_mask: bool
 
-    def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+    def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         model_input_name = self.processor.model_input_names[0]
@@ -347,6 +346,7 @@ def main():
             split=data_args.train_split_name,
             cache_dir=model_args.cache_dir,
             token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
 
     if training_args.do_eval:
@@ -356,6 +356,7 @@ def main():
             split=data_args.eval_split_name,
             cache_dir=model_args.cache_dir,
             token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
 
     if data_args.audio_column_name not in next(iter(raw_datasets.values())).column_names:
@@ -567,7 +568,7 @@ def main():
         args=training_args,
         train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
         eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
-        tokenizer=feature_extractor,
+        processing_class=feature_extractor,
         data_collator=data_collator,
         compute_metrics=compute_metrics if training_args.predict_with_generate else None,
     )

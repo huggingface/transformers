@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta Platforms authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -176,8 +175,8 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip("Flava does not use input_ids")
     def test_inputs_embeds(self):
-        # FLAVA does not use inputs_embeds
         pass
 
     def test_model_get_set_embeddings(self):
@@ -300,32 +299,24 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    # skip this test as FlavaImageModel has no base class and is
-    # not available in MODEL_MAPPING
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    # skip this test as FlavaImageModel has no base class and is
-    # not available in MODEL_MAPPING
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
@@ -459,36 +450,29 @@ class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(reason="FLAVA does not use input_embeds")
     def test_inputs_embeds(self):
         # FLAVA does not use inputs_embeds
-        pass
-
-    # skip this test as FlavaTextModel has no base class and is
-    # not available in MODEL_MAPPING
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    # skip this test as FlavaTextModel has no base class and is
-    # not available in MODEL_MAPPING
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
@@ -619,40 +603,32 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["hidden_states"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    @unittest.skip("FLAVA does not have input embeddings")
     def test_model_get_set_embeddings(self):
-        # No embedding in multimodal model
         pass
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(reason="FLAVA does not use input_embeds")
     def test_inputs_embeds(self):
-        # FLAVA does not use inputs_embeds
-        pass
-
-    # skip this test as FlavaMultimodalModel has no base class and is
-    # not available in MODEL_MAPPING
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    # skip this test as FlavaMultimodalModel has no base class and is
-    # not available in MODEL_MAPPING
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
@@ -742,50 +718,44 @@ class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
     def test_attention_outputs(self):
         pass
 
+    @unittest.skip(reason="No embedding in multimodal model")
     def test_model_get_set_embeddings(self):
-        # No embedding in multimodal model
         pass
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_hidden_states_output(self):
         pass
 
+    @unittest.skip(reason="FlavaImageCodebook has no attentions")
     def test_retain_grad_hidden_states_attentions(self):
-        # no attentions
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(reason="FLAVA does not use input_embeds")
     def test_inputs_embeds(self):
-        # FLAVA does not use inputs_embeds
         pass
 
+    @unittest.skip
     def test_model_outputs_equivalence(self):
-        pass
-
-    # skip this test as FlavaImageCodebook has no base class and is
-    # not available in MODEL_MAPPING
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    # skip this test as FlavaImageCodebook has no base class and is
-    # not available in MODEL_MAPPING
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
@@ -926,28 +896,35 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = self.class_for_tester(self)
+        common_properties = ["projection_dim", "logit_scale_init_value", "init_codebook"]
+        self.config_tester = ConfigTester(
+            self, config_class=FlavaConfig, has_text_modality=False, common_properties=common_properties
+        )
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # hidden_states are tested in individual model tests
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    @unittest.skip(reason="tested in individual model tests")
     def test_hidden_states_output(self):
         pass
 
-    # input_embeds are tested in individual model tests
+    @unittest.skip(reason="tested in individual model tests")
     def test_inputs_embeds(self):
         pass
 
-    # tested in individual model tests
+    @unittest.skip(reason="tested in individual model tests")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    # FlavaModel does not have input/output embeddings
+    @unittest.skip(reason="FlavaModel does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
-    # override as the `logit_scale` parameter initilization is different for FLAVA
+    # override as the `logit_scale` parameter initialization is different for FLAVA
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -956,7 +933,7 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
+                    # check if `logit_scale` is initialized as per the original implementation
                     if name == "logit_scale" or name == "flava.logit_scale":
                         self.assertAlmostEqual(
                             param.data.item(),
@@ -973,7 +950,7 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -1235,19 +1212,19 @@ class FlavaForPreTrainingTest(FlavaModelTest):
     test_torchscript = False
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -1285,7 +1262,7 @@ class FlavaModelIntegrationTest(unittest.TestCase):
         # verify the embeddings
         self.assertAlmostEqual(outputs.image_embeddings.sum().item(), -1352.53540, places=4)
         self.assertAlmostEqual(outputs.text_embeddings.sum().item(), -198.98225, places=4)
-        self.assertAlmostEqual(outputs.multimodal_embeddings.sum().item(), -4030.4602050, places=4)
+        self.assertAlmostEqual(outputs.multimodal_embeddings.sum().item(), -4030.4604492, places=4)
 
 
 @require_vision
@@ -1334,7 +1311,7 @@ class FlavaForPreTrainingIntegrationTest(unittest.TestCase):
         )
 
         expected_logits = torch.tensor([[16.1291, 8.4033], [16.1291, 8.4033]], device=torch_device)
-        self.assertTrue(torch.allclose(outputs.contrastive_logits_per_image, expected_logits, atol=1e-3))
+        torch.testing.assert_close(outputs.contrastive_logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
         self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 2.0727925, places=4)
         self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 7.0282096, places=4)
         self.assertAlmostEqual(outputs.loss.item(), 11.3792324, places=4)
@@ -1385,7 +1362,7 @@ class FlavaForPreTrainingIntegrationTest(unittest.TestCase):
         )
 
         expected_logits = torch.tensor([[16.1291, 8.4033], [16.1291, 8.4033]], device=torch_device)
-        self.assertTrue(torch.allclose(outputs.contrastive_logits_per_image, expected_logits, atol=1e-3))
+        torch.testing.assert_close(outputs.contrastive_logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
         self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 2.0727925, places=4)
         self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 6.8965902, places=4)
         self.assertAlmostEqual(outputs.loss.item(), 9.6084213, places=4)

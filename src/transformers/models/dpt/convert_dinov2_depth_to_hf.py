@@ -123,7 +123,7 @@ def create_rename_keys_backbone(config):
     rename_keys.append(("patch_embed.proj.weight", "backbone.embeddings.patch_embeddings.projection.weight"))
     rename_keys.append(("patch_embed.proj.bias", "backbone.embeddings.patch_embeddings.projection.bias"))
 
-    # Transfomer encoder
+    # Transformer encoder
     for i in range(config.backbone_config.num_hidden_layers):
         # layernorms
         rename_keys.append((f"blocks.{i}.norm1.weight", f"backbone.encoder.layer.{i}.norm1.weight"))
@@ -200,7 +200,7 @@ name_to_url = {
 
 
 def get_original_pixel_values(image):
-    class CenterPadding(object):
+    class CenterPadding:
         def __init__(self, multiple):
             super().__init__()
             self.multiple = multiple

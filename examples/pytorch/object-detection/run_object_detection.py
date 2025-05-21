@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,9 +17,10 @@
 import logging
 import os
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Any, List, Mapping, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import albumentations as A
 import numpy as np
@@ -48,7 +48,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.42.0.dev0")
+check_min_version("4.53.0.dev0")
 
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/object-detection/requirements.txt")
 
@@ -60,7 +60,7 @@ class ModelOutput:
 
 
 def format_image_annotations_as_coco(
-    image_id: str, categories: List[int], areas: List[float], bboxes: List[Tuple[float]]
+    image_id: str, categories: list[int], areas: list[float], bboxes: list[tuple[float]]
 ) -> dict:
     """Format one set of image annotations to the COCO format
 
@@ -94,7 +94,7 @@ def format_image_annotations_as_coco(
     }
 
 
-def convert_bbox_yolo_to_pascal(boxes: torch.Tensor, image_size: Tuple[int, int]) -> torch.Tensor:
+def convert_bbox_yolo_to_pascal(boxes: torch.Tensor, image_size: tuple[int, int]) -> torch.Tensor:
     """
     Convert bounding boxes from YOLO format (x_center, y_center, width, height) in range [0, 1]
     to Pascal VOC format (x_min, y_min, x_max, y_max) in absolute coordinates.
@@ -148,7 +148,7 @@ def augment_and_transform_batch(
     return result
 
 
-def collate_fn(batch: List[BatchFeature]) -> Mapping[str, Union[torch.Tensor, List[Any]]]:
+def collate_fn(batch: list[BatchFeature]) -> Mapping[str, Union[torch.Tensor, list[Any]]]:
     data = {}
     data["pixel_values"] = torch.stack([x["pixel_values"] for x in batch])
     data["labels"] = [x["labels"] for x in batch]
@@ -271,6 +271,10 @@ class DataTrainingArguments:
             )
         },
     )
+    use_fast: Optional[bool] = field(
+        default=True,
+        metadata={"help": "Use a fast torchvision-base image processor if it is supported for a given model."},
+    )
 
 
 @dataclass
@@ -313,9 +317,9 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-                "execute code present on the Hub on your local machine."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -383,7 +387,9 @@ def main():
     # Load dataset, prepare splits
     # ------------------------------------------------------------------------------------------------
 
-    dataset = load_dataset(data_args.dataset_name, cache_dir=model_args.cache_dir)
+    dataset = load_dataset(
+        data_args.dataset_name, cache_dir=model_args.cache_dir, trust_remote_code=model_args.trust_remote_code
+    )
 
     # If we don't have a validation split, split off a percentage of train as validation
     data_args.train_val_split = None if "validation" in dataset.keys() else data_args.train_val_split
@@ -425,6 +431,7 @@ def main():
         size={"max_height": data_args.image_square_size, "max_width": data_args.image_square_size},
         do_pad=True,
         pad_size={"height": data_args.image_square_size, "width": data_args.image_square_size},
+        use_fast=data_args.use_fast,
         **common_pretrained_args,
     )
 
@@ -486,7 +493,7 @@ def main():
         args=training_args,
         train_dataset=dataset["train"] if training_args.do_train else None,
         eval_dataset=dataset["validation"] if training_args.do_eval else None,
-        tokenizer=image_processor,
+        processing_class=image_processor,
         data_collator=collate_fn,
         compute_metrics=eval_compute_metrics_fn,
     )

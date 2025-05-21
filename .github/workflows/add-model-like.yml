@@ -23,7 +23,7 @@ jobs:
           sudo apt -y update && sudo apt install -y libsndfile1-dev
 
       - name: Load cached virtual environment
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         id: cache
         with:
           path: ~/venv/
@@ -54,7 +54,7 @@ jobs:
       - name: Create model files
         run: |
           . ~/venv/bin/activate
-          transformers-cli add-new-model-like --config_file tests/fixtures/add_distilbert_like_config.json --path_to_repo .
+          transformers add-new-model-like --config_file tests/fixtures/add_distilbert_like_config.json --path_to_repo .
           make style
           make fix-copies
 

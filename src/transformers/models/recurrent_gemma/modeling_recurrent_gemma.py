@@ -21,24 +21,19 @@ from typing import Dict, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithNoAttention, CausalLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import auto_docstring, logging
+from ...utils.import_utils import is_torchdynamo_compiling
 from .configuration_recurrent_gemma import RecurrentGemmaConfig
 
 
 logger = logging.get_logger(__name__)
-_CONFIG_FOR_DOC = "RecurrentGemmaConfig"
 _MAX_SQRT_GRADIENT = 1000.0
 
 
@@ -59,6 +54,9 @@ class RecurrentGemmaRMSNorm(nn.Module):
         output = output * (1.0 + self.weight.float())
         return output.type_as(x)
 
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.eps}"
+
 
 ALL_LAYERNORM_LAYERS.append(RecurrentGemmaRMSNorm)
 
@@ -72,7 +70,6 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", tensor=inv_freq, persistent=False)
 
     @torch.no_grad()
-    # Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding.forward with Gemma->RecurrentGemma
     def forward(self, x, position_ids, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
         self.inv_freq.to(x.device)
@@ -180,7 +177,7 @@ class RecurrentGemmaSdpaAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
+        cos, sin = self.rotary_emb(value_states, position_ids)
 
         # Partial rotary embedding
         query_rot, query_pass = torch.chunk(query_states, int(1 / self.partial_rotary_factor), dim=-1)
@@ -254,8 +251,8 @@ class RecurrentGemmaSdpaAttention(nn.Module):
             k_out = k_out[:, :, indices]
             v_out = v_out[:, :, indices]
 
-            k_out[:, :, cache_position] = key_states
-            v_out[:, :, cache_position] = value_states
+            k_out[:, :, cache_position] = key_states.to(k_out.dtype)
+            v_out[:, :, cache_position] = value_states.to(v_out.dtype)
 
         self.key_states, self.value_states = k_out, v_out
         return k_out, v_out
@@ -326,9 +323,7 @@ class RecurrentGemmaRglru(nn.Module):
         # Apply gamma normalization to the input. We need to clip the derivatives of
         # `sqrt` in order to prevent NaNs during training in bfloat16. TODO a bit annoying
         multiplier = 1
-        tracing = isinstance(activations, torch.fx.Proxy) or (
-            hasattr(torch, "_dynamo") and torch._dynamo.is_compiling()
-        )
+        tracing = isinstance(activations, torch.fx.Proxy) or is_torchdynamo_compiling()
         if not torch.jit.is_tracing() and not tracing:
             multiplier = SqrtBoundDerivative.apply(1 - a_square)
         multiplier = reset + ~reset * multiplier
@@ -491,8 +486,8 @@ class RecurrentGemmaDecoderLayer(nn.Module):
         activations: torch.Tensor,
         position_ids: torch.Tensor,
         attention_mask: torch.Tensor,
-        cache_position: torch.Tensor = None,
-        use_cache: bool = None,
+        cache_position: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         raw_activations = activations
         inputs_normalized = self.temporal_pre_norm(raw_activations)  # RMSNorm introduces slight slight differences
@@ -510,27 +505,7 @@ class RecurrentGemmaDecoderLayer(nn.Module):
         return hidden_states
 
 
-RECURRENTGEMMA_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`RecurrentGemmaConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare RecurrentGemma Model outputting raw hidden-states without any specific head on top.",
-    RECURRENTGEMMA_START_DOCSTRING,
-)
+@auto_docstring
 class RecurrentGemmaPreTrainedModel(PreTrainedModel):
     config_class = RecurrentGemmaConfig
     base_model_prefix = "model"
@@ -580,6 +555,13 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
             torch.nn.init.normal_(module.weight, mean=0.0, std=std)
             if getattr(module, "bias", None) is not None:
                 torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+        elif isinstance(module, RecurrentGemmaRMSNorm):
+            module.weight.data.fill_(1.0)
 
     def _setup_cache(self, config, batch, device, dtype):
         layers = getattr(self, "model", self).layers
@@ -590,63 +572,8 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
         pass
 
 
-RECURRENTGEMMA_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all  See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-            the complete sequence length.
-"""
-
-
-@add_start_docstrings(
-    "The bare RecurrentGemma Model outputting raw hidden-states without any specific head on top.",
-    RECURRENTGEMMA_START_DOCSTRING,
-)
+@auto_docstring
 class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`RecurrentGemmaDecoderLayer`]
-
-    Args:
-        config: RecurrentGemmaConfig
-    """
-
     def __init__(self, config: RecurrentGemmaConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -673,10 +600,10 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(RECURRENTGEMMA_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -684,7 +611,6 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs,
     ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -693,9 +619,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -745,10 +669,6 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             hidden_states=all_hidden_states,
         )
 
-    # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
-    # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
-    # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
-    # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
     # Ignore copy
     def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
         dtype, device = input_tensor.dtype, input_tensor.device
@@ -766,11 +686,13 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
             if attention_mask.dim() == 2:
+                # Crop the attention mask to the target length.
+                attention_mask = attention_mask[:, -target_length:]
                 mask_length = attention_mask.shape[-1]
                 padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
                 causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
 
-        if attention_mask is not None and attention_mask.device.type == "cuda":
+        if attention_mask is not None and attention_mask.device.type in ["cuda", "xpu", "npu"]:
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
             # Details: https://github.com/pytorch/pytorch/issues/110213
@@ -779,8 +701,9 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         return causal_mask
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->RECURRENTGEMMA,Llama->RecurrentGemma,llama->gemma
-class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
+# TODO: re-enable check: Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->RECURRENTGEMMA,Llama->RecurrentGemma,llama->gemma
+@auto_docstring
+class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
@@ -810,12 +733,12 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
     def get_decoder(self):
         return self.model
 
+    @auto_docstring
     # Ignore copy
-    @add_start_docstrings_to_model_forward(RECURRENTGEMMA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -823,16 +746,13 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         use_cache: Optional[bool] = None,
-        **kwargs,  # for now we need this for generation
+        **kwargs,
     ) -> Union[Tuple, CausalLMOutput]:
         r"""
-        Args:
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Returns:
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
@@ -857,6 +777,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         output_hidden_states = True
         outputs = self.model(
             input_ids=input_ids,
+            position_ids=position_ids,
             cache_position=cache_position,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
@@ -873,19 +794,16 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         cap = self.config.logits_soft_cap
         logits = nn.functional.tanh(logits / cap) * cap
 
-        logits = logits.float()
         loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
+            loss = self.loss_function(
+                logits,
+                labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -898,39 +816,6 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         )
 
     # Ignore copy
-    def prepare_inputs_for_generation(
-        self, input_ids, attention_mask=None, inputs_embeds=None, cache_position=None, use_cache=None, **kwargs
-    ):
-        position_ids = kwargs.get("position_ids", None)
-        if attention_mask is not None and position_ids is None:
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-
-        attention_mask = attention_mask[:, -self.config.attention_window_size :]
-
-        past_length = cache_position[0]
-        if past_length > 0:
-            position_ids = position_ids[:, past_length:]
-
-        if inputs_embeds is not None:
-            model_inputs = {"inputs_embeds": inputs_embeds[:, past_length:]}
-        else:
-            model_inputs = {"input_ids": input_ids[:, past_length:].contiguous()}
-
-        if cache_position is not None:
-            cache_position = cache_position[-position_ids.shape[1] :]
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "attention_mask": attention_mask,
-                "cache_position": cache_position,
-                "use_cache": use_cache,
-            }
-        )
-        return model_inputs
-
-    # Ignore copy
     def _reorder_cache(self, past_key_values, beam_idx):
         for layer in self.layers:
             if hasattr(layer.temporal_block, "key_states"):
@@ -939,3 +824,6 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
                 k_state = k_state.index_select(0, beam_idx.to(k_state.device))
                 v_state = v_state.index_select(0, beam_idx.to(v_state.device))
         return None
+
+
+__all__ = ["RecurrentGemmaForCausalLM", "RecurrentGemmaModel", "RecurrentGemmaPreTrainedModel"]

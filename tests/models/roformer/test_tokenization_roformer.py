@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,11 +14,12 @@
 
 import tempfile
 import unittest
+from functools import lru_cache
 
 from transformers import RoFormerTokenizer, RoFormerTokenizerFast
 from transformers.testing_utils import require_rjieba, require_tokenizers
 
-from ...test_tokenization_common import TokenizerTesterMixin
+from ...test_tokenization_common import TokenizerTesterMixin, use_cache_if_possible
 
 
 @require_rjieba
@@ -31,14 +31,25 @@ class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     space_between_special_tokens = True
     test_rust_tokenizer = True
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        tokenizer = cls.tokenizer_class.from_pretrained("junnyu/roformer_chinese_base")
+        tokenizer.save_pretrained(cls.tmpdirname)
 
-    def get_tokenizer(self, **kwargs):
-        return self.tokenizer_class.from_pretrained("junnyu/roformer_chinese_base", **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_tokenizer(cls, pretrained_name=None, **kwargs):
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return cls.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
-    def get_rust_tokenizer(self, **kwargs):
-        return self.rust_tokenizer_class.from_pretrained("junnyu/roformer_chinese_base", **kwargs)
+    @classmethod
+    @use_cache_if_possible
+    @lru_cache(maxsize=64)
+    def get_rust_tokenizer(cls, pretrained_name=None, **kwargs):
+        pretrained_name = pretrained_name or cls.tmpdirname
+        return cls.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
     def get_chinese_input_output_texts(self):
         input_text = "永和服装饰品有限公司,今天天气非常好"
@@ -56,7 +67,7 @@ class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         exp_tokens = [22943, 21332, 34431, 45904, 117, 306, 1231, 1231, 2653, 33994, 1266, 100]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), exp_tokens)
 
-    def test_rust_tokenizer(self):
+    def test_rust_tokenizer(self):  # noqa: F811
         tokenizer = self.get_rust_tokenizer()
         input_text, output_text = self.get_chinese_input_output_texts()
         tokens = tokenizer.tokenize(input_text)
@@ -65,11 +76,11 @@ class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         exp_tokens = [22943, 21332, 34431, 45904, 117, 306, 1231, 1231, 2653, 33994, 1266, 100]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), exp_tokens)
 
-    # can't train new_tokenizer via Tokenizers lib
+    @unittest.skip(reason="Cannot train new tokenizer via Tokenizers lib")
     def test_training_new_tokenizer(self):
         pass
 
-    # can't train new_tokenizer via Tokenizers lib
+    @unittest.skip(reason="Cannot train new tokenizer via Tokenizers lib")
     def test_training_new_tokenizer_with_special_tokens_change(self):
         pass
 

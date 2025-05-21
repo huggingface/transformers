@@ -269,9 +269,9 @@ class TFTransformerBlock(keras.layers.Layer):
         self.activation = config.activation
         self.output_attentions = config.output_attentions
 
-        assert (
-            config.dim % config.n_heads == 0
-        ), f"Hidden size {config.dim} not dividable by number of heads {config.n_heads}"
+        assert config.dim % config.n_heads == 0, (
+            f"Hidden size {config.dim} not dividable by number of heads {config.n_heads}"
+        )
 
         self.attention = TFMultiHeadSelfAttention(config, name="attention")
         self.sa_layer_norm = keras.layers.LayerNormalization(epsilon=1e-12, name="sa_layer_norm")
@@ -1133,3 +1133,15 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.dim])
+
+
+__all__ = [
+    "TFDistilBertForMaskedLM",
+    "TFDistilBertForMultipleChoice",
+    "TFDistilBertForQuestionAnswering",
+    "TFDistilBertForSequenceClassification",
+    "TFDistilBertForTokenClassification",
+    "TFDistilBertMainLayer",
+    "TFDistilBertModel",
+    "TFDistilBertPreTrainedModel",
+]

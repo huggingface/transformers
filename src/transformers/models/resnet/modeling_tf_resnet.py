@@ -552,10 +552,10 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
     @unpack_inputs
     def call(
         self,
-        pixel_values: tf.Tensor = None,
-        labels: tf.Tensor = None,
-        output_hidden_states: bool = None,
-        return_dict: bool = None,
+        pixel_values: Optional[tf.Tensor] = None,
+        labels: Optional[tf.Tensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[Tuple[tf.Tensor], TFImageClassifierOutputWithNoAttention]:
         r"""
@@ -591,3 +591,6 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
         if getattr(self, "classifier_layer", None) is not None:
             with tf.name_scope(self.classifier_layer.name):
                 self.classifier_layer.build([None, None, self.config.hidden_sizes[-1]])
+
+
+__all__ = ["TFResNetForImageClassification", "TFResNetModel", "TFResNetPreTrainedModel"]

@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +24,7 @@ import time
 from dataclasses import field
 from functools import partial
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import datasets
 import evaluate
@@ -60,7 +59,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risk.
-check_min_version("4.42.0.dev0")
+check_min_version("4.53.0.dev0")
 
 require_version("datasets>=2.14.0", "To fix: pip install -r examples/flax/speech-recognition/requirements.txt")
 
@@ -100,7 +99,7 @@ class ModelArguments:
     use_auth_token: bool = field(
         default=False,
         metadata={
-            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+            "help": "Will use the token generated when running `transformers login` (necessary to use this script "
             "with private models)."
         },
     )
@@ -135,6 +134,16 @@ class DataTrainingArguments:
     )
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+    )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
+            )
+        },
     )
     text_column: Optional[str] = field(
         default=None,
@@ -255,7 +264,7 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
     Data collator that will dynamically pad the inputs received.
     Args:
         processor ([`Wav2Vec2Processor`])
-            The processor used for proccessing the data.
+            The processor used for processing the data.
         decoder_start_token_id (:obj: `int`)
             The begin-of-sentence of the decoder.
         input_padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
@@ -293,7 +302,7 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
     pad_input_to_multiple_of: Optional[int] = None
     pad_target_to_multiple_of: Optional[int] = None
 
-    def __call__(self, features: List[Dict[str, Union[List[int], np.ndarray]]]) -> Dict[str, np.ndarray]:
+    def __call__(self, features: list[dict[str, Union[list[int], np.ndarray]]]) -> dict[str, np.ndarray]:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         model_input_name = self.processor.model_input_names[0]
@@ -442,6 +451,7 @@ def main():
             cache_dir=data_args.dataset_cache_dir,
             num_proc=data_args.preprocessing_num_workers,
             token=True if model_args.use_auth_token else None,
+            trust_remote_code=data_args.trust_remote_code,
         )
 
     if training_args.do_eval:
@@ -452,6 +462,7 @@ def main():
             cache_dir=data_args.dataset_cache_dir,
             num_proc=data_args.preprocessing_num_workers,
             token=True if model_args.use_auth_token else None,
+            trust_remote_code=data_args.trust_remote_code,
         )
 
     if not training_args.do_train and not training_args.do_eval:

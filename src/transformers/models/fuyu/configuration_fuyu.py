@@ -157,7 +157,7 @@ class FuyuConfig(PretrainedConfig):
         text_model_type = text_config["model_type"] if "model_type" in text_config else "persimmon"
         self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
-        self.vocab_size = vocab_size
+        self._vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.image_size = image_size
         self.patch_size = patch_size
@@ -186,7 +186,6 @@ class FuyuConfig(PretrainedConfig):
             **kwargs,
         )
 
-    # Copied from transformers.models.llama.configuration_llama.LlamaConfig._rope_scaling_validation
     def _rope_scaling_validation(self):
         """
         Validate the `rope_scaling` configuration.
@@ -196,7 +195,7 @@ class FuyuConfig(PretrainedConfig):
 
         if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
             raise ValueError(
-                "`rope_scaling` must be a dictionary with two fields, `type` and `factor`, " f"got {self.rope_scaling}"
+                f"`rope_scaling` must be a dictionary with two fields, `type` and `factor`, got {self.rope_scaling}"
             )
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_factor = self.rope_scaling.get("factor", None)
@@ -206,3 +205,6 @@ class FuyuConfig(PretrainedConfig):
             )
         if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
             raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
+
+
+__all__ = ["FuyuConfig"]

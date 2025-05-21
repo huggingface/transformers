@@ -78,6 +78,9 @@ class MyTestTrainerCallback(TrainerCallback):
     def on_step_begin(self, args, state, control, **kwargs):
         self.events.append("on_step_begin")
 
+    def on_pre_optimizer_step(self, args, state, control, **kwargs):
+        self.events.append("on_pre_optimizer_step")
+
     def on_optimizer_step(self, args, state, control, **kwargs):
         self.events.append("on_optimizer_step")
 
@@ -151,7 +154,7 @@ class TrainerCallbackTest(unittest.TestCase):
             expected_events.append("on_epoch_begin")
             for _ in range(train_dl_len):
                 step += 1
-                expected_events += ["on_step_begin", "on_optimizer_step", "on_step_end"]
+                expected_events += ["on_step_begin", "on_pre_optimizer_step", "on_optimizer_step", "on_step_end"]
                 if step % trainer.args.logging_steps == 0:
                     expected_events.append("on_log")
                 if trainer.args.eval_strategy == IntervalStrategy.STEPS and step % trainer.args.eval_steps == 0:
@@ -218,52 +221,53 @@ class TrainerCallbackTest(unittest.TestCase):
         import warnings
 
         # XXX: for now ignore scatter_gather warnings in this test since it's not relevant to what's being tested
-        warnings.simplefilter(action="ignore", category=UserWarning)
+        with warnings.catch_warnings():
+            warnings.simplefilter(action="ignore", category=UserWarning)
 
-        trainer = self.get_trainer(callbacks=[MyTestTrainerCallback])
-        trainer.train()
-        events = trainer.callback_handler.callbacks[-2].events
-        self.assertEqual(events, self.get_expected_events(trainer))
+            trainer = self.get_trainer(callbacks=[MyTestTrainerCallback])
+            trainer.train()
+            events = trainer.callback_handler.callbacks[-2].events
+            self.assertEqual(events, self.get_expected_events(trainer))
 
-        # Independent log/save/eval
-        trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], logging_steps=5)
-        trainer.train()
-        events = trainer.callback_handler.callbacks[-2].events
-        self.assertEqual(events, self.get_expected_events(trainer))
+            # Independent log/save/eval
+            trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], logging_steps=5)
+            trainer.train()
+            events = trainer.callback_handler.callbacks[-2].events
+            self.assertEqual(events, self.get_expected_events(trainer))
 
-        trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], save_steps=5)
-        trainer.train()
-        events = trainer.callback_handler.callbacks[-2].events
-        self.assertEqual(events, self.get_expected_events(trainer))
+            trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], save_steps=5)
+            trainer.train()
+            events = trainer.callback_handler.callbacks[-2].events
+            self.assertEqual(events, self.get_expected_events(trainer))
 
-        trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], eval_steps=5, eval_strategy="steps")
-        trainer.train()
-        events = trainer.callback_handler.callbacks[-2].events
-        self.assertEqual(events, self.get_expected_events(trainer))
+            trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], eval_steps=5, eval_strategy="steps")
+            trainer.train()
+            events = trainer.callback_handler.callbacks[-2].events
+            self.assertEqual(events, self.get_expected_events(trainer))
 
-        trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], eval_strategy="epoch")
-        trainer.train()
-        events = trainer.callback_handler.callbacks[-2].events
-        self.assertEqual(events, self.get_expected_events(trainer))
+            trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], eval_strategy="epoch")
+            trainer.train()
+            events = trainer.callback_handler.callbacks[-2].events
+            self.assertEqual(events, self.get_expected_events(trainer))
 
-        # A bit of everything
-        trainer = self.get_trainer(
-            callbacks=[MyTestTrainerCallback],
-            logging_steps=3,
-            save_steps=10,
-            eval_steps=5,
-            eval_strategy="steps",
-        )
-        trainer.train()
-        events = trainer.callback_handler.callbacks[-2].events
-        self.assertEqual(events, self.get_expected_events(trainer))
-
-        # warning should be emitted for duplicated callbacks
-        with patch("transformers.trainer_callback.logger.warning") as warn_mock:
+            # A bit of everything
             trainer = self.get_trainer(
-                callbacks=[MyTestTrainerCallback, MyTestTrainerCallback],
+                callbacks=[MyTestTrainerCallback],
+                logging_steps=3,
+                save_steps=10,
+                eval_steps=5,
+                eval_strategy="steps",
             )
-            assert str(MyTestTrainerCallback) in warn_mock.call_args[0][0]
+            trainer.train()
+            events = trainer.callback_handler.callbacks[-2].events
+            self.assertEqual(events, self.get_expected_events(trainer))
+
+            # warning should be emitted for duplicated callbacks
+            with patch("transformers.trainer_callback.logger.warning") as warn_mock:
+                trainer = self.get_trainer(
+                    callbacks=[MyTestTrainerCallback, MyTestTrainerCallback],
+                )
+                assert str(MyTestTrainerCallback) in warn_mock.call_args[0][0]
 
     def test_stateful_callbacks(self):
         # Use something with non-defaults
@@ -421,3 +425,21 @@ class TrainerCallbackTest(unittest.TestCase):
         trainer.state = TrainerState.load_from_json(os.path.join(checkpoint, TRAINER_STATE_NAME))
         trainer._load_callback_state()
         assert trainer.control.should_training_stop
+
+    def test_no_duplicate_save_on_epoch_save_strategy(self):
+        times_saved = 0
+
+        class OnEndCallback(TrainerCallback):
+            def on_step_end(self, args: TrainingArguments, state: TrainerState, control, **kwargs):
+                nonlocal times_saved
+                if control.should_save:
+                    times_saved += 1
+
+            def on_epoch_end(self, args: TrainingArguments, state: TrainerState, control, **kwargs):
+                nonlocal times_saved
+                if control.should_save:
+                    times_saved += 1
+
+        trainer = self.get_trainer(max_steps=2, save_strategy="epoch", callbacks=[OnEndCallback])
+        trainer.train()
+        assert times_saved == 1

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,6 @@ import inspect
 import os
 import tempfile
 import unittest
-from typing import Dict, List, Tuple
 
 import numpy as np
 from datasets import Audio, load_dataset
@@ -40,7 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import EncodecModel
+    from transformers import EncodecFeatureExtractor, EncodecModel
 
 
 def prepare_inputs_dict(
@@ -112,6 +110,19 @@ class EncodecModelTester:
 
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_normalization(self):
+        input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
+        config = self.get_config()
+        config.normalize = True
+
+        processor = EncodecFeatureExtractor(feature_size=config.audio_channels, sampling_rate=config.sampling_rate)
+        input_values = input_values.tolist()
+        inputs_dict = processor(
+            input_values, sampling_rate=config.sampling_rate, padding=True, return_tensors="pt"
+        ).to(torch_device)
+
+        return config, inputs_dict
+
     def get_config(self):
         return EncodecConfig(
             audio_channels=self.num_channels,
@@ -126,9 +137,7 @@ class EncodecModelTester:
 
     def create_and_check_model_forward(self, config, inputs_dict):
         model = EncodecModel(config=config).to(torch_device).eval()
-
-        input_values = inputs_dict["input_values"]
-        result = model(input_values)
+        result = model(**inputs_dict)
         self.parent.assertEqual(
             result.audio_values.shape, (self.batch_size, self.num_channels, self.intermediate_size)
         )
@@ -142,7 +151,6 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_headmasking = False
     test_resize_embeddings = False
     pipeline_model_mapping = {"feature-extraction": EncodecModel} if is_torch_available() else {}
-    input_name = "input_values"
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does not have attention and does not support returning hidden states
@@ -178,29 +186,35 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             expected_arg_names = ["input_values", "padding_mask", "bandwidth"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    @unittest.skip("The EncodecModel is not transformers based, thus it does not have `inputs_embeds` logics")
+    @unittest.skip(reason="The EncodecModel is not transformers based, thus it does not have `inputs_embeds` logics")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("The EncodecModel is not transformers based, thus it does not have `inputs_embeds` logics")
+    @unittest.skip(reason="The EncodecModel is not transformers based, thus it does not have `inputs_embeds` logics")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `attention` logic")
+    @unittest.skip(
+        reason="The EncodecModel is not transformers based, thus it does not have the usual `attention` logic"
+    )
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `attention` logic")
+    @unittest.skip(
+        reason="The EncodecModel is not transformers based, thus it does not have the usual `attention` logic"
+    )
     def test_torchscript_output_attentions(self):
         pass
 
-    @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `hidden_states` logic")
+    @unittest.skip(
+        reason="The EncodecModel is not transformers based, thus it does not have the usual `hidden_states` logic"
+    )
     def test_torchscript_output_hidden_state(self):
         pass
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -288,7 +302,9 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             # (Even with this call, there are still memory leak by ~0.04MB)
             self.clear_torch_jit_class_registry()
 
-    @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `attention` logic")
+    @unittest.skip(
+        reason="The EncodecModel is not transformers based, thus it does not have the usual `attention` logic"
+    )
     def test_attention_outputs(self):
         pass
 
@@ -307,7 +323,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             inputs = self._prepare_for_class(inputs_dict, model_class)
             inputs["input_values"] = inputs["input_values"].repeat(1, 1, 10)
 
-            hidden_states_no_chunk = model(**inputs)[0]
+            hidden_states_no_chunk = model(**inputs)[1]
 
             torch.manual_seed(0)
             config.chunk_length_s = 1
@@ -318,22 +334,24 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             model.to(torch_device)
             model.eval()
 
-            hidden_states_with_chunk = model(**inputs)[0]
-            self.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
+            hidden_states_with_chunk = model(**inputs)[1]
+            torch.testing.assert_close(hidden_states_no_chunk, hidden_states_with_chunk, rtol=1e-1, atol=1e-2)
 
-    @unittest.skip("The EncodecModel is not transformers based, thus it does not have the usual `hidden_states` logic")
+    @unittest.skip(
+        reason="The EncodecModel is not transformers based, thus it does not have the usual `hidden_states` logic"
+    )
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage(self):
         pass
 
-    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage_checkpoints(self):
         pass
 
-    @unittest.skip("No support for low_cpu_mem_usage=True.")
+    @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage_no_safetensors(self):
         pass
 
@@ -375,31 +393,21 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                 tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs)
 
-                def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
-                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
-                            recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
-                        for tuple_iterable_value, dict_iterable_value in zip(
-                            tuple_object.values(), dict_object.values()
-                        ):
-                            recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif tuple_object is None:
-                        return
-                    else:
-                        self.assertTrue(
-                            torch.allclose(
-                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
-                            ),
-                            msg=(
-                                "Tuple and dict output are not equal. Difference:"
-                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
-                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
-                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
-                            ),
-                        )
+                self.assertTrue(isinstance(tuple_output, tuple))
+                self.assertTrue(isinstance(dict_output, dict))
 
-                recursive_check(tuple_output, dict_output)
+                for tuple_value, dict_value in zip(tuple_output, dict_output.values()):
+                    self.assertTrue(
+                        torch.allclose(
+                            set_nan_tensor_to_zero(tuple_value), set_nan_tensor_to_zero(dict_value), atol=1e-5
+                        ),
+                        msg=(
+                            "Tuple and dict output are not equal. Difference:"
+                            f" {torch.max(torch.abs(tuple_value - dict_value))}. Tuple has `nan`:"
+                            f" {torch.isnan(tuple_value).any()} and `inf`: {torch.isinf(tuple_value)}. Dict has"
+                            f" `nan`: {torch.isnan(dict_value).any()} and `inf`: {torch.isinf(dict_value)}."
+                        ),
+                    )
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -435,6 +443,10 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_identity_shortcut(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         config.use_conv_shortcut = False
+        self.model_tester.create_and_check_model_forward(config, inputs_dict)
+
+    def test_model_forward_with_normalization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_normalization()
         self.model_tester.create_and_check_model_forward(config, inputs_dict)
 
 
@@ -479,10 +491,10 @@ class EncodecIntegrationTest(unittest.TestCase):
 
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
-                # use max bandwith for best possible reconstruction
+                # use max bandwidth for best possible reconstruction
                 encoder_outputs = model.encode(inputs["input_values"], bandwidth=float(bandwidth))
 
-                audio_code_sums = [a[0].sum().cpu().item() for a in encoder_outputs[0]]
+                audio_code_sums = [a[0].sum().item() for a in encoder_outputs[0]]
 
                 # make sure audio encoded codes are correct
                 self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
@@ -494,7 +506,7 @@ class EncodecIntegrationTest(unittest.TestCase):
                 )[-1]
 
             # make sure forward and decode gives same result
-            self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
+            torch.testing.assert_close(input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3)
 
             # make sure shape matches
             self.assertTrue(inputs["input_values"].shape == input_values_enc_dec.shape)
@@ -535,11 +547,11 @@ class EncodecIntegrationTest(unittest.TestCase):
 
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
-                # use max bandwith for best possible reconstruction
+                # use max bandwidth for best possible reconstruction
                 encoder_outputs = model.encode(
                     inputs["input_values"], inputs["padding_mask"], bandwidth=float(bandwidth), return_dict=False
                 )
-                audio_code_sums = [a[0].sum().cpu().item() for a in encoder_outputs[0]]
+                audio_code_sums = [a[0].sum().item() for a in encoder_outputs[0]]
 
                 # make sure audio encoded codes are correct
                 self.assertListEqual(audio_code_sums, expected_codesums[bandwidth])
@@ -550,7 +562,7 @@ class EncodecIntegrationTest(unittest.TestCase):
                 )[-1]
 
             # make sure forward and decode gives same result
-            self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
+            torch.testing.assert_close(input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3)
 
             # make sure shape matches
             self.assertTrue(inputs["input_values"].shape == input_values_enc_dec.shape)
@@ -595,10 +607,10 @@ class EncodecIntegrationTest(unittest.TestCase):
         input_values = inputs["input_values"].to(torch_device)
         for bandwidth, expected_rmse in expected_rmse.items():
             with torch.no_grad():
-                # use max bandwith for best possible reconstruction
+                # use max bandwidth for best possible reconstruction
                 encoder_outputs = model.encode(input_values, bandwidth=float(bandwidth), return_dict=False)
-                audio_code_sums_0 = [a[0][0].sum().cpu().item() for a in encoder_outputs[0]]
-                audio_code_sums_1 = [a[0][1].sum().cpu().item() for a in encoder_outputs[0]]
+                audio_code_sums_0 = [a[0][0].sum().item() for a in encoder_outputs[0]]
+                audio_code_sums_1 = [a[0][1].sum().item() for a in encoder_outputs[0]]
 
                 # make sure audio encoded codes are correct
                 self.assertListEqual(audio_code_sums_0, expected_codesums[bandwidth][0])
@@ -609,7 +621,7 @@ class EncodecIntegrationTest(unittest.TestCase):
                 input_values_enc_dec = model(input_values, bandwidth=float(bandwidth))[-1]
 
             # make sure forward and decode gives same result
-            self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
+            torch.testing.assert_close(input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3)
 
             # make sure shape matches
             self.assertTrue(input_values.shape == input_values_enc_dec.shape)

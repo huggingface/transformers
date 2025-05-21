@@ -74,6 +74,10 @@ Likewise, if your `NewModel` is a subclass of [`PreTrainedModel`], make sure its
 
 [[autodoc]] AutoImageProcessor
 
+## AutoVideoProcessor
+
+[[autodoc]] AutoVideoProcessor
+
 ## AutoProcessor
 
 [[autodoc]] AutoProcessor
@@ -381,3 +385,7 @@ The following auto classes are available for the following multimodal tasks.
 ### FlaxAutoModelForVision2Seq
 
 [[autodoc]] FlaxAutoModelForVision2Seq
+
+### AutoModelForImageTextToText
+
+[[autodoc]] AutoModelForImageTextToText

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 Ecole Polytechnique and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,13 +30,14 @@ class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = True
     test_sentencepiece = True
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
 
         tokenizer = BarthezTokenizerFast.from_pretrained("moussaKam/mbarthez")
-        tokenizer.save_pretrained(self.tmpdirname)
-        tokenizer.save_pretrained(self.tmpdirname, legacy_format=False)
-        self.tokenizer = tokenizer
+        tokenizer.save_pretrained(cls.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname, legacy_format=False)
+        cls.tokenizer = tokenizer
 
     def test_convert_token_and_id(self):
         """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
@@ -75,7 +75,7 @@ class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,6 @@ import math
 import tempfile
 import unittest
 import warnings
-from typing import Dict, List, Tuple
 
 import numpy as np
 from datasets import load_dataset
@@ -315,7 +313,12 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def setUp(self):
         self.model_tester = PerceiverModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PerceiverConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=PerceiverConfig,
+            hidden_size=37,
+            common_properties=["d_model", "num_self_attention_heads", "num_cross_attention_heads"],
+        )
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -344,12 +347,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         return inputs_dict
 
     def test_config(self):
-        # we don't test common_properties and arguments_init as these don't apply for Perceiver
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.run_common_tests()
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(model_class=PerceiverForMaskedLM)
@@ -387,7 +385,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def test_training(self):
         if not self.model_tester.is_training:
-            return
+            self.skipTest(reason="model_tester.is_training is set to False")
 
         for model_class in self.all_model_classes:
             if model_class.__name__ in [
@@ -559,10 +557,10 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
+                    if isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):
@@ -683,7 +681,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
                         torch.allclose(hidden_states_no_chunk[modality], hidden_states_with_chunk[modality], atol=1e-3)
                     )
             else:
-                self.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
+                torch.testing.assert_close(hidden_states_no_chunk, hidden_states_with_chunk, rtol=1e-3, atol=1e-3)
 
     def test_save_load(self):
         for model_class in self.all_model_classes:
@@ -732,7 +730,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def test_correct_missing_keys(self):
         if not self.test_missing_keys:
-            return
+            self.skipTest(reason="test_missing_keys is set to False")
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -812,14 +810,6 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip(reason="Perceiver models don't have a typical head like is the case with BERT")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="Perceiver models don't have a typical head like is the case with BERT")
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @unittest.skip(reason="Perceiver doesn't support resize_token_embeddings")
     def test_resize_tokens_embeddings(self):
         pass
@@ -851,7 +841,7 @@ def prepare_img():
 
 # Helper functions for optical flow integration test
 def prepare_optical_flow_images():
-    dataset = load_dataset("hf-internal-testing/fixtures_sintel", split="test")
+    dataset = load_dataset("hf-internal-testing/fixtures_sintel", split="test", trust_remote_code=True)
     image1 = Image.open(dataset[0]["file"]).convert("RGB")
     image2 = Image.open(dataset[0]["file"]).convert("RGB")
 
@@ -909,7 +899,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        self.assertTrue(torch.allclose(logits[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         expected_greedy_predictions = [38, 115, 111, 121, 121, 111, 116, 109, 52]
         masked_tokens_predictions = logits[0, 52:61].argmax(dim=-1).tolist()
@@ -938,7 +928,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([-1.1652, -0.1992, -0.7520], device=torch_device)
 
         atol = 1e-3 if IS_ROCM_SYSTEM else 1e-4
-        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=atol))
+        torch.testing.assert_close(logits[0, :3], expected_slice, rtol=atol, atol=atol)
 
     @slow
     def test_inference_image_classification_fourier(self):
@@ -962,7 +952,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-1.1295, -0.2832, 0.3226], device=torch_device)
 
-        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_image_classification_conv(self):
@@ -986,7 +976,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-1.1186, 0.0554, 0.0897], device=torch_device)
 
-        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_optical_flow(self):
@@ -1030,7 +1020,7 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        self.assertTrue(torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, :3, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_interpolate_pos_encoding(self):

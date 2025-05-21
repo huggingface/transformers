@@ -16,14 +16,17 @@ Generic utilities
 """
 
 import inspect
+import json
+import os
 import tempfile
+import warnings
 from collections import OrderedDict, UserDict
-from collections.abc import MutableMapping
+from collections.abc import Iterable, MutableMapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import fields, is_dataclass
 from enum import Enum
-from functools import partial
-from typing import Any, ContextManager, Iterable, List, Tuple
+from functools import partial, wraps
+from typing import Any, ContextManager, Optional, TypedDict
 
 import numpy as np
 from packaging import version
@@ -36,6 +39,11 @@ from .import_utils import (
     is_torch_available,
     is_torch_fx_proxy,
 )
+
+
+if is_torch_available():
+    # required for @can_return_tuple decorator to work with torchdynamo
+    import torch  # noqa: F401
 
 
 class cached_property(property):
@@ -213,7 +221,7 @@ def _is_tf_symbolic_tensor(x):
     # the `is_symbolic_tensor` predicate is only available starting with TF 2.14
     if hasattr(tf, "is_symbolic_tensor"):
         return tf.is_symbolic_tensor(x)
-    return type(x) == tf.Tensor
+    return isinstance(x, tf.Tensor)
 
 
 def is_tf_symbolic_tensor(x):
@@ -254,18 +262,25 @@ def to_py_obj(obj):
     """
     Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a python list.
     """
+    if isinstance(obj, (int, float)):
+        return obj
+    elif isinstance(obj, (dict, UserDict)):
+        return {k: to_py_obj(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        try:
+            arr = np.array(obj)
+            if np.issubdtype(arr.dtype, np.integer) or np.issubdtype(arr.dtype, np.floating):
+                return arr.tolist()
+        except Exception:
+            pass
+        return [to_py_obj(o) for o in obj]
 
     framework_to_py_obj = {
-        "pt": lambda obj: obj.detach().cpu().tolist(),
+        "pt": lambda obj: obj.tolist(),
         "tf": lambda obj: obj.numpy().tolist(),
         "jax": lambda obj: np.asarray(obj).tolist(),
         "np": lambda obj: obj.tolist(),
     }
-
-    if isinstance(obj, (dict, UserDict)):
-        return {k: to_py_obj(v) for k, v in obj.items()}
-    elif isinstance(obj, (list, tuple)):
-        return [to_py_obj(o) for o in obj]
 
     # This gives us a smart order to test the frameworks with the corresponding tests.
     framework_to_test_func = _get_frameworks_and_test_func(obj)
@@ -328,14 +343,18 @@ class ModelOutput(OrderedDict):
         """
         if is_torch_available():
             if version.parse(get_torch_version()) >= version.parse("2.2"):
-                _torch_pytree.register_pytree_node(
+                from torch.utils._pytree import register_pytree_node
+
+                register_pytree_node(
                     cls,
                     _model_output_flatten,
                     partial(_model_output_unflatten, output_type=cls),
                     serialized_type_name=f"{cls.__module__}.{cls.__name__}",
                 )
             else:
-                _torch_pytree._register_pytree_node(
+                from torch.utils._pytree import _register_pytree_node
+
+                _register_pytree_node(
                     cls,
                     _model_output_flatten,
                     partial(_model_output_unflatten, output_type=cls),
@@ -352,7 +371,7 @@ class ModelOutput(OrderedDict):
 
         if is_modeloutput_subclass and not is_dataclass(self):
             raise TypeError(
-                f"{self.__module__}.{self.__class__.__name__} is not a dataclasss."
+                f"{self.__module__}.{self.__class__.__name__} is not a dataclass."
                 " This is a subclass of ModelOutput and so must use the @dataclass decorator."
             )
 
@@ -450,7 +469,7 @@ class ModelOutput(OrderedDict):
         args = tuple(getattr(self, field.name) for field in fields(self))
         return callable, args, *remaining
 
-    def to_tuple(self) -> Tuple[Any]:
+    def to_tuple(self) -> tuple[Any]:
         """
         Convert self to a tuple containing all the attributes/keys that are not `None`.
         """
@@ -460,7 +479,7 @@ class ModelOutput(OrderedDict):
 if is_torch_available():
     import torch.utils._pytree as _torch_pytree
 
-    def _model_output_flatten(output: ModelOutput) -> Tuple[List[Any], "_torch_pytree.Context"]:
+    def _model_output_flatten(output: ModelOutput) -> tuple[list[Any], "_torch_pytree.Context"]:
         return list(output.values()), list(output.keys())
 
     def _model_output_unflatten(
@@ -527,7 +546,7 @@ class ContextManagers:
     in the `fastcore` library.
     """
 
-    def __init__(self, context_managers: List[ContextManager]):
+    def __init__(self, context_managers: list[ContextManager]):
         self.context_managers = context_managers
         self.stack = ExitStack()
 
@@ -750,3 +769,211 @@ def infer_framework(model_class):
             return "flax"
     else:
         raise TypeError(f"Could not infer framework from class {model_class}.")
+
+
+def torch_int(x):
+    """
+    Casts an input to a torch int64 tensor if we are in a tracing context, otherwise to a Python int.
+    """
+    if not is_torch_available():
+        return int(x)
+
+    import torch
+
+    return x.to(torch.int64) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
+
+
+def torch_float(x):
+    """
+    Casts an input to a torch float32 tensor if we are in a tracing context, otherwise to a Python float.
+    """
+    if not is_torch_available():
+        return int(x)
+
+    import torch
+
+    return x.to(torch.float32) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
+
+
+def filter_out_non_signature_kwargs(extra: Optional[list] = None):
+    """
+    Decorator to filter out named arguments that are not in the function signature.
+
+    This decorator ensures that only the keyword arguments that match the function's signature, or are specified in the
+    `extra` list, are passed to the function. Any additional keyword arguments are filtered out and a warning is issued.
+
+    Parameters:
+        extra (`Optional[list]`, *optional*):
+            A list of extra keyword argument names that are allowed even if they are not in the function's signature.
+
+    Returns:
+        Callable:
+            A decorator that wraps the function and filters out invalid keyword arguments.
+
+    Example usage:
+
+        ```python
+        @filter_out_non_signature_kwargs(extra=["allowed_extra_arg"])
+        def my_function(arg1, arg2, **kwargs):
+            print(arg1, arg2, kwargs)
+
+        my_function(arg1=1, arg2=2, allowed_extra_arg=3, invalid_arg=4)
+        # This will print: 1 2 {"allowed_extra_arg": 3}
+        # And issue a warning: "The following named arguments are not valid for `my_function` and were ignored: 'invalid_arg'"
+        ```
+    """
+    extra = extra or []
+    extra_params_to_pass = set(extra)
+
+    def decorator(func):
+        sig = inspect.signature(func)
+        function_named_args = set(sig.parameters.keys())
+        valid_kwargs_to_pass = function_named_args.union(extra_params_to_pass)
+
+        # Required for better warning message
+        is_instance_method = "self" in function_named_args
+        is_class_method = "cls" in function_named_args
+
+        # Mark function as decorated
+        func._filter_out_non_signature_kwargs = True
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            valid_kwargs = {}
+            invalid_kwargs = {}
+
+            for k, v in kwargs.items():
+                if k in valid_kwargs_to_pass:
+                    valid_kwargs[k] = v
+                else:
+                    invalid_kwargs[k] = v
+
+            if invalid_kwargs:
+                invalid_kwargs_names = [f"'{k}'" for k in invalid_kwargs.keys()]
+                invalid_kwargs_names = ", ".join(invalid_kwargs_names)
+
+                # Get the class name for better warning message
+                if is_instance_method:
+                    cls_prefix = args[0].__class__.__name__ + "."
+                elif is_class_method:
+                    cls_prefix = args[0].__name__ + "."
+                else:
+                    cls_prefix = ""
+
+                warnings.warn(
+                    f"The following named arguments are not valid for `{cls_prefix}{func.__name__}`"
+                    f" and were ignored: {invalid_kwargs_names}",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
+            return func(*args, **valid_kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+class LossKwargs(TypedDict, total=False):
+    """
+    Keyword arguments to be passed to the loss function
+
+    Attributes:
+        num_items_in_batch (`int`, *optional*):
+            Number of items in the batch. It is recommended to pass it when
+            you are doing gradient accumulation.
+    """
+
+    num_items_in_batch: Optional[int]
+
+
+def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
+    """Checks whether a config dict is a timm config dict."""
+    return "pretrained_cfg" in config_dict
+
+
+def is_timm_local_checkpoint(pretrained_model_path: str) -> bool:
+    """
+    Checks whether a checkpoint is a timm model checkpoint.
+    """
+    if pretrained_model_path is None:
+        return False
+
+    # in case it's Path, not str
+    pretrained_model_path = str(pretrained_model_path)
+
+    is_file = os.path.isfile(pretrained_model_path)
+    is_dir = os.path.isdir(pretrained_model_path)
+
+    # pretrained_model_path is a file
+    if is_file and pretrained_model_path.endswith(".json"):
+        with open(pretrained_model_path) as f:
+            config_dict = json.load(f)
+        return is_timm_config_dict(config_dict)
+
+    # pretrained_model_path is a directory with a config.json
+    if is_dir and os.path.exists(os.path.join(pretrained_model_path, "config.json")):
+        with open(os.path.join(pretrained_model_path, "config.json")) as f:
+            config_dict = json.load(f)
+        return is_timm_config_dict(config_dict)
+
+    return False
+
+
+def set_attribute_for_modules(module: "torch.nn.Module", key: str, value: Any):
+    """
+    Set a value to a module and all submodules.
+    """
+    setattr(module, key, value)
+    for submodule in module.children():
+        set_attribute_for_modules(submodule, key, value)
+
+
+def del_attribute_from_modules(module: "torch.nn.Module", key: str):
+    """
+    Delete a value from a module and all submodules.
+    """
+    # because we might remove it previously in case it's a shared module, e.g. activation function
+    if hasattr(module, key):
+        delattr(module, key)
+
+    for submodule in module.children():
+        del_attribute_from_modules(submodule, key)
+
+
+def can_return_tuple(func):
+    """
+    Decorator to wrap model method, to call output.to_tuple() if return_dict=False passed as a kwarg or
+    use_return_dict=False is set in the config.
+
+    Note:
+        output.to_tuple() convert output to tuple skipping all `None` values.
+    """
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        is_requested_to_return_tuple = kwargs.pop("return_dict", True) is False
+        is_configured_to_return_tuple = self.config.use_return_dict is False if hasattr(self, "config") else False
+
+        # The following allows to convert output to tuple ONLY on top level forward call,
+        # while internal modules of the model will return Output objects
+        # to be able to use name-based attribute access in modeling code.
+
+        # We will check if we are on top level module, if so, turn off to tuple conversion for all
+        # underling calls.
+        is_top_level_module = getattr(self, "_is_top_level_module", True)
+        if is_configured_to_return_tuple and is_top_level_module:
+            set_attribute_for_modules(self, "_is_top_level_module", False)
+
+        try:
+            output = func(self, *args, **kwargs)
+            if is_requested_to_return_tuple or (is_configured_to_return_tuple and is_top_level_module):
+                output = output.to_tuple()
+        finally:
+            # Remove the flag after the model forward call is finished.
+            if is_configured_to_return_tuple and is_top_level_module:
+                del_attribute_from_modules(self, "_is_top_level_module")
+
+        return output
+
+    return wrapper

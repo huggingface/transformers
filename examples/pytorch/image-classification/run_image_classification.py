@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,6 +41,7 @@ from transformers import (
     AutoImageProcessor,
     AutoModelForImageClassification,
     HfArgumentParser,
+    TimmWrapperImageProcessor,
     Trainer,
     TrainingArguments,
     set_seed,
@@ -56,7 +56,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.42.0.dev0")
+check_min_version("4.53.0.dev0")
 
 require_version("datasets>=2.14.0", "To fix: pip install -r examples/pytorch/image-classification/requirements.txt")
 
@@ -164,9 +164,9 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
-                "execute code present on the Hub on your local machine."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -242,6 +242,7 @@ def main():
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
             token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         data_files = {}
@@ -328,31 +329,36 @@ def main():
     )
 
     # Define torchvision transforms to be applied to each image.
-    if "shortest_edge" in image_processor.size:
-        size = image_processor.size["shortest_edge"]
+    if isinstance(image_processor, TimmWrapperImageProcessor):
+        _train_transforms = image_processor.train_transforms
+        _val_transforms = image_processor.val_transforms
     else:
-        size = (image_processor.size["height"], image_processor.size["width"])
-    normalize = (
-        Normalize(mean=image_processor.image_mean, std=image_processor.image_std)
-        if hasattr(image_processor, "image_mean") and hasattr(image_processor, "image_std")
-        else Lambda(lambda x: x)
-    )
-    _train_transforms = Compose(
-        [
-            RandomResizedCrop(size),
-            RandomHorizontalFlip(),
-            ToTensor(),
-            normalize,
-        ]
-    )
-    _val_transforms = Compose(
-        [
-            Resize(size),
-            CenterCrop(size),
-            ToTensor(),
-            normalize,
-        ]
-    )
+        if "shortest_edge" in image_processor.size:
+            size = image_processor.size["shortest_edge"]
+        else:
+            size = (image_processor.size["height"], image_processor.size["width"])
+
+        # Create normalization transform
+        if hasattr(image_processor, "image_mean") and hasattr(image_processor, "image_std"):
+            normalize = Normalize(mean=image_processor.image_mean, std=image_processor.image_std)
+        else:
+            normalize = Lambda(lambda x: x)
+        _train_transforms = Compose(
+            [
+                RandomResizedCrop(size),
+                RandomHorizontalFlip(),
+                ToTensor(),
+                normalize,
+            ]
+        )
+        _val_transforms = Compose(
+            [
+                Resize(size),
+                CenterCrop(size),
+                ToTensor(),
+                normalize,
+            ]
+        )
 
     def train_transforms(example_batch):
         """Apply _train_transforms across a batch."""
@@ -395,7 +401,7 @@ def main():
         train_dataset=dataset["train"] if training_args.do_train else None,
         eval_dataset=dataset["validation"] if training_args.do_eval else None,
         compute_metrics=compute_metrics,
-        tokenizer=image_processor,
+        processing_class=image_processor,
         data_collator=collate_fn,
     )
 

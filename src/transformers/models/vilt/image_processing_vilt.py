@@ -32,10 +32,10 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
@@ -119,6 +119,7 @@ def get_resize_output_image_size(
     return new_height, new_width
 
 
+@requires(backends=("vision",))
 class ViltImageProcessor(BaseImageProcessor):
     r"""
     Constructs a ViLT image processor.
@@ -164,7 +165,7 @@ class ViltImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         size_divisor: int = 32,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
@@ -192,27 +193,11 @@ class ViltImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_pad = do_pad
-        self._valid_processor_keys = [
-            "images",
-            "do_resize",
-            "size",
-            "size_divisor",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "do_pad",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
-        Overrides the `from_dict` method from the base class to make sure `reduce_labels` is updated if image processor
+        Overrides the `from_dict` method from the base class to make sure `pad_and_return_pixel_mask` is updated if image processor
         is created using from_dict and kwargs e.g. `ViltImageProcessor.from_pretrained(checkpoint,
         pad_and_return_pixel_mask=False)`
         """
@@ -243,7 +228,7 @@ class ViltImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`Dict[str, int]`):
                 Controls the size of the output image. Should be of the form `{"shortest_edge": int}`.
-            size_divisor (`int`, defaults to 32):
+            size_divisor (`int`, *optional*, defaults to 32):
                 The image is resized to a size that is a multiple of this value.
             resample (`PILImageResampling` filter, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 Resampling filter to use when resiizing the image.
@@ -351,6 +336,7 @@ class ViltImageProcessor(BaseImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -367,7 +353,6 @@ class ViltImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -433,8 +418,6 @@ class ViltImageProcessor(BaseImageProcessor):
 
         images = make_list_of_images(images)
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
@@ -457,7 +440,7 @@ class ViltImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -503,3 +486,6 @@ class ViltImageProcessor(BaseImageProcessor):
             encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
 
         return encoded_outputs
+
+
+__all__ = ["ViltImageProcessor"]

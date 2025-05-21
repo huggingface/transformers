@@ -18,6 +18,7 @@ import collections
 import json
 import os
 import re
+import sys
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -124,7 +125,7 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         emoji_file (`str`):
             File containing the emoji.
         unk_token (`str`, *optional*, defaults to `"<|nottoken|>"`):
-            The token used for unknown charactor
+            The token used for unknown character
         pad_token (`str`, *optional*, defaults to `"<|separator|>"`):
             The token used for padding
         bos_token (`str`, *optional*, defaults to `"<|startoftext|>"`):
@@ -235,19 +236,6 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
             words.append(bytearray(byte_tokens).decode("utf-8", errors="replace"))
         text = "".join(words)
         return text
-
-    @property
-    def default_chat_template(self):
-        """
-        A simple chat template that adds standard BOS, SEP and EOS tokens between messages while discarding role
-        information.
-        """
-        return (
-            "{% for message in messages %}"
-            "{% if not loop.first %}{{ bos_token}}{% endif %}"
-            "{{ sep_token }}{{ message.content }} {{ eos_token }}"
-            "{% endfor %}"
-        )
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         index = 0
@@ -378,13 +366,13 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         )
 
 
-class SubWordJapaneseTokenizer(object):
+class SubWordJapaneseTokenizer:
     """
     This tokenizer is based on GPTNeoXJapaneseTokenizer and has the following modifications
     - Decoding byte0~byte255 tokens correctly
     - Added bagofword token handling
 
-    https://github.com/tanreinama/Japanese-BPEEncoder_V2 This tokenizer class is under MIT Lisence according to the
+    https://github.com/tanreinama/Japanese-BPEEncoder_V2 This tokenizer class is under MIT License according to the
     original repository.
 
     MIT License
@@ -420,12 +408,26 @@ class SubWordJapaneseTokenizer(object):
         self.content_repatter5 = re.compile(
             r"(明治|大正|昭和|平成|令和|㍾|㍽|㍼|㍻|\u32ff)\d{1,2}年(0?[1-9]|1[0-2])月(0?[1-9]|[12][0-9]|3[01])日(\d{1,2}|:|\d{1,2}時|\d{1,2}分|\(日\)|\(月\)|\(火\)|\(水\)|\(木\)|\(金\)|\(土\)|㈰|㈪|㈫|㈬|㈭|㈮|㈯)*"
         )
-        self.content_repatter6 = re.compile(
-            r"((0|[1-9]\d*|[1-9]\d{0,2}(,\d{3})+)*億)*((0|[1-9]\d*|[1-9]\d{0,2}(,\d{3})+)*万)*((0|[1-9]\d*|[1-9]\d{0,2}(,\d{3})+)*千)*(0|[1-9]\d*|[1-9]\d{0,2}(,\d{3})+)*(千円|万円|千万円|円|千ドル|万ドル|千万ドル|ドル|千ユーロ|万ユーロ|千万ユーロ|ユーロ)+(\(税込\)|\(税抜\)|\+tax)*"
-        )
+        # The original version of this regex displays catastrophic backtracking behaviour. We avoid this using
+        # possessive quantifiers in Py >= 3.11. In versions below this, we avoid the vulnerability using a slightly
+        # different regex that should generally have the same behaviour in most non-pathological cases.
+        if sys.version_info >= (3, 11):
+            self.content_repatter6 = re.compile(
+                r"(?:\d,\d{3}|[\d億])*+"
+                r"(?:\d,\d{3}|[\d万])*+"
+                r"(?:\d,\d{3}|[\d千])*+"
+                r"(?:千円|万円|千万円|円|千ドル|万ドル|千万ドル|ドル|千ユーロ|万ユーロ|千万ユーロ|ユーロ)+"
+                r"(?:\(税込\)|\(税抜\)|\+tax)*"
+            )
+        else:
+            self.content_repatter6 = re.compile(
+                r"(?:\d,\d{3}|[\d億万千])*"
+                r"(?:千円|万円|千万円|円|千ドル|万ドル|千万ドル|ドル|千ユーロ|万ユーロ|千万ユーロ|ユーロ)+"
+                r"(?:\(税込\)|\(税抜\)|\+tax)*"
+            )
         keisen = "─━│┃┄┅┆┇┈┉┊┋┌┍┎┏┐┑┒┓└┕┖┗┘┙┚┛├┝┞┟┠┡┢┣┤┥┦┧┨┩┪┫┬┭┮┯┰┱┲┳┴┵┶┷┸┹┺┻┼┽┾┿╀╁╂╃╄╅╆╇╈╉╊╋╌╍╎╏═║╒╓╔╕╖╗╘╙╚╛╜╝╞╟╠╡╢╣╤╥╦╧╨╩╪╫╬╭╮╯╰╱╲╳╴╵╶╷╸╹╺╻╼╽╾╿"
         blocks = "▀▁▂▃▄▅▆▇█▉▊▋▌▍▎▏▐░▒▓▔▕▖▗▘▙▚▛▜▝▞▟"
-        self.content_trans1 = str.maketrans({k: "<BLOCK>" for k in keisen + blocks})
+        self.content_trans1 = str.maketrans(dict.fromkeys(keisen + blocks, "<BLOCK>"))
 
     def __len__(self):
         return len(self.ids_to_tokens)
@@ -511,3 +513,6 @@ class SubWordJapaneseTokenizer(object):
 
     def convert_id_to_token(self, index):
         return self.ids_to_tokens[index][0]
+
+
+__all__ = ["GPTSanJapaneseTokenizer"]

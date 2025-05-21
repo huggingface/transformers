@@ -25,7 +25,7 @@ from typing import Dict, Optional, Union
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...feature_extraction_utils import FeatureExtractionMixin
-from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_file_from_repo, logging
+from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, cached_file, logging
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -49,6 +49,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("conditional_detr", "ConditionalDetrFeatureExtractor"),
         ("convnext", "ConvNextFeatureExtractor"),
         ("cvt", "ConvNextFeatureExtractor"),
+        ("dac", "DacFeatureExtractor"),
         ("data2vec-audio", "Wav2Vec2FeatureExtractor"),
         ("data2vec-vision", "BeitFeatureExtractor"),
         ("deformable_detr", "DeformableDetrFeatureExtractor"),
@@ -60,6 +61,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("encodec", "EncodecFeatureExtractor"),
         ("flava", "FlavaFeatureExtractor"),
         ("glpn", "GLPNFeatureExtractor"),
+        ("granite_speech", "GraniteSpeechFeatureExtractor"),
         ("groupvit", "CLIPFeatureExtractor"),
         ("hubert", "Wav2Vec2FeatureExtractor"),
         ("imagegpt", "ImageGPTFeatureExtractor"),
@@ -68,12 +70,16 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("levit", "LevitFeatureExtractor"),
         ("maskformer", "MaskFormerFeatureExtractor"),
         ("mctct", "MCTCTFeatureExtractor"),
+        ("mimi", "EncodecFeatureExtractor"),
         ("mobilenet_v1", "MobileNetV1FeatureExtractor"),
         ("mobilenet_v2", "MobileNetV2FeatureExtractor"),
         ("mobilevit", "MobileViTFeatureExtractor"),
+        ("moonshine", "Wav2Vec2FeatureExtractor"),
+        ("moshi", "EncodecFeatureExtractor"),
         ("nat", "ViTFeatureExtractor"),
         ("owlvit", "OwlViTFeatureExtractor"),
         ("perceiver", "PerceiverFeatureExtractor"),
+        ("phi4_multimodal", "Phi4MultimodalFeatureExtractor"),
         ("poolformer", "PoolFormerFeatureExtractor"),
         ("pop2piano", "Pop2PianoFeatureExtractor"),
         ("regnet", "ConvNextFeatureExtractor"),
@@ -216,7 +222,7 @@ def get_feature_extractor_config(
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         token = use_auth_token
 
-    resolved_config_file = get_file_from_repo(
+    resolved_config_file = cached_file(
         pretrained_model_name_or_path,
         FEATURE_EXTRACTOR_NAME,
         cache_dir=cache_dir,
@@ -226,6 +232,9 @@ def get_feature_extractor_config(
         token=token,
         revision=revision,
         local_files_only=local_files_only,
+        _raise_exceptions_for_gated_repo=False,
+        _raise_exceptions_for_missing_entries=False,
+        _raise_exceptions_for_connection_errors=False,
     )
     if resolved_config_file is None:
         logger.info(
@@ -349,7 +358,9 @@ class AutoFeatureExtractor:
         # If we don't find the feature extractor class in the feature extractor config, let's try the model config.
         if feature_extractor_class is None and feature_extractor_auto_map is None:
             if not isinstance(config, PretrainedConfig):
-                config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+                config = AutoConfig.from_pretrained(
+                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                )
             # It could be in `config.feature_extractor_type``
             feature_extractor_class = getattr(config, "feature_extractor_type", None)
             if hasattr(config, "auto_map") and "AutoFeatureExtractor" in config.auto_map:
@@ -396,3 +407,6 @@ class AutoFeatureExtractor:
             feature_extractor_class ([`FeatureExtractorMixin`]): The feature extractor to register.
         """
         FEATURE_EXTRACTOR_MAPPING.register(config_class, feature_extractor_class, exist_ok=exist_ok)
+
+
+__all__ = ["FEATURE_EXTRACTOR_MAPPING", "AutoFeatureExtractor"]
