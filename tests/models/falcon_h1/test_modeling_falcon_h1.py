@@ -41,7 +41,7 @@ if is_torch_available():
         FalconH1Model,
     )
     from transformers.models.falcon_h1.modeling_falcon_h1 import (
-        HybridMambaAttentionDynamicCache,
+        FalconFalconFalconHybridMambaAttentionDynamicCache,
     )
 
 
@@ -210,7 +210,7 @@ class FalconH1ModelTester:
 
         # first forward pass
         # Attention: Jamba needs the cache to be initialized to return a cache!
-        past_key_values = HybridMambaAttentionDynamicCache(
+        past_key_values = FalconFalconHybridMambaAttentionDynamicCache(
             config,
             input_ids.shape[0],
             model.dtype,
