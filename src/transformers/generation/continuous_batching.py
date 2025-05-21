@@ -13,6 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from abc import ABC, abstractmethod
 import logging
 import queue
 import statistics
@@ -21,7 +22,7 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from functools import partial
-from typing import Deque, Dict, List, Optional, Tuple, Union
+from typing import Deque, Dict, List, Optional, Set, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -287,6 +288,273 @@ class PagedAttentionCache(Cache):
         return k_cache_flat[None, :, read_index, :], v_cache_flat[None, :, read_index, :]
 
 
+class Scheduler(ABC):
+    """
+    Abstract base class for scheduling requests in the continuous batch processor.
+    It is expected that cache allocation and scheduling logic will be implemented in subclasses.
+    """
+    def __init__(self, cache: PagedAttentionCache):
+        self.active_requests: Dict[str, RequestState] = {}
+        self.waiting_requests: Dict[str, RequestState] = {}
+        self.waiting_requests_order: Deque[str] = deque()
+        self.cache = cache
+
+    @abstractmethod
+    def add_waiting_request(self, state: RequestState):
+        """Add a request to the waiting list."""
+        pass
+
+    @abstractmethod
+    def schedule_batch(self, token_budget: int) -> List[RequestState]:
+        pass
+
+    @traced
+    def has_pending_requests(self) -> bool:
+        """Check if there are requests ready to be processed."""
+        return self.active_requests or self.waiting_requests
+
+
+    @abstractmethod
+    def finish_request(self, state: RequestState):
+        """Finish processing a request and free its allocated blocks."""
+        pass
+
+    @abstractmethod
+    def get_active_request_static_outputs(self, request_id: str) -> List[int]:
+        """Get the static outputs of an active request."""
+        pass
+
+    @traced
+    def get_active_request_static_outputs(self, request_id: str) -> List[int]:
+        if request_id in self.active_requests:
+            return self.active_requests[request_id].static_outputs
+        return []
+
+
+@attach_tracer()
+class FIFOScheduler(Scheduler):
+    @traced
+    def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int):
+        # 1. we check that the occupancy is less than the requested length
+        # 2. we allocate enough blocks to cover the requested length
+        current_len = state.current_len()
+        occupancy = len(state.allocated_blocks) * self.cache.block_size - current_len
+        if occupancy < len_next_tokens or (len(state.allocated_blocks) == 0):
+            blocks_needed = ((len_next_tokens - occupancy + 1) // self.cache.block_size) + 1
+            allocated = self.cache.allocate_blocks(blocks_needed, state.request_id)
+            if not allocated:
+                return False
+            state.allocated_blocks.extend(allocated)
+        return True
+
+    @traced(span_name="prepare_request")
+    def _prepare_request_for_processing(self, state: RequestState, token_budget: int, request_ids_to_remove_from_waiting: Set[str]):
+        """Prepare a request for processing in the current batch."""
+        request_tokens = (
+            state.remaining_prompt_ids if state.status == RequestStatus.SPLIT_PENDING_REMAINDER else state.prompt_ids
+        )
+        if len(request_tokens) < token_budget:
+            # Can process the entire prompt/remainder
+            if state.status == RequestStatus.PENDING:
+                self.active_requests[state.request_id] = state
+                state.status = RequestStatus.PREFILLING
+                request_ids_to_remove_from_waiting.add(state.request_id)
+            elif state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
+                state.status = RequestStatus.PREFILLING
+                state.prompt_ids = state.remaining_prompt_ids
+                state.remaining_prompt_ids = []
+        else:
+            # Need to split the request
+            if state.status == RequestStatus.PENDING:
+                self.active_requests[state.request_id] = state
+                state.status = RequestStatus.PREFILLING_SPLIT
+                request_ids_to_remove_from_waiting.add(state.request_id)
+            elif state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
+                state.status = RequestStatus.PREFILLING_SPLIT
+            state.remaining_prompt_ids = request_tokens[token_budget:]
+            state.prompt_ids = request_tokens[:token_budget]
+
+    @traced
+    def add_waiting_request(self, state: RequestState):
+        """Add a request to the waiting list."""
+        self.waiting_requests[state.request_id] = state
+        self.waiting_requests_order.append(state.request_id)
+
+    @traced
+    def schedule_batch(self, token_budget: int) -> List[RequestState]:
+        priority_states: List[RequestState] = []
+        second_priority_states: List[RequestState] = []
+        scheduled_requests = []
+
+        for state in self.active_requests.values():
+            if state.status == RequestStatus.DECODING:
+                priority_states.append(state)
+            if state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
+                second_priority_states.append(state)
+
+        # Add waiting requests to second priority
+        for req_id in self.waiting_requests_order:
+            second_priority_states.append(self.waiting_requests[req_id])
+
+        candidates = priority_states + second_priority_states
+        request_ids_to_remove_from_waiting = set()
+
+        for state in candidates:
+            self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
+            request_len = len(state.prompt_ids)
+            if not self._allocate_blocks_if_needed(
+                state, len(state.prompt_ids)
+            ):  # don't schedule if we can't allocate blocks
+                if len(self.cache._free_blocks) == 0:
+                    break
+                continue
+
+            @traced
+            def _add_to_scheduled_requests(state: RequestState):
+                scheduled_requests.append(state)
+
+            _add_to_scheduled_requests(state)
+
+            token_budget -= request_len
+
+            @traced
+            def _remove_from_waiting_requests(state: RequestState):
+                req_id = state.request_id
+                if req_id in self.waiting_requests:
+                    del self.waiting_requests[req_id]
+                    request_ids_to_remove_from_waiting.add(req_id)
+
+            _remove_from_waiting_requests(state)
+
+            if token_budget == 0:
+                break
+
+        self.waiting_requests_order = deque(
+            [req_id for req_id in self.waiting_requests_order if req_id not in request_ids_to_remove_from_waiting]
+        )
+
+        return scheduled_requests
+
+    @traced
+    def finish_request(self, state: RequestState):
+        request_id = state.request_id
+        self.cache.free_blocks(request_id)
+        if request_id in self.active_requests:
+            del self.active_requests[request_id]
+
+
+@attach_tracer()
+class PrefillFirstScheduler(Scheduler):
+    @traced
+    def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int):
+        # 1. we check that the occupancy is less than the requested length
+        # 2. we allocate enough blocks to cover the requested length
+        current_len = state.current_len()
+        occupancy = len(state.allocated_blocks) * self.cache.block_size - current_len
+        if occupancy < len_next_tokens or (len(state.allocated_blocks) == 0):
+            blocks_needed = ((len_next_tokens - occupancy + 1) // self.cache.block_size) + 1
+            allocated = self.cache.allocate_blocks(blocks_needed, state.request_id)
+            if not allocated:
+                return False
+            state.allocated_blocks.extend(allocated)
+        return True
+
+    @traced(span_name="prepare_request")
+    def _prepare_request_for_processing(self, state: RequestState, token_budget: int, request_ids_to_remove_from_waiting: Set[str]):
+        """Prepare a request for processing in the current batch."""
+        request_tokens = (
+            state.remaining_prompt_ids if state.status == RequestStatus.SPLIT_PENDING_REMAINDER else state.prompt_ids
+        )
+        if len(request_tokens) < token_budget:
+            # Can process the entire prompt/remainder
+            if state.status == RequestStatus.PENDING:
+                self.active_requests[state.request_id] = state
+                state.status = RequestStatus.PREFILLING
+                request_ids_to_remove_from_waiting.add(state.request_id)
+            elif state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
+                state.status = RequestStatus.PREFILLING
+                state.prompt_ids = state.remaining_prompt_ids
+                state.remaining_prompt_ids = []
+        else:
+            # Need to split the request
+            if state.status == RequestStatus.PENDING:
+                self.active_requests[state.request_id] = state
+                state.status = RequestStatus.PREFILLING_SPLIT
+                request_ids_to_remove_from_waiting.add(state.request_id)
+            elif state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
+                state.status = RequestStatus.PREFILLING_SPLIT
+            state.remaining_prompt_ids = request_tokens[token_budget:]
+            state.prompt_ids = request_tokens[:token_budget]
+
+    @traced
+    def add_waiting_request(self, state: RequestState):
+        """Add a request to the waiting list."""
+        self.waiting_requests[state.request_id] = state
+        self.waiting_requests_order.append(state.request_id)
+
+    @traced
+    def schedule_batch(self, token_budget: int) -> List[RequestState]:
+        priority_states: List[RequestState] = []
+        second_priority_states: List[RequestState] = []
+        scheduled_requests = []
+
+        for state in self.active_requests.values():
+            if state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
+                priority_states.append(state)
+            elif state.status == RequestStatus.DECODING:
+                second_priority_states.append(state)
+
+        for req_id in self.waiting_requests_order:
+            second_priority_states.append(self.waiting_requests[req_id])
+
+        candidates = priority_states + second_priority_states
+
+        request_ids_to_remove_from_waiting = set()
+
+        for state in candidates:
+            self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
+            request_len = len(state.prompt_ids)
+            if not self._allocate_blocks_if_needed(
+                state, len(state.prompt_ids)
+            ):  # don't schedule if we can't allocate blocks
+                if len(self.cache._free_blocks) == 0:
+                    break
+                continue
+
+            @traced
+            def _add_to_scheduled_requests(state: RequestState):
+                scheduled_requests.append(state)
+
+            _add_to_scheduled_requests(state)
+
+            token_budget -= request_len
+
+            @traced
+            def _remove_from_waiting_requests(state: RequestState):
+                req_id = state.request_id
+                if req_id in self.waiting_requests:
+                    del self.waiting_requests[req_id]
+                    request_ids_to_remove_from_waiting.add(req_id)
+
+            _remove_from_waiting_requests(state)
+
+            if token_budget == 0:
+                break
+
+        self.waiting_requests_order = deque(
+            [req_id for req_id in self.waiting_requests_order if req_id not in request_ids_to_remove_from_waiting]
+        )
+
+        return scheduled_requests
+
+    @traced
+    def finish_request(self, state: RequestState):
+        request_id = state.request_id
+        self.cache.free_blocks(request_id)
+        if request_id in self.active_requests:
+            del self.active_requests[request_id]
+
+
 @traced(standalone=True)
 def compute_optimal_blocks(
     device: torch.device,
@@ -437,6 +705,7 @@ class ContinuousBatchProcessor:
         stop_event: threading.Event,
         model_device: torch.device,
         model_dtype: torch.dtype,
+        scheduler: Scheduler,
         streaming: bool = False,
     ):
         """Initialize the continuous batch processor.
@@ -459,12 +728,10 @@ class ContinuousBatchProcessor:
         self.stop_event = stop_event
         self.model_device = model_device
         self.model_dtype = model_dtype
+        self.scheduler = scheduler
         self.streaming = streaming
 
-        self.active_requests: Dict[str, RequestState] = {}
-        self.waiting_requests_dict: Dict[str, RequestState] = {}
-        self.waiting_requests_order: Deque[str] = deque()
-        self.requests_to_process_next: List[str] = []
+        self.requests_in_batch: List[RequestState] = []
 
         # Get batch size parameters from generation config
         self._configure_batch_parameters()
@@ -532,7 +799,7 @@ class ContinuousBatchProcessor:
 
     def __repr__(self):
         return (
-            f"ContinuousBatchProcessor(input_queue={self.input_queue}, output_queue={self.output_queue}, active_requests={self.active_requests}, waiting_requests={self.waiting_requests_dict})"
+            f"ContinuousBatchProcessor(input_queue={self.input_queue}, output_queue={self.output_queue}, active_requests={self.scheduler.active_requests}, waiting_requests={self.scheduler.waiting_requests})"
             + self.get_model_kwargs().__repr__()
         )
 
@@ -563,8 +830,7 @@ class ContinuousBatchProcessor:
                 state = self.input_queue.get_nowait()
                 if state is None:  # Sentinel value
                     continue
-                self.waiting_requests_dict[state.request_id] = state
-                self.waiting_requests_order.append(state.request_id)
+                self.scheduler.add_waiting_request(state)
 
             except queue.Empty:
                 break
@@ -581,118 +847,29 @@ class ContinuousBatchProcessor:
         state.error = str(error)
 
         # Include any generated tokens if this is an active request
-        if isinstance(state.request_id, str) and state.request_id in self.active_requests:
-            state.static_outputs = self.active_requests[state.request_id].static_outputs
+        if isinstance(state.request_id, str):
+            state.static_outputs = self.scheduler.get_active_request_static_outputs(state.request_id)
         else:
             state.static_outputs = []
 
         self.metrics.record_request_completion(state.created_time, state.request_id)
         self.output_queue.put(state.to_generation_output())
 
-    @traced(span_name="prepare_request")
-    def _prepare_request_for_processing(self, state: RequestState, token_budget, request_ids_to_remove_from_waiting):
-        """Prepare a request for processing in the current batch."""
-        request_tokens = (
-            state.remaining_prompt_ids if state.status == RequestStatus.SPLIT_PENDING_REMAINDER else state.prompt_ids
-        )
-        if len(request_tokens) < token_budget:
-            # Can process the entire prompt/remainder
-            if state.status == RequestStatus.PENDING:
-                self.active_requests[state.request_id] = state
-                state.status = RequestStatus.PREFILLING
-                request_ids_to_remove_from_waiting.add(state.request_id)
-            elif state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
-                state.status = RequestStatus.PREFILLING
-                state.prompt_ids = state.remaining_prompt_ids
-                state.remaining_prompt_ids = []
-        else:
-            # Need to split the request
-            if state.status == RequestStatus.PENDING:
-                self.active_requests[state.request_id] = state
-                state.status = RequestStatus.PREFILLING_SPLIT
-                request_ids_to_remove_from_waiting.add(state.request_id)
-            elif state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
-                state.status = RequestStatus.PREFILLING_SPLIT
-            state.remaining_prompt_ids = request_tokens[token_budget:]
-            state.prompt_ids = request_tokens[:token_budget]
-
-    @traced
-    def _allocate_blocks_if_needed(self, state: RequestState, len_next_tokens: int):
-        # 1. we check that the occupency is less than the requested length
-        # 2. we allocate enough blocks to cover the requested length
-        current_len = state.current_len()
-        occupency = len(state.allocated_blocks) * self.cache.block_size - current_len
-        if occupency < len_next_tokens or (len(state.allocated_blocks) == 0):
-            blocks_needed = ((len_next_tokens - occupency + 1) // self.cache.block_size) + 1
-            allocated = self.cache.allocate_blocks(blocks_needed, state.request_id)
-            if not allocated:
-                return False
-            state.allocated_blocks.extend(allocated)
-        return True
-
-    @traced
-    def _schedule_batch(self) -> List[str]:
-        priority_states = []
-        second_priority_states = []
-        scheduled_requests = []
-        token_budget = self.max_batch_tokens
-
-        for state in self.active_requests.values():
-            if state.status == RequestStatus.DECODING:
-                priority_states.append(state)
-            if state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
-                second_priority_states.append(state)
-
-        # Add waiting requests to second priority
-        for req_id in self.waiting_requests_order:
-            second_priority_states.append(self.waiting_requests_dict[req_id])
-
-        candidates = priority_states + second_priority_states
-        request_ids_to_remove_from_waiting = set()
-
-        for state in candidates:
-            self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
-            request_len = len(state.prompt_ids)
-            if not self._allocate_blocks_if_needed(
-                state, len(state.prompt_ids)
-            ):  # don't schedule if we can't allocate blocks
-                continue
-            scheduled_requests.append(state.request_id)
-            token_budget -= request_len
-
-            req_id = state.request_id
-            if req_id in self.waiting_requests_dict:
-                del self.waiting_requests_dict[req_id]
-                request_ids_to_remove_from_waiting.add(req_id)
-
-            if token_budget == 0:
-                break
-
-        if request_ids_to_remove_from_waiting:
-            self.waiting_requests_order = deque(
-                [req_id for req_id in self.waiting_requests_order if req_id not in request_ids_to_remove_from_waiting]
-            )
-
-        if len(scheduled_requests) == 0 and len(self.waiting_requests_dict) == 0 and len(self.active_requests) == 0:
-            logger.warning("No requests to process. Should exit.")
-        return scheduled_requests
-
     @traced
     def prepare_next_batch(self):
         """Prepare tensors and metadata for the next model forward pass."""
         # Get new requests from the queue
         self._get_new_requests()
-        if not self.active_requests and not self.waiting_requests_dict:
+        if not self.scheduler.has_pending_requests():
             return None
 
-        self.metrics.record_queue_metrics(len(self.active_requests), len(self.waiting_requests_dict))
+        self.metrics.record_queue_metrics(len(self.scheduler.active_requests), len(self.scheduler.waiting_requests))
 
-        self.requests_to_process_next = self._schedule_batch()
-        if not self.requests_to_process_next:
+        self.requests_in_batch = self.scheduler.schedule_batch(self.max_batch_tokens)
+        if not self.requests_in_batch:
             return None
 
         # Get the request objects for this batch
-        self.requests_in_batch = [self.active_requests[req_id] for req_id in self.requests_to_process_next]
         self.reset_static_tensors()
         position_ids = []
         input_ids = []
@@ -727,7 +904,7 @@ class ContinuousBatchProcessor:
             state.position_offset += query_length
 
         logger.warning(
-            f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.waiting_requests_dict)}, Active: {len(self.active_requests)}. cum Q: {cumulative_seqlens_q[-1]}. cum KV: {cumulative_seqlens_k[-1]}, free blocks: {self.cache.get_num_free_blocks()}"
+            f"Scheduled: {len(self.requests_in_batch)}, Waiting: {len(self.scheduler.waiting_requests)}, Active: {len(self.scheduler.active_requests)}. cum Q: {cumulative_seqlens_q[-1]}. cum KV: {cumulative_seqlens_k[-1]}, free blocks: {self.cache.get_num_free_blocks()}"
         )
         self._build_tensors(
             input_ids,
@@ -817,29 +994,24 @@ class ContinuousBatchProcessor:
                 state.prompt_ids = [token]
                 if state.update_with_token(token):
                     self.metrics.record_request_completion(state.created_time, state.request_id)
+                    self.scheduler.finish_request(state)
                     finished_request_ids.append(req_id)
                 self._maybe_send_output(state, token)
             elif state.status == RequestStatus.PREFILLING_SPLIT:
                 state.status = RequestStatus.SPLIT_PENDING_REMAINDER
-        for req_id in finished_request_ids:
-            if req_id in self.active_requests:
-                self.cache.free_blocks(req_id)
-                del self.active_requests[req_id]
 
     @traced
     def has_pending_requests(self) -> bool:
         """Check if there are any active or waiting requests."""
-        return bool(self.active_requests or self.waiting_requests_dict)
+        return self.scheduler.has_pending_requests()
 
     @traced
     def handle_batch_error(self, error):
         """Handle errors during batch processing."""
-        failed_ids = self.requests_to_process_next
-        for req_id in failed_ids:
-            if req_id in self.active_requests:
-                self._handle_request_error(error, req_id)
-                self.cache.free_blocks(req_id)
-                del self.active_requests[req_id]
+        failed_reqs = self.requests_in_batch
+        for req in failed_reqs:
+            self._handle_request_error(error, req)
+            self.scheduler.finish_request(req)
 
     @traced
     def fail_all_requests(self, error):
@@ -848,18 +1020,23 @@ class ContinuousBatchProcessor:
         Args:
             error: The error to report in the failure message
         """
-        for req_id, state in list(self.active_requests.items()):
+        for state in self.scheduler.active_requests.values():
             self._handle_request_error(error, state)
-            self.cache.free_blocks(req_id)
-            del self.active_requests[req_id]
+            self.scheduler.finish_request(state)
 
         # Also fail any requests in the waiting queue
-        for req_id in list(self.waiting_requests_dict.keys()):
-            state = self.waiting_requests_dict.pop(req_id)
+        for req_id in list(self.scheduler.waiting_requests.keys()):
+            state = self.scheduler.waiting_requests.pop(req_id)
             self._handle_request_error(error, state)
 
         # Clear the ordering queue
-        self.waiting_requests_order.clear()
+        self.scheduler.waiting_requests_order.clear()
+
+
+SCHEDULER_MAPPING = {
+    "fifo": FIFOScheduler,
+    "prefill_first": PrefillFirstScheduler,
+}
 
 
 # Manager Class (User Interface)
@@ -1066,6 +1243,11 @@ class ContinuousBatchingManager:
                 self.model.dtype,
             )
 
+            scheduler = SCHEDULER_MAPPING.get(self.generation_config.scheduler)
+            if scheduler is None:
+                logger.warning(f"Scheduler '{scheduler}' not found. Defaulting to FIFO.")
+                scheduler = FIFOScheduler
+
             batch_processor = ContinuousBatchProcessor(
                 paged_attention_cache,
                 self.model.config,
@@ -1075,6 +1257,7 @@ class ContinuousBatchingManager:
                 self.stop_event,
                 self.model.device,
                 self.model.dtype,
+                scheduler(paged_attention_cache),
                 self.streaming,
             )
             is_first = True
@@ -1163,7 +1346,7 @@ class ContinuousMixin:
     """Mixin class for models to add continuous batching capabilities."""
 
     def init_continuous_batching(
-        self, generation_config: Optional[GenerationConfig] = None, max_queue_size: int = 0, streaming: bool = False
+        self, generation_config: Optional[GenerationConfig] = None, max_queue_size: int = 0, scheduler: str = "fifo", streaming: bool = False
     ) -> ContinuousBatchingManager:
         """Initialize a manager for continuous batching inference.
 

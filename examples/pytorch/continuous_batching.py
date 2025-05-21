@@ -24,6 +24,7 @@ generation_config = GenerationConfig(
     block_size=128,
     do_sample=True,
     max_batch_tokens=1024,  # Maximum number of tokens to process in a single batch
+    scheduler="prefill_first",
 )
 
 train_dataset = datasets.load_dataset("openai/gsm8k", "socratic", split="test")
