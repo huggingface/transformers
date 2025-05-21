@@ -170,9 +170,10 @@ class PatchTSTAttention(nn.Module):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
-        attention_interface: Callable = (
-            eager_attn_forward if "eager" else ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-        )
+        attention_interface: Callable = eager_attn_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
