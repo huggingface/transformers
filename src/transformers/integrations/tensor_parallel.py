@@ -31,8 +31,11 @@ logger = logging.get_logger(__name__)
 _torch_distributed_available = torch.distributed.is_available()
 
 
-if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-    from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
+if is_torch_greater_or_equal("2.0") and _torch_distributed_available:
+    if is_torch_greater_or_equal("2.5"):
+        from torch.distributed.tensor import DTensor, Placement, Replicate, Shard
+    else:
+        from torch.distributed._tensor import DTensor, Placement, Replicate, Shard
 
 
 def _blocks_to_block_sizes(total_size: int, blocks: Union[int, List[int]]) -> List[int]:

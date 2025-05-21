@@ -172,8 +172,11 @@ _is_quantized = False
 _is_ds_init_called = False
 _torch_distributed_available = torch.distributed.is_available()
 
-if _torch_distributed_available and is_torch_greater_or_equal("2.5"):
-    from torch.distributed.tensor import DTensor
+if _torch_distributed_available and is_torch_greater_or_equal("2.0"):
+    if is_torch_greater_or_equal("2.0"):
+        from torch.distributed.tensor import DTensor
+    else:
+        from torch.distributed._tensor import DTensor
 
 
 def is_fsdp_enabled():
