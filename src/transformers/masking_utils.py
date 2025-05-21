@@ -360,6 +360,8 @@ def sdpa_mask_older_torch(
     **kwargs,
 ) -> Optional[torch.Tensor]:
     """
+    NOTE: This function is only used when torch version is torch<2.5 - see `sdpa_mask_recent_torch` otherwise.
+
     Create a 4D boolean mask of shape `(batch_size, 1, query_length, kv_length)` where a value of True indicates that
     the element should take part in the attention computation, and False that it should not.
     If `allow_torch_fix=True` (the default), rows corresponding to query tokens that do not attend
