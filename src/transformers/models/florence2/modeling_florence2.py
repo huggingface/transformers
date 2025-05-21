@@ -2668,14 +2668,23 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         else:
             raise NotImplementedError("Not implemented yet")
 
-    def get_encoder(self):
+    def get_encoder(self) -> Florence2LanguageEncoder:
         return self.language_model.get_encoder()
 
-    def get_decoder(self):
+    def get_decoder(self) -> Florence2LanguageDecoder:
         return self.language_model.get_decoder()
 
-    def get_input_embeddings(self):
+    def set_input_embeddings(self, value: nn.Module) -> None:
+        self.language_model.set_input_embeddings(value)
+
+    def get_input_embeddings(self) -> nn.Module:
         return self.language_model.get_input_embeddings()
+
+    def set_output_embeddings(self, new_embeddings: nn.Linear) -> None:
+        self.language_model.set_output_embeddings(new_embeddings)
+
+    def get_output_embeddings(self) -> nn.Linear:
+        return self.language_model.get_output_embeddings()
 
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
         model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)

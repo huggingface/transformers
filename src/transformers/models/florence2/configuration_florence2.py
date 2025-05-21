@@ -314,12 +314,17 @@ class Florence2Config(PretrainedConfig):
         self.vocab_size = vocab_size
         self.projection_dim = projection_dim
         self.vision_config = vision_config
+
+        self._attn_implementation = "eager"
+        if "_attn_implementation" in kwargs:
+            self._attn_implementation = kwargs["_attn_implementation"]
+
         if vision_config is not None:
             self.vision_config = Florence2VisionConfig(**vision_config)
 
         self.text_config = text_config
         if text_config is not None:
-            self.text_config = Florence2LanguageConfig(**text_config)
+            self.text_config = Florence2LanguageConfig(**text_config, _attn_implementation=self._attn_implementation)
 
         super().__init__(**kwargs)
 

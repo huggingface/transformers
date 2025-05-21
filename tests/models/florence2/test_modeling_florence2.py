@@ -317,7 +317,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg"
         )
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
+        inputs = processor(images=raw_image, text=prompt, return_tensors="pt")
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
         EXPECTED_DECODED_TEXT = "A green car parked in front of a yellow building."  # fmt: skip
