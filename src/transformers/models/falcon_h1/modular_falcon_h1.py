@@ -45,6 +45,7 @@ from transformers.models.mamba2.modeling_mamba2 import (
 )
 
 from ...cache_utils import Cache
+from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
