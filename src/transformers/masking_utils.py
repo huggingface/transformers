@@ -176,6 +176,45 @@ def prepare_padding_mask(
     return local_padding_mask
 
 
+def _ignore_causal_mask_sdpa(
+    padding_mask: Optional[torch.Tensor],
+    query_length: int,
+    kv_length: int,
+    kv_offset: int,
+    local_attention_size: Optional[int] = None,
+) -> bool:
+    """
+    Detects whether the causal mask can be ignored in case PyTorch's SDPA is used, rather relying on SDPA's `is_causal` argument.
+
+    In case no token is masked in the 2D `padding_mask` argument, if `query_length == 1` or
+    `key_value_length == query_length`, we rather rely on SDPA `is_causal` argument to use causal/non-causal masks,
+    allowing to dispatch to the flash attention kernel (that can otherwise not be used if a custom `attn_mask` is
+    passed).
+    """
+    is_tracing = torch.jit.is_tracing() or isinstance(padding_mask, torch.fx.Proxy) or is_torchdynamo_compiling()
+    if padding_mask is not None and padding_mask.shape[-1] > kv_length:
+        mask_indices = torch.arange(kv_length, device=padding_mask.device)
+        mask_indices += kv_offset
+        padding_mask = padding_mask[:, mask_indices]
+
+    # When using `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
+    # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
+    # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
+    # `ignore_causal_mask = True` if we are not tracing
+    if (
+        not is_tracing
+        # only cases when lower and upper diags are the same, see https://github.com/pytorch/pytorch/issues/108108
+        and (query_length == 1 or kv_length == query_length)
+        # in this case we need to add special patterns to the mask so cannot be skipped otherwise
+        and (local_attention_size is None or kv_length < local_attention_size)
+        # In this case, we need to add padding to the mask, so cannot be skipped otherwise
+        and (padding_mask is None or padding_mask.all())
+    ):
+        return True
+
+    return False
+
+
 def sdpa_mask_recent_torch(
     batch_size: int,
     cache_position: torch.Tensor,
@@ -891,45 +930,6 @@ def create_chunked_causal_mask(
         config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
     )
     return causal_mask
-
-
-def _ignore_causal_mask_sdpa(
-    padding_mask: Optional[torch.Tensor],
-    query_length: int,
-    kv_length: int,
-    kv_offset: int,
-    local_attention_size: Optional[int] = None,
-) -> bool:
-    """
-    Detects whether the causal mask can be ignored in case PyTorch's SDPA is used, rather relying on SDPA's `is_causal` argument.
-
-    In case no token is masked in the 2D `padding_mask` argument, if `query_length == 1` or
-    `key_value_length == query_length`, we rather rely on SDPA `is_causal` argument to use causal/non-causal masks,
-    allowing to dispatch to the flash attention kernel (that can otherwise not be used if a custom `attn_mask` is
-    passed).
-    """
-    is_tracing = torch.jit.is_tracing() or isinstance(padding_mask, torch.fx.Proxy) or is_torchdynamo_compiling()
-    if padding_mask is not None and padding_mask.shape[-1] > kv_length:
-        mask_indices = torch.arange(kv_length, device=padding_mask.device)
-        mask_indices += kv_offset
-        padding_mask = padding_mask[:, mask_indices]
-
-    # When using `torch.export` or `torch.onnx.dynamo_export`, we must pass an example input, and `is_causal` behavior is
-    # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
-    # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
-    # `ignore_causal_mask = True` if we are not tracing
-    if (
-        not is_tracing
-        # only cases when lower and upper diags are the same, see https://github.com/pytorch/pytorch/issues/108108
-        and (query_length == 1 or kv_length == query_length)
-        # in this case we need to add special patterns to the mask so cannot be skipped otherwise
-        and (local_attention_size is None or kv_length < local_attention_size)
-        # In this case, we need to add padding to the mask, so cannot be skipped otherwise
-        and (padding_mask is None or padding_mask.all())
-    ):
-        return True
-
-    return False
 
 
 LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {
