@@ -19,7 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -389,19 +389,27 @@ def eager_attn_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
-    scaling: float,
+    scaling: Optional[float] = None,
     dropout: float = 0.0,
-    layer_head_mask: Optional[torch.Tensor] = None,
+    head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ):
+    if scaling is None:
+        logger.warning_once(
+            "You are using a model's `eager` attention module but are not passing its appropriate attention scaling."
+            " We default to `head_dim**-0.5`. If this is unexpected, please report this to the Transformers GitHub"
+            " repo: https://github.com/huggingface/transformers/issues/new"
+        )
+        scaling = query.size(-1) ** -0.5
+
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
-    if layer_head_mask is not None:
-        attn_weights = attn_weights * layer_head_mask.view(1, -1, 1, 1)
+    if head_mask is not None:
+        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
 
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value)
@@ -513,19 +521,18 @@ class InformerAttention(nn.Module):
                 if is_cross_attention:
                     past_key_value.is_updated[self.layer_idx] = True
 
-        attn_output, attn_weights = ALL_ATTENTION_FUNCTIONS(
-            attention_type=self.config._attn_implementation,
-            eager_attention=eager_attn_forward,
-            module=self,
-            query=query_states,
-            key=key_states,
-            value=value_states,
-            attention_mask=attention_mask,
-            training=self.training,
-            dropout=self.dropout,
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
             scaling=self.scaling,
             output_attentions=output_attentions,
-            layer_head_mask=layer_head_mask,
+            head_mask=layer_head_mask,
+            eager_fallback=eager_attn_forward,
             **kwargs,
         )
 
