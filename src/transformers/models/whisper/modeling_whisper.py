@@ -363,7 +363,7 @@ class WhisperAttention(nn.Module):
             value_states,
             attention_mask,
             dropout=0.0 if not self.training else self.dropout,
-            scaling=self.scaling,
+            scaling=1.0,
             output_attentions=output_attentions,
             head_mask=layer_head_mask,
             eager_fallback=eager_attn_forward,
