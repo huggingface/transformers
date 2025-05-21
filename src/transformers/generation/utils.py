@@ -1987,7 +1987,7 @@ class GenerationMixin:
 
         is_hybrid_cache = any(class_name in self.__class__.__name__.lower() for class_name in ["mamba", "falconh1"])
         cache_name = "past_key_values" if not is_hybrid_cache else "cache_params"
-        
+
         requires_cross_attention_cache = (
             self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
         )
