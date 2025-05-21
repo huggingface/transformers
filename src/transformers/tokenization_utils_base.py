@@ -1380,6 +1380,7 @@ INIT_TOKENIZER_DOCSTRING = r"""
             internal state of the tokenizer. The default behavior is to not split special tokens. This means that if
             `<s>` is the `bos_token`, then `tokenizer.tokenize("<s>") = ['<s>`]. Otherwise, if
             `split_special_tokens=True`, then `tokenizer.tokenize("<s>")` will be give `['<','s', '>']`.
+        add_special_tokens (`bool`, *optional*): Whether or not to add special tokens when encoding.
 """
 
 
@@ -1435,6 +1436,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # By default, cleaning tokenization spaces for both fast and slow tokenizers
         self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", False)
+        self._add_special_tokens = kwargs.pop("add_special_tokens", True)
 
         # By default, do not split special tokens for both fast and slow tokenizers
         self.split_special_tokens = kwargs.pop("split_special_tokens", False)
@@ -3430,7 +3432,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self,
         ids: List[int],
         pair_ids: Optional[List[int]] = None,
-        add_special_tokens: bool = True,
+        add_special_tokens: bool = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy, None] = None,
         max_length: Optional[int] = None,
@@ -3463,7 +3465,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 Tokenized input ids of the second sequence. Can be obtained from a string by chaining the `tokenize`
                 and `convert_tokens_to_ids` methods.
         """
-
+        add_special_tokens = add_special_tokens if add_special_tokens is not None else self._add_special_tokens
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
             padding=padding,
