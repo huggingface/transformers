@@ -569,6 +569,8 @@ class WhisperPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["WhisperEncoderLayer", "WhisperDecoderLayer"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    # TODO: compiling issues
+    _supports_flex_attn = False
     _supports_cache_class = True
     _supports_static_cache = True
 
