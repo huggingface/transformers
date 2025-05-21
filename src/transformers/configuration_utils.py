@@ -27,7 +27,6 @@ from .dynamic_module_utils import custom_object_save
 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .utils import (
     CONFIG_NAME,
-    ExplicitEnum,
     PushToHubMixin,
     add_model_info_to_auto_map,
     add_model_info_to_custom_pipelines,
@@ -1212,11 +1211,14 @@ if PretrainedConfig.push_to_hub.__doc__ is not None:
     )
 
 
-class LayerType(ExplicitEnum):
-    """
-    All the possible layer types.
-    """
+ALLOWED_LAYER_TYPES = (
+    "full_attention",
+    "sliding_attention",
+    "chunked_attention",
+)
 
-    FULL_ATTENTION = "full_attention"
-    SLIDING_ATTENTION = "sliding_attention"
-    CHUNKED_ATTENTION = "chunked_attention"
+
+def layer_type_validation(layer_types: list[str]):
+    """Check that each entry in `layer_types` are allowed."""
+    if not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layer_types):
+        raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES}")

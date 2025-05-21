@@ -24,7 +24,7 @@ import torch.nn as nn
 import torch.utils.checkpoint
 
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import LayerType, PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
@@ -246,11 +246,10 @@ class Gemma3TextConfig(Gemma2Config, PretrainedConfig):
             # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
             sliding_window_pattern = getattr(self, "sliding_window_pattern", 6)
             self.layer_types = [
-                LayerType.SLIDING_ATTENTION if bool((i + 1) % sliding_window_pattern) else LayerType.FULL_ATTENTION
+                "sliding_attention" if bool((i + 1) % sliding_window_pattern) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        else:
-            self.layer_types = [LayerType(layer_type) for layer_type in self.layer_types]
+        layer_type_validation(self.layer_types)
 
 
 class Gemma3Config(PretrainedConfig):

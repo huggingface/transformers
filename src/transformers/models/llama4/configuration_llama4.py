@@ -15,7 +15,7 @@
 # limitations under the License.
 
 
-from ...configuration_utils import LayerType, PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...utils import logging
 
 
@@ -366,10 +366,9 @@ class Llama4TextConfig(PretrainedConfig):
         self.layer_types = layer_types
         if layer_types is None:
             self.layer_types = [
-                LayerType.CHUNKED_ATTENTION if no_rope else LayerType.FULL_ATTENTION for no_rope in self.no_rope_layers
+                "chunked_attention" if no_rope else "full_attention" for no_rope in self.no_rope_layers
             ]
-        else:
-            self.layer_types = [LayerType(layer_type) for layer_type in self.layer_types]
+        layer_type_validation(self.layer_types)
 
 
 class Llama4Config(PretrainedConfig):

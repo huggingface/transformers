@@ -19,7 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import LayerType, PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 
 
@@ -220,11 +220,10 @@ class Cohere2Config(PretrainedConfig):
             # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
             sliding_window_pattern = getattr(self, "sliding_window_pattern", 4)
             self.layer_types = [
-                LayerType.SLIDING_ATTENTION if bool((i + 1) % sliding_window_pattern) else LayerType.FULL_ATTENTION
+                "sliding_window" if bool((i + 1) % sliding_window_pattern) else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        else:
-            self.layer_types = [LayerType(layer_type) for layer_type in self.layer_types]
+        layer_type_validation(self.layer_types)
 
 
 __all__ = ["Cohere2Config"]
