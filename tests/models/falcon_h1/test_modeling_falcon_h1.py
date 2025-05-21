@@ -210,7 +210,7 @@ class FalconH1ModelTester:
 
         # first forward pass
         # Attention: Jamba needs the cache to be initialized to return a cache!
-        past_key_values = FalconFalconHybridMambaAttentionDynamicCache(
+        past_key_values = FalconHybridMambaAttentionDynamicCache(
             config,
             input_ids.shape[0],
             model.dtype,
