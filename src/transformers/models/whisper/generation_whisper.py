@@ -244,19 +244,19 @@ class WhisperGenerationMixin(GenerationMixin):
         weight_length = None
 
         if "beam_indices" in generate_outputs:
-            # If beam search has been used, the output sequences may have been generated for more timesteps than their
-            # `sequence_lengths` since the beam search strategy chooses the most probable sequences at the end of the
-            # search. In that case, the `cross_attentions` weights are too long and we have to make sure that they have
+            # If beam search has been used, the sequence length of the outputs may not be the real sequence length:
+            # beam search may end up returning a sequence that finished a few steps earlier while decoding.
+            # In that case, the `cross_attentions` weights are too long and we have to make sure that they have
             # the right `output_length`
-            weight_length = (generate_outputs.beam_indices != -1).sum(-1).max()
+            weight_length = (generate_outputs.beam_indices != -1).sum(-1).max()  # real sequence length
 
             # The first forward pass (prefill) may have processed more than one token and, therefore, contain
             # cross-attention weights for several tokens.
-            # Let's unfold the first `beam_indices` accordingly.
-            if num_input_ids is not None:
-                # -1 because the original length would be correct if `num_input_ids` is 1
+            # Let's unroll the first `beam_indices` accordingly, so we can use it to gather the weights.
+            if num_input_ids is not None and num_input_ids > 1:
+                # `-1`: `beam_indices` can be used as-is to gather the weights when `num_input_ids` is 1
                 weight_length += num_input_ids - 1
-                prepend_beam_indices = (
+                beam_indices_first_step_unrolled = (
                     torch.ones(
                         generate_outputs.beam_indices.shape[0],
                         num_input_ids - 1,
@@ -265,21 +265,22 @@ class WhisperGenerationMixin(GenerationMixin):
                     )
                     * (generate_outputs.beam_indices[:, 0:1])
                 )
-                beam_indices = torch.cat([prepend_beam_indices, generate_outputs.beam_indices], dim=-1)
+                unrolled_beam_indices = torch.cat(
+                    [beam_indices_first_step_unrolled, generate_outputs.beam_indices], dim=-1
+                )
             else:
-                beam_indices = generate_outputs.beam_indices
-
-            weights = weights[:, :, :weight_length]
+                unrolled_beam_indices = generate_outputs.beam_indices
 
             # If beam index is still -1, it means that the associated token id is EOS
             # We need to replace the index with 0 since index_select gives an error if any of the indexes is -1.
-            beam_indices = beam_indices.masked_fill(beam_indices == -1, 0)
+            unrolled_beam_indices = unrolled_beam_indices.masked_fill(unrolled_beam_indices == -1, 0)
 
-            # Select the cross attention from the right beam for each output sequences
+            # Select the cross attention from the right beam for each output sequences, up to the real sequence
+            # length (`weight_length`)
             weights = torch.stack(
                 [
-                    torch.index_select(weights[:, :, i, :], dim=0, index=beam_indices[:, i])
-                    for i in range(beam_indices.shape[1])
+                    torch.index_select(weights[:, :, i, :], dim=0, index=unrolled_beam_indices[:, i])
+                    for i in range(unrolled_beam_indices.shape[1])
                 ],
                 dim=2,
             )
