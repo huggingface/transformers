@@ -3020,17 +3020,19 @@ class TokenizerTesterMixin:
                     self.assertEqual(output[key], output_sequence[key])
 
     def test_prepare_for_model(self):
-        tokenizer = self.get_tokenizer(do_lower_case=False)
-        if hasattr(tokenizer, "is_fast") and tokenizer.is_fast:
-            self.skipTest(f"{tokenizer.__class__.__name__} is fast")
+        tokenizers = self.get_tokenizers(do_lower_case=False)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                if hasattr(tokenizer, "is_fast") and tokenizer.is_fast:
+                    self.skipTest(f"{tokenizer.__class__.__name__} is fast")
 
-        string_sequence = "Testing the prepare_for_model method."
-        ids = tokenizer.encode(string_sequence, add_special_tokens=False)
-        prepared_input_dict = tokenizer.prepare_for_model(ids, add_special_tokens=True)
+                string_sequence = "Testing the prepare_for_model method."
+                ids = tokenizer.encode(string_sequence, add_special_tokens=False)
+                prepared_input_dict = tokenizer.prepare_for_model(ids, add_special_tokens=True)
 
-        input_dict = tokenizer.encode_plus(string_sequence, add_special_tokens=True)
+                input_dict = tokenizer.encode_plus(string_sequence, add_special_tokens=True)
 
-        self.assertEqual(input_dict, prepared_input_dict)
+                self.assertEqual(input_dict, prepared_input_dict)
 
     def test_batch_encode_plus_overflowing_tokens(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
