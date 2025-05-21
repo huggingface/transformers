@@ -24,7 +24,7 @@ import torch.distributed as dist
 from torch import nn
 
 from ..utils import is_torch_greater_or_equal, logging
-from .utils.generic import GeneralInterface
+from ..utils.generic import GeneralInterface
 
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
