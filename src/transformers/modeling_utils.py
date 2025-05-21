@@ -4177,7 +4177,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # We need to correctly dispatch the model on the current process device. The easiest way for this is to use a simple
         # `device_map` pointing to the correct device
-        if device_mesh is None:
+        if device_mesh is None and tp_plan is not None:
             tp_plan, device_map, device_mesh = initialize_tensor_parallelism(tp_plan, tp_size=None)
         else:
             # TODO: make device_mesh support multiple dimensions
