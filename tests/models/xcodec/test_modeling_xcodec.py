@@ -14,15 +14,17 @@
 """Testing suite for the PyTorch Xcodec model."""
 
 import inspect
+import math
 import os
 import tempfile
 import unittest
 
-import math
 import numpy as np
 from datasets import Audio, load_dataset
 from pytest import mark
 
+from tests.test_configuration_common import ConfigTester
+from tests.test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from transformers import AutoFeatureExtractor, XcodecConfig
 from transformers.testing_utils import (
     is_flaky,
@@ -33,15 +35,12 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from tests.test_configuration_common import ConfigTester
-from tests.test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 
 
 if is_torch_available():
     import torch
 
     from transformers import XcodecModel
-
 
 
 @require_torch
@@ -56,7 +55,6 @@ class XcodecModelTester:
         num_quantizers=8,
         num_samples=400,
         is_training=False,
-
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -81,26 +79,25 @@ class XcodecModelTester:
         config, inputs_dict = self.prepare_config_and_inputs()
         codes_length = math.ceil(self.num_samples / config.hop_length)
         inputs_dict["audio_codes"] = ids_tensor(
-            [self.batch_size, self.num_quantizers, codes_length], config.codebook_size)    
-        
+            [self.batch_size, self.num_quantizers, codes_length], config.codebook_size
+        )
+
         return config, inputs_dict
 
     def get_config(self):
         return XcodecConfig(
-                    sample_rate=self.sample_rate,
-                    audio_channels=self.num_channels,
-                    codebook_size=self.codebook_size,
-                    num_quantizers=self.num_quantizers,
+            sample_rate=self.sample_rate,
+            audio_channels=self.num_channels,
+            codebook_size=self.codebook_size,
+            num_quantizers=self.num_quantizers,
         )
-        
-    
+
     def create_and_check_model_forward(self, config, inputs_dict):
         model = XcodecModel(config=config).to(torch_device).eval()
         input_values = inputs_dict["input_values"]
         result = model(input_values)
-        self.parent.assertEqual(
-            result.audio_values.shape, (self.batch_size, self.num_channels, self.num_samples)
-        )
+        self.parent.assertEqual(result.audio_values.shape, (self.batch_size, self.num_channels, self.num_samples))
+
 
 @require_torch
 class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
@@ -128,12 +125,10 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
-    
 
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
-    
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -147,7 +142,6 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["input_values", "audio_codes", "bandwidth", "return_dict"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    
     def test_gradient_checkpointing_backward_compatibility(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -160,7 +154,6 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
             config.decoder.gradient_checkpointing = True
             model = model_class(config)
             self.assertTrue(model.is_gradient_checkpointing)
-    
 
     @unittest.skip(reason="We cannot configure to output a smaller model.")
     def test_model_is_small(self):
@@ -285,7 +278,7 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
-    # Copied from transformers.tests.encodec.test_modeling_encodecEncodecModelTest.test_determinism 
+    # Copied from transformers.tests.encodec.test_modeling_encodecEncodecModelTest.test_determinism
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -350,7 +343,6 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
-    
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         configs_no_init = _config_zero_init(config)
@@ -358,18 +350,17 @@ class XcodecModelTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 # skipping the parametrizations original0 tensor
-                if name =="semantic_model.encoder.pos_conv_embed.conv.parametrizations.weight.original0":
+                if name == "semantic_model.encoder.pos_conv_embed.conv.parametrizations.weight.original0":
                     continue
 
                 uniform_init_parms = ["conv"]
- 
+
                 if param.requires_grad:
                     if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of {model_class.__name__} seems not properly initialized",
                         )
-
 
     @require_flash_attn
     @require_torch_gpu
@@ -426,22 +417,20 @@ def compute_rmse(arr1, arr2):
     return np.sqrt(((arr1_normalized - arr2_normalized) ** 2).mean())
 
 
-#@slow
+# @slow
 @require_torch
 class XcodecIntegrationTest(unittest.TestCase):
     def test_integration(self):
         expected_rmse = {
-            "0.5": 0.0065491,  
-            "4.0": 0.0070978, 
+            "0.5": 0.0065491,
+            "4.0": 0.0070978,
         }
         expected_codesums = {
-            "0.5": [117262],   
-            "4.0": [926416],     
+            "0.5": [117262],
+            "4.0": [926416],
         }
 
-        librispeech = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
-        )
+        librispeech = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "Manel/X-Codec"
         model = XcodecModel.from_pretrained(model_id).to(torch_device).eval()
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
@@ -449,7 +438,9 @@ class XcodecIntegrationTest(unittest.TestCase):
         librispeech = librispeech.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
         audio = librispeech[-1]["audio"]["array"]
 
-        inputs = feature_extractor(raw_audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(torch_device)
+        inputs = feature_extractor(
+            raw_audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
+        ).to(torch_device)
 
         for bandwidth, exp_rmse in expected_rmse.items():
             bandwidth = float(bandwidth)
@@ -460,17 +451,13 @@ class XcodecIntegrationTest(unittest.TestCase):
                 expected_codesum = expected_codesums[str(bandwidth)][0]
                 self.assertEqual(codesum, expected_codesum)
 
-                input_values_dec = model.decode(
-                    audio_codes, return_dict=False
-                )
-                input_values_enc_dec = model(
-                    inputs["input_values"], bandwidth=bandwidth
-                )[1]
+                input_values_dec = model.decode(audio_codes, return_dict=False)
+                input_values_enc_dec = model(inputs["input_values"], bandwidth=bandwidth)[1]
 
             self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
 
             self.assertTrue(inputs["input_values"].shape == input_values_enc_dec.shape)
-            
+
             arr = inputs["input_values"][0].cpu().numpy()
             arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
             rmse = compute_rmse(arr, arr_enc_dec)

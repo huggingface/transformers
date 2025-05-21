@@ -16,14 +16,12 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union, Tuple
+from typing import Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..auto import AutoModel
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -31,7 +29,9 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
+from ..auto import AutoModel
 from .configuration_xcodec import XcodecConfig
+
 
 # General docstring
 _CONFIG_FOR_DOC = "XcodecConfig"
@@ -58,6 +58,7 @@ class XcodecEncoderOutput(ModelOutput):
         audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
             Discrete code indices computed using `model.encode`.
     """
+
     audio_codes: Optional[torch.LongTensor] = None
 
 
@@ -68,14 +69,24 @@ class XcodecDecoderOutput(ModelOutput):
         audio_values (`torch.FloatTensor`  of shape `(batch_size, channels, num_samples)`, *optional*):
             Decoded audio values obtained using the decoder part of Xcodec.
     """
-    audio_values: Optional[torch.FloatTensor] = None
 
+    audio_values: Optional[torch.FloatTensor] = None
 
 
 class ResidualUnit(nn.Module):
     """Residual block for SemanticEncoder and SemanticDecoder used in Xcodec."""
 
-    def __init__(self, in_channels: int, out_channels: int, kernel_size: int = 3, dilation: int = 1, stride: int = 1, bias: bool = False, padding: int = -1, groups: int = 1):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 3,
+        dilation: int = 1,
+        stride: int = 1,
+        bias: bool = False,
+        padding: int = -1,
+        groups: int = 1,
+    ):
         super().__init__()
         self.activation = nn.ELU()
         if padding < 0:
@@ -102,9 +113,12 @@ class SemanticEncoderBlock(nn.Module):
         bias: bool = False,
     ):
         super().__init__()
-        self.res_units = nn.ModuleList([
-            ResidualUnit(in_channels, in_channels, unit_kernel_size, dilation=dilation, bias=bias)
-            for dilation in dilations])
+        self.res_units = nn.ModuleList(
+            [
+                ResidualUnit(in_channels, in_channels, unit_kernel_size, dilation=dilation, bias=bias)
+                for dilation in dilations
+            ]
+        )
 
         # special case: stride=1, do not use kernel=2
         kernel = 3 if stride == 1 else (2 * stride)
@@ -125,13 +139,18 @@ class SemanticEncoder(nn.Module):
             raise ValueError("Number of strides must match the number of channel_ratios.")
 
         self.conv = nn.Conv1d(
-            config.input_channels, config.encoder_channels, config.kernel_size, 1, config.kernel_size // 2, bias=False)
+            config.input_channels, config.encoder_channels, config.kernel_size, 1, config.kernel_size // 2, bias=False
+        )
 
         in_channels = config.encoder_channels
         conv_blocks = []
         for i, stride in enumerate(config.strides):
             out_channels = int(config.encoder_channels * config.channel_ratios[i])
-            conv_blocks += [SemanticEncoderBlock(in_channels, out_channels, stride, config.block_dilations, config.unit_kernel_size, bias=False)]
+            conv_blocks += [
+                SemanticEncoderBlock(
+                    in_channels, out_channels, stride, config.block_dilations, config.unit_kernel_size, bias=False
+                )
+            ]
             in_channels = out_channels
 
         self.conv_blocks = nn.ModuleList(conv_blocks)
@@ -155,7 +174,9 @@ class SemanticDecoderBlock(nn.Module):
     ):
         super().__init__()
         if stride == 1:
-            self.conv = nn.Conv1d(in_channels, out_channels,
+            self.conv = nn.Conv1d(
+                in_channels,
+                out_channels,
                 kernel_size=3,
                 stride=1,
                 padding=1,
@@ -165,11 +186,22 @@ class SemanticDecoderBlock(nn.Module):
             kernel_size = 2 * stride
             padding = (stride + 1) // 2
             output_padding = 1 if stride % 2 == 1 else 0
-            self.conv = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride, padding, output_padding, bias=False)
+            self.conv = nn.ConvTranspose1d(
+                in_channels, out_channels, kernel_size, stride, padding, output_padding, bias=False
+            )
 
-        self.res_units = nn.ModuleList([
-            ResidualUnit(in_channels=out_channels, out_channels=out_channels, kernel_size=unit_kernel_size, dilation=dilation, bias=bias)
-            for dilation in dilations])
+        self.res_units = nn.ModuleList(
+            [
+                ResidualUnit(
+                    in_channels=out_channels,
+                    out_channels=out_channels,
+                    kernel_size=unit_kernel_size,
+                    dilation=dilation,
+                    bias=bias,
+                )
+                for dilation in dilations
+            ]
+        )
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         hidden_state = self.conv(hidden_state)
@@ -182,7 +214,7 @@ class SemanticDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.conv1 = nn.Conv1d(
-            in_channels=config.decoder_channels, 
+            in_channels=config.decoder_channels,
             out_channels=int(config.decoder_channels * config.channel_ratios[0]),
             kernel_size=config.kernel_size,
             stride=1,
@@ -198,13 +230,26 @@ class SemanticDecoder(nn.Module):
             else:
                 out_channels = config.decoder_channels
 
-            conv_blocks += [SemanticDecoderBlock(in_channels, out_channels, config.strides[i],
-                    dilations = config.block_dilations,
-                    unit_kernel_size = config.unit_kernel_size,
-                    bias = False)] 
+            conv_blocks += [
+                SemanticDecoderBlock(
+                    in_channels,
+                    out_channels,
+                    config.strides[i],
+                    dilations=config.block_dilations,
+                    unit_kernel_size=config.unit_kernel_size,
+                    bias=False,
+                )
+            ]
 
         self.conv_blocks = nn.ModuleList(conv_blocks)
-        self.conv2 = nn.Conv1d(config.decoder_channels, config.output_channels, config.kernel_size, stride=1, padding=config.kernel_size // 2, bias=False)
+        self.conv2 = nn.Conv1d(
+            config.decoder_channels,
+            config.output_channels,
+            config.kernel_size,
+            stride=1,
+            padding=config.kernel_size // 2,
+            bias=False,
+        )
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         hidden_state = self.conv1(hidden_state)
@@ -216,7 +261,8 @@ class SemanticDecoder(nn.Module):
 
 class XcodecEuclideanCodebook(nn.Module):
     """Codebook with Euclidean distance."""
-    def __init__(self, config):
+
+    def __init__(self, config: XcodecConfig):
         super().__init__()
         embed = torch.zeros(config.codebook_size, config.codebook_dim)
         self.codebook_size = config.codebook_size
@@ -225,14 +271,14 @@ class XcodecEuclideanCodebook(nn.Module):
         self.register_buffer("embed", embed)
         self.register_buffer("embed_avg", embed.clone())
 
-    # Copied from transformers.models.mimi.modeling_mimi.MimiEuclideanCodebook.quantize
+    # Copied from transformers.models.encodec.modeling_encodec.EncodecEuclideanCodebook.quantize
     def quantize(self, hidden_states):
         embed = self.embed.t()
-        dist = -(hidden_states.pow(2).sum(1, keepdim=True) - 2 * hidden_states @ embed + embed.pow(2).sum(0, keepdim=True))
+        scaled_states = hidden_states.pow(2).sum(1, keepdim=True)
+        dist = -(scaled_states - 2 * hidden_states @ embed + embed.pow(2).sum(0, keepdim=True))
         embed_ind = dist.max(dim=-1).indices
         return embed_ind
 
-    # Copied from transformers.models.encodec.modeling_encodec.EncodecEuclideanCodebook.encode
     def encode(self, hidden_states):
         shape = hidden_states.shape
         hidden_states = hidden_states.reshape((-1, shape[-1]))
@@ -240,49 +286,44 @@ class XcodecEuclideanCodebook(nn.Module):
         embed_ind = embed_ind.view(*shape[:-1])
         return embed_ind
 
-    # Copied from transformers.models.encodec.modeling_encodec.EncodecEuclideanCodebook.decode
-    def decode(self, embed_ind):
-        quantized = F.embedding(embed_ind, self.embed)
-        return quantized
-
-
-
-# Copied from transformers.models.encodec.modeling_encodec.EncodecVectorQuantization with Encodec-> Xcodec
 class XcodecVectorQuantization(nn.Module):
-    """Vector quantization implementation. Currently supports only euclidean distance.
     """
-    def __init__(self, config):
+    Vector quantization implementation. Currently supports only euclidean distance.
+    """
+
+    def __init__(self, config: XcodecConfig):
         super().__init__()
         self.codebook = XcodecEuclideanCodebook(config)
 
+    # Copied from transformers.models.encodec.modeling_encodec.EncodecVectorQuantization.encode
     def encode(self, hidden_states):
         hidden_states = hidden_states.permute(0, 2, 1)
         embed_in = self.codebook.encode(hidden_states)
         return embed_in
 
+    # Copied from transformers.models.encodec.modeling_encodec.EncodecVectorQuantization.decode
     def decode(self, embed_ind):
-        quantized = self.codebook.decode(embed_ind)
-        quantized = quantized.permute(0, 2, 1)
-        return quantized
+        quantize = self.codebook.decode(embed_ind)
+        quantize = quantize.permute(0, 2, 1)
+        return quantize
 
 
 class XcodecResidualVectorQuantization(nn.Module):
     """
     Residual vector quantization implementation. Follows Algorithm 1 in https://arxiv.org/pdf/2107.03312.pdf
     """
-
-    def __init__(self, config):
+    def __init__(self, config: XcodecConfig):
         super().__init__()
         self.quantizers = nn.ModuleList([XcodecVectorQuantization(config) for _ in range(config.num_quantizers)])
-        self.frame_rate = config.frame_rate 
+        self.frame_rate = config.frame_rate
         self.codebook_size = config.codebook_size
         self.num_quantizers = config.num_quantizers
 
     def get_bandwidth_per_quantizer(self):
         """Return bandwidth per quantizer."""
-        return math.log2(self.codebook_size) * self.frame_rate/ 1000
+        return math.log2(self.codebook_size) * self.frame_rate / 1000
 
-    def get_num_quantizers_for_bandwidth(self, bandwidth= None) -> int:
+    def get_num_quantizers_for_bandwidth(self, bandwidth=None) -> int:
         """Return num_quantizers based on specified target bandwidth."""
         bw_per_q = self.get_bandwidth_per_quantizer()
         num_quantizers = self.num_quantizers
@@ -290,7 +331,7 @@ class XcodecResidualVectorQuantization(nn.Module):
             num_quantizers = int(max(1, math.floor(bandwidth / bw_per_q)))
         return num_quantizers
 
-    def encode(self, embeddings: torch.Tensor, bandwidth = None) -> torch.Tensor:
+    def encode(self, embeddings: torch.Tensor, bandwidth=None) -> torch.Tensor:
         """
         Encode the input tensor into discrete indices using RVQ, with the number of quantizers selected based on the given bandwidth.
         Each quantizer /codebook residually quantizes the input and returns the nearest indices in terms of Euclidian distance.
@@ -306,7 +347,6 @@ class XcodecResidualVectorQuantization(nn.Module):
         out_indices = torch.stack(all_indices)
         return out_indices
 
-
     def decode(self, codes: torch.Tensor) -> torch.Tensor:
         """Decode the given codes to their quantized representation."""
         quantized_out = torch.tensor(0.0, device=codes.device)
@@ -317,25 +357,24 @@ class XcodecResidualVectorQuantization(nn.Module):
         return quantized_out
 
 
-     
-
 class XcodecPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
+
     config_class = XcodecConfig
     base_model_prefix = "xcodec"
     main_input_name = "input_values"
     supports_gradient_checkpointing = False
 
-    def _init_weights(self, module):    
+    def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-               
+
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -344,11 +383,9 @@ class XcodecPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
-        
 
     def apply_weight_norm(self):
-        """Apply weight norm in the acoustic encoder and decoder because the original checkpoint has weight norm applied.
-        """
+        """Apply weight norm in the acoustic encoder and decoder because the original checkpoint has weight norm applied."""
         weight_norm = torch.nn.utils.weight_norm
         if hasattr(torch.nn.utils.parametrizations, "weight_norm"):
             weight_norm = torch.nn.utils.parametrizations.weight_norm
@@ -372,7 +409,7 @@ class XcodecPreTrainedModel(PreTrainedModel):
                 weight_norm(res_unit.conv2, name="weight")
 
     def remove_weight_norm(self):
-        """Remove the weight norm from the acoustic encoder and decoder. """
+        """Remove the weight norm from the acoustic encoder and decoder."""
         for module in (self.acoustic_encoder, self.acoustic_decoder):
             for m in module.modules():
                 try:
@@ -381,7 +418,6 @@ class XcodecPreTrainedModel(PreTrainedModel):
                     pass
                 if hasattr(m, "parametrizations") and "weight" in m.parametrizations:
                     torch.nn.utils.parametrize.remove_parametrizations(m, "weight", leave_parametrized=True)
-
 
 
 XCODEC_START_DOCSTRING = r"""
@@ -418,8 +454,7 @@ XCODEC_INPUTS_DOCSTRING = r"""
     "The Xcodec neural audio codec model.",
     XCODEC_START_DOCSTRING,
 )
-
-class XcodecModel(XcodecPreTrainedModel): 
+class XcodecModel(XcodecPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
@@ -438,11 +473,11 @@ class XcodecModel(XcodecPreTrainedModel):
 
     @staticmethod
     def _adjust_dac_decoder(decoder: nn.Module):
-        r""" 
+        r"""
         DAC implemented in Xcodec is slightly different from the HF version.
         DAC in Xcodec adjusts the output padding in every ConvTranspose1d in the decoder and removes
         the final `nn.Tanh` activation function.
-        """        
+        """
         for module in decoder.modules():
             if isinstance(module, nn.ConvTranspose1d):
                 stride = module.stride[0] if isinstance(module.stride, tuple) else module.stride
@@ -451,17 +486,22 @@ class XcodecModel(XcodecPreTrainedModel):
             decoder.tanh = nn.Identity()
 
     def _extract_semantic_features(self, input_values: torch.FloatTensor) -> torch.FloatTensor:
-        input_values = input_values[:,0,:]
+        input_values = input_values[:, 0, :]
         input_values = F.pad(input_values, (self.pad, self.pad))
         with torch.no_grad():
             outputs = self.semantic_model(input_values, output_hidden_states=True)
-            hidden_states = outputs.hidden_states  
+            hidden_states = outputs.hidden_states
 
-        stacked = torch.stack(hidden_states, dim=1)  
+        stacked = torch.stack(hidden_states, dim=1)
         return stacked.mean(dim=1)
 
-
-    def encode(self, input_values: torch.Tensor, bandwidth: Optional[float] = None, return_dict: Optional[bool] = None, **kwargs) -> Union[torch.Tensor, XcodecEncoderOutput]:
+    def encode(
+        self,
+        input_values: torch.Tensor,
+        bandwidth: Optional[float] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs,
+    ) -> Union[torch.Tensor, XcodecEncoderOutput]:
         """
         Encodes the input audio waveform into discrete audio codes.
 
@@ -475,15 +515,17 @@ class XcodecModel(XcodecPreTrainedModel):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         Returns:
-            `torch.LongTensor` of shape `(batch_size, num_quantizers, codes_length)` containing the discrete encoded audio codes. 
+            `torch.LongTensor` of shape `(batch_size, num_quantizers, codes_length)` containing the discrete encoded audio codes.
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
-        
+
         if input_values.ndim != 3:
-            raise ValueError(f"Expected input shape (batch_size, channels, num_samples), but got shape {input_values.shape}")
-        
-        _, channels, self._input_length = input_values.shape 
-        
+            raise ValueError(
+                f"Expected input shape (batch_size, channels, num_samples), but got shape {input_values.shape}"
+            )
+
+        _, channels, self._input_length = input_values.shape
+
         if channels not in (1, 2):
             raise ValueError(f"Number of audio channels must be 1 or 2, but got {channels}")
 
@@ -491,33 +533,35 @@ class XcodecModel(XcodecPreTrainedModel):
             bandwidth = self.config.target_bandwidths[-1]
         elif bandwidth not in self.config.target_bandwidths:
             raise ValueError(
-                f"This model doesn't support the bandwidth {bandwidth}. Select one of {self.config.target_bandwidths}.")
+                f"This model doesn't support the bandwidth {bandwidth}. Select one of {self.config.target_bandwidths}."
+            )
 
         e_semantic_input = self._extract_semantic_features(input_values).detach()
         e_semantic = self.encoder_semantic(e_semantic_input.transpose(1, 2))
         e_acoustic = self.acoustic_encoder(input_values)
-        
+
         if e_acoustic.shape[2] != e_semantic.shape[2]:
             # make sure they line up if frames don't match
-            e_acoustic = self.acoustic_encoder(F.pad(input_values[:,0,:], (self.pad, self.pad)).unsqueeze(1)) 
-        
+            e_acoustic = self.acoustic_encoder(F.pad(input_values[:, 0, :], (self.pad, self.pad)).unsqueeze(1))
+
         embeddings = torch.cat([e_acoustic, e_semantic], dim=1)
         embeddings = self.fc(embeddings.transpose(1, 2)).transpose(1, 2)
         audio_codes = self.quantizer.encode(embeddings, bandwidth)
         audio_codes = audio_codes.transpose(0, 1)
 
         if not return_dict:
-            return (audio_codes)
+            return audio_codes
 
         return XcodecEncoderOutput(audio_codes)
 
-
-    def decode(self, audio_codes: torch.Tensor, return_dict: Optional[bool] = None, **kwargs) -> Union[torch.Tensor, XcodecDecoderOutput]:
+    def decode(
+        self, audio_codes: torch.Tensor, return_dict: Optional[bool] = None, **kwargs
+    ) -> Union[torch.Tensor, XcodecDecoderOutput]:
         """
         Decode the given discrete codes into an output audio waveform.
-        
+
         The produced audio waveform is longer than the audio input, so it's automatically trimmed to match the original input.
-        
+
         Args:
             audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`):
                 Discrete code indices computed using `model.encode`.
@@ -543,14 +587,20 @@ class XcodecModel(XcodecPreTrainedModel):
                 audio_values = audio_values[..., start : start + self._input_length]
 
         if not return_dict:
-            return (audio_values)
+            return audio_values
 
         return XcodecDecoderOutput(audio_values)
 
-
     @add_start_docstrings_to_model_forward(XCODEC_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=XcodecOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(self, input_values: torch.Tensor, audio_codes: Optional[torch.Tensor] = None, bandwidth: Optional[float] = None, return_dict: Optional[bool] = None, **kwargs) -> Union[Tuple[torch.Tensor, torch.Tensor], XcodecOutput]:
+    def forward(
+        self,
+        input_values: torch.Tensor,
+        audio_codes: Optional[torch.Tensor] = None,
+        bandwidth: Optional[float] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], XcodecOutput]:
         r"""
         Returns:
 
@@ -585,7 +635,6 @@ class XcodecModel(XcodecPreTrainedModel):
             return (audio_codes, audio_values)
 
         return XcodecOutput(audio_codes=audio_codes, audio_values=audio_values)
-
 
 
 __all__ = ["XcodecModel", "XcodecPreTrainedModel"]
