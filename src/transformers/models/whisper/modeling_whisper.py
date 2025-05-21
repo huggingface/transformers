@@ -15,7 +15,7 @@
 """PyTorch Whisper model."""
 
 import math
-from typing import Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -24,13 +24,11 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import (
     FlashAttentionKwargs,
-    flash_attn_supports_top_left_mask,
-    is_flash_attn_available,
 )
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -51,9 +49,6 @@ if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
 
     from ...integrations.flex_attention import make_flex_block_causal_mask
-
-if is_flash_attn_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -343,19 +338,21 @@ class WhisperAttention(nn.Module):
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
 
-        attn_output, attn_weights = ALL_ATTENTION_FUNCTIONS(
-            attention_type=self.config._attn_implementation,
-            eager_attention=eager_attn_forward,
-            module=self,
-            query=query_states,
-            key=key_states,
-            value=value_states,
-            attention_mask=attention_mask,
-            training=self.training,
-            dropout=self.dropout,
-            scaling=1.0,
+        attention_interface: Callable = eager_attn_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
             output_attentions=output_attentions,
-            layer_head_mask=layer_head_mask,
+            head_mask=layer_head_mask,
+            eager_fallback=eager_attn_forward,
             **kwargs,
         )
 

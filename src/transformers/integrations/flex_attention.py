@@ -26,17 +26,20 @@ Citation:
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 import torch
 from packaging import version
 
-from ..utils import is_torch_flex_attn_available
+from ..utils import is_torch_flex_attn_available, logging
 from ..utils.import_utils import _torch_version
 
 
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex_attention
+
+
+logger = logging.get_logger(__name__)
 
 
 class WrappedFlexAttention:
@@ -227,8 +230,29 @@ def flex_attention_forward(
     scaling: Optional[float] = None,
     softcap: Optional[float] = None,
     head_mask: Optional[torch.Tensor] = None,
+    output_attentions: bool = False,
+    dropout: float = 0.0,
+    eager_fallback: Optional[Callable] = None,
     **kwargs,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
+    if output_attentions or head_mask is not None or dropout > 0:
+        logger.warning_once(
+            "Falling back to eager attention because `flex_attention` does not support"
+            " `output_attentions=True`, `head_mask`, or `dropout`."
+        )
+        return eager_fallback(
+            module,
+            query=query,
+            key=key,
+            value=value,
+            attention_mask=attention_mask,
+            dropout=dropout,
+            scaling=scaling,
+            output_attentions=output_attentions,
+            head_mask=head_mask,
+            **kwargs,
+        )
+
     block_mask = None
     score_mask = None
     if isinstance(attention_mask, BlockMask):
