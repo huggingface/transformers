@@ -39,7 +39,7 @@ class XcodecConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        target_bandwidths (`List[float]`, *optional*, defaults to [0.5, 1.0, 1.5, 2.0, 4.0]):
+        target_bandwidths (`List[float]`, *optional*, defaults to `[0.5, 1, 1.5, 2, 4]`):
             The range of different bandwidths (in kbps) the model can encode audio with.
         audio_channels (`int`, *optional*, defaults to 1):
             Number of channels in the audio data. Either 1 for mono or 2 for stereo.
@@ -47,15 +47,15 @@ class XcodecConfig(PretrainedConfig):
             The sampling rate at which the audio waveform should be digitalized, in hertz (Hz).
         input_channels (`int`, *optional*, defaults to 768):
             Number of channels of the input to the first convolution in the semantic encoder.
-        kernel_size (`int`, *optional*, defaults to 3):
-            Kernel size for the initial semantic convolution.
         encoder_channels (`int`, *optional*, defaults to 768):
             Number of hidden channels in each semantic encoder block.
-        channel_ratios (`List[float]`, *optional*, defaults to [1.0, 1.0]):
+        kernel_size (`int`, *optional*, defaults to 3):
+            Kernel size for the initial semantic convolution.
+        channel_ratios (`List[float]`, *optional*, defaults to `[1, 1]`):
             Expansion factors for the number of output channels in each semantic block.
-        strides (`List[int]`, *optional*, defaults to [1, 1]):
+        strides (`List[int]`, *optional*, defaults to `[1, 1]`):
             Strides for each semantic encoder block.
-        block_dilations (`List[int]`, *optional*, defaults to [1, 1]):
+        block_dilations (`List[int]`, *optional*, defaults to `[1, 1]`):
             Dilation factors for the residual units in semantic blocks.
         unit_kernel_size (`int`, *optional*, defaults to 3):
             Kernel size inside each ResidualUnit in semantic blocks.
@@ -108,7 +108,7 @@ class XcodecConfig(PretrainedConfig):
     def __init__(
         self,
         target_bandwidths: List[float] = [0.5, 1, 1.5, 2, 4],
-        audio_channels=1,
+        audio_channels: int = 1,
         sample_rate: int = 16000,
         input_channels: int = 768,
         encoder_channels: int = 768,
