@@ -95,6 +95,7 @@ if TYPE_CHECKING:
     from .donut import *
     from .dpr import *
     from .dpt import *
+    from .efficientloftr import *
     from .efficientnet import *
     from .electra import *
     from .emu3 import *
