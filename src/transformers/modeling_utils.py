@@ -27,7 +27,6 @@ import shutil
 import tempfile
 import warnings
 from collections import defaultdict
-from collections.abc import MutableMapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
@@ -58,9 +57,12 @@ from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
 from .integrations.accelerate import find_tied_parameters, init_empty_weights
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
+from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
+from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
+from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
     ALL_PARALLEL_STYLES,
     _get_parameter_tp_plan,
@@ -124,6 +126,7 @@ from .utils import (
     replace_return_docstrings,
     strtobool,
 )
+from .utils.generic import GeneralInterface
 from .utils.hub import create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
     ENV_VARS_TRUE_VALUES,
@@ -164,6 +167,7 @@ if is_safetensors_available():
 
 if is_kernels_available():
     from kernels import get_kernel
+
 
 logger = logging.get_logger(__name__)
 
@@ -6076,7 +6080,7 @@ def get_disk_only_shard_files(device_map, weight_map):
     return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
 
 
-class AttentionInterface(MutableMapping):
+class AttentionInterface(GeneralInterface):
     """
     Dict-like object keeping track of allowed attention functions. You can easily add a new attention function
     with a call to `register()`. If a model needs to locally overwrite an existing attention function, say `sdpa`,
@@ -6088,38 +6092,11 @@ class AttentionInterface(MutableMapping):
     _global_mapping = {
         "flash_attention_2": flash_attention_forward,
         "flex_attention": flex_attention_forward,
+        "paged_attention": paged_attention_forward,
         "sdpa": sdpa_attention_forward,
+        "sdpa_paged": sdpa_attention_paged_forward,
+        "eager_paged": eager_paged_attention_forward,
     }
-
-    def __init__(self):
-        self._local_mapping = {}
-
-    def __getitem__(self, key):
-        # First check if instance has a local override
-        if key in self._local_mapping:
-            return self._local_mapping[key]
-        return self._global_mapping[key]
-
-    def __setitem__(self, key, value):
-        # Allow local update of the default functions without impacting other instances
-        self._local_mapping.update({key: value})
-
-    def __delitem__(self, key):
-        del self._local_mapping[key]
-
-    def __iter__(self):
-        # Ensure we use all keys, with the overwritten ones on top
-        return iter({**self._global_mapping, **self._local_mapping})
-
-    def __len__(self):
-        return len(self._global_mapping.keys() | self._local_mapping.keys())
-
-    @classmethod
-    def register(cls, key: str, value: Callable):
-        cls._global_mapping.update({key: value})
-
-    def valid_keys(self) -> List[str]:
-        return list(self.keys())
 
 
 # Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones
