@@ -154,6 +154,10 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_eager_matches_fa2_generate(self):
         pass
 
+    @unittest.skip("Gemma2 eager/FA2 attention outputs are expected to be different")
+    def test_flash_attn_2_equivalence(self):
+        pass
+
 
 @slow
 @require_torch_accelerator

@@ -58,7 +58,7 @@ BigBird は、質問応答や要約などのさまざまな NLP タスクのパ�
 
 ## ドキュメント リソース
 
-- [テキスト分類タスクガイド](../tasks/sequence_classification)
+- [テキスト分類タスクガイド(英語版)](../../en/tasks/sequence_classification)
 - [トークン分類タスクガイド](../tasks/token_classification)
 - [質問回答タスク ガイド](../tasks/question_answering)
 - [因果言語モデリング タスク ガイド](../tasks/language_modeling)

@@ -280,10 +280,6 @@ class GenerationConfig(PushToHubMixin):
         begin_suppress_tokens  (`List[int]`, *optional*):
             A list of tokens that will be suppressed at the beginning of the generation. The `SupressBeginTokens` logit
             processor will set their log probs to `-inf` so that they are not sampled.
-        forced_decoder_ids (`List[List[int]]`, *optional*):
-            A list of pairs of integers which indicates a mapping from generation indices to token indices that will be
-            forced before sampling. For example, `[[1, 123]]` means the second generated token will always be a token
-            of index 123.
         sequence_bias (`Dict[Tuple[int], float]`, *optional*)):
             Dictionary that maps a sequence of tokens to its bias term. Positive biases increase the odds of the
             sequence being selected, while negative biases do the opposite. Check
@@ -388,12 +384,6 @@ class GenerationConfig(PushToHubMixin):
             Whether to disable the automatic compilation of the forward pass. Automatic compilation happens when
             specific criteria are met, including using a compilable cache. Please open an issue if you find the
             need to use this flag.
-
-        > Wild card
-
-        generation_kwargs:
-            Additional generation kwargs will be forwarded to the `generate` function of the model. Kwargs that are not
-            present in `generate`'s signature will be used in the model forward pass.
     """
 
     extra_output_flags = ("output_attentions", "output_hidden_states", "output_scores", "output_logits")
@@ -449,7 +439,6 @@ class GenerationConfig(PushToHubMixin):
         self.exponential_decay_length_penalty = kwargs.pop("exponential_decay_length_penalty", None)
         self.suppress_tokens = kwargs.pop("suppress_tokens", None)
         self.begin_suppress_tokens = kwargs.pop("begin_suppress_tokens", None)
-        self.forced_decoder_ids = kwargs.pop("forced_decoder_ids", None)
         self.sequence_bias = kwargs.pop("sequence_bias", None)
         self.token_healing = kwargs.pop("token_healing", False)
         self.guidance_scale = kwargs.pop("guidance_scale", None)
@@ -494,8 +483,6 @@ class GenerationConfig(PushToHubMixin):
         # Performance
         self.compile_config = kwargs.pop("compile_config", None)
         self.disable_compile = kwargs.pop("disable_compile", False)
-        # Wild card
-        self.generation_kwargs = kwargs.pop("generation_kwargs", {})
 
         # The remaining attributes do not parametrize `.generate()`, but are informative and/or used by the hub
         # interface.

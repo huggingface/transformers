@@ -55,6 +55,7 @@ if is_torch_available():
         convert_and_export_with_cache,
         pipeline,
     )
+    from transformers.integrations.executorch import export_with_dynamic_cache
 
 
 TEST_CACHE_IMPLEMENTATIONS = [
@@ -593,22 +594,11 @@ class CacheExportIntegrationTest(unittest.TestCase):
         attention_mask = inputs.attention_mask
         input_ids = inputs.input_ids
 
-        past_key_values = DynamicCache()
-        ep = torch.export.export(
-            model,
-            (),
-            {
-                "input_ids": input_ids,
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "use_cache": True,
-            },
-            strict=False,
-        )
+        ep = export_with_dynamic_cache(model, input_ids, attention_mask)
         res = ep.module()(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            past_key_values=DynamicCache(),
             use_cache=True,
         )
         self.assertTrue(len(res.past_key_values.key_cache) == model.config.num_hidden_layers)
