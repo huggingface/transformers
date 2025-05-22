@@ -245,8 +245,7 @@ class AyaVisionProcessor(ProcessorMixin):
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
-        Computes the number of placeholder tokens needed for each multimodal input type
-        (image, video, and audio) with the given input sizes.
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
             image_sizes (`List[List[int]]`, *optional*):
@@ -271,7 +270,7 @@ class AyaVisionProcessor(ProcessorMixin):
             num_image_tokens = [
                 token_per_patch + 3 + sum(token_per_patch + 1 for _ in range(1, num_patches))
                 for num_patches in num_image_patches
-            ]
+            ]  # Add +3 and +1 for BOI/EOI and image tile tokens
             multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**multimodal_data)

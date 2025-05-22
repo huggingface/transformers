@@ -86,6 +86,7 @@ class ChameleonProcessor(ProcessorMixin):
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.image_start_token_id = tokenizer.convert_tokens_to_ids(self.image_start_token)
         self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
+        self.image_ids = [self.image_token_id, self.image_start_token_id, self.image_end_token_id]
 
         super().__init__(image_processor, tokenizer)
 
@@ -166,17 +167,14 @@ class ChameleonProcessor(ProcessorMixin):
         if return_mm_token_type_ids:
             array_ids = np.array(text_inputs["input_ids"])
             mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            mm_token_type_ids[array_ids == self.image_start_token_id] = 1
-            mm_token_type_ids[array_ids == self.image_end_token_id] = 1
+            mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
             text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
-        Computes the number of placeholder tokens needed for each multimodal input type
-        (image, video, and audio) with the given input sizes.
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
             image_sizes (`List[List[int]]`, *optional*):

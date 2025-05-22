@@ -66,7 +66,7 @@ class Gemma3Processor(ProcessorMixin):
         self.image_seq_length = image_seq_length
         self.image_token_id = tokenizer.image_token_id
         self.boi_token = tokenizer.boi_token
-        self.image_token = tokenizer.boi_token
+        self.image_token = tokenizer.image_token
         image_tokens_expanded = "".join([tokenizer.image_token] * image_seq_length)
         self.full_image_sequence = f"\n\n{tokenizer.boi_token}{image_tokens_expanded}{tokenizer.eoi_token}\n\n"
 
@@ -140,7 +140,7 @@ class Gemma3Processor(ProcessorMixin):
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
-        # self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
         # Add token type ids manually, as tokenizer can't do arbitrary position token types
         if return_mm_token_type_ids:
@@ -153,8 +153,7 @@ class Gemma3Processor(ProcessorMixin):
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
-        Computes the number of placeholder tokens needed for each multimodal input type
-        (image, video, and audio) with the given input sizes.
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
             image_sizes (`List[List[int]]`, *optional*):
@@ -167,6 +166,7 @@ class Gemma3Processor(ProcessorMixin):
 
         multimodal_data = {}
         if image_sizes is not None:
+            # NOTE: no image cropping supported yet
             num_image_tokens = [self.image_seq_length] * len(image_sizes)
             num_image_patches = [1] * len(image_sizes)
 

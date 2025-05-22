@@ -51,27 +51,5 @@ class InternVLVideoProcessor(BaseVideoProcessor):
     def __init__(self, **kwargs: Unpack[InternVLVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
 
-    def get_number_of_video_tokens(self, num_frames: int, height: int, width: int, videos_kwargs=None):
-        """
-        A utility that returns number of image embeddings and number of patches for a given image size. The
-        number of embeddings are calculated is equal to the number of image placeholder tokens
-        needed for the input. Note, that placeholder tokens include BOI/EOI and other special tokens
-        used to denote each image row or column.
-
-        Args:
-            num_frames (`int`):
-                Number of frames of the input video.
-            height (`int`):
-                Height of the input video.
-            width (`int`):
-                Width of the input video.
-            videos_kwargs (`dict`, *optional*)
-                Any kwargs to override defaults of the video processor.
-        Returns:
-            `Tuple(int, int)`: Number of placeholder tokens required and number of patches per image.
-        """
-
-        return 0
-
 
 __all__ = ["InternVLVideoProcessor"]

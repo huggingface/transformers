@@ -197,8 +197,7 @@ class Emu3Processor(ProcessorMixin):
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
-        Computes the number of placeholder tokens needed for each multimodal input type
-        (image, video, and audio) with the given input sizes.
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
             image_sizes (`List[List[int]]`, *optional*):

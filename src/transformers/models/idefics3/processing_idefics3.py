@@ -327,6 +327,7 @@ class Idefics3Processor(ProcessorMixin):
                             fake_token_around_image=fake_image_token,
                             global_img_token=global_img_token,
                         )
+                        # Add +2 and +3 for special BOI/EOI/fake_image_wrapper tokens
                         row_length = (self.image_seq_len + 2) * n_cols + 1
                         image_seq_lengths.append((self.image_seq_len + 3) + row_length * n_rows)
                         image_prompt_strings.append(image_prompt_string)
@@ -374,8 +375,7 @@ class Idefics3Processor(ProcessorMixin):
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
-        Computes the number of placeholder tokens needed for each multimodal input type
-        (image, video, and audio) with the given input sizes.
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
             image_sizes (`List[List[int]]`, *optional*):
@@ -403,7 +403,6 @@ class Idefics3Processor(ProcessorMixin):
             for num_patches in num_image_patches:
                 num_cols = num_rows = int(math.sqrt(num_patches - 1))
                 row_length = col_length * num_cols + 1
-                num_patches = num_rows * num_cols + 1
                 num_image_tokens.append(base_image_length + (row_length * num_rows))
 
             multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})

@@ -362,8 +362,8 @@ class FuyuProcessor(ProcessorMixin):
         self.max_position_embeddings = 16384  # TODO Can't derive this from model files: where to set it?
         self.pad_token_id = 0
         self.dummy_image_index = -1
-        self.image_token = ""
         self.image_token_id = tokenizer.encode("|SPEAKER|", add_special_tokens=False)[1]
+        self.image_newline_id = tokenizer.encode("|NEWLINE|", add_special_tokens=False)[1]
 
     def _left_pad_inputs_with_attention_mask(self, model_inputs: List[Dict], return_attention_mask: bool):
         max_length_input_ids = max(entry["input_ids"].shape[1] for entry in model_inputs)
@@ -565,8 +565,6 @@ class FuyuProcessor(ProcessorMixin):
 
         # --- Use self.tokenizer to get the ids of special tokens to insert into image ids ---
 
-        image_placeholder_id = self.tokenizer("|SPEAKER|", add_special_tokens=False)["input_ids"][1]
-        image_newline_id = self.tokenizer("|NEWLINE|", add_special_tokens=False)["input_ids"][1]
         tensor_batch_images = torch.stack([img[0] for img in batch_images]).unsqueeze(1)
 
         # --- Use self.image_processor again to obtain the full token ids and batch inputs ---
@@ -580,8 +578,8 @@ class FuyuProcessor(ProcessorMixin):
                 scale_factors=[scale_factor],
                 image_unpadded_heights=torch.tensor([image_unpadded_height]),
                 image_unpadded_widths=torch.tensor([image_unpadded_width]),
-                image_placeholder_id=image_placeholder_id,
-                image_newline_id=image_newline_id,
+                image_placeholder_id=self.image_token_id,
+                image_newline_id=self.image_newline_id,
                 tensor_batch_images=tensor_batch_image.unsqueeze(0),
             )
             all_encodings.append(sample_encoding)
@@ -592,16 +590,15 @@ class FuyuProcessor(ProcessorMixin):
         if return_mm_token_type_ids:
             input_ids = batch_encoding["input_ids"]
             mm_token_type_ids = torch.zeros_like(input_ids)
-            mm_token_type_ids[input_ids == image_placeholder_id] = 1
-            mm_token_type_ids[input_ids == image_newline_id] = 1
+            mm_token_type_ids[input_ids == self.image_token_id] = 1
+            mm_token_type_ids[input_ids == self.image_newline_id] = 1
             batch_encoding["mm_token_type_ids"] = mm_token_type_ids
 
         return FuyuBatchFeature(data=batch_encoding)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
-        Computes the number of placeholder tokens needed for each multimodal input type
-        (image, video, and audio) with the given input sizes.
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
             image_sizes (`List[List[int]]`, *optional*):
@@ -624,12 +621,13 @@ class FuyuProcessor(ProcessorMixin):
                 width_scale_factor = padded_width / image_size[1]
                 optimal_scale_factor = min(height_scale_factor, width_scale_factor)
 
+                # We can use torch here because Fuyu processor has hard dependency on torch
                 model_image_input = self.image_processor.preprocess_with_tokenizer_info(
                     image_input=torch.zeros(1, 1, 3, padded_height, padded_width),
                     image_present=torch.ones(1, 1, 1),
                     image_unpadded_h=torch.tensor([[int(image_size[0] * optimal_scale_factor)]]),
                     image_unpadded_w=torch.tensor([[int(image_size[1] * optimal_scale_factor)]]),
-                    image_placeholder_id=0,
+                    image_placeholder_id=0,  # dummy ids, we can be sure `id=0` is never out-of-range
                     image_newline_id=0,
                     variable_sized=True,
                 )
