@@ -46,7 +46,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate (`int`, *optional*, defaults to 44100):
             The sampling rate at which the audio files should be digitalized expressed in Hertz (Hz).
         hop_length_to_sampling_rate (`int`, *optional*, defaults to 86):
-            Hop length is length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
+            Hop length is length of the overlapping windows for the STFT used to obtain the Mel Frequency coefficients.
             For example, with sampling rate 44100, the hop length is 512, with 44100 / 512 = 86
         n_fft (`int`, *optional*, defaults to 2048):
             Size of the Fourier transform.
@@ -141,7 +141,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
 
                 <Tip>
 
-                For TvltTransformer models, `attention_mask` should alwys be passed for batched inference, to avoid
+                For TvltTransformer models, `attention_mask` should always be passed for batched inference, to avoid
                 subtle bugs.
 
                 </Tip>
@@ -228,3 +228,6 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
 
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
         return encoded_inputs
+
+
+__all__ = ["TvltFeatureExtractor"]

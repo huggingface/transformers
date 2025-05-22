@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -126,10 +125,6 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
 
     @unittest.skip("Cohere2 has HybridCache and doesn't support progressive generation using input embeds.")
     def test_generate_continue_from_inputs_embeds(self):
-        pass
-
-    @unittest.skip("Cohere2's eager attn/sdpa attn outputs are expected to be different")
-    def test_sdpa_equivalence(self):
         pass
 
 

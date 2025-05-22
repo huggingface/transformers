@@ -22,7 +22,7 @@ import weakref
 from functools import partialmethod
 
 from ..dependency_versions_check import dep_version_check
-from ..utils import is_accelerate_available, is_torch_available, is_torch_mlu_available, logging
+from ..utils import is_accelerate_available, is_torch_available, logging
 
 
 if is_torch_available():
@@ -40,9 +40,6 @@ def is_deepspeed_available():
     # AND checking it has an author field in the metadata that is HuggingFace.
     if package_exists:
         try:
-            if is_torch_mlu_available():
-                _ = importlib_metadata.metadata("deepspeed-mlu")
-                return True
             _ = importlib_metadata.metadata("deepspeed")
             return True
         except importlib_metadata.PackageNotFoundError:
@@ -306,7 +303,7 @@ def deepspeed_config():
         return None
 
 
-def _load_state_dict_into_zero3_model(model_to_load, state_dict, assign_to_params_buffers=False):
+def _load_state_dict_into_zero3_model(model_to_load, state_dict):
     """
     Loads state dict into a model specifically for Zero3, since DeepSpeed does not support the `transformers`
     tensor parallelism API.
@@ -349,10 +346,7 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, assign_to_param
             if child is not None:
                 load(child, state_dict, prefix + name + ".", assign_to_params_buffers)
 
-    load(model_to_load, state_dict, assign_to_params_buffers=assign_to_params_buffers)
-    # Delete `state_dict` so it could be collected by GC earlier. Note that `state_dict` is a copy of the argument, so
-    # it's safe to delete it.
-    del state_dict
+    load(model_to_load, state_dict, assign_to_params_buffers=False)
 
     return error_msgs
 

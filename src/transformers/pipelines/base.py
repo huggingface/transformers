@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from ..dynamic_module_utils import custom_object_save
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
+from ..generation import GenerationConfig
 from ..image_processing_utils import BaseImageProcessor
 from ..modelcard import ModelCard
 from ..models.auto import AutoConfig, AutoTokenizer
@@ -555,7 +556,7 @@ class PipelineDataFormat:
 
         if input_path is not None:
             if not exists(abspath(self.input_path)):
-                raise OSError(f"{self.input_path} doesnt exist on disk")
+                raise OSError(f"{self.input_path} doesn't exist on disk")
 
     @abstractmethod
     def __iter__(self):
@@ -849,6 +850,22 @@ PIPELINE_INIT_ARGS = build_pipeline_init_args(
     supports_binary_output=True,
 )
 
+SUPPORTED_PEFT_TASKS = {
+    "document-question-answering": ["PeftModelForQuestionAnswering"],
+    "feature-extraction": ["PeftModelForFeatureExtraction", "PeftModel"],
+    "question-answering": ["PeftModelForQuestionAnswering"],
+    "summarization": ["PeftModelForSeq2SeqLM"],
+    "table-question-answering": ["PeftModelForQuestionAnswering"],
+    "text2text-generation": ["PeftModelForSeq2SeqLM"],
+    "text-classification": ["PeftModelForSequenceClassification"],
+    "sentiment-analysis": ["PeftModelForSequenceClassification"],
+    "text-generation": ["PeftModelForCausalLM"],
+    "token-classification": ["PeftModelForTokenClassification"],
+    "ner": ["PeftModelForTokenClassification"],
+    "translation": ["PeftModelForSeq2SeqLM"],
+    "translation_xx_to_yy": ["PeftModelForSeq2SeqLM"],
+    "zero-shot-classification": ["PeftModelForSequenceClassification"],
+}
 
 if is_torch_available():
     from transformers.pipelines.pt_utils import (
@@ -896,6 +913,9 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
     _load_image_processor = True
     _load_feature_extractor = True
     _load_tokenizer = True
+
+    # Pipelines that call `generate` have shared logic, e.g. preparing the generation config.
+    _pipeline_calls_generate = False
 
     default_input_names = None
 
@@ -947,12 +967,18 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             if device == -1 and self.model.device is not None:
                 device = self.model.device
             if isinstance(device, torch.device):
-                if device.type == "xpu" and not is_torch_xpu_available(check_device=True):
+                if (device.type == "xpu" and not is_torch_xpu_available(check_device=True)) or (
+                    device.type == "hpu" and not is_torch_hpu_available()
+                ):
                     raise ValueError(f'{device} is not available, you should use device="cpu" instead')
+
                 self.device = device
             elif isinstance(device, str):
-                if "xpu" in device and not is_torch_xpu_available(check_device=True):
+                if ("xpu" in device and not is_torch_xpu_available(check_device=True)) or (
+                    "hpu" in device and not is_torch_hpu_available()
+                ):
                     raise ValueError(f'{device} is not available, you should use device="cpu" instead')
+
                 self.device = torch.device(device)
             elif device < 0:
                 self.device = torch.device("cpu")
@@ -975,6 +1001,8 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         else:
             self.device = device if device is not None else -1
 
+        if is_torch_available() and torch.distributed.is_initialized():
+            self.device = self.model.device
         logger.warning(f"Device set to use {self.device}")
 
         self.binary_output = binary_output
@@ -987,18 +1015,47 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         ):
             self.model.to(self.device)
 
-        # If the model can generate:
+        # If it's a generation pipeline and the model can generate:
         # 1 - create a local generation config. This is done to avoid side-effects on the model as we apply local
         # tweaks to the generation config.
         # 2 - load the assistant model if it is passed.
-        self.assistant_model, self.assistant_tokenizer = load_assistant_model(
-            self.model, kwargs.pop("assistant_model", None), kwargs.pop("assistant_tokenizer", None)
-        )
-        if self.model.can_generate():
+        if self._pipeline_calls_generate and self.model.can_generate():
+            self.assistant_model, self.assistant_tokenizer = load_assistant_model(
+                self.model, kwargs.pop("assistant_model", None), kwargs.pop("assistant_tokenizer", None)
+            )
             self.prefix = self.model.config.prefix if hasattr(self.model.config, "prefix") else None
-            self.generation_config = copy.deepcopy(self.model.generation_config)
-            # Update the generation config with task specific params if they exist
-            # NOTE: `prefix` is pipeline-specific and doesn't exist in the generation config.
+            # each pipeline with text generation capabilities should define its own default generation in a
+            # `_default_generation_config` class attribute
+            default_pipeline_generation_config = getattr(self, "_default_generation_config", GenerationConfig())
+            if hasattr(self.model, "_prepare_generation_config"):  # TF doesn't have `_prepare_generation_config`
+                # Uses `generate`'s logic to enforce the following priority of arguments:
+                # 1. user-defined config options in `**kwargs`
+                # 2. model's generation config values
+                # 3. pipeline's default generation config values
+                # NOTE: _prepare_generation_config creates a deep copy of the generation config before updating it,
+                # and returns all kwargs that were not used to update the generation config
+                prepared_generation_config, kwargs = self.model._prepare_generation_config(
+                    generation_config=default_pipeline_generation_config, use_model_defaults=True, **kwargs
+                )
+                self.generation_config = prepared_generation_config
+                # if the `max_new_tokens` is set to the pipeline default, but `max_length` is set to a non-default
+                # value: let's honor `max_length`. E.g. we want Whisper's default `max_length=448` take precedence
+                # over over the pipeline's length default.
+                if (
+                    default_pipeline_generation_config.max_new_tokens is not None  # there's a pipeline default
+                    and self.generation_config.max_new_tokens == default_pipeline_generation_config.max_new_tokens
+                    and self.generation_config.max_length is not None
+                    and self.generation_config.max_length != 20  # global default
+                ):
+                    self.generation_config.max_new_tokens = None
+            else:
+                # TODO (joao): no PT model should reach this line. However, some audio models with complex
+                # inheritance patterns do. Streamline those models such that this line is no longer needed.
+                # In those models, the default generation config is not (yet) used.
+                self.generation_config = copy.deepcopy(self.model.generation_config)
+            # Update the generation config with task specific params if they exist.
+            # NOTE: 1. `prefix` is pipeline-specific and doesn't exist in the generation config.
+            #       2. `task_specific_params` is a legacy feature and should be removed in a future version.
             task_specific_params = self.model.config.task_specific_params
             if task_specific_params is not None and task in task_specific_params:
                 this_task_params = task_specific_params.get(task)
@@ -1201,6 +1258,9 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         """
         if not isinstance(supported_models, list):  # Create from a model mapping
             supported_models_names = []
+            if self.task in SUPPORTED_PEFT_TASKS:
+                supported_models_names.extend(SUPPORTED_PEFT_TASKS[self.task])
+
             for _, model_name in supported_models.items():
                 # Mapping can now contain tuples of models for the same configuration.
                 if isinstance(model_name, tuple):

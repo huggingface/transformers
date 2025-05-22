@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,12 +31,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import (
-    require_soundfile,
-    require_torch,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import backend_empty_cache, require_soundfile, require_torch, slow, torch_device
 from transformers.utils import is_soundfile_available
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -86,6 +80,7 @@ class Phi4MultimodalModelTester:
             intermediate_size=48,
             depthwise_seperable_out_channel=128,
             nemo_conv_channels=128,
+            initializer_range=1e-5,
         ),
         vision_config=Phi4MultimodalVisionConfig(
             num_hidden_layers=2,
@@ -93,6 +88,7 @@ class Phi4MultimodalModelTester:
             intermediate_size=64,
             num_attention_heads=8,
             crop_size=16,
+            initializer_range=1e-5,
         ),
     ):
         self.parent = parent
@@ -190,19 +186,6 @@ class Phi4MultimodalModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_model(self, config, input_ids, attention_mask):
-        model = Phi4MultimodalForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                return_dict=True,
-            )["logits"]
-        self.parent.assertEqual(logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
 
 @require_torch
 class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -225,10 +208,6 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 
     @unittest.skip(reason="Right padding not supported")
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
-    @unittest.skip(reason="This one tries to use right padding as well")
-    def test_eager_matches_fa2_generate(self):
         pass
 
     @unittest.skip(reason="Depending on input modalities, some params may not have gradients")
@@ -301,6 +280,8 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
     audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"
 
     def setUp(self):
+        # Currently, the Phi-4 checkpoint on the hub is not working with the latest Phi-4 code, so the slow integration tests
+        # won't pass without using the correct revision (refs/pr/70)
         self.processor = AutoProcessor.from_pretrained(self.checkpoint_path)
         self.generation_config = GenerationConfig(max_new_tokens=20, do_sample=False)
         self.user_token = "<|user|>"
@@ -315,7 +296,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     def test_text_only_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
@@ -341,7 +322,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
             self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device
         )
 
-        prompt = f"{self.user_token}<|image_1|>What is shown in this image?{self.end_token}{self.assistant_token}"
+        prompt = f"{self.user_token}<|image|>What is shown in this image?{self.end_token}{self.assistant_token}"
         inputs = self.processor(prompt, images=self.image, return_tensors="pt").to(torch_device)
 
         output = model.generate(
@@ -365,7 +346,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         for i in range(1, 5):
             url = f"https://image.slidesharecdn.com/azureintroduction-191206101932/75/Introduction-to-Microsoft-Azure-Cloud-{i}-2048.jpg"
             images.append(Image.open(requests.get(url, stream=True).raw))
-            placeholder += f"<|image_{i}|>"
+            placeholder += "<|image|>"
 
         prompt = f"{self.user_token}{placeholder}Summarize the deck of slides.{self.end_token}{self.assistant_token}"
         inputs = self.processor(prompt, images, return_tensors="pt").to(torch_device)
@@ -387,8 +368,8 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
             self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device
         )
 
-        prompt = f"{self.user_token}<|audio_1|>What is happening in this audio?{self.end_token}{self.assistant_token}"
-        inputs = self.processor(prompt, audios=self.audio, sampling_rate=self.sampling_rate, return_tensors="pt").to(
+        prompt = f"{self.user_token}<|audio|>What is happening in this audio?{self.end_token}{self.assistant_token}"
+        inputs = self.processor(prompt, audio=self.audio, sampling_rate=self.sampling_rate, return_tensors="pt").to(
             torch_device
         )
 

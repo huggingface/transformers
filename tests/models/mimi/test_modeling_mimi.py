@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -540,7 +539,7 @@ class MimiIntegrationTest(unittest.TestCase):
                     # use max bandwidth for best possible reconstruction
                     encoder_outputs = model.encode(inputs["input_values"], num_quantizers=int(num_codebooks))
 
-                    audio_code_sums = encoder_outputs[0].sum().cpu().item()
+                    audio_code_sums = encoder_outputs[0].sum().item()
 
                     # make sure audio encoded codes are correct
                     # assert relative difference less than a threshold, because `audio_code_sums` varies a bit

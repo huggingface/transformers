@@ -64,7 +64,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             The number of FFT components to use. If `None`, this is determined using
             `transformers.audio_utils.optimal_fft_length`.
         max_length_s (`int`, *optional*, defaults to 10):
-            The maximum input lenght of the model in seconds. This is used to pad the audio.
+            The maximum input length of the model in seconds. This is used to pad the audio.
         fmin (`float`, *optional*, defaults to 0.0):
             Minimum mel frequency in Hz.
         fmax (`float`, *optional*):
@@ -276,7 +276,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             `List[np.ndarray]`: A ragged list of 1D waveform arrays with padding removed.
         """
         # Collapse the batched waveform tensor to a list of 1D audio waveforms
-        waveforms = [waveform.detach().clone().cpu().numpy() for waveform in waveforms]
+        waveforms = [waveform.detach().to(device="cpu", copy=True).numpy() for waveform in waveforms]
 
         if waveform_lengths is not None:
             waveforms = [waveform[: waveform_lengths[i]] for i, waveform in enumerate(waveforms)]

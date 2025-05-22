@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Team Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -139,24 +138,6 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         gc.collect()
         torch.cuda.empty_cache()
-
-    def test_get_keys_to_not_convert_trust_remote_code(self):
-        r"""
-        Test the `get_keys_to_not_convert` function with `trust_remote_code` models.
-        """
-        from accelerate import init_empty_weights
-
-        from transformers.integrations.bitsandbytes import get_keys_to_not_convert
-
-        model_id = "mosaicml/mpt-7b"
-        config = AutoConfig.from_pretrained(
-            model_id, trust_remote_code=True, revision="ada218f9a93b5f1c6dce48a4cc9ff01fcba431e7"
-        )
-        with init_empty_weights():
-            model = AutoModelForCausalLM.from_config(
-                config, trust_remote_code=True, code_revision="ada218f9a93b5f1c6dce48a4cc9ff01fcba431e7"
-            )
-        self.assertEqual(get_keys_to_not_convert(model), ["transformer.wte"])
 
     def test_get_keys_to_not_convert(self):
         r"""
@@ -889,6 +870,7 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
 
         # Step 1: freeze all parameters
         model = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True)
+        model.train()
 
         if torch.cuda.is_available():
             self.assertEqual(set(model.hf_device_map.values()), {torch.cuda.current_device()})
@@ -914,14 +896,9 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
         batch = self.tokenizer("Test batch ", return_tensors="pt").to(torch_device)
 
         # Step 4: Check if the gradient is not None
-        if torch_device in {"xpu", "cpu"}:
-            # XPU and CPU finetune do not support autocast for now.
+        with torch.autocast(torch_device):
             out = model.forward(**batch)
             out.logits.norm().backward()
-        else:
-            with torch.autocast(torch_device):
-                out = model.forward(**batch)
-                out.logits.norm().backward()
 
         for module in model.modules():
             if isinstance(module, LoRALayer):
@@ -932,7 +909,6 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
 
 
 @apply_skip_if_not_implemented
-@unittest.skipIf(torch_device == "xpu", reason="XPU has precision issue on gpt model, will test it once fixed")
 class MixedInt8GPT2Test(MixedInt8Test):
     model_name = "openai-community/gpt2-xl"
     EXPECTED_RELATIVE_DIFFERENCE = 1.8720077507258357
