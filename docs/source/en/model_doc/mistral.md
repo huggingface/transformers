@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 # Mistral
 
-[Mistral](https://huggingface.co/papers/2310.06825) is a 7B parameter language model, available as a pretrained and instruction-tuned variant, focused on balancing 
+[Mistral](https://huggingface.co/papers/2310.06825) is a 7B parameter language model, available as a pretrained and instruction-tuned variant, focused on balancing
 the scaling costs of large models with performance and efficient inference. This model uses sliding window attention (SWA) trained with a 8K context length and a fixed cache size to handle longer sequences more effectively. Grouped-query attention (GQA) speeds up inference and reduces memory requirements. Mistral also features a byte-fallback BPE tokenizer to improve token handling and efficiency by ensuring characters are never mapped to out-of-vocabulary tokens.
 
 You can find all the original Mistral checkpoints under the [Mistral AI_](https://huggingface.co/mistralai) organization.
@@ -78,10 +78,10 @@ The example below demonstrates how to chat with [`Pipeline`] or the [`AutoModel`
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers CLI">
 
 ```python
-echo -e "My favorite condiment is" | transformers-cli chat --model_name_or_path mistralai/Mistral-7B-v0.3 --torch_dtype auto --device 0 --attn_implementation flash_attention_2
+echo -e "My favorite condiment is" | transformers chat mistralai/Mistral-7B-v0.3 --torch_dtype auto --device 0 --attn_implementation flash_attention_2
 ```
 
 </hfoption>
