@@ -65,6 +65,8 @@ altCLIP does **not** require `transformers-cli` at inference time, but the tool 
 
 ---
 
+## Quantisation
+
 Quantisation reduces the memory burden of large models by representing weights in lower precision.  
 The snippet below uses **dynamic INT-8 quantisation** (see the [Quantization](../quantization/overview) overview for more back-ends).
 
