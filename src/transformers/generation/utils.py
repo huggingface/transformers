@@ -40,7 +40,6 @@ from ..cache_utils import (
     QuantizedCacheConfig,
 )
 from ..configuration_utils import PretrainedConfig
-from ..continuous_batching import ContinuousMixin
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..integrations.fsdp import is_fsdp_managed_module
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
@@ -73,6 +72,7 @@ from .configuration_utils import (
     GenerationConfig,
     GenerationMode,
 )
+from .continuous_batching import ContinuousMixin
 from .logits_process import (
     EncoderNoRepeatNGramLogitsProcessor,
     EncoderRepetitionPenaltyLogitsProcessor,
