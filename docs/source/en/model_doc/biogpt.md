@@ -60,13 +60,16 @@ tokenizer = AutoTokenizer.from_pretrained("microsoft/biogpt")
 model = AutoModelForCausalLM.from_pretrained(
     "microsoft/biogpt",
     torch_dtype=torch.float16,
-    device_map="auto", # 0 for GPU, -1 for CPU
+    device_map="auto",
     attn_implementation="sdpa"
 )
+
 input_text = "Ibuprofen is best used for"
-inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
+inputs = tokenizer(input_text, return_tensors="pt").to("cuda)
+
 with torch.no_grad():
     generated_ids = model.generate(**inputs, max_length=50)
+    
 output = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 print(output)
 ```
