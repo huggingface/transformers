@@ -72,7 +72,7 @@ It achieves near-SOTA zero-shot retrieval across languages while preserving CLIP
 >
 > # similarity → probabilities
 > probs = outputs.logits_per_image.softmax(dim=1)
-> print(probs)  # tensor([[0.9996, 0.0004]])
+> print(probs)  # tensor([[9.9956e-01, 4.3879e-04]], grad_fn=<SoftmaxBackward0>)
 > ```
 >
 > The first caption (“cat”) wins with > 99 % confidence—exactly what we expect
