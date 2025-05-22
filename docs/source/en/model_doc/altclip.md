@@ -79,15 +79,7 @@ transformers-cli quantize BAAI/AltCLIP \
 
 ## Attention visualisation
 
-Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/main/src/transformers/utils/attention_visualizer.py) to understand what the image encoder attends to **once encoder support lands** (current release only handles decoder-style LLMs).
-
-```py
-# will work in a future transformers release ↓
-from transformers.utils.attention_visualizer import AttentionMaskVisualizer
-
-viz = AttentionMaskVisualizer("BAAI/AltCLIP")
-viz("<img>What animal is in the picture?", image)
-```
+[AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/main/src/transformers/utils/attention_visualizer.py) is **NOT** compatible yet with encoder models. It may be used **once encoder support lands** (current release only handles decoder-style LLMs).
 
 In the meantime you can manually retrieve ViT self-attention:
 
