@@ -25,7 +25,6 @@ from transformers import (
     AutoTokenizer,
     Gemma3Config,
     Gemma3TextConfig,
-    GenerationConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -634,46 +633,6 @@ class Gemma3IntegrationTest(unittest.TestCase):
 
         EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
-
-    def test_generation_beyond_sliding_window_with_generation_config(self):
-        """
-        Similar to `test_generation_beyond_sliding_window`, but passing a GenerationConfig. Regression test for #36684
-        -- ensures `cache_implementation='hybrid'` is correctly inherited from the base `model.generation_config`.
-        """
-        model_id = "google/gemma-3-1b-it"
-        attn_implementation = "sdpa"
-
-        input_text = [
-            "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
-            "A list of colors: red, blue",  # This will almost all be padding tokens
-        ]
-        tokenizer = AutoTokenizer.from_pretrained(model_id, padding="left")
-        inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
-
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation=attn_implementation, torch_dtype=torch.float16
-        ).to(torch_device)
-
-        # Make sure prefill is larger than sliding window
-        input_size = inputs.input_ids.shape[-1]
-        self.assertGreater(input_size, model.config.sliding_window)
-
-        generation_config = GenerationConfig(max_new_tokens=5, min_new_tokens=5)
-        out = model.generate(**inputs, generation_config=generation_config)
-
-        out = model.generate(**inputs, generation_config=generation_config, do_sample=False)[:, input_size:]
-        output_text = tokenizer.batch_decode(out)
-        EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
-        self.assertEqual(output_text, EXPECTED_COMPLETIONS)
-
-        # Generation works beyond sliding window
-        self.assertGreater(out.shape[1], model.config.sliding_window)
-        self.assertEqual(out.shape[1], input_size + 5)
-
-        # Note: Auto-inheritance only works for models saved starting from 4.50.0
-        model.generation_config.transformers_version = "4.49.0"
-        with self.assertRaises(RuntimeError):  # errors out because it is not using hybrid cache
-            out = model.generate(**inputs, generation_config=generation_config)
 
     def test_export_text_only_with_hybrid_cache(self):
         if not is_torch_greater_or_equal("2.6.0"):

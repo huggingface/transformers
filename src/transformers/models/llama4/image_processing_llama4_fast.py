@@ -26,11 +26,7 @@ from ...image_processing_utils_fast import (
     group_images_by_shape,
     reorder_images,
 )
-from ...image_utils import (
-    ImageInput,
-    PILImageResampling,
-    SizeDict,
-)
+from ...image_utils import ImageInput, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -320,7 +316,7 @@ def get_best_fit(
     else:
         optimal_canvas = chosen_canvas[0]
 
-    return tuple(optimal_canvas.tolist())
+    return optimal_canvas
 
 
 class Llama4ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
@@ -356,6 +352,8 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[Llama4ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
+    # Disable compilation here as conversion to bfloat16 causes differences in the output of the compiled and non-compiled versions
+    @torch.compiler.disable
     def rescale_and_normalize(
         self,
         images: "torch.Tensor",
@@ -399,7 +397,7 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
         **kwargs,
     ) -> BatchFeature:
         possible_resolutions = find_supported_resolutions(max_num_chunks=max_patches, patch_size=size)
-        possible_resolutions = torch.tensor(possible_resolutions)
+        possible_resolutions = torch.tensor(possible_resolutions, device=images[0].device)
         # process images by batch, grouped by shape
         grouped_images, grouped_images_index = group_images_by_shape(images)
         grouped_processed_images = {}
@@ -438,7 +436,9 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
             # split into tiles
             processed_images = split_to_tiles(processed_images, ratio_h, ratio_w)
             grouped_processed_images[shape] = processed_images
-            grouped_aspect_ratios[shape] = torch.tensor([[ratio_h, ratio_w]] * stacked_images.shape[0])
+            grouped_aspect_ratios[shape] = torch.tensor(
+                [[ratio_h, ratio_w]] * stacked_images.shape[0], device=images[0].device
+            )
 
             # add a global tile to the processed tile if there are more than one tile
             if ratio_h * ratio_w > 1:

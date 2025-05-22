@@ -131,7 +131,7 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
         kwargs.pop("size")
         kwargs.pop("crop_size")
 
-        return self._preprocess(images=images, trimaps=trimaps, **kwargs)
+        return self._preprocess(images, trimaps, **kwargs)
 
     def _prepare_input_trimaps(
         self, trimaps: ImageInput, device: Optional["torch.device"] = None
