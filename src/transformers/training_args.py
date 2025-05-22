@@ -807,6 +807,7 @@ class TrainingArguments:
         "gradient_checkpointing_kwargs",
         "lr_scheduler_kwargs",
     ]
+    framework = "pt"
 
     output_dir: Optional[str] = field(
         default=None,
@@ -1530,7 +1531,6 @@ class TrainingArguments:
             "https://github.com/huggingface/transformers/issues/34242"
         },
     )
-    framework: str = "pt"
 
     def __post_init__(self):
         # Set default output_dir if not provided
