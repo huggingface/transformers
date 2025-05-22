@@ -78,10 +78,7 @@ print(output)
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Ibuprofen is best used for" \
-| transformers run --task text-generation \
-                   --model microsoft/biogpt \
-                   --device -1
+echo -e "Ibuprofen is best used for" | transformers run --task text-generation --model microsoft/biogpt --device 0
 ```
 
 </hfoption>
