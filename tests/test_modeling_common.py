@@ -958,6 +958,8 @@ class ModelTesterMixin:
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
 
         seq_len = getattr(self.model_tester, "seq_length", None)
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
@@ -1106,7 +1108,7 @@ class ModelTesterMixin:
         configs_no_init.torchscript = True
         for model_class in self.all_model_classes:
             for attn_implementation in ["eager", "sdpa"]:
-                if attn_implementation == "sdpa" and (not model_class._supports_sdpa or not is_torch_sdpa_available()):
+                if attn_implementation == "sdpa" and (not model_class._supports_sdpa or not is_torch_sdpa_available()) or config.output_attentions:
                     continue
 
                 configs_no_init._attn_implementation = attn_implementation
@@ -1722,6 +1724,10 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
         config.output_attentions = self.has_attentions
+
+        # force eager attention to support output attentions
+        if self.has_attentions:
+            config._attn_implementation = "eager"
 
         # no need to test all models as different heads yield the same functionality
         model_class = self.all_model_classes[0]
