@@ -83,7 +83,16 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
 
 ```python
+import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+
+quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-3.3-8b-base")
+model = AutoModelForCausalLM.from_pretrained("ibm-granite/granite-3.3-8b-base", torch_dtype=torch.bfloat16, device_map="auto", attn_implementation="sdpa", quantization_config=quantization_config)
+
+inputs = tokenizer("Explain quantum computing in simple terms", return_tensors="pt").to("cuda")
+outputs = model.generate(**inputs, max_length=50, cache_implementation="static")
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 
