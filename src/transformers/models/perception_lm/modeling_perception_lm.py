@@ -296,9 +296,6 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-        if pixel_values_videos is not None:
-            pixel_values = pixel_values_videos
-
         if pixel_values is not None and inputs_embeds is not None:
             raise ValueError(
                 "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
@@ -312,11 +309,19 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
             image_features = self.get_image_features(
                 pixel_values=pixel_values.to(inputs_embeds),
             )
-
             special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
             special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_features = image_features.to(inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+        if pixel_values_videos is not None:
+            video_features = self.get_image_features(
+                pixel_values=pixel_values_videos.to(inputs_embeds),
+            )
+            special_video_mask = (input_ids == self.config.video_token_id).unsqueeze(-1)
+            special_video_mask = special_video_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            video_features = video_features.to(inputs_embeds)
+            inputs_embeds = inputs_embeds.masked_scatter(special_video_mask, video_features)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
