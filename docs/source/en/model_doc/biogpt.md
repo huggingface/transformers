@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 [BioGPT](https://huggingface.co/papers/2210.10341) is a generative Transformer model based on [GPT-2](./gpt2) and pretrained on 15 million PubMed abstracts. It is designed for biomedical language tasks.
 
-You can find all the original BioGPT checkpoints under the [BioGPT](https://huggingface.co/models?search=biogpt) collection.
+You can find all the original BioGPT checkpoints under the [Microsoft](https://huggingface.co/microsoft?search_models=biogpt) organization.
 
 > [!TIP]
 > Click on the BioGPT models in the right sidebar for more examples of how to apply BioGPT to different language tasks.
