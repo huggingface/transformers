@@ -432,6 +432,7 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
             model = model_class(config)
+            model.attn_implementation = "eager"
 
             subsampled_encoder_seq_length = model._get_feat_extract_output_lengths(encoder_seq_length)
             subsampled_encoder_key_length = model._get_feat_extract_output_lengths(encoder_key_length)

@@ -360,6 +360,7 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
             model = model_class(config)
+            model.attn_implementation = "eager"
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
 

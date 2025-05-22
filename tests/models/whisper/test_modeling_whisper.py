@@ -677,6 +677,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
             model = model_class(config)
+            model.attn_implementation = "eager"
             model.to(torch_device)
             model.eval()
 
