@@ -6,6 +6,6 @@ messages:
       world then you jump falling in slow bur fast motion passing other worlds
       and then you land on earth
   - role: user
-    content: 'Write me a cartoon movie {{input,}} placeholders '
+    content: 'Write me a cartoon movie {{input}} placeholders '
 model: openai/gpt-4.1
 modelParameters: {}
