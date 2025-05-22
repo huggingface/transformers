@@ -31,13 +31,15 @@ from typing import Optional, Tuple, Union
 import torch
 from packaging import version
 
-from ..utils import is_torch_flex_attn_available
+from ..utils import is_torch_flex_attn_available, logging
 from ..utils.import_utils import _torch_version, is_torchdynamo_compiling
 
 
 if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask, flex_attention
-    from torch.nn.attention.flex_attention import create_block_mask as create_block_causal_mask_flex
+    from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex_attention
+
+
+logger = logging.get_logger(__name__)
 
 
 class WrappedFlexAttention:
@@ -98,21 +100,23 @@ def compile_friendly_flex_attention(
 Offset = Union[torch.Tensor, int]
 
 
+# TODO: deprecate / rename to make_flex_block_mask for clarity as it's not only causal anymore
 def make_flex_block_causal_mask(
     attention_mask_2d: torch.Tensor,
     attention_chunk_size: Optional[int] = None,
     query_length=None,
     key_length=None,
     offsets: Optional[Tuple[Offset, Offset]] = None,
+    is_causal: Optional[bool] = True,
 ) -> "BlockMask":
     """
     IMPORTANT NOTICE: This function is deprecated in favor of using the mask primitives in `masking_utils.py`,
     and will be removed in a future version without warnings. New code should not use it. It is only kept here
     for BC for now, while models using it are being patched accordingly.
 
-    Create a block causal document mask for a batch of sequences, both packed and unpacked.
-    Create Block causal logic and passing it into :func:`torch.nn.attention.flex_attention.create_block_mask`.
-    The resultant BlockMask is a compressed representation of the full block causal
+    Create a block (causal) document mask for a batch of sequences, both packed and unpacked.
+    Create Block (causal) logic and passing it into :func:`torch.nn.attention.flex_attention.create_block_mask`.
+    The resultant BlockMask is a compressed representation of the full (causal) block
     mask. BlockMask is essential for performant computation of flex attention.
     See: https://pytorch.org/blog/flexattention/
 
@@ -170,7 +174,21 @@ def make_flex_block_causal_mask(
         causal_doc_mask = causal_mask_mod(batch_idx, head_idx, q_idx, kv_idx)
         return chunk_mask & causal_doc_mask
 
-    mask_mod_maybe_combined = causal_mask_mod if attention_chunk_size is None else chunk_causal_mask_mod
+    def default_mask_mod(batch_idx, head_idx, q_idx, kv_idx):
+        """
+        Utilizes default attention mask to enable encoder and encoder-decoder
+        attention masks.
+        """
+        document_mask = document_ids[batch_idx, q_idx] == document_ids[batch_idx, kv_idx]
+        # kv indexing is crucial in order to work correctly
+        padding_mask = attention_mask_2d[batch_idx, kv_idx] > 0
+        final_mask = padding_mask & document_mask
+        return final_mask
+
+    if not is_causal:
+        mask_mod_maybe_combined = default_mask_mod
+    else:
+        mask_mod_maybe_combined = causal_mask_mod if attention_chunk_size is None else chunk_causal_mask_mod
 
     if offsets is not None:
         q_offset = offsets[0]
@@ -182,7 +200,8 @@ def make_flex_block_causal_mask(
             return mask_mod_maybe_combined(batch_idx, head_idx, offset_q, offset_kv)
     else:
         mask_mod = mask_mod_maybe_combined
-    return create_block_causal_mask_flex(
+
+    return create_block_mask(
         mask_mod=mask_mod,
         B=batch_size,
         H=None,  # attention head
@@ -216,21 +235,33 @@ def flex_attention_forward(
     head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
+    if kwargs.get("output_attentions", False) or head_mask is not None:
+        logger.warning_once(
+            "`flex_attention` does not support `output_attentions=True` or `head_mask`."
+            " Please set your attention to `eager` if you want any of these features."
+        )
+
+    if kwargs.get("dropout", 0.0) > 0:
+        raise ValueError(
+            "`flex_attention` does not support `dropout`. Please use it with inference"
+            " only (`model.eval()`) or turn off the attention dropout in the respective config."
+        )
+
     block_mask = None
-    causal_mask = None
+    score_mask = None
     if isinstance(attention_mask, BlockMask):
         block_mask = attention_mask
     else:
-        causal_mask = attention_mask
+        score_mask = attention_mask
 
-    if causal_mask is not None:
-        causal_mask = causal_mask[:, :, :, : key.shape[-2]]
+    if score_mask is not None:
+        score_mask = score_mask[:, :, :, : key.shape[-2]]
 
     def score_mod(score, batch_idx, head_idx, q_idx, kv_idx):
         if softcap is not None:
             score = softcap * torch.tanh(score / softcap)
-        if causal_mask is not None:
-            score = score + causal_mask[batch_idx][0][q_idx][kv_idx]
+        if score_mask is not None:
+            score = score + score_mask[batch_idx][0][q_idx][kv_idx]
         if head_mask is not None:
             score = score + head_mask[batch_idx][head_idx][0][0]
         return score
