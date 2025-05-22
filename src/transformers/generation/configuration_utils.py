@@ -58,7 +58,10 @@ if is_torch_available():
         OffloadedHybridCache,
         OffloadedStaticCache,
         QuantizedCacheConfig,
+        SQuatCacheConfig,
         QuantoQuantizedCache,
+        QuantoSQuatCache,
+        HQQSQuatCache,
         SlidingWindowCache,
         StaticCache,
         StaticCacheConfig,
@@ -66,6 +69,7 @@ if is_torch_available():
     from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
     CACHE_CONFIG_MAPPING["quantized"] = QuantizedCacheConfig
+    CACHE_CONFIG_MAPPING["squat"] = SQuatCacheConfig
     CACHE_CONFIG_MAPPING["static"] = StaticCacheConfig
     NEED_SETUP_CACHE_CLASSES_MAPPING = {
         "static": StaticCache,
@@ -78,6 +82,7 @@ if is_torch_available():
         "mamba": MambaCache,
     }
     QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
+    SQUAT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoSQuatCache, "HQQ": HQQSQuatCache}
     ALL_CACHE_IMPLEMENTATIONS = (
         list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(CACHE_CONFIG_MAPPING.keys()) + ["offloaded", "dynamic"]
     )

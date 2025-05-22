@@ -36,6 +36,7 @@ from ..cache_utils import (
     OffloadedCache,
     OffloadedHybridCache,
     QuantizedCacheConfig,
+    SQuatCacheConfig,
 )
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import (
@@ -74,6 +75,7 @@ from .candidate_generator import (
 from .configuration_utils import (
     NEED_SETUP_CACHE_CLASSES_MAPPING,
     QUANT_BACKEND_CLASSES_MAPPING,
+    SQUAT_BACKEND_CLASSES_MAPPING,
     GenerationConfig,
     GenerationMode,
 )
@@ -2061,6 +2063,32 @@ class GenerationMixin:
                     else QuantizedCacheConfig()
                 )
                 cache_class = QUANT_BACKEND_CLASSES_MAPPING[cache_config.backend]
+
+                if cache_config.backend == "quanto" and not is_optimum_quanto_available():
+                    raise ImportError(
+                        "You need to install optimum-quanto in order to use KV cache quantization with optimum-quanto backend. "
+                        "Please install it via  with `pip install optimum-quanto`"
+                    )
+                elif cache_config.backend == "HQQ" and not is_hqq_available():
+                    raise ImportError(
+                        "You need to install `HQQ` in order to use KV cache quantization with HQQ backend. "
+                        "Please install it via  with `pip install hqq`"
+                    )
+
+                model_kwargs[cache_name] = cache_class(cache_config)
+            elif generation_config.cache_implementation == "squat":
+                if not self._supports_quantized_cache:
+                    raise ValueError(
+                        "This model does not support the quantized cache. If you want your model to support quantized "
+                        "cache, please open an issue and tag @zucchini-nlp."
+                    )
+
+                cache_config = (
+                    generation_config.cache_config
+                    if generation_config.cache_config is not None
+                    else SQuatCacheConfig()
+                )
+                cache_class = SQUAT_BACKEND_CLASSES_MAPPING[cache_config.backend]
 
                 if cache_config.backend == "quanto" and not is_optimum_quanto_available():
                     raise ImportError(
