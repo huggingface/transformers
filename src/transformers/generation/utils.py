@@ -39,6 +39,7 @@ from ..cache_utils import (
     OffloadedHybridCache,
     QuantizedCacheConfig,
 )
+from ..continuous_batching import ContinuousMixin
 from ..configuration_utils import PretrainedConfig
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..integrations.fsdp import is_fsdp_managed_module
@@ -345,7 +346,7 @@ GenerateBeamOutput = Union[GenerateBeamDecoderOnlyOutput, GenerateBeamEncoderDec
 GenerateOutput = Union[GenerateNonBeamOutput, GenerateBeamOutput]
 
 
-class GenerationMixin:
+class GenerationMixin(ContinuousMixin):
     """
     A class containing all functions for auto-regressive text generation, to be used as a mixin in model classes.
     Inheriting from this class causes the model to have special generation-related behavior, such as loading a
