@@ -28,7 +28,7 @@ rendered properly in your Markdown viewer.
 You can find all the original BioGPT checkpoints under the [BioGPT](https://huggingface.co/models?search=biogpt) collection.
 
 > [!TIP]
-> Click on the BioGPT models in the right sidebar for more examples of how to apply BioGPT to different biomedical text generation and question answering tasks.
+> Click on the BioGPT models in the right sidebar for more examples of how to apply BioGPT to different language tasks.
 
 The example below demonstrates how to generate biomedical text with [`Pipeline`], [`AutoModel`], and also from the command line.
 
