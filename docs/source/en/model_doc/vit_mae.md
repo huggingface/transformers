@@ -14,8 +14,6 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# ViTMAE
-
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
@@ -23,78 +21,64 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
-## Overview
+# ViTMAE
 
-The ViTMAE model was proposed in [Masked Autoencoders Are Scalable Vision Learners](https://arxiv.org/abs/2111.06377v2) by Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li,
-Piotr Dollár, Ross Girshick. The paper shows that, by pre-training a Vision Transformer (ViT) to reconstruct pixel values for masked patches, one can get results after
-fine-tuning that outperform supervised pre-training.
+[ViTMAE (Vision Transformer - Masked AutoEncoder)](https://huggingface.co/papers/2111.06377) is a self-supervised vision model that learns by hiding large portions of images and training itself to reconstruct them. It masks around 75% of the input image patches and learns to reconstruct the missing pixels from the remaining visible ones. After pretraining, the encoder can be reused for downstream tasks like image classification or object detection — often outperforming models trained with supervised learning.
 
-The abstract from the paper is the following:
+You can find all the original ViTMAE checkpoints under the [vit-mae](https://huggingface.co/facebook/vit-mae-base) collection.
 
-*This paper shows that masked autoencoders (MAE) are scalable self-supervised learners for computer vision. Our MAE approach is simple: we mask random patches of the
-input image and reconstruct the missing pixels. It is based on two core designs. First, we develop an asymmetric encoder-decoder architecture, with an encoder that operates
-only on the visible subset of patches (without mask tokens), along with a lightweight decoder that reconstructs the original image from the latent representation and mask
-tokens. Second, we find that masking a high proportion of the input image, e.g., 75%, yields a nontrivial and meaningful self-supervisory task. Coupling these two designs
-enables us to train large models efficiently and effectively: we accelerate training (by 3x or more) and improve accuracy. Our scalable approach allows for learning high-capacity
-models that generalize well: e.g., a vanilla ViT-Huge model achieves the best accuracy (87.8%) among methods that use only ImageNet-1K data. Transfer performance in downstream
-tasks outperforms supervised pre-training and shows promising scaling behavior.*
+> [!TIP]
+> Click on the ViTMAE models in the right sidebar for more examples of how to apply ViTMAE to different image classification and reconstruction tasks.
 
-<img src="https://user-images.githubusercontent.com/11435359/146857310-f258c86c-fde6-48e8-9cee-badd2b21bd2c.png"
-alt="drawing" width="600"/> 
+The example below demonstrates how to use ViTMAE with the [`AutoModel`] class.
 
-<small> MAE architecture. Taken from the <a href="https://arxiv.org/abs/2111.06377">original paper.</a> </small>
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). TensorFlow version of the model was contributed by [sayakpaul](https://github.com/sayakpaul) and 
-[ariG23498](https://github.com/ariG23498) (equal contribution). The original code can be found [here](https://github.com/facebookresearch/mae). 
+<!-- This model is not currently supported via pipeline. -->
 
-## Usage tips
+</hfoption>
+<hfoption id="AutoModel">
 
-- MAE (masked auto encoding) is a method for self-supervised pre-training of Vision Transformers (ViTs). The pre-training objective is relatively simple:
-by masking a large portion (75%) of the image patches, the model must reconstruct raw pixel values. One can use [`ViTMAEForPreTraining`] for this purpose.
-- After pre-training, one "throws away" the decoder used to reconstruct pixels, and one uses the encoder for fine-tuning/linear probing. This means that after
-fine-tuning, one can directly plug in the weights into a [`ViTForImageClassification`].
-- One can use [`ViTImageProcessor`] to prepare images for the model. See the code examples for more info.
-- Note that the encoder of MAE is only used to encode the visual patches. The encoded patches are then concatenated with mask tokens, which the decoder (which also
-consists of Transformer blocks) takes as input. Each mask token is a shared, learned vector that indicates the presence of a missing patch to be predicted. Fixed
-sin/cos position embeddings are added both to the input of the encoder and the decoder.
-- For a visual understanding of how MAEs work you can check out this [post](https://keras.io/examples/vision/masked_image_modeling/).
+```python
+import torch
+import requests
+from PIL import Image
+from transformers import ViTImageProcessor, ViTMAEForPreTraining
 
-### Using Scaled Dot Product Attention (SDPA)
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
 
-PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
-encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
-[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
-or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
-page for more information.
+processor = ViTImageProcessor.from_pretrained("facebook/vit-mae-base")
+inputs = processor(image, return_tensors="pt").to("cuda")
 
-SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
-`attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
+model = ViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base").to("cuda")
+with torch.no_grad():
+    outputs = model(**inputs)
 
+reconstruction = outputs.logits
 ```
+
+</hfoption>
+<hfoption id="transformers-cli">
+
+<!-- This model is not currently supported via transformers-cli. -->
+
+</hfoption>
+</hfoptions>
+
+## Notes
+- ViTMAE is used in two stages: self-supervised pretraining with    `ViTMAEForPreTraining`, then finetuning using the encoder with `ViTForImageClassification`.
+- The model reconstructs masked image patches (typically 75%) during pretraining and discards the decoder afterward.
+- Only visible patches are encoded, and learned mask tokens are used in the decoder.
+- Use `ViTImageProcessor` for input preparation.
+- For faster inference on supported hardware, SDPA can be enabled via `attn_implementation="sdpa"`.
+
+```python
 from transformers import ViTMAEModel
 model = ViTMAEModel.from_pretrained("facebook/vit-mae-base", attn_implementation="sdpa", torch_dtype=torch.float16)
 ...
 ```
-
-For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
-
-On a local benchmark (A100-40GB, PyTorch 2.3.0, OS Ubuntu 22.04) with `float32` and `facebook/vit-mae-base` model, we saw the following speedups during inference.
-
-|   Batch size |   Average inference time (ms), eager mode |   Average inference time (ms), sdpa model |   Speed up, Sdpa / Eager (x) |
-|--------------|-------------------------------------------|-------------------------------------------|------------------------------|
-|            1 |                                        11 |                                         6 |                      1.83 |
-|            2 |                                         8 |                                         6 |                      1.33 |
-|            4 |                                         8 |                                         6 |                      1.33 |
-|            8 |                                         8 |                                         6 |                      1.33 |
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ViTMAE.
-
-- [`ViTMAEForPreTraining`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining), allowing you to pre-train the model from scratch/further pre-train the model on custom data.
-- A notebook that illustrates how to visualize reconstructed pixel values with [`ViTMAEForPreTraining`] can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/ViTMAE/ViT_MAE_visualization_demo.ipynb).
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 ## ViTMAEConfig
 
