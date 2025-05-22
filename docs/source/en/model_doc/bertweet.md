@@ -59,7 +59,7 @@ import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained(
-   model_id,
+   "vinai/bertweet-base",
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "vinai/bertweet-base",
