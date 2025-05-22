@@ -87,7 +87,7 @@ print(f"The predicted token is: {predicted_token}")
 </hfoptions>
 
 ## Notes
-- Inputs should be padded on the right, since BigBird uses absolute position embeddings.
+- Inputs should be padded on the right because BigBird uses absolute position embeddings.
 - If the input sequence is too short, the block_sparse attention type will automatically fall back to original_full attention, since sparse patterns don’t offer much benefit for small inputs.
 
 ## BigBirdConfig
