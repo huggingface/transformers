@@ -90,7 +90,7 @@ echo -e "Plants create <mask> through a process known as photosynthesis." | tran
 </hfoptions>
 
 ## Notes
-- Use the AutoTokenizer or BertweetTokenizer — it’s preloaded with a custom vocabulary adapted to tweet-specific tokens like hashtags (#), mentions (@), emojis, and common abbreviations.
+- Use the [`AutoTokenizer`] or [`BertweetTokenizer`] because it’s preloaded with a custom vocabulary adapted to tweet-specific tokens like hashtags (#), mentions (@), emojis, and common abbreviations. Make sure to also install the [emoji](https://pypi.org/project/emoji/) library.
 - Inputs should be padded on the right (e.g., padding="max_length") to align with the positional encoding behavior.
 - Since it was pre-trained on tweets, it performs best on short, informal, and social media-style text.
 
