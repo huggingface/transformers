@@ -205,6 +205,22 @@ class PretrainedConfig(PushToHubMixin):
             key = super().__getattribute__("attribute_map")[key]
         super().__setattr__(key, value)
 
+    @property
+    def output_attentions(self):
+        """
+        `bool`: Whether or not the model should returns all attentions.
+        """
+        return getattr(self, "_output_attentions", False)
+    
+    @output_attentions.setter
+    def output_attentions(self, value):
+        if self._attn_implementation != "eager":
+            raise ValueError(
+                "The `output_attentions` attribute is not supported when using the `attn_implementation` set to "
+                f"{self._attn_implementation}. Please set it to 'eager' instead."
+            ) 
+        self._output_attentions = value
+
     def __getattribute__(self, key):
         if key != "attribute_map" and key in super().__getattribute__("attribute_map"):
             key = super().__getattribute__("attribute_map")[key]
