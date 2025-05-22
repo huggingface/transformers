@@ -381,6 +381,8 @@
         title: BARTpho
       - local: model_doc/bert
         title: BERT
+      - local: model_doc/bert2d
+        title: Bert2D
       - local: model_doc/bert-generation
         title: BertGeneration
       - local: model_doc/bert-japanese
