@@ -663,6 +663,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+
         seq_len = getattr(self.model_tester, "seq_length", None)
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", 1)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)

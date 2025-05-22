@@ -26,13 +26,13 @@ Citation:
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 from packaging import version
 
 from ..utils import is_torch_flex_attn_available, logging
-from ..utils.import_utils import _torch_version
+from ..utils.import_utils import _torch_version, is_torchdynamo_compiling
 
 
 if is_torch_flex_attn_available():
@@ -79,10 +79,28 @@ class WrappedFlexAttention:
         return self._compiled_flex_attention
 
 
+def compile_friendly_flex_attention(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    training=False,
+    **kwargs,
+) -> torch.Tensor:
+    # First call initialise singleton wrapper object, second call invokes the object method to return compiled flex attention
+    # Do not use compiled version if already compiling forward (it raises issues)
+    flex_attention_compiled = WrappedFlexAttention(training)() if not is_torchdynamo_compiling() else flex_attention
+    return flex_attention_compiled(
+        query,
+        key,
+        value,
+        **kwargs,
+    )
+
+
 Offset = Union[torch.Tensor, int]
 
 
-# TODO: rename to make_flex_block_mask for clarity as it's not only causal anymore
+# TODO: deprecate / rename to make_flex_block_mask for clarity as it's not only causal anymore
 def make_flex_block_causal_mask(
     attention_mask_2d: torch.Tensor,
     attention_chunk_size: Optional[int] = None,
@@ -92,9 +110,13 @@ def make_flex_block_causal_mask(
     is_causal: Optional[bool] = True,
 ) -> "BlockMask":
     """
+    IMPORTANT NOTICE: This function is deprecated in favor of using the mask primitives in `masking_utils.py`,
+    and will be removed in a future version without warnings. New code should not use it. It is only kept here
+    for BC for now, while models using it are being patched accordingly.
+
     Create a block (causal) document mask for a batch of sequences, both packed and unpacked.
     Create Block (causal) logic and passing it into :func:`torch.nn.attention.flex_attention.create_block_mask`.
-    The resultant BlockMask is a compressed representation of the full block (causal)
+    The resultant BlockMask is a compressed representation of the full (causal) block
     mask. BlockMask is essential for performant computation of flex attention.
     See: https://pytorch.org/blog/flexattention/
 
@@ -135,7 +157,6 @@ def make_flex_block_causal_mask(
         """
         Defines the logic of a block causal mask by combining both a standard causal mask
         and a block diagonal document mask.
-
         See :func:`~torchtune.modules.attention_utils.create_block_causal_mask`
         for an illustration.
         """
@@ -191,24 +212,6 @@ def make_flex_block_causal_mask(
     )
 
 
-@torch.compiler.disable(recursive=False)
-def compile_friendly_flex_attention(
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    training=False,
-    **kwargs,
-) -> torch.Tensor:
-    # First call initialise singleton wrapper object, second call invokes the object method to return compiled flex attention
-    flex_attention_compiled = WrappedFlexAttention(training)()
-    return flex_attention_compiled(
-        query,
-        key,
-        value,
-        **kwargs,
-    )
-
-
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -230,27 +233,18 @@ def flex_attention_forward(
     scaling: Optional[float] = None,
     softcap: Optional[float] = None,
     head_mask: Optional[torch.Tensor] = None,
-    output_attentions: bool = False,
-    dropout: float = 0.0,
-    eager_fallback: Optional[Callable] = None,
     **kwargs,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    if output_attentions or head_mask is not None or dropout > 0:
+    if kwargs.get("output_attentions", False) or head_mask is not None:
         logger.warning_once(
-            "Falling back to eager attention because `flex_attention` does not support"
-            " `output_attentions=True`, `head_mask`, or `dropout`."
+            "`flex_attention` does not support `output_attentions=True` or `head_mask`."
+            " Please set your attention to `eager` if you want any of these features."
         )
-        return eager_fallback(
-            module,
-            query=query,
-            key=key,
-            value=value,
-            attention_mask=attention_mask,
-            dropout=dropout,
-            scaling=scaling,
-            output_attentions=output_attentions,
-            head_mask=head_mask,
-            **kwargs,
+
+    if kwargs.get("dropout", 0.0) > 0:
+        raise ValueError(
+            "`flex_attention` does not support `dropout`. Please use it with inference"
+            " only (`model.eval()`) or turn off the attention dropout in the respective config."
         )
 
     block_mask = None
