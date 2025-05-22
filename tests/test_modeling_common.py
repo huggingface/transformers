@@ -1108,7 +1108,11 @@ class ModelTesterMixin:
         configs_no_init.torchscript = True
         for model_class in self.all_model_classes:
             for attn_implementation in ["eager", "sdpa"]:
-                if attn_implementation == "sdpa" and (not model_class._supports_sdpa or not is_torch_sdpa_available()) or config.output_attentions:
+                if (
+                    attn_implementation == "sdpa"
+                    and (not model_class._supports_sdpa or not is_torch_sdpa_available())
+                    or config.output_attentions
+                ):
                     continue
 
                 configs_no_init._attn_implementation = attn_implementation

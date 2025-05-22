@@ -26,7 +26,7 @@ Citation:
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 from packaging import version
@@ -230,27 +230,18 @@ def flex_attention_forward(
     scaling: Optional[float] = None,
     softcap: Optional[float] = None,
     head_mask: Optional[torch.Tensor] = None,
-    output_attentions: bool = False,
-    dropout: float = 0.0,
-    eager_fallback: Optional[Callable] = None,
     **kwargs,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    if output_attentions or head_mask is not None or dropout > 0:
+    if kwargs.get("output_attentions", False) or head_mask is not None:
         logger.warning_once(
-            "Falling back to eager attention because `flex_attention` does not support"
-            " `output_attentions=True`, `head_mask`, or `dropout`."
+            "`flex_attention` does not support `output_attentions=True` or `head_mask`."
+            " Please set your attention to `eager` if you want any of these features."
         )
-        return eager_fallback(
-            module,
-            query=query,
-            key=key,
-            value=value,
-            attention_mask=attention_mask,
-            dropout=dropout,
-            scaling=scaling,
-            output_attentions=output_attentions,
-            head_mask=head_mask,
-            **kwargs,
+
+    if kwargs.get("dropout", 0.0) > 0:
+        raise ValueError(
+            "`flex_attention` does not support `dropout`. Please use it with inference"
+            " only (`model.eval()`) or turn off the attention dropout in the respective config."
         )
 
     block_mask = None

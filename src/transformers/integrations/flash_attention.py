@@ -1,4 +1,4 @@
-from typing import Callable, Optional, Tuple
+from typing import Optional, Tuple
 
 import torch
 
@@ -21,27 +21,12 @@ def flash_attention_forward(
     scaling: Optional[float] = None,
     sliding_window: Optional[int] = None,
     softcap: Optional[float] = None,
-    output_attentions: bool = False,
-    head_mask: Optional[torch.Tensor] = None,
-    eager_fallback: Optional[Callable] = None,
     **kwargs,
 ) -> Tuple[torch.Tensor, None]:
-    if output_attentions or head_mask is not None:
+    if kwargs.get("output_attentions", False) or kwargs.get("head_mask", None) is not None:
         logger.warning_once(
-            "Falling back to eager attention because `flash_attention_2` does not support"
-            " `output_attentions=True` or `head_mask`."
-        )
-        return eager_fallback(
-            module,
-            query=query,
-            key=key,
-            value=value,
-            attention_mask=attention_mask,
-            dropout=dropout,
-            scaling=scaling,
-            output_attentions=output_attentions,
-            head_mask=head_mask,
-            **kwargs,
+            "`flash_attention_2` does not support `output_attentions=True` or `head_mask`."
+            " Please set your attention to `eager` if you want any of these features."
         )
 
     # This is before the transpose
