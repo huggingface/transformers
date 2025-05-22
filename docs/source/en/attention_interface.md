@@ -145,6 +145,7 @@ def my_new_sdpa_mask(*args, **kwargs):
 AttentionMaskInterface.register("my_new_sdpa_mask", my_new_sdpa_mask)
 ```
 
+The reason you have to register it is because we need to automatically correct your mask format based on the attention implementation (for example, flex attention uses a BlockMask format, while sdpa uses a 4D tensor).
 By default, if you do not register an attention mask function along with your attention function, mask creation will be skipped
 and `attention_mask=None` will be passed along to the Attention layers.
 

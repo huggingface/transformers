@@ -942,6 +942,8 @@ def create_masks_for_generate(
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
     output_attentions: bool = False,
+    or_mask_function: Optional[Callable] = None,
+    and_mask_function: Optional[Callable] = None,
     **kwargs,
 ):
     """
@@ -963,6 +965,12 @@ def create_masks_for_generate(
             The past key values, if we use a cache.
         output_attentions (`bool`, optional):
             Whether we return the attention scores or not. By default `False`.
+        or_mask_function (`Callable`, optional):
+            An optional mask function to combine with the other mask function (by doing the union of both). This is
+            useful to easily overlay another mask on top of the causal one, for example for image tokens handling.
+        and_mask_function (`Callable`, optional):
+            An optional mask function to combine with the other mask function (by doing the intersection of both). This is
+            useful to easily overlay another mask on top of the causal one, for example for image tokens handling.
     """
     # The attribute reside in the text config for composite models
     effective_config = config.get_text_config()
@@ -974,6 +982,8 @@ def create_masks_for_generate(
         "cache_position": cache_position,
         "past_key_values": past_key_values,
         "output_attentions": output_attentions,
+        "or_mask_function": or_mask_function,
+        "and_mask_function": and_mask_function,
     }
 
     # If the attribute exist, we need several masks
@@ -985,7 +995,7 @@ def create_masks_for_generate(
     # In this case, all layers are sliding
     elif getattr(effective_config, "sliding_window", None) is not None:
         return create_sliding_window_causal_mask(**mask_kwargs)
-    # In this case, all layxers are chunked
+    # In this case, all layers are chunked
     elif getattr(effective_config, "attention_chunk_size", None) is not None:
         return create_chunked_causal_mask(**mask_kwargs)
     # All layers use standard causal attention
