@@ -737,6 +737,8 @@
         title: EfficientFormer
       - local: model_doc/efficientnet
         title: EfficientNet
+      - local: model_doc/eomt
+        title: EoMT
       - local: model_doc/focalnet
         title: FocalNet
       - local: model_doc/glpn

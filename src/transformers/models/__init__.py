@@ -100,6 +100,7 @@ if TYPE_CHECKING:
     from .emu3 import *
     from .encodec import *
     from .encoder_decoder import *
+    from .eomt import *
     from .ernie import *
     from .esm import *
     from .falcon import *
