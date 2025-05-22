@@ -67,44 +67,43 @@ altCLIP does **not** require `transformers-cli` at inference time, but the tool 
 
 ## Quantization
 
-Quantization reduces the memory burden of large models by representing the weights in a lower precision.  
-Refer to the [Quantization](../quantization/overview) overview for more available back-ends.
+Quantization reduces the memory burden of large models by storing weights in lower precision.  
+See the [Quantization](../quantization/overview) overview for all available back-ends.
 
-The example below uses **[dynamic INT-8 quantization](../quantization/overview#dynamic-quantization)** to only
-quantize the *Linear* and *Embedding* weights to **8-bit integers** while keeping activations in FP32.
+The example below uses **[dynamic INT-8](../quantization/overview#dynamic-quantization)** to quantize the **Linear** layers to 8-bit integers while keeping Embedding layers in FP32 (PyTorch doesn’t yet support INT-8 Embeddings through `quantize_dynamic`).
 
 ```bash
 # one-liner via transformers-cli
 transformers-cli quantize BAAI/AltCLIP \
   --method dynamic \
   --dtype int8 \
-  --modules Linear Embedding \
+  --modules Linear \
   --output AltCLIP-int8
 ```
 
-Or do it programmatically in PyTorch:
+Or do it in plain PyTorch:
 
 ```python
 from transformers import AltCLIPModel
 from torch.quantization import quantize_dynamic
 import torch, psutil, os
 
-def mb() -> float:                      # helper to report RAM usage
-    return psutil.Process(os.getpid()).memory_info().rss / 1024**2
+def mb() -> int:  # quick RAM meter
+    return psutil.Process(os.getpid()).memory_info().rss // 1024**2
 
-print(f"Resident RAM before load: {mb():.0f} MB")
+print(f"RAM before load : {mb():>4} MB")
 
-model_fp32 = AltCLIPModel.from_pretrained("BAAI/AltCLIP")
-print(f"After FP32 load: {mb():.0f} MB")
+model = AltCLIPModel.from_pretrained("BAAI/AltCLIP")
+print(f"FP32 checkpoint : {mb():>4} MB")
 
-model_int8 = quantize_dynamic(
-    model_fp32, {torch.nn.Linear, torch.nn.Embedding}, dtype=torch.qint8
-)
-print(f"After INT-8 quantization: {mb():.0f} MB")
+# dynamic INT-8 (Linear layers only)
+model_int8 = quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
+print(f"INT-8 Linear-only: {mb():>4} MB")
 ```
 
-Expect roughly a **4× reduction** in GPU/CPU memory for the quantized
-checkpoint while inference accuracy remains virtually unchanged.
+On a typical machine the INT-8 checkpoint occupies **≈ ½ the RAM** of the full-precision model with negligible accuracy drop.
+
+> ℹ️ Embedding layers can be quantized with *float-qparams weight-only* configs once PyTorch exposes them via the public API.
 
 
 ---
