@@ -65,17 +65,47 @@ altCLIP does **not** require `transformers-cli` at inference time, but the tool 
 
 ---
 
-## Quantisation
+## Quantization
 
-Quantisation reduces the memory burden of large models by representing weights in lower precision.  
-The snippet below uses **dynamic INT-8 quantisation** (see the [Quantization](../quantization/overview) overview for more back-ends).
+Quantization reduces the memory burden of large models by representing the weights in a lower precision.  
+Refer to the [Quantization](../quantization/overview) overview for more available back-ends.
+
+The example below uses **[dynamic INT-8 quantization](../quantization/overview#dynamic-quantization)** to only
+quantize the *Linear* and *Embedding* weights to **8-bit integers** while keeping activations in FP32.
 
 ```bash
+# one-liner via transformers-cli
 transformers-cli quantize BAAI/AltCLIP \
   --method dynamic \
   --dtype int8 \
+  --modules Linear Embedding \
   --output AltCLIP-int8
 ```
+
+Or do it programmatically in PyTorch:
+
+```python
+from transformers import AltCLIPModel
+from torch.quantization import quantize_dynamic
+import torch, psutil, os
+
+def mb() -> float:                      # helper to report RAM usage
+    return psutil.Process(os.getpid()).memory_info().rss / 1024**2
+
+print(f"Resident RAM before load: {mb():.0f} MB")
+
+model_fp32 = AltCLIPModel.from_pretrained("BAAI/AltCLIP")
+print(f"After FP32 load: {mb():.0f} MB")
+
+model_int8 = quantize_dynamic(
+    model_fp32, {torch.nn.Linear, torch.nn.Embedding}, dtype=torch.qint8
+)
+print(f"After INT-8 quantization: {mb():.0f} MB")
+```
+
+Expect roughly a **4× reduction** in GPU/CPU memory for the quantized
+checkpoint while inference accuracy remains virtually unchanged.
+
 
 ---
 
