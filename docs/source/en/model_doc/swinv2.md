@@ -22,12 +22,12 @@ rendered properly in your Markdown viewer.
 
 # Swin Transformer V2
 
-[Swin Transformer V2](https://huggingface.co/papers/2111.09883) builds upon the original Swin Transformer, focusing on scaling up model capacity and training resolution effectively. It introduces techniques like residual-post-norm combined with cosine attention for improved training stability, and a log-spaced continuous position bias to better handle varying image resolutions between pre-training and fine-tuning. These improvements enabled the training of very large models (up to 3 billion parameters) capable of processing high-resolution images, achieving state-of-the-art results on various vision benchmarks.
+[Swin Transformer V2](https://huggingface.co/papers/2111.09883) is a 3B parameter model that focuses on how to scale a vision model to billions of parameters. It introduces techniques like residual-post-norm combined with cosine attention for improved training stability, log-spaced continuous position bias to better handle varying image resolutions between pre-training and fine-tuning, and a new pre-training method (SimMIM) to reduce the need for large amounts of labeled data. These improvements enable efficiently training very large models (up to 3 billion parameters) capable of processing high-resolution images.
 
 You can find official Swin Transformer V2 checkpoints under the [Microsoft](https://huggingface.co/microsoft?search_models=swinv2) organization.
 
 > [!TIP]
-> Click on the Swin Transformer V2 models in the right sidebar for more examples of how to apply Swin Transformer V2 to image classification tasks.
+> Click on the Swin Transformer V2 models in the right sidebar for more examples of how to apply Swin Transformer V2 to vision tasks.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
