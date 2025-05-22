@@ -355,10 +355,10 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
             model.to(torch_device)
             model.eval()
-            model.config._attn_implementation = "eager"
+
             # Case 1: With token_type_ids
             outputs_with_types = model(
                 **inputs_dict,

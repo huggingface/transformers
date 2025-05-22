@@ -1712,7 +1712,7 @@ class ModelTesterMixin:
         model_class = self.all_model_classes[0]
         model = model_class._from_config(config, attn_implementation="eager")
         model.to(torch_device)
-        print(model)
+
         inputs = self._prepare_for_class(inputs_dict, model_class)
 
         outputs = model(**inputs)
