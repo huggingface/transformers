@@ -981,11 +981,11 @@ class ProcessorMixin(PushToHubMixin):
         # override processor_dict with given kwargs
         processor_dict.update(kwargs)
         # validate both processor_dict and given kwargs
-        unused_kwargs, used_kwargs = cls.validate_init_kwargs(
+        unused_kwargs, valid_kwargs = cls.validate_init_kwargs(
             processor_config=processor_dict, valid_kwargs=cls.valid_kwargs
         )
         # instantiate processor with used (and valid) kwargs only
-        processor = cls(*args, **used_kwargs)
+        processor = cls(*args, **valid_kwargs)
 
         logger.info(f"Processor {processor}")
         if return_unused_kwargs:
@@ -1284,12 +1284,12 @@ class ProcessorMixin(PushToHubMixin):
         valid_kwargs_set = set(valid_kwargs)
 
         unused_keys = kwargs_from_config - valid_kwargs_set
-        used_keys = kwargs_from_config & valid_kwargs_set
+        valid_keys = kwargs_from_config & valid_kwargs_set
 
         unused_kwargs = {k: processor_config[k] for k in unused_keys} if unused_keys else {}
-        used_kwargs = {k: processor_config[k] for k in used_keys} if used_keys else {}
+        valid_kwargs = {k: processor_config[k] for k in valid_keys} if valid_keys else {}
 
-        return unused_kwargs, used_kwargs
+        return unused_kwargs, valid_kwargs
 
     def prepare_and_validate_optional_call_args(self, *args):
         """
