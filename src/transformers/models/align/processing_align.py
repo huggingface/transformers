@@ -36,7 +36,7 @@ class AlignProcessorKwargs(ProcessingKwargs, total=False):
 class AlignProcessor(ProcessorMixin):
     r"""
     Constructs an ALIGN processor which wraps [`EfficientNetImageProcessor`] and
-    [`BertTokenizer`]/[`BertTokenizerFast`] into a single processor that interits both the image processor and
+    [`BertTokenizer`]/[`BertTokenizerFast`] into a single processor that inherits both the image processor and
     tokenizer functionalities. See the [`~AlignProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more
     information.
     The preferred way of passing kwargs is as a dictionary per modality, see usage example below.

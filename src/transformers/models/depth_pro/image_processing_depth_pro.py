@@ -18,6 +18,8 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
+from ...utils.import_utils import requires
+
 
 if TYPE_CHECKING:
     from .modeling_depth_pro import DepthProDepthEstimatorOutput
@@ -34,25 +36,23 @@ from ...image_utils import (
     is_scaled_image,
     is_torch_available,
     make_list_of_images,
-    pil_torch_interpolation_mapping,
     to_numpy_array,
     valid_images,
 )
-from ...utils import (
-    TensorType,
-    filter_out_non_signature_kwargs,
-    logging,
-    requires_backends,
-)
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_torchvision_available, logging, requires_backends
 
 
 if is_torch_available():
     import torch
 
+if is_torchvision_available():
+    from ...image_utils import pil_torch_interpolation_mapping
+
 
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("torchvision", "torch"))
 class DepthProImageProcessor(BaseImageProcessor):
     r"""
     Constructs a DepthPro image processor.

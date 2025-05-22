@@ -39,6 +39,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
@@ -48,30 +49,31 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class ConvNextImageProcessor(BaseImageProcessor):
     r"""
     Constructs a ConvNeXT image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be overriden
+            Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden
             by `do_resize` in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 384}`):
             Resolution of the output image after `resize` is applied. If `size["shortest_edge"]` >= 384, the image is
             resized to `(size["shortest_edge"], size["shortest_edge"])`. Otherwise, the smaller edge of the image will
             be matched to `int(size["shortest_edge"]/crop_pct)`, after which the image is cropped to
             `(size["shortest_edge"], size["shortest_edge"])`. Only has an effect if `do_resize` is set to `True`. Can
-            be overriden by `size` in the `preprocess` method.
+            be overridden by `size` in the `preprocess` method.
         crop_pct (`float` *optional*, defaults to 224 / 256):
             Percentage of the image to crop. Only has an effect if `do_resize` is `True` and size < 384. Can be
-            overriden by `crop_pct` in the `preprocess` method.
+            overridden by `crop_pct` in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
-            Resampling filter to use if resizing the image. Can be overriden by `resample` in the `preprocess` method.
+            Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overriden by `do_rescale` in
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
             the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overriden by `rescale_factor` in the `preprocess`
+            Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
             method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
@@ -89,7 +91,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         crop_pct: Optional[float] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
@@ -188,7 +190,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         crop_pct: Optional[float] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,

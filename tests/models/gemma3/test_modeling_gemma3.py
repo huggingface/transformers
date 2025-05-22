@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Gemma3 model."""
 
+import logging
 import tempfile
 import unittest
 
@@ -24,7 +25,6 @@ from transformers import (
     AutoTokenizer,
     Gemma3Config,
     Gemma3TextConfig,
-    GenerationConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -49,9 +49,11 @@ if is_torch_available():
     from transformers import (
         Gemma3ForCausalLM,
         Gemma3ForConditionalGeneration,
+        Gemma3Model,
         Gemma3Processor,
         Gemma3TextModel,
     )
+    from transformers.pytorch_utils import is_torch_greater_or_equal
 
 
 class Gemma3ModelTester(GemmaModelTester):
@@ -135,7 +137,7 @@ class Gemma3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     @unittest.skip(
         reason="HybridCache can't be gathered because it is not iterable. Adding a simple iter and dumping `distributed_iterator`"
-        " as in Dynamic Cache doesnt work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
+        " as in Dynamic Cache doesn't work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
     )
     def test_multi_gpu_data_parallel_forward(self):
         pass
@@ -146,9 +148,9 @@ class Gemma3Vision2TextModelTester:
         self,
         parent,
         mm_tokens_per_image=2,
-        image_token_index=1,
-        boi_token_index=2,
-        eoi_token_index=3,
+        image_token_index=4,
+        boi_token_index=5,
+        eoi_token_index=6,
         seq_length=25,
         is_training=True,
         vision_config={
@@ -240,7 +242,14 @@ class Gemma3Vision2TextModelTester:
 
 @require_torch
 class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Gemma3ForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            Gemma3Model,
+            Gemma3ForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (Gemma3ForConditionalGeneration,) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False
@@ -273,7 +282,7 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
     @unittest.skip(
         reason="HybridCache can't be gathered because it is not iterable. Adding a simple iter and dumping `distributed_iterator`"
-        " as in Dynamic Cache doesnt work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
+        " as in Dynamic Cache doesn't work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
     )
     def test_multi_gpu_data_parallel_forward(self):
         pass
@@ -327,6 +336,10 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
     @unittest.skip("Gemma3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
     def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
+    @unittest.skip("Gemma3 has HybridCache which auto-compiles. Compile and FA2 don't work together.")
+    def test_eager_matches_fa2_generate(self):
         pass
 
     @unittest.skip(
@@ -621,42 +634,41 @@ class Gemma3IntegrationTest(unittest.TestCase):
         EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
-    def test_generation_beyond_sliding_window_with_generation_config(self):
-        """
-        Similar to `test_generation_beyond_sliding_window`, but passing a GenerationConfig. Regression test for #36684
-        -- ensures `cache_implementation='hybrid'` is correctly inherited from the base `model.generation_config`.
-        """
+    def test_export_text_only_with_hybrid_cache(self):
+        if not is_torch_greater_or_equal("2.6.0"):
+            self.skipTest(reason="This test requires torch >= 2.6 to run.")
+
+        from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
+
         model_id = "google/gemma-3-1b-it"
-        attn_implementation = "sdpa"
+        model = AutoModelForCausalLM.from_pretrained(model_id)
+        self.assertEqual(model.config.cache_implementation, "hybrid")
 
-        input_text = [
-            "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
-            "A list of colors: red, blue",  # This will almost all be padding tokens
-        ]
-        tokenizer = AutoTokenizer.from_pretrained(model_id, padding="left")
-        inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
+        # Export + HybridCache
+        model.eval()
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
+        exported_program = exportable_module.export()
+        logging.info(f"\nExported program: {exported_program}")
 
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation=attn_implementation, torch_dtype=torch.float16
-        ).to(torch_device)
+        # Test generation with the exported model
+        prompt = "What is the capital of France?"
+        max_new_tokens_to_generate = 20
+        # Generate text with the exported model
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        export_generated_text = TorchExportableModuleForDecoderOnlyLM.generate(
+            exported_program, tokenizer, prompt, max_new_tokens=max_new_tokens_to_generate
+        )
+        logging.info(f"\nExport generated texts: '{export_generated_text}'")
 
-        # Make sure prefill is larger than sliding window
-        input_size = inputs.input_ids.shape[-1]
-        self.assertGreater(input_size, model.config.sliding_window)
+        input_text = tokenizer(prompt, return_tensors="pt")
+        with torch.no_grad():
+            eager_outputs = model.generate(
+                **input_text,
+                max_new_tokens=max_new_tokens_to_generate,
+                do_sample=False,  # Use greedy decoding to match the exported model
+            )
 
-        generation_config = GenerationConfig(max_new_tokens=5, min_new_tokens=5)
-        out = model.generate(**inputs, generation_config=generation_config)
+        eager_generated_text = tokenizer.decode(eager_outputs[0], skip_special_tokens=True)
+        logging.info(f"\nEager generated texts: '{eager_generated_text}'")
 
-        out = model.generate(**inputs, generation_config=generation_config, do_sample=False)[:, input_size:]
-        output_text = tokenizer.batch_decode(out)
-        EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
-        self.assertEqual(output_text, EXPECTED_COMPLETIONS)
-
-        # Generation works beyond sliding window
-        self.assertGreater(out.shape[1], model.config.sliding_window)
-        self.assertEqual(out.shape[1], input_size + 5)
-
-        # Note: Auto-inheritance only works for models saved starting from 4.50.0
-        model.generation_config.transformers_version = "4.49.0"
-        with self.assertRaises(RuntimeError):  # errors out because it is not using hybrid cache
-            out = model.generate(**inputs, generation_config=generation_config)
+        self.assertEqual(export_generated_text, eager_generated_text)

@@ -24,38 +24,16 @@ from transformers import AutoModelForImageTextToText
 
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
+from ...utils import ModelOutput, auto_docstring
 from .configuration_colpali import ColPaliConfig
 
 
-_CONFIG_FOR_DOC = "ColPaliConfig"
-
-COLPALI_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`ColPaliConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare ColPali model outputting raw hidden-states without any specific head on top.",
-    COLPALI_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The bare ColPali model outputting raw hidden-states without any specific head on top.
+    """
 )
+@auto_docstring
 class ColPaliPreTrainedModel(PreTrainedModel):
     config_class = ColPaliConfig
     base_model_prefix = "model"
@@ -118,47 +96,8 @@ class ColPaliForRetrievalOutput(ModelOutput):
     image_hidden_states: Optional[torch.FloatTensor] = None
 
 
-COLPALI_FOR_RETRIEVAL_INPUT_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-            [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
-            The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`SiglipImageProcessor.__call__`] for details ([]`PaliGemmaProcessor`] uses
-            [`SiglipImageProcessor`] for processing images). If none, ColPali will only process text (query embeddings).
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-            [What are attention masks?](../glossary#attention-mask)
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
-            `past_key_values`).
-            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        kwargs (`Dict[str, Any]`, *optional*):
-            Additional key word arguments passed along to the vlm backbone model.
-"""
-
-
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     In our proposed ColPali approach, we leverage VLMs to construct efficient multi-vector embeddings directly
     from document images (“screenshots”) for document retrieval. We train the model to maximize the similarity
     between these document embeddings and the corresponding query embeddings, using the late interaction method
@@ -175,8 +114,8 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         self.vocab_size = config.vlm_config.text_config.vocab_size
 
         vlm = AutoModelForImageTextToText.from_config(config.vlm_config)
-        if vlm.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"vlm.language_model.{k}" for k in vlm.language_model._tied_weights_keys]
+        if vlm._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"vlm.{k}" for k in vlm._tied_weights_keys]
         self.vlm = vlm
 
         self.embedding_dim = self.config.embedding_dim
@@ -187,8 +126,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
 
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(COLPALI_FOR_RETRIEVAL_INPUT_DOCSTRING)
-    @replace_return_docstrings(output_type=ColPaliForRetrievalOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -199,9 +137,6 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple, ColPaliForRetrievalOutput]:
-        r"""
-        Returns:
-        """
         if "pixel_values" in kwargs:
             kwargs["pixel_values"] = kwargs["pixel_values"].to(dtype=self.dtype)
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -246,25 +181,25 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         )
 
     def get_input_embeddings(self):
-        return self.vlm.language_model.get_input_embeddings()
+        return self.vlm.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.vlm.language_model.set_input_embeddings(value)
+        self.vlm.set_input_embeddings(value)
 
     def get_output_embeddings(self):
-        return self.vlm.language_model.get_output_embeddings()
+        return self.vlm.get_output_embeddings()
 
     def set_output_embeddings(self, new_embeddings):
-        self.vlm.language_model.set_output_embeddings(new_embeddings)
+        self.vlm.set_output_embeddings(new_embeddings)
 
     def set_decoder(self, decoder):
-        self.vlm.language_model.set_decoder(decoder)
+        self.vlm.set_decoder(decoder)
 
     def get_decoder(self):
-        return self.vlm.language_model.get_decoder()
+        return self.vlm.get_decoder()
 
     def tie_weights(self):
-        return self.vlm.language_model.tie_weights()
+        return self.vlm.tie_weights()
 
     def resize_token_embeddings(
         self,
@@ -272,7 +207,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         pad_to_multiple_of: Optional[int] = None,
         mean_resizing: bool = True,
     ) -> nn.Embedding:
-        model_embeds = self.vlm.language_model.resize_token_embeddings(
+        model_embeds = self.vlm.resize_token_embeddings(
             new_num_tokens=new_num_tokens,
             pad_to_multiple_of=pad_to_multiple_of,
             mean_resizing=mean_resizing,
@@ -288,6 +223,5 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
 
 __all__ = [
     "ColPaliForRetrieval",
-    "ColPaliForRetrievalOutput",
     "ColPaliPreTrainedModel",
 ]

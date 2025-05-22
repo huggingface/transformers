@@ -91,7 +91,7 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
         do_center_crop: bool = True,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[Dict[str, int]] = None,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
@@ -179,7 +179,7 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_center_crop: Optional[bool] = None,
         crop_size: Optional[int] = None,
@@ -319,3 +319,6 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["EfficientFormerImageProcessor"]

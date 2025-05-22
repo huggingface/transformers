@@ -7,13 +7,14 @@ from ...cache_utils import Cache
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import logging
-from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
+from ..llama.modeling_llama import LlamaPreTrainedModel, LlamaRMSNorm, eager_attention_forward
 from ..olmo.configuration_olmo import OlmoConfig
 from ..olmo.modeling_olmo import (
     OlmoAttention,
     OlmoDecoderLayer,
     OlmoForCausalLM,
     OlmoModel,
+    OlmoRotaryEmbedding,
     apply_rotary_pos_emb,
 )
 
@@ -164,11 +165,25 @@ class Olmo2Config(OlmoConfig):
         del self.clip_qkv
 
 
+# OLMo2 RMS norm is identical to Llama RMS norm except:
+# - Weight and hidden states are multiplied before converting back to the input dtype, rather than after.
 class Olmo2RMSNorm(LlamaRMSNorm):
-    pass
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return (self.weight * hidden_states).to(input_dtype)
 
 
 ALL_LAYERNORM_LAYERS.append(Olmo2RMSNorm)
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
 
 
 # Olmo2 attention is identical to OLMo attention except:
@@ -285,6 +300,14 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
             outputs += (self_attn_weights,)
 
         return outputs
+
+
+class Olmo2RotaryEmbedding(OlmoRotaryEmbedding):
+    pass
+
+
+class Olmo2PreTrainedModel(LlamaPreTrainedModel):
+    pass
 
 
 # The OLMo2 model is identical to the OLMo model, except RMSNorm is used instead of

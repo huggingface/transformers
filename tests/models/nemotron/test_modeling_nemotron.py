@@ -21,13 +21,13 @@ import pytest
 
 from transformers import NemotronConfig, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     is_flaky,
     require_flash_attn,
     require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -101,38 +101,6 @@ class NemotronModelTest(GemmaModelTest):
     def test_model_outputs_equivalence(self, **kwargs):
         pass
 
-    @require_torch_sdpa
-    @require_torch_accelerator
-    @slow
-    def test_sdpa_equivalence(self):
-        for model_class in self.all_model_classes:
-            if not model_class._supports_sdpa:
-                self.skipTest(reason="Model does not support SDPA")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_sdpa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, attn_implementation="sdpa"
-                )
-                model_sdpa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="eager")
-                model.to(torch_device)
-
-                dummy_input = inputs_dict[model_class.main_input_name]
-                dummy_input = dummy_input.to(torch_device)
-                outputs = model(dummy_input, output_hidden_states=True)
-                outputs_sdpa = model_sdpa(dummy_input, output_hidden_states=True)
-
-                logits = outputs.hidden_states[-1]
-                logits_sdpa = outputs_sdpa.hidden_states[-1]
-
-                # nemotron sdpa needs a high tolerance
-                assert torch.allclose(logits_sdpa, logits, atol=1e-2)
-
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
@@ -168,7 +136,7 @@ class NemotronModelTest(GemmaModelTest):
                 assert torch.allclose(logits_fa, logits, atol=1e-2)
 
 
-@require_torch_gpu
+@require_torch_accelerator
 class NemotronIntegrationTest(unittest.TestCase):
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
     # Depending on the hardware we get different logits / generations
@@ -194,7 +162,7 @@ class NemotronIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(text, return_tensors="pt").to(torch_device)
 
-        output = model.generate(**inputs, do_sample=False)
+        output = model.generate(**inputs, do_sample=False, max_new_tokens=10)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT, output_text)
 
@@ -202,9 +170,17 @@ class NemotronIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_nemotron_8b_generation_eager(self):
         text = ["What is the largest planet in solar system?"]
-        EXPECTED_TEXT = [
-            "What is the largest planet in solar system?\nAnswer: Jupiter\n\nWhat is the answer",
-        ]
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("xpu", 3): [
+                    "What is the largest planet in solar system?\nAnswer: Jupiter\n\nWhat is the answer: What is the name of the 19",
+                ],
+                ("cuda", 7): [
+                    "What is the largest planet in solar system?\nAnswer: Jupiter\n\nWhat is the answer",
+                ],
+            }
+        )
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         model_id = "thhaus/nemotron3-8b"
         model = NemotronForCausalLM.from_pretrained(
             model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="eager"

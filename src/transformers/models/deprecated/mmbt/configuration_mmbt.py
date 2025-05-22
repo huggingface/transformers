@@ -40,3 +40,6 @@ class MMBTConfig:
         self.modal_hidden_size = modal_hidden_size
         if num_labels:
             self.num_labels = num_labels
+
+
+__all__ = ["MMBTConfig"]

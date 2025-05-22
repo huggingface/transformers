@@ -163,7 +163,7 @@ class Siglip2ImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        resample: "PILImageResampling" = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
         do_normalize: bool = True,
@@ -195,7 +195,7 @@ class Siglip2ImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        resample: Optional[PILImageResampling] = None,
+        resample: Optional["PILImageResampling"] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,

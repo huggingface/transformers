@@ -9,8 +9,6 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     SizeDict,
@@ -33,12 +31,13 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
     logging,
 )
+from ...utils.import_utils import requires
 from .image_processing_deformable_detr import get_size_with_aspect_ratio
 
 
@@ -58,6 +57,26 @@ logger = logging.get_logger(__name__)
 
 
 class DeformableDetrFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    r"""
+    format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
+        Data format of the annotations. One of "coco_detection" or "coco_panoptic".
+    do_convert_annotations (`bool`, *optional*, defaults to `True`):
+        Controls whether to convert the annotations to the format expected by the DEFORMABLE_DETR model. Converts the
+        bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
+        Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
+    do_pad (`bool`, *optional*, defaults to `True`):
+        Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
+        method. If `True`, padding will be applied to the bottom and right of the image with zeros.
+        If `pad_size` is provided, the image will be padded to the specified dimensions.
+        Otherwise, the image will be padded to the maximum height and width of the batch.
+    pad_size (`Dict[str, int]`, *optional*):
+        The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+        provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+        height and width in the batch.
+    return_segmentation_masks (`bool`, *optional*, defaults to `False`):
+        Whether to return segmentation masks.
+    """
+
     format: Optional[Union[str, AnnotationFormat]]
     do_convert_annotations: Optional[bool]
     do_pad: Optional[bool]
@@ -265,29 +284,8 @@ def prepare_coco_panoptic_annotation(
     return new_target
 
 
-@add_start_docstrings(
-    "Constructs a fast DeformableDetr image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    """
-        format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
-            Data format of the annotations. One of "coco_detection" or "coco_panoptic".
-        do_convert_annotations (`bool`, *optional*, defaults to `True`):
-            Controls whether to convert the annotations to the format expected by the DEFORMABLE_DETR model. Converts the
-            bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
-            Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-            method. If `True`, padding will be applied to the bottom and right of the image with zeros.
-            If `pad_size` is provided, the image will be padded to the specified dimensions.
-            Otherwise, the image will be padded to the maximum height and width of the batch.
-        pad_size (`Dict[str, int]`, *optional*):
-            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
-            provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
-            height and width in the batch.
-        return_segmentation_masks (`bool`, *optional*, defaults to `False`):
-            Whether to return segmentation masks.
-    """,
-)
+@auto_docstring
+@requires(backends=("torchvision", "torch"))
 class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -560,9 +558,15 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
 
         return image, pixel_mask, annotation
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
+    @auto_docstring
+    def preprocess(
+        self,
+        images: ImageInput,
+        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
+        masks_path: Optional[Union[str, pathlib.Path]] = None,
+        **kwargs: Unpack[DeformableDetrFastImageProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
         annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
             List of annotations associated with the image or batch of images. If annotation is for object
             detection, the annotations should be a dictionary with the following keys:
@@ -574,34 +578,9 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
             - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
                 An image can have no segments, in which case the list should be empty.
             - "file_name" (`str`): The file name of the image.
-        format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
-            Data format of the annotations. One of "coco_detection" or "coco_panoptic".
-        do_convert_annotations (`bool`, *optional*, defaults to `True`):
-            Controls whether to convert the annotations to the format expected by the DEFORMABLE_DETR model. Converts the
-            bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
-            Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-            method. If `True`, padding will be applied to the bottom and right of the image with zeros.
-            If `pad_size` is provided, the image will be padded to the specified dimensions.
-            Otherwise, the image will be padded to the maximum height and width of the batch.
-        pad_size (`Dict[str, int]`, *optional*):
-            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
-            provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
-            height and width in the batch.
-        return_segmentation_masks (`bool`, *optional*, defaults to `False`):
-            Whether to return segmentation masks.
         masks_path (`str` or `pathlib.Path`, *optional*):
             Path to the directory containing the segmentation masks.
-        """,
-    )
-    def preprocess(
-        self,
-        images: ImageInput,
-        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
-        **kwargs: Unpack[DeformableDetrFastImageProcessorKwargs],
-    ) -> BatchFeature:
+        """
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
             logger.warning_once(
@@ -616,19 +595,17 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
             )
             kwargs["size"] = kwargs.pop("max_size")
 
-        return super().preprocess(images, annotations=annotations, masks_path=masks_path, **kwargs)
+        return super().preprocess(images, annotations, masks_path, **kwargs)
 
     def _preprocess(
         self,
         images: List["torch.Tensor"],
         annotations: Optional[Union[AnnotationType, List[AnnotationType]]],
-        return_segmentation_masks: bool,
         masks_path: Optional[Union[str, pathlib.Path]],
+        return_segmentation_masks: bool,
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
-        do_center_crop: bool,
-        crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -639,6 +616,7 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
         pad_size: Optional[Dict[str, int]],
         format: Optional[Union[str, AnnotationFormat]],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         """
         Preprocess an image or a batch of images so that it can be used by the model.

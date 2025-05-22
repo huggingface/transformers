@@ -18,11 +18,7 @@ from typing import Any, Optional, TypedDict, Union
 
 import numpy as np
 
-from .image_processing_utils import (
-    BaseImageProcessor,
-    BatchFeature,
-    get_size_dict,
-)
+from .image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from .image_transforms import (
     convert_to_rgb,
     get_resize_output_image_size,
@@ -46,7 +42,7 @@ from .image_utils import (
 from .processing_utils import Unpack
 from .utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -68,6 +64,8 @@ if is_torchvision_available():
         from torchvision.transforms.v2 import functional as F
     else:
         from torchvision.transforms import functional as F
+else:
+    pil_torch_interpolation_mapping = None
 
 logger = logging.get_logger(__name__)
 
@@ -188,107 +186,7 @@ class DefaultFastImageProcessorKwargs(TypedDict, total=False):
     device: Optional["torch.device"]
 
 
-BASE_IMAGE_PROCESSOR_FAST_DOCSTRING = r"""
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
-            `do_resize` parameter in the `preprocess` method.
-        size (`dict`, *optional*, defaults to `self.size`):
-            Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
-            method.
-        default_to_square (`bool`, *optional*, defaults to `self.default_to_square`):
-            Whether to default to a square image when resizing, if size is an int.
-        resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
-            Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
-            overridden by the `resample` parameter in the `preprocess` method.
-        do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
-            Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
-            `preprocess` method.
-        crop_size (`Dict[str, int]` *optional*, defaults to `self.crop_size`):
-            Size of the output image after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
-            method.
-        do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
-            `do_rescale` parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `self.rescale_factor`):
-            Scale factor to use if rescaling the image. Only has an effect if `do_rescale` is set to `True`. Can be
-            overridden by the `rescale_factor` parameter in the `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
-            overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-            Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-            Whether to convert the image to RGB.
-        return_tensors (`str` or `TensorType`, *optional*, defaults to `self.return_tensors`):
-            Returns stacked tensors if set to `pt, otherwise returns a list of tensors.
-        data_format (`ChannelDimension` or `str`, *optional*, defaults to `self.data_format`):
-            Only `ChannelDimension.FIRST` is supported. Added for compatibility with slow processors.
-        input_data_format (`ChannelDimension` or `str`, *optional*, defaults to `self.input_data_format`):
-            The channel dimension format for the input image. If unset, the channel dimension format is inferred
-            from the input image. Can be one of:
-            - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-            - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-            - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        device (`torch.device`, *optional*, defaults to `self.device`):
-            The device to process the images on. If unset, the device is inferred from the input images."""
-
-BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS = r"""
-    Preprocess an image or batch of images.
-
-    Args:
-        images (`ImageInput`):
-            Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-            passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-        do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-            Whether to resize the image.
-        size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-            Describes the maximum input dimensions to the model.
-        resample (`PILImageResampling` or `InterpolationMode`, *optional*, defaults to `self.resample`):
-            Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
-            has an effect if `do_resize` is set to `True`.
-        do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
-            Whether to center crop the image.
-        crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
-            Size of the output image after applying `center_crop`.
-        do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-            Whether to rescale the image.
-        rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-            Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-        do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-            Whether to normalize the image.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-            Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-        image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-            Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
-            `True`.
-        do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-            Whether to convert the image to RGB.
-        return_tensors (`str` or `TensorType`, *optional*, defaults to `self.return_tensors`):
-            Returns stacked tensors if set to `pt, otherwise returns a list of tensors.
-        data_format (`ChannelDimension` or `str`, *optional*, defaults to `self.data_format`):
-            Only `ChannelDimension.FIRST` is supported. Added for compatibility with slow processors.
-        input_data_format (`ChannelDimension` or `str`, *optional*, defaults to `self.input_data_format`):
-            The channel dimension format for the input image. If unset, the channel dimension format is inferred
-            from the input image. Can be one of:
-            - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-            - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-            - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        device (`torch.device`, *optional*, defaults to `self.device`):
-            The device to process the images on. If unset, the device is inferred from the input images."""
-
-
-@add_start_docstrings(
-    "Constructs a fast base image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
+@auto_docstring
 class BaseImageProcessorFast(BaseImageProcessor):
     resample = None
     image_mean = None
@@ -331,6 +229,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
             else:
                 setattr(self, key, getattr(self, key, None))
 
+        # get valid kwargs names
+        self._valid_kwargs_names = list(self.valid_kwargs.__annotations__.keys())
+
     def resize(
         self,
         image: "torch.Tensor",
@@ -347,7 +248,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 Image to resize.
             size (`SizeDict`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
+            interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
                 `InterpolationMode` filter to use when resizing the image e.g. `InterpolationMode.BICUBIC`.
 
         Returns:
@@ -664,12 +565,16 @@ class BaseImageProcessorFast(BaseImageProcessor):
             data_format=data_format,
         )
 
-    @add_start_docstrings(BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS)
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
+    def __call__(self, images: ImageInput, *args, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
+        return self.preprocess(images, *args, **kwargs)
+
+    @auto_docstring
+    def preprocess(self, images: ImageInput, *args, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> BatchFeature:
+        # args are not validated, but their order in the `preprocess` and `_preprocess` signatures must be the same
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_kwargs_names)
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
-        for kwarg_name in self.valid_kwargs.__annotations__:
+        for kwarg_name in self._valid_kwargs_names:
             kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
 
         # Extract parameters that are only used for preparing the input images
@@ -689,15 +594,19 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
         # torch resize uses interpolation instead of resample
         resample = kwargs.pop("resample")
+
+        # Check if resample is an int before checking if it's an instance of PILImageResampling
+        # because if pillow < 9.1.0, resample is an int and PILImageResampling is a module.
+        # Checking PILImageResampling will fail with error `TypeError: isinstance() arg 2 must be a type or tuple of types`.
         kwargs["interpolation"] = (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
+            pil_torch_interpolation_mapping[resample] if isinstance(resample, (int, PILImageResampling)) else resample
         )
 
         # Pop kwargs that are not needed in _preprocess
         kwargs.pop("default_to_square")
         kwargs.pop("data_format")
 
-        return self._preprocess(images=images, **kwargs)
+        return self._preprocess(images, *args, **kwargs)
 
     def _preprocess(
         self,
@@ -745,11 +654,12 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def to_dict(self):
         encoder_dict = super().to_dict()
         encoder_dict.pop("_valid_processor_keys", None)
+        encoder_dict.pop("_valid_kwargs_names", None)
         return encoder_dict
 
 
 class SemanticSegmentationMixin:
-    def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
         """
         Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
