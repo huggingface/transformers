@@ -1209,3 +1209,16 @@ if PretrainedConfig.push_to_hub.__doc__ is not None:
     PretrainedConfig.push_to_hub.__doc__ = PretrainedConfig.push_to_hub.__doc__.format(
         object="config", object_class="AutoConfig", object_files="configuration file"
     )
+
+
+ALLOWED_LAYER_TYPES = (
+    "full_attention",
+    "sliding_attention",
+    "chunked_attention",
+)
+
+
+def layer_type_validation(layer_types: list[str]):
+    """Check that each entry in `layer_types` are allowed."""
+    if not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layer_types):
+        raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES}")
