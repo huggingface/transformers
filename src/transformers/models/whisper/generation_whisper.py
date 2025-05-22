@@ -628,7 +628,8 @@ class WhisperGenerationMixin(GenerationMixin):
         self._check_decoder_input_ids(kwargs=kwargs)
         # `output_attentions` is deprecated - we force eager attention if this feature is
         # indirectly requested, e.g. through return_token_timestamps
-        self.model.config._attn_implementation = "eager"
+        if return_token_timestamps:
+            self.model.config._attn_implementation = "eager"
 
         # 3. Retrieve logits processors
         device = kwargs["encoder_outputs"][0].device if "encoder_outputs" in kwargs else input_features.device
