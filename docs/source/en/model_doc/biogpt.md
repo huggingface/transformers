@@ -43,7 +43,7 @@ generator = pipeline(
     task="text-generation",
     model="microsoft/biogpt",
     torch_dtype=torch.float16,
-    device_map="auto",  # 0 for GPU, -1 for CPU
+    device=0,
 )
 result = generator("Ibuprofen is best used for", truncation=True, max_length=50, do_sample=True)[0]["generated_text"]
 print(result)
