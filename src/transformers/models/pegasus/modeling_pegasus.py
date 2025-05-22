@@ -110,8 +110,8 @@ class PegasusSinusoidalPositionalEmbedding(nn.Embedding):
         return super().forward(position_ids)
 
 
-# Copied from transformers.models.bart.modeling_bart.eager_attn_forward
-def eager_attn_forward(
+# Copied from transformers.models.bart.modeling_bart.eager_attention_forward
+def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
@@ -123,11 +123,6 @@ def eager_attn_forward(
     **kwargs,
 ):
     if scaling is None:
-        logger.warning_once(
-            "You are using a model's `eager` attention module but are not passing its appropriate attention scaling."
-            " We default to `head_dim**-0.5`. If this is unexpected, please report this to the Transformers GitHub"
-            " repo: https://github.com/huggingface/transformers/issues/new"
-        )
         scaling = query.size(-1) ** -0.5
 
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
@@ -250,7 +245,7 @@ class PegasusAttention(nn.Module):
                 if is_cross_attention:
                     past_key_value.is_updated[self.layer_idx] = True
 
-        attention_interface: Callable = eager_attn_forward
+        attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
@@ -264,7 +259,6 @@ class PegasusAttention(nn.Module):
             scaling=self.scaling,
             output_attentions=output_attentions,
             head_mask=layer_head_mask,
-            eager_fallback=eager_attn_forward,
             **kwargs,
         )
 
@@ -494,21 +488,16 @@ class PegasusPreTrainedModel(PreTrainedModel):
         self,
         attention_mask: Union[torch.Tensor, None],
         inputs_embeds: torch.Tensor,
-        _unsupported_features: bool,
     ):
         if attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2" and not _unsupported_features:
+            if self.config._attn_implementation == "flash_attention_2":
                 attention_mask = attention_mask if 0 in attention_mask else None
-            elif self.config._attn_implementation == "sdpa" and not _unsupported_features:
+            elif self.config._attn_implementation == "sdpa":
                 # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
                 # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
-            elif (
-                self.config._attn_implementation == "flex_attention"
-                and not _unsupported_features
-                and (self.config.attention_dropout == 0 or not self.training)
-            ):
+            elif self.config._attn_implementation == "flex_attention":
                 if isinstance(attention_mask, torch.Tensor):
                     attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
             else:
@@ -524,14 +513,8 @@ class PegasusPreTrainedModel(PreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        _unsupported_features: bool = False,
-        dropout: float = 0.0,
     ):
-        if (
-            self.config._attn_implementation == "flex_attention"
-            and not _unsupported_features
-            and (dropout == 0 or not self.training)
-        ):
+        if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
                 attention_mask = make_flex_block_causal_mask(attention_mask)
             # Other attention flavors support in-built causal (when `mask is None`)
@@ -545,7 +528,7 @@ class PegasusPreTrainedModel(PreTrainedModel):
                 )
             return attention_mask
 
-        if self.config._attn_implementation == "flash_attention_2" and not _unsupported_features:
+        if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
@@ -557,7 +540,7 @@ class PegasusPreTrainedModel(PreTrainedModel):
         using_compilable_cache = past_key_values.is_compileable if past_key_values is not None else False
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_compilable_cache and not _unsupported_features:
+        if self.config._attn_implementation == "sdpa" and not using_compilable_cache:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -591,7 +574,6 @@ class PegasusPreTrainedModel(PreTrainedModel):
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
             and attention_mask.device.type in ["cuda", "xpu", "npu"]
-            and not _unsupported_features
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
@@ -664,14 +646,12 @@ class PegasusPreTrainedModel(PreTrainedModel):
         encoder_attention_mask: Union[torch.Tensor, None],
         input_shape: torch.Size,
         inputs_embeds: torch.Tensor,
-        _unsupported_features: bool,
-        dropout: float = 0.0,
     ):
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2" and not _unsupported_features:
+            if self.config._attn_implementation == "flash_attention_2":
                 encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
-            elif self.config._attn_implementation == "sdpa" and not _unsupported_features:
+            elif self.config._attn_implementation == "sdpa":
                 # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
                 # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -680,11 +660,7 @@ class PegasusPreTrainedModel(PreTrainedModel):
                     inputs_embeds.dtype,
                     tgt_len=input_shape[-1],
                 )
-            elif (
-                self.config._attn_implementation == "flex_attention"
-                and not _unsupported_features
-                and (dropout == 0 or not self.training)
-            ):
+            elif self.config._attn_implementation == "flex_attention":
                 if isinstance(encoder_attention_mask, torch.Tensor):
                     encoder_attention_mask = make_flex_block_causal_mask(
                         encoder_attention_mask,
@@ -841,14 +817,9 @@ class PegasusEncoder(PegasusPreTrainedModel):
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        # Efficient attention implementations are not able to interact with certain features,
-        # e.g. outputting the attention weights, applying a head mask, and dropout (flex attention).
-        # In these cases, we fall back to the eager attention to enable the requested feature(s).
-        _unsupported_features = output_attentions is True or head_mask is not None
         attention_mask = self._update_full_mask(
             attention_mask,
             inputs_embeds,
-            _unsupported_features,
         )
 
         encoder_states = () if output_hidden_states else None
@@ -1123,25 +1094,17 @@ class PegasusDecoder(PegasusPreTrainedModel):
             else past_key_values
         )
 
-        # Efficient attention implementations are not able to interact with certain features,
-        # e.g. outputting the attention weights, applying a head mask, and dropout (flex attention).
-        # In these cases, we fall back to the eager attention to enable the requested feature(s).
-        _unsupported_features = output_attentions is True or cross_attn_head_mask is not None or head_mask is not None
         causal_mask = self._update_causal_mask(
             attention_mask,
             inputs_embeds,
             cache_position,
             self_attn_cache,
-            _unsupported_features,
-            self.config.attention_dropout,
         )
         encoder_attention_mask = self._update_cross_attn_mask(
             encoder_hidden_states,
             encoder_attention_mask,
             input_shape,
             inputs_embeds,
-            _unsupported_features,
-            self.config.attention_dropout,
         )
 
         # embed positions

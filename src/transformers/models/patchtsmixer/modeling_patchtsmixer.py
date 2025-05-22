@@ -237,8 +237,8 @@ class PatchTSMixerChannelFeatureMixerBlock(nn.Module):
         return out
 
 
-# Copied from transformers.models.bart.modeling_bart.eager_attn_forward
-def eager_attn_forward(
+# Copied from transformers.models.bart.modeling_bart.eager_attention_forward
+def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
@@ -250,11 +250,6 @@ def eager_attn_forward(
     **kwargs,
 ):
     if scaling is None:
-        logger.warning_once(
-            "You are using a model's `eager` attention module but are not passing its appropriate attention scaling."
-            " We default to `head_dim**-0.5`. If this is unexpected, please report this to the Transformers GitHub"
-            " repo: https://github.com/huggingface/transformers/issues/new"
-        )
         scaling = query.size(-1) ** -0.5
 
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
@@ -373,7 +368,7 @@ class PatchTSMixerAttention(nn.Module):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
-        attention_interface: Callable = eager_attn_forward
+        attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
@@ -387,7 +382,6 @@ class PatchTSMixerAttention(nn.Module):
             scaling=self.scaling,
             output_attentions=output_attentions,
             head_mask=layer_head_mask,
-            eager_fallback=eager_attn_forward,
             **kwargs,
         )
 

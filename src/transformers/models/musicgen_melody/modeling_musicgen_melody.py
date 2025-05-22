@@ -166,8 +166,8 @@ class MusicgenMelodySinusoidalPositionalEmbedding(nn.Module):
         return self.weights.index_select(0, position_ids.view(-1)).detach()
 
 
-# Copied from transformers.models.bart.modeling_bart.eager_attn_forward
-def eager_attn_forward(
+# Copied from transformers.models.bart.modeling_bart.eager_attention_forward
+def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
@@ -179,11 +179,6 @@ def eager_attn_forward(
     **kwargs,
 ):
     if scaling is None:
-        logger.warning_once(
-            "You are using a model's `eager` attention module but are not passing its appropriate attention scaling."
-            " We default to `head_dim**-0.5`. If this is unexpected, please report this to the Transformers GitHub"
-            " repo: https://github.com/huggingface/transformers/issues/new"
-        )
         scaling = query.size(-1) ** -0.5
 
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
@@ -302,7 +297,7 @@ class MusicgenMelodyAttention(nn.Module):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
-        attention_interface: Callable = eager_attn_forward
+        attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
@@ -316,7 +311,6 @@ class MusicgenMelodyAttention(nn.Module):
             scaling=self.scaling,
             output_attentions=output_attentions,
             head_mask=layer_head_mask,
-            eager_fallback=eager_attn_forward,
             **kwargs,
         )
 
@@ -559,16 +553,11 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
 
         input_shape = inputs_embeds.size()[:-1]
 
-        # Efficient attention implementations are not able to interact with certain features,
-        # e.g. outputting the attention weights, applying a head mask, and dropout (flex attention).
-        # In these cases, we fall back to the eager attention to enable the requested feature(s).
-        _unsupported_features = output_attentions is True or head_mask is not None
         attention_mask = self._update_causal_mask(
             attention_mask,
             input_shape,
             inputs_embeds,
             past_key_values_length,
-            _unsupported_features,
         )
 
         # embed positions
@@ -657,12 +646,11 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
         input_shape: torch.Size,
         inputs_embeds: torch.Tensor,
         past_key_values_length: int,
-        _unsupported_features: bool,
     ):
-        if self.config._attn_implementation == "flash_attention_2" and not _unsupported_features:
+        if self.config._attn_implementation == "flash_attention_2":
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-        elif self.config._attn_implementation == "sdpa" and not _unsupported_features:
+        elif self.config._attn_implementation == "sdpa":
             # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
             # the manual implementation that requires a 4D causal mask in all cases.
             attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
@@ -671,11 +659,7 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
                 inputs_embeds,
                 past_key_values_length,
             )
-        elif (
-            self.config._attn_implementation == "flex_attention"
-            and not _unsupported_features
-            and (self.config.attention_dropout == 0 or not self.training)
-        ):
+        elif self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
                 attention_mask = make_flex_block_causal_mask(attention_mask)
             # Other attention flavors support in-built causal (when `mask is None`)
@@ -702,7 +686,6 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
         encoder_attention_mask: Union[torch.Tensor, None],
         input_shape: torch.Size,
         inputs_embeds: torch.Tensor,
-        _unsupported_features: bool,
     ):
         # MusicgenMelody doesn't apply cross attention, hence it's ignored here
         # and only exists to not confuse any copy checks

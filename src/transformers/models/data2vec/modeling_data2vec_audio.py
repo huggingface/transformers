@@ -43,15 +43,12 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, is_peft_available, is_torch_flex_attn_available, logging
+from ...utils import auto_docstring, is_peft_available, is_torch_flex_attn_available
 from .configuration_data2vec_audio import Data2VecAudioConfig
 
 
 if is_torch_flex_attn_available():
     from ...integrations.flex_attention import make_flex_block_causal_mask
-
-
-logger = logging.get_logger(__name__)
 
 
 class Data2VecAudioConvLayer(nn.Module):
@@ -184,7 +181,7 @@ class Data2VecAudioFeatureProjection(nn.Module):
         return hidden_states, norm_hidden_states
 
 
-def eager_attn_forward(
+def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
@@ -196,11 +193,6 @@ def eager_attn_forward(
     **kwargs,
 ):
     if scaling is None:
-        logger.warning_once(
-            "You are using a model's `eager` attention module but are not passing its appropriate attention scaling."
-            " We default to `head_dim**-0.5`. If this is unexpected, please report this to the Transformers GitHub"
-            " repo: https://github.com/huggingface/transformers/issues/new"
-        )
         scaling = query.size(-1) ** -0.5
 
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
@@ -318,7 +310,7 @@ class Data2VecAudioAttention(nn.Module):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
-        attention_interface: Callable = eager_attn_forward
+        attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
@@ -332,7 +324,6 @@ class Data2VecAudioAttention(nn.Module):
             scaling=self.scaling,
             output_attentions=output_attentions,
             head_mask=layer_head_mask,
-            eager_fallback=eager_attn_forward,
             **kwargs,
         )
 
@@ -428,14 +419,9 @@ class Data2VecAudioEncoder(nn.Module):
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states[~expand_attention_mask] = 0
 
-        # Efficient attention implementations are not able to interact with certain features,
-        # e.g. outputting the attention weights, applying a head mask, and dropout (flex attention).
-        # In these cases, we fall back to the eager attention to enable the requested feature(s).
-        _unsupported_features = output_attentions is True
         attention_mask = self._update_full_mask(
             attention_mask,
             hidden_states,
-            _unsupported_features,
         )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
@@ -489,21 +475,16 @@ class Data2VecAudioEncoder(nn.Module):
         self,
         attention_mask: Union[torch.Tensor, None],
         inputs_embeds: torch.Tensor,
-        _unsupported_features: bool,
     ):
         if attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2" and not _unsupported_features:
+            if self.config._attn_implementation == "flash_attention_2":
                 attention_mask = attention_mask if 0 in attention_mask else None
-            elif self.config._attn_implementation == "sdpa" and not _unsupported_features:
+            elif self.config._attn_implementation == "sdpa":
                 # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
                 # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
-            elif (
-                self.config._attn_implementation == "flex_attention"
-                and not _unsupported_features
-                and (self.config.attention_dropout == 0 or not self.training)
-            ):
+            elif self.config._attn_implementation == "flex_attention":
                 if isinstance(attention_mask, torch.Tensor):
                     attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
             else:

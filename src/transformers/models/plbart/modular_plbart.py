@@ -82,21 +82,16 @@ class PLBartPreTrainedModel(PreTrainedModel):
         self,
         attention_mask: Union[torch.Tensor, None],
         inputs_embeds: torch.Tensor,
-        _unsupported_features: bool,
     ):
         if attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2" and not _unsupported_features:
+            if self.config._attn_implementation == "flash_attention_2":
                 attention_mask = attention_mask if 0 in attention_mask else None
-            elif self.config._attn_implementation == "sdpa" and not _unsupported_features:
+            elif self.config._attn_implementation == "sdpa":
                 # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
                 # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
-            elif (
-                self.config._attn_implementation == "flex_attention"
-                and not _unsupported_features
-                and (self.config.attention_dropout == 0 or not self.training)
-            ):
+            elif self.config._attn_implementation == "flex_attention":
                 if isinstance(attention_mask, torch.Tensor):
                     attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
             else:
@@ -112,14 +107,8 @@ class PLBartPreTrainedModel(PreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        _unsupported_features: bool = False,
-        dropout: float = 0.0,
     ):
-        if (
-            self.config._attn_implementation == "flex_attention"
-            and not _unsupported_features
-            and (dropout == 0 or not self.training)
-        ):
+        if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
                 attention_mask = make_flex_block_causal_mask(attention_mask)
             # Other attention flavors support in-built causal (when `mask is None`)
@@ -133,7 +122,7 @@ class PLBartPreTrainedModel(PreTrainedModel):
                 )
             return attention_mask
 
-        if self.config._attn_implementation == "flash_attention_2" and not _unsupported_features:
+        if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
@@ -145,7 +134,7 @@ class PLBartPreTrainedModel(PreTrainedModel):
         using_compilable_cache = past_key_values.is_compileable if past_key_values is not None else False
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_compilable_cache and not _unsupported_features:
+        if self.config._attn_implementation == "sdpa" and not using_compilable_cache:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -179,7 +168,6 @@ class PLBartPreTrainedModel(PreTrainedModel):
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
             and attention_mask.device.type in ["cuda", "xpu", "npu"]
-            and not _unsupported_features
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
@@ -252,14 +240,12 @@ class PLBartPreTrainedModel(PreTrainedModel):
         encoder_attention_mask: Union[torch.Tensor, None],
         input_shape: torch.Size,
         inputs_embeds: torch.Tensor,
-        _unsupported_features: bool,
-        dropout: float = 0.0,
     ):
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2" and not _unsupported_features:
+            if self.config._attn_implementation == "flash_attention_2":
                 encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
-            elif self.config._attn_implementation == "sdpa" and not _unsupported_features:
+            elif self.config._attn_implementation == "sdpa":
                 # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
                 # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -268,11 +254,7 @@ class PLBartPreTrainedModel(PreTrainedModel):
                     inputs_embeds.dtype,
                     tgt_len=input_shape[-1],
                 )
-            elif (
-                self.config._attn_implementation == "flex_attention"
-                and not _unsupported_features
-                and (dropout == 0 or not self.training)
-            ):
+            elif self.config._attn_implementation == "flex_attention":
                 if isinstance(encoder_attention_mask, torch.Tensor):
                     encoder_attention_mask = make_flex_block_causal_mask(
                         encoder_attention_mask,

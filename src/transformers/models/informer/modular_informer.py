@@ -114,21 +114,16 @@ class InformerPreTrainedModel(PreTrainedModel):
         self,
         attention_mask: Union[torch.Tensor, None],
         inputs_embeds: torch.Tensor,
-        _unsupported_features: bool,
     ):
         if attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2" and not _unsupported_features:
+            if self.config._attn_implementation == "flash_attention_2":
                 attention_mask = attention_mask if 0 in attention_mask else None
-            elif self.config._attn_implementation == "sdpa" and not _unsupported_features:
+            elif self.config._attn_implementation == "sdpa":
                 # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
                 # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
-            elif (
-                self.config._attn_implementation == "flex_attention"
-                and not _unsupported_features
-                and (self.config.attention_dropout == 0 or not self.training)
-            ):
+            elif self.config._attn_implementation == "flex_attention":
                 if isinstance(attention_mask, torch.Tensor):
                     attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
             else:
@@ -144,12 +139,11 @@ class InformerPreTrainedModel(PreTrainedModel):
         input_shape: torch.Size,
         inputs_embeds: torch.Tensor,
         past_key_values_length: int,
-        _unsupported_features: bool,
     ):
-        if self.config._attn_implementation == "flash_attention_2" and not _unsupported_features:
+        if self.config._attn_implementation == "flash_attention_2":
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-        elif self.config._attn_implementation == "sdpa" and not _unsupported_features:
+        elif self.config._attn_implementation == "sdpa":
             # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
             # the manual implementation that requires a 4D causal mask in all cases.
             attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
@@ -158,11 +152,7 @@ class InformerPreTrainedModel(PreTrainedModel):
                 inputs_embeds,
                 past_key_values_length,
             )
-        elif (
-            self.config._attn_implementation == "flex_attention"
-            and not _unsupported_features
-            and (self.config.attention_dropout == 0 or not self.training)
-        ):
+        elif self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
                 attention_mask = make_flex_block_causal_mask(attention_mask)
             # Other attention flavors support in-built causal (when `mask is None`)
@@ -189,13 +179,12 @@ class InformerPreTrainedModel(PreTrainedModel):
         encoder_attention_mask: Union[torch.Tensor, None],
         input_shape: torch.Size,
         inputs_embeds: torch.Tensor,
-        _unsupported_features: bool,
     ):
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2" and not _unsupported_features:
+            if self.config._attn_implementation == "flash_attention_2":
                 encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
-            elif self.config._attn_implementation == "sdpa" and not _unsupported_features:
+            elif self.config._attn_implementation == "sdpa":
                 # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
                 # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -204,11 +193,7 @@ class InformerPreTrainedModel(PreTrainedModel):
                     inputs_embeds.dtype,
                     tgt_len=input_shape[-1],
                 )
-            elif (
-                self.config._attn_implementation == "flex_attention"
-                and not _unsupported_features
-                and (self.config.attention_dropout == 0 or not self.training)
-            ):
+            elif self.config._attn_implementation == "flex_attention":
                 if isinstance(encoder_attention_mask, torch.Tensor):
                     encoder_attention_mask = make_flex_block_causal_mask(
                         encoder_attention_mask,

@@ -203,14 +203,8 @@ class BioGptPreTrainedModel(PreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        _unsupported_features: bool = False,
-        dropout: float = 0.0,
     ):
-        if (
-            self.config._attn_implementation == "flex_attention"
-            and not _unsupported_features
-            and (dropout == 0 or not self.training)
-        ):
+        if self.config._attn_implementation == "flex_attention":
             if isinstance(attention_mask, torch.Tensor):
                 attention_mask = make_flex_block_causal_mask(attention_mask)
             # Other attention flavors support in-built causal (when `mask is None`)
@@ -224,7 +218,7 @@ class BioGptPreTrainedModel(PreTrainedModel):
                 )
             return attention_mask
 
-        if self.config._attn_implementation == "flash_attention_2" and not _unsupported_features:
+        if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
@@ -236,7 +230,7 @@ class BioGptPreTrainedModel(PreTrainedModel):
         using_compilable_cache = past_key_values.is_compileable if past_key_values is not None else False
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_compilable_cache and not _unsupported_features:
+        if self.config._attn_implementation == "sdpa" and not using_compilable_cache:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -270,7 +264,6 @@ class BioGptPreTrainedModel(PreTrainedModel):
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
             and attention_mask.device.type in ["cuda", "xpu", "npu"]
-            and not _unsupported_features
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
@@ -441,16 +434,11 @@ class BioGptModel(BioGptPreTrainedModel):
             else past_key_values
         )
 
-        # Efficient attention implementations are not able to interact with certain features,
-        # e.g. outputting the attention weights, applying a head mask, and dropout (flex attention).
-        # In these cases, we fall back to the eager attention to enable the requested feature(s).
         causal_mask = self._update_causal_mask(
             attention_mask,
             inputs_embeds,
             cache_position,
             self_attn_cache,
-            output_attentions,
-            self.config.attention_probs_dropout_prob,
         )
 
         # embed positions
