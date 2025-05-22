@@ -88,7 +88,13 @@ print(f"The predicted token is: {predicted_token}")
 
 ## Notes
 - Inputs should be padded on the right because BigBird uses absolute position embeddings.
-- If the input sequence is too short, the block_sparse attention type will automatically fall back to original_full attention, since sparse patterns don’t offer much benefit for small inputs.
+- BigBird supports `original_full` and `block_sparse` attention. If the input sequence length is less than 1024, it is recommended to use `original_full` since sparse patterns don't offer much benefit for smaller inputs.
+- The current implementation uses window size of 3 blocks and 2 global blocks, only supports the ITC-implementation, and doesn't support `num_random_blocks=0`.
+- The sequence length must be divisible by the block size.
+
+## Resources
+
+- Read the [BigBird](https://huggingface.co/blog/big-bird) blog post for more details about how its attention works.
 
 ## BigBirdConfig
 
