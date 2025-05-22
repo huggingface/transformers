@@ -96,10 +96,6 @@ outputs = model(**inputs, output_attentions=True)
 attn = outputs.vision_model_output.attentions  # list[num_layers] of (B,H,S,S)
 ```
 
-# upload image to https://huggingface.co/datasets/huggingface/documentation-images/tree/main/transformers/model_doc and ping me to merge
-<div class="flex justify-center">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/altclip/attention_cls.png" alt="CLS-attention heat-map" width="320">
-</div>
 
 ## Notes
 
