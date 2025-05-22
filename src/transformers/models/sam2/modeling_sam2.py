@@ -60,7 +60,7 @@ def load_cuda_kernels():
         with_cuda=True,
         extra_include_paths=[str(root)],
         extra_cuda_cflags=[
-            "-DCUDA_HAS_FP16=1",
+            "-DCUDA_HAS_FP16=0",
             "-D__CUDA_NO_HALF_OPERATORS__",
             "-D__CUDA_NO_HALF_CONVERSIONS__",
             "-D__CUDA_NO_HALF2_OPERATORS__",
@@ -2074,14 +2074,14 @@ class Sam2Model(Sam2PreTrainedModel):
         self.post_init()
 
     def get_image_wide_positional_embeddings(self):
-        size = self.config.prompt_encoder_config.image_embedding_size
+        size = self.prompt_encoder.image_embedding_size
         target_device = self.shared_image_embedding.positional_embedding.device
         target_dtype = self.shared_image_embedding.positional_embedding.dtype
-        grid = torch.ones((size, size), device=target_device, dtype=target_dtype)
+        grid = torch.ones(size, device=target_device, dtype=target_dtype)
         y_embed = grid.cumsum(dim=0) - 0.5
         x_embed = grid.cumsum(dim=1) - 0.5
-        y_embed = y_embed / size
-        x_embed = x_embed / size
+        y_embed = y_embed / size[0]
+        x_embed = x_embed / size[1]
 
         positional_embedding = self.shared_image_embedding(torch.stack([x_embed, y_embed], dim=-1))
         return positional_embedding.permute(2, 0, 1).unsqueeze(0)  # channel x height x width
