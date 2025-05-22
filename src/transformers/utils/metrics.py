@@ -1,8 +1,9 @@
 import functools
 import logging
 import time
-import torch
 from typing import Any, Callable, List, Optional, Tuple, Union
+
+import torch
 
 from ..generation.utils import RequestStatus
 
@@ -420,4 +421,3 @@ class ContinuousBatchProcessorMetrics:
             logger.debug(f"Recorded request completion for {request_id}: {latency_ms:.2f}ms")
         except Exception as e:
             logger.warning(f"Failed to record request completion metric: {e}")
-

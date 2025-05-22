@@ -13,12 +13,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from abc import ABC, abstractmethod
 import logging
 import queue
 import statistics
 import threading
 import time
+from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass, field
 from functools import partial
@@ -33,7 +33,6 @@ from ..cache_utils import Cache
 from ..configuration_utils import PretrainedConfig
 from ..generation.configuration_utils import GenerationConfig
 from ..generation.utils import GenerationMixin, RequestStatus
-from ..modeling_attn_mask_utils import AttentionMask
 from ..utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 
 
@@ -293,6 +292,7 @@ class Scheduler(ABC):
     Abstract base class for scheduling requests in the continuous batch processor.
     It is expected that cache allocation and scheduling logic will be implemented in subclasses.
     """
+
     def __init__(self, cache: PagedAttentionCache):
         self.active_requests: Dict[str, RequestState] = {}
         self.waiting_requests: Dict[str, RequestState] = {}
@@ -313,15 +313,9 @@ class Scheduler(ABC):
         """Check if there are requests ready to be processed."""
         return self.active_requests or self.waiting_requests
 
-
     @abstractmethod
     def finish_request(self, state: RequestState):
         """Finish processing a request and free its allocated blocks."""
-        pass
-
-    @abstractmethod
-    def get_active_request_static_outputs(self, request_id: str) -> List[int]:
-        """Get the static outputs of an active request."""
         pass
 
     @traced
@@ -348,7 +342,9 @@ class FIFOScheduler(Scheduler):
         return True
 
     @traced(span_name="prepare_request")
-    def _prepare_request_for_processing(self, state: RequestState, token_budget: int, request_ids_to_remove_from_waiting: Set[str]):
+    def _prepare_request_for_processing(
+        self, state: RequestState, token_budget: int, request_ids_to_remove_from_waiting: Set[str]
+    ):
         """Prepare a request for processing in the current batch."""
         request_tokens = (
             state.remaining_prompt_ids if state.status == RequestStatus.SPLIT_PENDING_REMAINDER else state.prompt_ids
@@ -460,7 +456,9 @@ class PrefillFirstScheduler(Scheduler):
         return True
 
     @traced(span_name="prepare_request")
-    def _prepare_request_for_processing(self, state: RequestState, token_budget: int, request_ids_to_remove_from_waiting: Set[str]):
+    def _prepare_request_for_processing(
+        self, state: RequestState, token_budget: int, request_ids_to_remove_from_waiting: Set[str]
+    ):
         """Prepare a request for processing in the current batch."""
         request_tokens = (
             state.remaining_prompt_ids if state.status == RequestStatus.SPLIT_PENDING_REMAINDER else state.prompt_ids
@@ -963,7 +961,6 @@ class ContinuousBatchProcessor:
                     ),
                     diagonal=diagonal,
                 )
-                visualize_mask = AttentionMask(mask)
                 self.attention_mask[..., query_range, key_range] = mask
 
     @traced
@@ -1346,7 +1343,11 @@ class ContinuousMixin:
     """Mixin class for models to add continuous batching capabilities."""
 
     def init_continuous_batching(
-        self, generation_config: Optional[GenerationConfig] = None, max_queue_size: int = 0, scheduler: str = "fifo", streaming: bool = False
+        self,
+        generation_config: Optional[GenerationConfig] = None,
+        max_queue_size: int = 0,
+        scheduler: str = "fifo",
+        streaming: bool = False,
     ) -> ContinuousBatchingManager:
         """Initialize a manager for continuous batching inference.
 
