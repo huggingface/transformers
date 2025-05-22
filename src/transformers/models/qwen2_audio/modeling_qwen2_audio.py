@@ -78,8 +78,8 @@ class Qwen2AudioCausalLMOutputWithPast(ModelOutput):
     attention_mask: Optional[torch.FloatTensor] = None
 
 
-# Copied from transformers.models.whisper.modeling_whisper.eager_attn_forward
-def eager_attn_forward(
+# Copied from transformers.models.whisper.modeling_whisper.eager_attention_forward
+def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
@@ -184,7 +184,7 @@ class Qwen2AudioAttention(nn.Module):
         key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
         value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
-        attention_interface: Callable = eager_attn_forward
+        attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
@@ -198,7 +198,6 @@ class Qwen2AudioAttention(nn.Module):
             scaling=1.0,
             output_attentions=output_attentions,
             head_mask=layer_head_mask,
-            eager_fallback=eager_attn_forward,
             **kwargs,
         )
 
