@@ -80,7 +80,9 @@ class Florence2VisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        drop_path_rate=0.1,
+        in_chans=3,
+        num_classes=1000,
+        depths=(1, 1, 9, 1),
         patch_size=(7, 3, 3, 3),
         patch_stride=(4, 2, 2, 2),
         patch_padding=(3, 1, 1, 1),
@@ -88,15 +90,24 @@ class Florence2VisionConfig(PretrainedConfig):
         dim_embed=(256, 512, 1024, 2048),
         num_heads=(8, 16, 32, 64),
         num_groups=(8, 16, 32, 64),
-        depths=(1, 1, 9, 1),
         window_size=12,
+        drop_path_rate=0.1,
+        mlp_ratio=4.0,
+        qkv_bias=True,
+        norm_layer_type="layernorm",  # string to be resolved in model
+        conv_at_attn=True,
+        conv_at_ffn=True,
         projection_dim=1024,
         visual_temporal_embedding={"type": "COSINE", "max_temporal_embeddings": 100},
         image_pos_embed={"type": "learned_abs_2d", "max_pos_embeddings": 50},
         image_feature_source=("spatial_avg_pool", "temporal_avg_pool"),
         **kwargs,
     ):
-        self.drop_path_rate = drop_path_rate
+        super().__init__(**kwargs)
+
+        self.in_chans = in_chans
+        self.num_classes = num_classes
+        self.depths = depths
         self.patch_size = patch_size
         self.patch_stride = patch_stride
         self.patch_padding = patch_padding
@@ -104,14 +115,17 @@ class Florence2VisionConfig(PretrainedConfig):
         self.dim_embed = dim_embed
         self.num_heads = num_heads
         self.num_groups = num_groups
-        self.depths = depths
         self.window_size = window_size
+        self.drop_path_rate = drop_path_rate
+        self.mlp_ratio = mlp_ratio
+        self.qkv_bias = qkv_bias
+        self.norm_layer_type = norm_layer_type
+        self.conv_at_attn = conv_at_attn
+        self.conv_at_ffn = conv_at_ffn
         self.projection_dim = projection_dim
         self.visual_temporal_embedding = visual_temporal_embedding
         self.image_pos_embed = image_pos_embed
         self.image_feature_source = image_feature_source
-
-        super().__init__(**kwargs)
 
 
 class Florence2LanguageConfig(PretrainedConfig):
@@ -319,11 +333,11 @@ class Florence2Config(PretrainedConfig):
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. initializing the Blip2VisionConfig with default values.")
+            logger.info("vision_config is None. Initializing the Florence2VisionConfig with default values.")
 
         if text_config is None:
             text_config = {}
-            logger.info("text_config is None. Initializing the text config with default values (`OPTConfig`).")
+            logger.info("text_config is None.  Initializing the Florence2LanguageConfig with default values.")
 
         self.vision_config = Florence2VisionConfig(**vision_config)
         self.text_config = Florence2LanguageConfig(**text_config)

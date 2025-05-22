@@ -164,11 +164,11 @@ IGNORE_NON_TESTED = (
         "CsmDepthDecoderForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
         "CsmDepthDecoderModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
         "CsmBackboneModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
+        "Florence2LanguageForConditionalGeneration",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
         "Florence2LanguageModel",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
-        "Florence2Vision",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
+        "Florence2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
         "Florence2VisionModel",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
         "Florence2VisionModelWithProjection",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
-        "Florence2LanguageForConditionalGeneration",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
     ]
 )
 
@@ -384,7 +384,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "CsmForConditionalGeneration",  # Building part of a bigger model
     "Florence2LanguageForConditionalGeneration",  # Building part of a bigger model
     "Florence2LanguageModel",  # Building part of a bigger model
-    "Florence2Vision",  # Building part of a bigger model
+    "Florence2VisionBackbone",  # Building part of a bigger model
     "Florence2VisionModel",  # Building part of a bigger model
     "Florence2VisionModelWithProjection",  # Building part of a bigger model
 ]

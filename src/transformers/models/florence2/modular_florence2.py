@@ -563,59 +563,20 @@ class Florence2VisionBlock(nn.Module):
         return x, size
 
 
-class Florence2Vision(PreTrainedModel):
-    """The Florence2Vision is a DaViT model
+@auto_docstring
+class Florence2VisionBackbone(PreTrainedModel):
+    config_class = Florence2VisionConfig
 
-    Args:
-        in_chans (int, *optional*, defaults to 3): Number of input image channels.
-        num_classes (int, *optional*, defaults to 1000): Number of classes for classification head.
-        depths (tuple(int), *optional*, defaults to `(1, 1, 3, 1)`): Number of blocks in each stage.
-        patch_size (tuple(int), *optional*, defaults to `(7, 2, 2, 2)`): Patch size of convolution in different stages.
-        patch_stride (tuple(int), *optional*, defaults to `(4, 2, 2, 2)`): Patch stride of convolution in different stages.
-        patch_padding (tuple(int), *optional*, defaults to `(3, 0, 0, 0)`): Patch padding of convolution in different stages.
-        patch_prenorm (tuple(bool), *optional*, defaults to `(False, False, False, False)`): If True, perform norm before convlution layer.
-        embed_dims (tuple(int), *optional*, defaults to `(64, 128, 192, 256)`): Patch embedding dimension in different stages.
-        num_heads (tuple(int), *optional*, defaults to `(3, 6, 12, 24)`): Number of spatial attention heads in different stages.
-        num_groups (tuple(int), *optional*, defaults to `(3, 6, 12, 24)`): Number of channel groups in different stages.
-        window_size (int, *optional*, defaults to 7): Window size.
-        mlp_ratio (float, *optional*, defaults to 4.0): Ratio of mlp hidden dim to embedding dim.
-        qkv_bias (bool, *optional*, defaults to `True`): If True, add a learnable bias to query, key, value.
-        drop_path_rate (float, *optional*, defaults to 0.1): Stochastic depth rate.
-        norm_layer (nn.Module, *optional*, defaults to `LayerNorm`): Normalization layer.
-        conv_at_attn (bool, *optional*, defaults to `True`): If True, performe depthwise convolution before attention layer.
-        conv_at_ffn (bool, *optional*, defaults to `True`): If True, performe depthwise convolution before ffn layer.
-        config (`Optional[Florence2VisionConfig]`, *optional*): Config class
-    """
-
-    def __init__(
-        self,
-        in_chans=3,
-        num_classes=1000,
-        depths=(1, 1, 3, 1),
-        patch_size=(7, 2, 2, 2),
-        patch_stride=(4, 2, 2, 2),
-        patch_padding=(3, 0, 0, 0),
-        patch_prenorm=(False, False, False, False),
-        embed_dims=(64, 128, 192, 256),
-        num_heads=(3, 6, 12, 24),
-        num_groups=(3, 6, 12, 24),
-        window_size=7,
-        mlp_ratio=4.0,
-        qkv_bias=True,
-        drop_path_rate=0.1,
-        norm_layer=nn.LayerNorm,
-        conv_at_attn=True,
-        conv_at_ffn=True,
-        config: Optional[Florence2VisionConfig] = None,
-    ):
+    def __init__(self, config: Florence2VisionConfig):
         super().__init__(config)
         self.config = config
 
-        self.num_classes = num_classes
-        self.embed_dims = embed_dims
-        self.num_heads = num_heads
-        self.num_groups = num_groups
-        self.num_stages = len(self.embed_dims)
+        self.num_classes = config.num_classes
+        self.dim_embed = config.dim_embed
+        self.num_heads = config.num_heads
+        self.num_groups = config.num_groups
+        self.num_stages = len(self.dim_embed)
+
         if not (self.num_stages == len(self.num_heads) == len(self.num_groups)):
             raise ValueError(
                 f"Expected self.num_stages ({self.num_stages}) == "
@@ -623,54 +584,63 @@ class Florence2Vision(PreTrainedModel):
                 f"len(self.num_groups) ({len(self.num_groups)})"
             )
 
-        num_stages = len(embed_dims)
-        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths) * 2, device="cpu")]
-
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths) * 2, device="cpu")]
         depth_offset = 0
+
+        # Resolve norm layer from config
+        norm_layer = self._get_norm_layer(config.norm_layer_type)
+
         convs = []
         blocks = []
-        for i in range(num_stages):
+        for i in range(self.num_stages):
             conv_embed = Florence2VisionConvEmbed(
-                patch_size=patch_size[i],
-                stride=patch_stride[i],
-                padding=patch_padding[i],
-                in_chans=in_chans if i == 0 else self.embed_dims[i - 1],
-                embed_dim=self.embed_dims[i],
+                patch_size=config.patch_size[i],
+                stride=config.patch_stride[i],
+                padding=config.patch_padding[i],
+                in_chans=config.in_chans if i == 0 else self.dim_embed[i - 1],
+                embed_dim=self.dim_embed[i],
                 norm_layer=norm_layer,
-                pre_norm=patch_prenorm[i],
+                pre_norm=config.patch_prenorm[i],
             )
             convs.append(conv_embed)
 
             block = nn.ModuleList(
                 Florence2VisionBlock(
-                    embed_dim=embed_dims[i],
-                    num_heads=num_heads[i],
-                    window_size=window_size,
+                    embed_dim=self.dim_embed[i],
+                    num_heads=self.num_heads[i],
+                    window_size=config.window_size,
                     drop_path_rate=dpr[depth_offset + j * 2],
                     channel_drop_path_rate=dpr[depth_offset + j * 2 + 1],
-                    qkv_bias=qkv_bias,
-                    mlp_ratio=mlp_ratio,
-                    conv_at_attn=conv_at_attn,
-                    conv_at_ffn=conv_at_ffn,
-                    num_groups=num_groups[i],
+                    qkv_bias=config.qkv_bias,
+                    mlp_ratio=config.mlp_ratio,
+                    conv_at_attn=config.conv_at_attn,
+                    conv_at_ffn=config.conv_at_ffn,
+                    num_groups=self.num_groups[i],
                 )
-                for j in range(depths[i])
+                for j in range(config.depths[i])
             )
             blocks.append(block)
-            depth_offset += depths[i] * 2
+            depth_offset += config.depths[i] * 2
 
         self.convs = nn.ModuleList(convs)
         self.blocks = nn.ModuleList(blocks)
-
-        self.norms = norm_layer(self.embed_dims[-1])
+        self.norms = norm_layer(self.dim_embed[-1])
         self.avgpool = nn.AdaptiveAvgPool1d(1)
-        self.head = nn.Linear(self.embed_dims[-1], num_classes) if num_classes > 0 else nn.Identity()
+        self.head = nn.Linear(self.dim_embed[-1], self.num_classes) if self.num_classes > 0 else nn.Identity()
 
         self.apply(self._init_weights)
 
+    def _get_norm_layer(self, norm_type: str):
+        if norm_type.lower() == "layernorm":
+            return nn.LayerNorm
+        elif norm_type.lower() == "batchnorm":
+            return nn.BatchNorm2d
+        else:
+            raise ValueError(f"Unsupported norm layer type: {norm_type}")
+
     @property
     def dim_out(self):
-        return self.embed_dims[-1]
+        return self.dim_embed[-1]
 
     @property
     def _supports_flash_attn_2(self):
@@ -687,22 +657,13 @@ class Florence2Vision(PreTrainedModel):
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.Conv2d):
             nn.init.normal_(m.weight, std=0.02)
-            for name, _ in m.named_parameters():
-                if name in ["bias"]:
-                    nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.weight, 1.0)
-            nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.BatchNorm2d):
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, (nn.LayerNorm, nn.BatchNorm2d)):
             nn.init.constant_(m.weight, 1.0)
             nn.init.constant_(m.bias, 0)
 
     def forward_features_unpool(self, x: torch.Tensor):
-        """
-        forward until avg pooling
-        Args:
-            x (_type_): input image tensor
-        """
         input_size = (x.size(2), x.size(3))
         for conv, block in zip(self.convs, self.blocks):
             x, input_size = conv(x, input_size)
@@ -712,35 +673,15 @@ class Florence2Vision(PreTrainedModel):
 
     def forward_features(self, x: torch.Tensor):
         x = self.forward_features_unpool(x)
-
-        # (batch_size, num_tokens, token_dim)
         x = self.avgpool(x.transpose(1, 2))
-        # (batch_size, 1, num_tokens)
         x = torch.flatten(x, 1)
         x = self.norms(x)
-
         return x
 
     def forward(self, x: torch.Tensor):
         x = self.forward_features(x)
         x = self.head(x)
         return x
-
-    @classmethod
-    def from_config(cls, config):
-        return cls(
-            depths=config.depths,
-            embed_dims=config.dim_embed,
-            num_heads=config.num_heads,
-            num_groups=config.num_groups,
-            patch_size=config.patch_size,
-            patch_stride=config.patch_stride,
-            patch_padding=config.patch_padding,
-            patch_prenorm=config.patch_prenorm,
-            drop_path_rate=config.drop_path_rate,
-            window_size=config.window_size,
-            config=config,
-        )
 
 
 class Florence2LanguageScaledWordEmbedding(BartScaledWordEmbedding):
@@ -980,7 +921,7 @@ FLORENCE2_INPUTS_DOCSTRING = r"""
 class Florence2VisionModel(Florence2PreTrainedModel):
     def __init__(self, config: Florence2VisionConfig):
         super().__init__(config)
-        self.vision_tower = Florence2Vision.from_config(config=config)
+        self.vision_tower = Florence2VisionBackbone.from_config(config=config)
 
         self.post_init()
 
@@ -995,7 +936,7 @@ class Florence2VisionModel(Florence2PreTrainedModel):
 class Florence2VisionModelWithProjection(Florence2PreTrainedModel):
     def __init__(self, config: Florence2VisionConfig):
         super().__init__(config)
-        self.vision_tower = Florence2Vision.from_config(config=config)
+        self.vision_tower = Florence2VisionBackbone.from_config(config=config)
 
         self._build_image_projection_layers(config)
 
@@ -1076,7 +1017,7 @@ class Florence2VisionModelWithProjection(Florence2PreTrainedModel):
 class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixin):
     def __init__(self, config: Florence2Config):
         super().__init__(config)
-        self.vision_tower = Florence2Vision.from_config(config=config.vision_config)
+        self.vision_tower = Florence2VisionBackbone(config=config.vision_config)
         # remove unused layers
         del self.vision_tower.head
         del self.vision_tower.norms
@@ -1398,7 +1339,7 @@ __all__ = [
     "Florence2LanguageModel",
     "Florence2LanguagePreTrainedModel",
     "Florence2PreTrainedModel",
-    "Florence2Vision",
+    "Florence2VisionBackbone",
     "Florence2VisionModel",
     "Florence2VisionModelWithProjection",
 ]

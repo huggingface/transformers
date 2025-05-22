@@ -52,9 +52,9 @@ The original code can be found [here](https://huggingface.co/microsoft/Florence-
 [[autodoc]] Florence2LanguageModel
     - forward
 
-## Florence2Vision
+## Florence2VisionBackbone
 
-[[autodoc]] Florence2Vision
+[[autodoc]] Florence2VisionBackbone
     - forward
 
 ## Florence2VisionModel
