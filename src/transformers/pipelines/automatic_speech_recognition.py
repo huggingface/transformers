@@ -11,13 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import warnings
 from collections import defaultdict
 from typing import TYPE_CHECKING, Dict, Optional, Union
 
 import numpy as np
 import requests
 
+from ..generation import GenerationConfig
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import is_torch_available, is_torchaudio_available, logging
 from .audio_utils import ffmpeg_read
@@ -131,6 +131,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     The input can be either a raw waveform or a audio file. In case of the audio file, ffmpeg should be installed for
     to support multiple audio formats
 
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+    - num_beams: 5
+
     Example:
 
     ```python
@@ -191,6 +196,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             `torch.float16` or `torch.bfloat16` to use half-precision in the respective dtypes.
 
     """
+
+    _pipeline_calls_generate = True
+    # Make sure the docstring is updated when the default generation config is changed
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+        num_beams=5,  # follows openai's whisper implementation
+    )
 
     def __init__(
         self,
@@ -291,7 +303,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         return_timestamps=None,
         return_language=None,
         generate_kwargs=None,
-        max_new_tokens=None,
     ):
         # No parameters on this pipeline right now
         preprocess_params = {}
@@ -308,23 +319,17 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             preprocess_params["stride_length_s"] = stride_length_s
 
         forward_params = defaultdict(dict)
-        if max_new_tokens is not None:
-            warnings.warn(
-                "`max_new_tokens` is deprecated and will be removed in version 4.49 of Transformers. To remove this warning, pass `max_new_tokens` as a key inside `generate_kwargs` instead.",
-                FutureWarning,
-            )
-            forward_params["max_new_tokens"] = max_new_tokens
         if generate_kwargs is not None:
-            if max_new_tokens is not None and "max_new_tokens" in generate_kwargs:
-                raise ValueError(
-                    "`max_new_tokens` is defined both as an argument and inside `generate_kwargs` argument, please use"
-                    " only 1 version"
-                )
             forward_params.update(generate_kwargs)
 
         postprocess_params = {}
         if decoder_kwargs is not None:
             postprocess_params["decoder_kwargs"] = decoder_kwargs
+
+        # in some models like whisper, the generation config has a `return_timestamps` key
+        if hasattr(self, "generation_config") and hasattr(self.generation_config, "return_timestamps"):
+            return_timestamps = return_timestamps or self.generation_config.return_timestamps
+
         if return_timestamps is not None:
             # Check whether we have a valid setting for return_timestamps and throw an error before we perform a forward pass
             if self.type == "seq2seq" and return_timestamps:
@@ -348,9 +353,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 raise ValueError("Only Whisper can return language for now.")
             postprocess_params["return_language"] = return_language
 
-        if self.assistant_model is not None:
+        if getattr(self, "assistant_model", None) is not None:
             forward_params["assistant_model"] = self.assistant_model
-        if self.assistant_tokenizer is not None:
+        if getattr(self, "assistant_tokenizer", None) is not None:
             forward_params["tokenizer"] = self.tokenizer
             forward_params["assistant_tokenizer"] = self.assistant_tokenizer
 
@@ -500,6 +505,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 )
 
             # custom processing for Whisper timestamps and word-level timestamps
+            return_timestamps = return_timestamps or getattr(self.generation_config, "return_timestamps", False)
             if return_timestamps and self.type == "seq2seq_whisper":
                 generate_kwargs["return_timestamps"] = return_timestamps
                 if return_timestamps == "word":

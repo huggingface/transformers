@@ -19,8 +19,6 @@ from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     group_images_by_shape,
@@ -38,7 +36,7 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     filter_out_non_signature_kwargs,
     is_torch_available,
     is_torchvision_available,
@@ -61,21 +59,19 @@ logger = logging.get_logger(__name__)
 
 
 class VitMatteFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    do_pad (`bool`, *optional*, defaults to `True`):
+        Whether to pad the image to make the width and height divisible by `size_divisibility`. Can be overridden
+        by the `do_pad` parameter in the `preprocess` method.
+    size_divisibility (`int`, *optional*, defaults to 32):
+        The width and height of the image will be padded to be divisible by this number.
+    """
+
     do_pad: Optional[bool]
     size_divisibility: int
 
 
-@add_start_docstrings(
-    "Constructs a fast VitMatte image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    """
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the image to make the width and height divisible by `size_divisibility`. Can be overridden
-            by the `do_pad` parameter in the `preprocess` method.
-        size_divisibility (`int`, *optional*, defaults to 32):
-            The width and height of the image will be padded to be divisible by this number.
-    """,
-)
+@auto_docstring
 class VitMatteImageProcessorFast(BaseImageProcessorFast):
     do_rescale: bool = True
     rescale_factor: Union[int, float] = 1 / 255
@@ -89,22 +85,17 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[VitMatteFastImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-        do_pad (`bool`, *optional*, defaults to `True`):
-            Whether to pad the image to make the width and height divisible by `size_divisibility`. Can be overridden
-            by the `do_pad` parameter in the `preprocess` method.
-        size_divisibility (`int`, *optional*, defaults to 32):
-            The width and height of the image will be padded to be divisible by this number.
-    """,
-    )
+    @auto_docstring
     def preprocess(
         self,
         images: list["torch.Tensor"],
         trimaps: list["torch.Tensor"],
         **kwargs: Unpack[VitMatteFastImageProcessorKwargs],
     ) -> BatchFeature:
+        r"""
+        trimaps (`list[torch.Tensor]`):
+            The trimaps to preprocess.
+        """
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
@@ -140,7 +131,7 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
         kwargs.pop("size")
         kwargs.pop("crop_size")
 
-        return self._preprocess(images=images, trimaps=trimaps, **kwargs)
+        return self._preprocess(images, trimaps, **kwargs)
 
     def _prepare_input_trimaps(
         self, trimaps: ImageInput, device: Optional["torch.device"] = None
