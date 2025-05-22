@@ -1172,25 +1172,10 @@ class ModelTesterMixin:
                         traced_model = torch.jit.trace(model, example_inputs, check_trace=False)
                     else:
                         main_input = inputs[main_input_name]
-
-                        if model.config._attn_implementation == "sdpa":
-                            trace_input = {main_input_name: main_input}
-
-                            if "attention_mask" in inputs:
-                                trace_input["attention_mask"] = inputs["attention_mask"]
-                            else:
-                                self.skipTest(reason="testing SDPA without attention_mask is not supported")
-
-                            outputs = model(main_input, attention_mask=inputs["attention_mask"])
-                            if any(isinstance(x, Cache) for x in outputs):
-                                continue
-                            # example_kwarg_inputs was introduced in torch==2.0, but it is fine here since SDPA has a requirement on torch>=2.1.
-                            traced_model = torch.jit.trace(model, example_kwarg_inputs=trace_input)
-                        else:
-                            outputs = model(main_input)
-                            if any(isinstance(x, Cache) for x in outputs):
-                                continue
-                            traced_model = torch.jit.trace(model, (main_input,))
+                        outputs = model(main_input)
+                        if any(isinstance(x, Cache) for x in outputs):
+                            continue
+                        traced_model = torch.jit.trace(model, (main_input,))
                 except RuntimeError:
                     self.fail("Couldn't trace module.")
 
@@ -3907,6 +3892,11 @@ class ModelTesterMixin:
                 self.skipTest(
                     "DBRX (transformers==4.40) requires a modification to support dynamic shapes with compile."
                 )
+            if getattr(config, "cache_implementation", None) == "hybrid":
+                self.skipTest(
+                    "Cannot compile forward without an existing cache with Hybrid, as `torch._dynamo.mark_static_address` "
+                    "is a forbidden call."
+                )
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -4346,18 +4336,31 @@ class ModelTesterMixin:
         config.sliding_window = sliding_window
         inputs["attention_mask"] = torch.ones(batch_size, seq_len).to(torch.int64).to(torch_device)
         for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-
             # Set sliding window to `True` and check that all tokens beyond window size are masked
-            model.config.use_sliding_window = True
+            config.use_sliding_window = True
+            config_dict = config.to_diff_dict()
+            if hasattr(config, "layer_types"):
+                del config_dict["layer_types"]
+            new_config = config.__class__(**config_dict)
+            model = model_class(new_config).to(torch_device)
+            model.eval()
+            layer_types = getattr(model.config, "layer_types", ["sliding_attention"] * config.num_hidden_layers)
             attentions = model(**inputs, output_attentions=True).attentions
-            for layer_attention in attentions:
-                self.assertTrue((layer_attention[:, :, ~sliding_mask] == 0).all().item())
+            for layer_attention, layer_type in zip(attentions, layer_types):
+                if layer_type == "sliding_attention":
+                    self.assertTrue((layer_attention[:, :, ~sliding_mask] == 0).all().item())
+                else:
+                    self.assertFalse((layer_attention[:, :, ~sliding_mask] == 0).all().item())
 
             # Set sliding window to `False` while keeping `sliding_window=3`
             # Check that all tokens beyond window size are not masked
-            model.config.use_sliding_window = False
+            config.use_sliding_window = False
+            config_dict = config.to_diff_dict()
+            if hasattr(config, "layer_types"):
+                del config_dict["layer_types"]
+            new_config = config.__class__(**config_dict)
+            model = model_class(new_config).to(torch_device)
+            model.eval()
             attentions_not_sliding = model(**inputs, output_attentions=True).attentions
             for layer_attention in attentions_not_sliding:
                 self.assertFalse((layer_attention[:, :, ~sliding_mask] == 0).all().item())
