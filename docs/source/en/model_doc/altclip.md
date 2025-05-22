@@ -70,7 +70,7 @@ It achieves near-SOTA zero-shot retrieval across languages while preserving CLIP
 > print(probs)      # tensor([[0.9996, 0.0004]])
 > ```
 >
-> The first caption (“cat”) wins with > 99 % confidence—exactly what we expect
+> The first caption (“cat”) wins with > 99 % confidence, exactly what we expect
 > for that COCO image.
 
 <Tip>
