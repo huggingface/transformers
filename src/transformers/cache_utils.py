@@ -1968,7 +1968,7 @@ class HybridChunkedCache(Cache):
             self.sliding_window = config.sliding_window
         self.max_cache_len = max_cache_len
         # Sliding layers can't be larger than the overall max cache len
-        self.sliding_window = min(config.sliding_window, self.max_cache_len)
+        self.sliding_window = min(self.sliding_window, self.max_cache_len)
         self.max_batch_size = max_batch_size
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self._dtype = dtype
