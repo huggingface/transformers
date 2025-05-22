@@ -9,6 +9,9 @@ on:
       start_sha:
         required: true
         type: string
+      job:
+        required: true
+        type: string
 
 
 env:
@@ -26,7 +29,7 @@ env:
 
 
 jobs:
-  run_models_gpu:
+  check_new_failures:
     name: " "
     runs-on:
       group: aws-g4dn-4xlarge-cache
@@ -36,17 +39,17 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: ci_results_run_models_gpu
-          path: /transformers/ci_results_run_models_gpu
+          name: ci_results_${{ inputs.job }}
+          path: /transformers/ci_results_${{ inputs.job }}
 
       - name: Check file
         working-directory: /transformers
         run: |
-          if [ -f ci_results_run_models_gpu/new_model_failures.json ]; then
-            echo "`ci_results_run_models_gpu/new_model_failures.json` exists, continue ..."
+          if [ -f ci_results_${{ inputs.job }}/new_failures.json ]; then
+            echo "`ci_results_${{ inputs.job }}/new_failures.json` exists, continue ..."
             echo "process=true" >> $GITHUB_ENV
           else
-            echo "`ci_results_run_models_gpu/new_model_failures.json` doesn't exist, abort."
+            echo "`ci_results_${{ inputs.job }}/new_failures.json` doesn't exist, abort."
             echo "process=false" >> $GITHUB_ENV
           fi
 
@@ -112,14 +115,14 @@ jobs:
       - name: Check failed tests
         working-directory: /transformers
         if: ${{ env.process == 'true' }}
-        run: python3 utils/check_bad_commit.py --start_commit ${{ inputs.start_sha }} --end_commit ${{ env.END_SHA }} --file ci_results_run_models_gpu/new_model_failures.json --output_file new_model_failures_with_bad_commit.json
+        run: python3 utils/check_bad_commit.py --start_commit ${{ inputs.start_sha }} --end_commit ${{ env.END_SHA }} --file ci_results_${{ inputs.job }}/new_failures.json --output_file new_failures_with_bad_commit.json
 
       - name: Show results
         working-directory: /transformers
         if: ${{ env.process == 'true' }}
         run: |
-          ls -l new_model_failures_with_bad_commit.json
-          cat new_model_failures_with_bad_commit.json
+          ls -l new_failures_with_bad_commit.json
+          cat new_failures_with_bad_commit.json
 
       - name: Checkout back
         working-directory: /transformers
@@ -134,6 +137,7 @@ jobs:
         env:
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+          JOB_NAME: ${{ inputs.job }}
         run: |
           python3 utils/process_bad_commit_report.py
 
@@ -144,6 +148,7 @@ jobs:
         env:
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+          JOB_NAME: ${{ inputs.job }}
         run: |
           {
             echo 'REPORT_TEXT<<EOF'
