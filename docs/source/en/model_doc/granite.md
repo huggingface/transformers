@@ -110,7 +110,6 @@ outputs = model.generate(**inputs, max_length=50, cache_implementation="static")
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
-## Notes
   
 ## GraniteConfig
 
