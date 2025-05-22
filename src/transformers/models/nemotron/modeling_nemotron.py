@@ -72,7 +72,9 @@ class NemotronLayerNorm1P(nn.LayerNorm):
 
     def forward(self, input: Tensor) -> Tensor:
         device_type = input.device.type if isinstance(input.device.type, str) and input.device.type != "mps" else "cpu"
-        args = _cast_if_autocast_enabled(device_type, input, self.normalized_shape, self.weight + 1, self.bias, self.eps)
+        args = _cast_if_autocast_enabled(
+            device_type, input, self.normalized_shape, self.weight + 1, self.bias, self.eps
+        )
         with torch.autocast(device_type=input.device.type, enabled=False):
             return F.layer_norm(*args)
 
@@ -345,7 +347,11 @@ class NemotronFlashAttention2(NemotronAttention):
         # in fp32. (NemotronRMSNorm handles it correctly)
 
         input_dtype = query_states.dtype
-        device_type = query_states.device.type if isinstance(query_states.device.type, str) and query_states.device.type != "mps" else "cpu"
+        device_type = (
+            query_states.device.type
+            if isinstance(query_states.device.type, str) and query_states.device.type != "mps"
+            else "cpu"
+        )
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
                 target_dtype = torch.get_autocast_dtype(device_type)
