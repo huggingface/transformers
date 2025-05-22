@@ -119,15 +119,100 @@ def _sliding_cache_update(
     return k_out_updated, v_out_updated
 
 
+
+class KVList:
+    """Simulates separate key/value lists given the layers."""
+    def __init__(self, layers, cache_type="key"):
+        self.layers = layers
+        self.cache_type = cache_type
+
+    def __getitem__(self, idx):
+        if isinstance(idx, slice):
+            return [getattr(layer, f"{self.cache_type}_cache") for layer in self.layers[idx]]
+        return getattr(self.layers[idx], f"{self.cache_type}_cache")
+
+    def __setitem__(self, idx, value):
+        if isinstance(idx, slice):
+            for layer, val in zip(self.layers[idx], value):
+                setattr(layer, f"{self.cache_type}_cache", val)
+        else:
+            setattr(self.layers[idx], f"{self.cache_type}_cache", value)
+
+    def __len__(self):
+        return len(self.layers)
+
+    def __iter__(self):
+        for layer in self.layers:
+            yield getattr(layer, f"{self.cache_type}_cache")
+
+    def __bool__(self):
+        return bool(self.layers)
+
 class Cache:
     """
-    Base, abstract class for all caches. The actual data structure is specific to each subclass.
+    Base, abstract class for all caches. The actual data structure is specific to the layers.
+    This class handles basic propagation of operations across layers.
     """
 
-    is_compileable = False
+    layer_type = None  # Subclasses must define their layer type
 
-    def __init__(self):
-        super().__init__()
+    def build_static(self, 
+                  config: PretrainedConfig,
+                  max_batch_size: int,
+                  max_cache_len: Optional[int] = None,
+                  device: Union[torch.device, str, None] = None,
+                  dtype: torch.dtype = torch.float32,
+                  layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
+    ) -> None:
+        self.layer_type = StaticLayer
+        max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
+        num_key_value_heads = (
+            config.num_attention_heads
+            if getattr(config, "num_key_value_heads", None) is None
+            else config.num_key_value_heads
+        )
+
+        device = torch.device(device) if device is not None else None
+        for idx in range(config.num_hidden_layers):
+            layer_device = layer_device_map[idx] if layer_device_map is not None else device
+            layer = StaticLayer(
+                max_batch_size,
+                max_cache_len,
+                num_key_value_heads,
+                # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads:
+                getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads,
+                dtype,
+                layer_device,
+            )
+            self.layers.append(layer)
+
+    def __init__(self, *args, **kwargs) -> None:
+        self.layers: List[CacheLayer] = []
+        _distributed_cache_data = args[0] if len(args) == 1 and isinstance(args[0], Iterable) else None
+        # `_distributed_cache_data` was originally added for compatibility with `torch.distributed` (DDP). See #36212
+        # and #36373 for more information. In a nutshell, it is `map(gather_map, zip(*caches))`, i.e. each item in the
+        # iterable contains the key and value states for a layer gathered across replicas by torch.distributed
+        # (shape=[global batch size, num_heads, seq_len, head_dim]).
+        # WARNING: `_distributed_cache_data` must be the first argument in `__init__`, otherwise we'll break
+        # compatibility. The name of the argument doesn't matter.
+        if _distributed_cache_data is not None:
+            args = args[1:]
+            for key_states, value_states in _distributed_cache_data:
+                layer = self.layer_type(key_states, value_states)
+                self.layers.append(layer)
+        # Pass args and kwargs to builder
+        if self.__class__ is StaticCache:
+            self.build_static(*args, **kwargs)
+
+    @property
+    def key_cache(self) -> KVList:
+        """Returns a list-like object of key cache tensors for each layer."""
+        return KVList(self.layers, "key")
+
+    @property
+    def value_cache(self) -> KVList:
+        """Returns a list-like object of value cache tensors for each layer."""
+        return KVList(self.layers, "value")
 
     def update(
         self,
@@ -153,48 +238,148 @@ class Cache:
         Return:
             A tuple containing the updated key and value states.
         """
+        if len(self.layers) <= layer_idx:
+            # Extend the list with empty layers up to the required index
+            self.layers.extend([self.layer_type() for _ in range(layer_idx - len(self.layers))])
+            # Create new layer
+            self.layers.append(self.layer_type())
+        return self.layers[layer_idx].update(key_states, value_states, cache_kwargs)
+    
+    def __getitem__(self, layer_idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Support for backwards-compatible `past_key_value` indexing, e.g. `past_key_value[0][0].shape[2]` to get the
+        sequence length.
+        """
+        if layer_idx < len(self.layers):
+            return self.layers[layer_idx].key_cache, self.layers[layer_idx].value_cache
+        else:
+            raise KeyError(f"Cache only has {len(self.layers)} layers, attempted to access layer with index {layer_idx}")
+        
+    def __iter__(self):
+        """
+        Support for backwards-compatible `past_key_value` iteration, e.g. `for x in past_key_value:` to iterate over
+        keys and values
+        """
+        for layer_idx in range(len(self)):
+            yield (self.layers[layer_idx].key_cache, self.layers[layer_idx].value_cache)
+
+    def __len__(self):
+        """
+        Support for backwards-compatible `past_key_value` length, e.g. `len(past_key_value)`. This value corresponds
+        to the number of layers in the model.
+        """
+        return len(self.layers)
+
+    def __getattr__(self, name):
+        """
+        Dynamically handle any method call / attribute access by forwarding to layers.
+        If it doesn't exist on any layer, raises AttributeError.
+        For is_* attributes, returns the AND of all layers' values (e.g. is_sliding, is_compileable)
+        For regular attributes, returns the value directly if it exists on any layer (e.g. max_cache_len, sliding_window_len)
+        For methods, returns a function that propagates the call to all layers with carry-over state (e.g. update, reset)
+        """
+        if name.startswith("is_"):
+            if not self.layers:
+                return getattr(self.layer_type, name, False)
+            return all(getattr(layer, name, False) for layer in self.layers)
+            
+        # Check if it's an attribute on any layer
+        for layer in self.layers:
+            if hasattr(layer, name) and not callable(getattr(layer, name)):
+                return getattr(layer, name)
+        
+        def propagate_to_layers(*args, **kwargs):
+            state = None
+            # If the cache is empty, we can call the layer type method directly
+            if not self.layers:
+                if hasattr(self.layer_type, name):
+                    state, _ = getattr(self.layer_type, name)(None, None, *args, **kwargs)
+                    return state
+                else:
+                    raise AttributeError(
+                        f"{self.layer_type.__name__} does not support {name}"
+                    )
+            for i, layer in enumerate(self.layers):
+                if not hasattr(layer, name):
+                    raise AttributeError(
+                        f"Layer {i}: {layer.__class__.__name__} of Cache does not support {name}"
+                    )
+                # State is carried over from layer to layer for flexible aggregation
+                state, return_early = getattr(layer, name)(state, *args, **kwargs)
+                # A layer can signal to break the loop early
+                if return_early:
+                    break
+            return state
+        
+        return propagate_to_layers
+
+    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
+        """Converts the `Cache` instance into the its equivalent in the legacy cache format. Used for
+        backward compatibility."""
+        legacy_cache = ()
+        for layer in self.layers:
+            if layer is not None:
+                legacy_cache += ((layer.key_cache, layer.value_cache),)
+        return legacy_cache
+    
+    @classmethod
+    def from_legacy_cache(
+        cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor]]] = None
+    ) -> "Cache":
+        """Converts a cache in the legacy cache format into an equivalent `Cache`. Used for
+        backward compatibility."""
+        cache = cls()
+        if past_key_values is not None:
+            for layer_idx in range(len(past_key_values)):
+                key_states, value_states = past_key_values[layer_idx]
+                cache.update(key_states, value_states, layer_idx)
+        return cache
+
+class CacheLayer:
+    """Base, abstract class for a single layer's cache."""
+
+    def __init__(self, key_cache: Optional[torch.Tensor] = None, value_cache: Optional[torch.Tensor] = None) -> None:
+        self.key_cache = key_cache if key_cache is not None else None
+        self.value_cache = value_cache if value_cache is not None else None
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Updates KV cache, returns updated K and V for this layer."""
         raise NotImplementedError("Make sure to implement `update` in a subclass.")
-
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
-        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        # TODO: deprecate this function in favor of `cache_position`
-        raise NotImplementedError("Make sure to implement `get_seq_length` in a subclass.")
-
-    def get_max_cache_shape(self) -> Optional[int]:
-        """Returns the maximum sequence length (i.e. max capacity) of the cache object"""
-        raise NotImplementedError("Make sure to implement `get_max_cache_shape` in a subclass.")
-
-    def get_usable_length(self, new_seq_length: int, layer_idx: Optional[int] = 0) -> int:
-        """Given the sequence length of the new inputs, returns the usable length of the cache."""
+    
+    def get_usable_length(self, state, new_seq_length: int, layer_idx: Optional[int] = 0) -> tuple[int, bool]:
+        """Given the sequence length of the new inputs, returns the usable length of the cache.
+        Early stops since first layer is enough to compute sequence length"""
         # Cache without size limit -> all cache is usable
         # Cache with size limit -> if the length cache plus the length of the new inputs is larger the maximum cache
         #   length, we will need to evict part of the cache (and thus not all cache is usable)
         max_length = self.get_max_cache_shape()
-        previous_seq_length = self.get_seq_length(layer_idx)
+        previous_seq_length, _ = self.get_seq_length(layer_idx)
         if max_length is not None and previous_seq_length + new_seq_length > max_length:
-            return max_length - new_seq_length
-        return previous_seq_length
+            return max_length - new_seq_length, True
+        return previous_seq_length, True
 
-    def reorder_cache(self, beam_idx: torch.LongTensor):
-        """Reorders the cache for beam search, given the selected beam indices."""
-        for layer_idx in range(len(self.key_cache)):
-            if self.key_cache[layer_idx].numel():
-                device = self.key_cache[layer_idx].device
-                self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
-            if self.value_cache[layer_idx].numel():
-                device = self.value_cache[layer_idx].device
-                self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
+    def get_max_cache_shape(self, state) -> tuple[Optional[int], bool]:
+        """Returns the maximum sequence length (i.e. max capacity) of this layer's cache."""
+        raise NotImplementedError("Make sure to implement `get_max_cache_shape` in a subclass.")
 
-    @property
-    def seen_tokens(self):
-        logger.warning_once(
-            "The `seen_tokens` attribute is deprecated and will be removed in v4.41. Use the `cache_position` "
-            "model input instead."
-        )
-        if hasattr(self, "_seen_tokens"):
-            return self._seen_tokens
-        else:
-            return None
+    def reset(self, state) -> tuple[None, bool]:
+        """Resets this layer's cache."""
+        raise NotImplementedError("Make sure to implement `reset` in a subclass.")
+
+    def reorder_cache(self, state, beam_idx: torch.LongTensor) -> tuple[None, bool]:
+        """Reorders this layer's cache for beam search."""
+        if self.key_cache.numel():
+            device = self.key_cache.device
+            self.key_cache = self.key_cache.index_select(0, beam_idx.to(device))
+        if self.value_cache.numel():
+            device = self.value_cache.device
+            self.value_cache = self.value_cache.index_select(0, beam_idx.to(device))
+        return None, True
 
 
 @dataclass
@@ -433,6 +618,119 @@ class StaticCacheConfig(CacheConfig):
             )
 
 
+class DynamicLayer(CacheLayer):
+    """
+    A cache layer that grows dynamically as more tokens are generated. This is the default for generative models.
+    It stores the Key and Value states as tensors with shape `[batch_size, num_heads, seq_len, head_dim]`.
+    """
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Updates the cache with the new `key_states` and `value_states`.
+
+        Parameters:
+            key_states (`torch.Tensor`):
+                The new key states to cache.
+            value_states (`torch.Tensor`):
+                The new value states to cache.
+            cache_kwargs (`Dict[str, Any]`, `optional`):
+                Additional arguments for the cache subclass. No additional arguments are used in `DynamicLayer`.
+
+        Return:
+            A tuple containing the updated key and value states.
+        """
+        if self.key_cache is None:
+            self.key_cache = key_states
+            self.value_cache = value_states
+        else:
+            self.key_cache = torch.cat([self.key_cache, key_states], dim=-2)
+            self.value_cache = torch.cat([self.value_cache, value_states], dim=-2)
+
+        return self.key_cache, self.value_cache
+
+    def get_seq_length(self, state, cache_position: Optional[torch.LongTensor] = None) -> tuple[int, bool]:
+        """Returns the sequence length of the cached states."""
+        # TODO: deprecate this function in favor of `cache_position`
+        if self is None or self.key_cache is None:
+            return 0, True
+        return (self.key_cache.shape[-2], True)
+
+    def get_max_cache_shape(self, state) -> tuple[Optional[int], bool]:
+        """Returns the maximum sequence length of the cache object. DynamicLayer does not have a maximum length."""
+        return None, True
+
+    def reset(self, state) -> tuple[None, bool]:
+        """Resets the cache values while preserving the objects"""
+        self.key_cache = torch.tensor([], dtype=self.key_cache.dtype, device=self.key_cache.device)
+        self.value_cache = torch.tensor([], dtype=self.value_cache.dtype, device=self.value_cache.device)
+        return None, False
+
+    def reorder_cache(self, state, beam_idx: torch.LongTensor) -> tuple[None, bool]:
+        """Reorders the cache for beam search, given the selected beam indices."""
+        if self.key_cache.numel():
+            device = self.key_cache.device
+            self.key_cache = self.key_cache.index_select(0, beam_idx.to(device))
+        if self.value_cache.numel():
+            device = self.value_cache.device
+            self.value_cache = self.value_cache.index_select(0, beam_idx.to(device))
+        return None, False
+
+    def crop(self, state, max_length: int) -> tuple[None, bool]:
+        """Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
+        negative to remove `max_length` tokens."""
+        if max_length < 0:
+            max_length = self.get_seq_length() - abs(max_length)
+
+        if self.get_seq_length() <= max_length:
+            return None, False
+
+        if self.key_cache.numel():
+            self.key_cache = self.key_cache[..., :max_length, :]
+            self.value_cache = self.value_cache[..., :max_length, :]
+        return None, False
+
+    def batch_split(self, state, full_batch_size: int, split_size: int) -> tuple[List["DynamicLayer"], bool]:
+        """Split the current instance into a list of `DynamicLayer` by the batch size."""
+        out = []
+        for i in range(0, full_batch_size, split_size):
+            current_split = DynamicLayer(
+                key_cache=self.key_cache[i : i + split_size] if self.key_cache.numel() else None,
+                value_cache=self.value_cache[i : i + split_size] if self.value_cache.numel() else None,
+            )
+            out.append(current_split)
+        return out, False
+
+    def batch_repeat_interleave(self, state, repeats: int) -> tuple[None, bool]:
+        """Repeat the cache `repeats` times in the batch dimension."""
+        if self.key_cache.numel():
+            self.key_cache = self.key_cache.repeat_interleave(repeats, dim=0)
+            self.value_cache = self.value_cache.repeat_interleave(repeats, dim=0)
+        return None, False
+
+    def batch_select_indices(self, state, indices: torch.Tensor) -> tuple[None, bool]:
+        """Only keep the `indices` in the batch dimension of the cache."""
+        if self.key_cache.numel():
+            self.key_cache = self.key_cache[indices, ...]
+            self.value_cache = self.value_cache[indices, ...]
+        return None, False
+
+    @classmethod
+    def from_batch_splits(cls, state, splits: List["DynamicLayer"]) -> tuple["DynamicLayer", bool]:
+        """This is the opposite of the above `batch_split()` method."""
+        cache = DynamicCache()
+        
+        if splits[0].key_cache.numel():
+            cache.key_cache = torch.cat([split.key_cache for split in splits], dim=0)
+            cache.value_cache = torch.cat([split.value_cache for split in splits], dim=0)
+        
+        return cache, True
+
+
 class DynamicCache(Cache):
     """
     A cache that grows dynamically as more tokens are generated. This is the default for generative models.
@@ -457,186 +755,7 @@ class DynamicCache(Cache):
         DynamicCache()
         ```
     """
-
-    def __init__(self, _distributed_cache_data: Optional[Iterable] = None) -> None:
-        super().__init__()
-        self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
-        self.key_cache: List[torch.Tensor] = []
-        self.value_cache: List[torch.Tensor] = []
-
-        # `_distributed_cache_data` was originally added for compatibility with `torch.distributed` (DDP). See #36121
-        # and #36373 for more information. In a nutshell, it is `map(gather_map, zip(*caches))`, i.e. each item in the
-        # iterable contains the key and value states for a layer gathered across replicas by torch.distributed
-        # (shape=[global batch size, num_heads, seq_len, head_dim]).
-        # WARNING: `_distributed_cache_data` must be the first argument in `__init__`, otherwise we'll break
-        # compatibility. The name of the argument doesn't matter.
-        if _distributed_cache_data is not None:
-            for key_states, value_states in _distributed_cache_data:
-                self.key_cache.append(key_states)
-                self.value_cache.append(value_states)
-
-    def __getitem__(self, layer_idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Support for backwards-compatible `past_key_value` indexing, e.g. `past_key_value[0][0].shape[2]` to get the
-        sequence length.
-        """
-        if layer_idx < len(self):
-            return (self.key_cache[layer_idx], self.value_cache[layer_idx])
-        else:
-            raise KeyError(f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}")
-
-    def __iter__(self):
-        """
-        Support for backwards-compatible `past_key_value` iteration, e.g. `for x in past_key_value:` to iterate over
-        keys and values
-        """
-        for layer_idx in range(len(self)):
-            yield (self.key_cache[layer_idx], self.value_cache[layer_idx])
-
-    def __len__(self):
-        """
-        Support for backwards-compatible `past_key_value` length, e.g. `len(past_key_value)`. This value corresponds
-        to the number of layers in the model.
-        """
-        return len(self.key_cache)
-
-    def update(
-        self,
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
-        layer_idx: int,
-        cache_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
-
-        Parameters:
-            key_states (`torch.Tensor`):
-                The new key states to cache.
-            value_states (`torch.Tensor`):
-                The new value states to cache.
-            layer_idx (`int`):
-                The index of the layer to cache the states for.
-            cache_kwargs (`Dict[str, Any]`, `optional`):
-                Additional arguments for the cache subclass. No additional arguments are used in `DynamicCache`.
-
-        Return:
-            A tuple containing the updated key and value states.
-        """
-        # Update the number of seen tokens
-        if layer_idx == 0:
-            self._seen_tokens += key_states.shape[-2]
-
-        # Update the cache
-        if key_states is not None:
-            if len(self.key_cache) <= layer_idx:
-                # There may be skipped layers, fill them with empty lists
-                for _ in range(len(self.key_cache), layer_idx):
-                    self.key_cache.append(torch.tensor([]))
-                    self.value_cache.append(torch.tensor([]))
-                self.key_cache.append(key_states)
-                self.value_cache.append(value_states)
-            elif (
-                not self.key_cache[layer_idx].numel()  # prefers not t.numel() to len(t) == 0 to export the model
-            ):  # fills previously skipped layers; checking for tensor causes errors
-                self.key_cache[layer_idx] = key_states
-                self.value_cache[layer_idx] = value_states
-            else:
-                self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
-                self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
-
-        return self.key_cache[layer_idx], self.value_cache[layer_idx]
-
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
-        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        # TODO: deprecate this function in favor of `cache_position`
-        is_empty_layer = (
-            len(self.key_cache) == 0  # no cache in any layer
-            or len(self.key_cache) <= layer_idx  # skipped `layer_idx` and hasn't run a layer with cache after it
-            or not self.key_cache[layer_idx].numel()  # the layer has no cache
-        )
-        layer_seq_length = self.key_cache[layer_idx].shape[-2] if not is_empty_layer else 0
-        return layer_seq_length
-
-    def get_max_cache_shape(self) -> Optional[int]:
-        """Returns the maximum sequence length of the cache object. DynamicCache does not have a maximum length."""
-        return None
-
-    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
-        """Converts the `DynamicCache` instance into the its equivalent in the legacy cache format. Used for
-        backward compatibility."""
-        legacy_cache = ()
-        for layer_idx in range(len(self)):
-            legacy_cache += ((self.key_cache[layer_idx], self.value_cache[layer_idx]),)
-        return legacy_cache
-
-    @classmethod
-    def from_legacy_cache(
-        cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor]]] = None
-    ) -> "DynamicCache":
-        """Converts a cache in the legacy cache format into an equivalent `DynamicCache`. Used for
-        backward compatibility."""
-        cache = cls()
-        if past_key_values is not None:
-            for layer_idx in range(len(past_key_values)):
-                key_states, value_states = past_key_values[layer_idx]
-                cache.update(key_states, value_states, layer_idx)
-        return cache
-
-    def crop(self, max_length: int):
-        """Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
-        negative to remove `max_length` tokens. This is used in assisted decoding and contrastive search."""
-        # In case it is negative
-        if max_length < 0:
-            max_length = self.get_seq_length() - abs(max_length)
-
-        if self.get_seq_length() <= max_length:
-            return
-
-        self._seen_tokens = max_length
-        for idx in range(len(self.key_cache)):
-            if self.key_cache[idx].numel():
-                self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
-                self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
-
-    def batch_split(self, full_batch_size: int, split_size: int) -> List["DynamicCache"]:
-        """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
-        `_split_model_inputs()` in `generation.utils`"""
-        out = []
-        for i in range(0, full_batch_size, split_size):
-            current_split = DynamicCache()
-            current_split._seen_tokens = self._seen_tokens
-            current_split.key_cache = [tensor[i : i + split_size] for tensor in self.key_cache]
-            current_split.value_cache = [tensor[i : i + split_size] for tensor in self.value_cache]
-            out.append(current_split)
-        return out
-
-    @classmethod
-    def from_batch_splits(cls, splits: List["DynamicCache"]) -> "DynamicCache":
-        """This is the opposite of the above `batch_split()` method. This will be used by `stack_model_outputs` in
-        `generation.utils`"""
-        cache = cls()
-        for idx in range(len(splits[0])):
-            key_cache = [current.key_cache[idx] for current in splits if current.key_cache[idx].numel()]
-            value_cache = [current.value_cache[idx] for current in splits if current.value_cache[idx].numel()]
-            if key_cache != []:
-                layer_keys = torch.cat(key_cache, dim=0)
-                layer_values = torch.cat(value_cache, dim=0)
-                cache.update(layer_keys, layer_values, idx)
-        return cache
-
-    def batch_repeat_interleave(self, repeats: int):
-        """Repeat the cache `repeats` times in the batch dimension. Used in contrastive search."""
-        for layer_idx in range(len(self)):
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].repeat_interleave(repeats, dim=0)
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].repeat_interleave(repeats, dim=0)
-
-    def batch_select_indices(self, indices: torch.Tensor):
-        """Only keep the `indices` in the batch dimension of the cache. Used in contrastive search."""
-        for layer_idx in range(len(self)):
-            self.key_cache[layer_idx] = self.key_cache[layer_idx][indices, ...]
-            self.value_cache[layer_idx] = self.value_cache[layer_idx][indices, ...]
-
+    layer_type = DynamicLayer
 
 # Utilities for `DynamicCache` <> torch.export support
 def _flatten_dynamic_cache(
@@ -651,18 +770,17 @@ def _flatten_dynamic_cache(
             "DynamicCache + torch.export is tested on torch 2.6.0+ and may not work on earlier versions."
         )
 
-    # NOTE it seems _seen_tokens is deprecated, so probably doesn't need tracking
     dictionary = {
-        "key_cache": getattr(dynamic_cache, "key_cache"),
-        "value_cache": getattr(dynamic_cache, "value_cache"),
+        "key_cache": [layer.key_cache for layer in dynamic_cache.layers if layer is not None],
+        "value_cache": [layer.value_cache for layer in dynamic_cache.layers if layer is not None],
     }
     return torch.utils._pytree._dict_flatten(dictionary)
 
 
 def _flatten_with_keys_dynamic_cache(dynamic_cache: DynamicCache):
     dictionary = {
-        "key_cache": getattr(dynamic_cache, "key_cache"),
-        "value_cache": getattr(dynamic_cache, "value_cache"),
+        "key_cache": [layer.key_cache for layer in dynamic_cache.layers if layer is not None],
+        "value_cache": [layer.value_cache for layer in dynamic_cache.layers if layer is not None],
     }
     return torch.utils._pytree._dict_flatten_with_keys(dictionary)
 
@@ -673,15 +791,20 @@ def _unflatten_dynamic_cache(
 ):
     dictionary = torch.utils._pytree._dict_unflatten(values, context)
     cache = DynamicCache()
-    for k, v in dictionary.items():
-        setattr(cache, k, v)
+    # Reconstruct layers from key_cache and value_cache lists
+    key_list = dictionary.get("key_cache", [])
+    value_list = dictionary.get("value_cache", [])
+    for idx in range(max(len(key_list), len(value_list))):
+        key = key_list[idx] if idx < len(key_list) else None
+        value = value_list[idx] if idx < len(value_list) else None
+        cache.layers.append(DynamicLayer(key, value))
     return cache
 
 
 def _flatten_dynamic_cache_for_fx(cache, spec):
     dictionary = {
-        "key_cache": getattr(cache, "key_cache"),
-        "value_cache": getattr(cache, "value_cache"),
+        "key_cache": [layer.key_cache for layer in cache.layers if layer is not None],
+        "value_cache": [layer.value_cache for layer in cache.layers if layer is not None],
     }
     return torch.utils._pytree.tree_flatten(dictionary)[0]
 
@@ -803,10 +926,6 @@ class OffloadedCache(DynamicCache):
         Return:
             A tuple containing the updated key and value states.
         """
-        # Update the number of seen tokens
-        if layer_idx == 0:
-            self._seen_tokens += key_states.shape[-2]
-
         # Update the cache
         if len(self.key_cache) < layer_idx:
             raise ValueError("OffloadedCache does not support model usage where layers are skipped. Use DynamicCache.")
@@ -821,12 +940,6 @@ class OffloadedCache(DynamicCache):
             self.value_cache[layer_idx] = torch.cat([value_tensor, value_states], dim=-2)
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
-
-    # According to https://docs.python.org/3/library/exceptions.html#NotImplementedError
-    # if a method is not supposed to be supported in a subclass we should set it to None
-    from_legacy_cache = None
-
-    to_legacy_cache = None
 
 
 class QuantizedCache(DynamicCache):
@@ -1048,203 +1161,66 @@ class HQQQuantizedCache(QuantizedCache):
         tensor = self.quantizer.dequantize(quant_tensor, meta)
         return tensor
 
+class StaticLayer(CacheLayer):
+    is_compileable = True
 
-class SinkCache(Cache):
-    """
-    Deprecated.
-
-    A cache that as described in the [Attention Sinks paper](https://arxiv.org/abs/2309.17453). It allows the model to
-    generate beyond the length of its context window, without losing fluency in the conversation. As it discards past
-    tokens, the model will lose the ability to generate tokens that depend on the context that was discarded.
-
-    It stores the Key and Value states as a list of tensors, one for each layer. The expected shape for each tensor is
-    `[batch_size, num_heads, seq_len, head_dim]`.
-
-    Parameters:
-        window_length (`int`):
-            The length of the context window.
-        num_sink_tokens (`int`):
-            The number of sink tokens. See the original paper for more information.
-
-    Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, SinkCache
-
-        >>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
-        >>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
-
-        >>> inputs = tokenizer(text="My name is Qwen2", return_tensors="pt")
-
-        >>> # Prepare a cache class and pass it to model's forward
-        >>> past_key_values = SinkCache(window_length=256, num_sink_tokens=4)
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values # access cache filled with key/values from generation
-        SinkCache()
-        ```
-    """
-
-    is_sliding = True
-
-    def __init__(self, window_length: int, num_sink_tokens: int) -> None:
-        super().__init__()
-        self.key_cache: List[torch.Tensor] = []
-        self.value_cache: List[torch.Tensor] = []
-        self.window_length = window_length
-        self.num_sink_tokens = num_sink_tokens
-        self.cos_sin_rerotation_cache = {}
-        self._cos_cache = None
-        self._sin_cache = None
-        self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
-
-        warnings.warn(
-            "`SinkCache` is deprecated and will be removed in v4.53.0. You can achieve similar functionality by "
-            "using a model with a sliding window attention mechanism, or by expanding RoPE and optionally using an "
-            "offloaded cache implementation.",
-            FutureWarning,
-        )
-
-    @staticmethod
-    def _rotate_half(x):
-        x1 = x[..., : x.shape[-1] // 2]
-        x2 = x[..., x.shape[-1] // 2 :]
-        return torch.cat((-x2, x1), dim=-1)
-
-    def _apply_key_rotary_pos_emb(
-        self, key_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
-    ) -> torch.Tensor:
-        rotated_key_states = (key_states * cos) + (self._rotate_half(key_states) * sin)
-        return rotated_key_states
-
-    def _get_rerotation_cos_sin(
-        self, key_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        if key_states.shape[-2] not in self.cos_sin_rerotation_cache:
-            # Upcast to float32 temporarily for better accuracy
-            cos = cos.to(torch.float32)
-            sin = sin.to(torch.float32)
-
-            # Compute the cos and sin required for back- and forward-rotating to one position earlier in the sequence
-            original_cos = cos[self.num_sink_tokens + key_states.shape[-2] :]
-            shifted_cos = cos[self.num_sink_tokens : -key_states.shape[-2]]
-            original_sin = sin[self.num_sink_tokens + key_states.shape[-2] :]
-            shifted_sin = sin[self.num_sink_tokens : -key_states.shape[-2]]
-            rerotation_cos = original_cos * shifted_cos + original_sin * shifted_sin
-            rerotation_sin = -original_sin * shifted_cos + original_cos * shifted_sin
-
-            self.cos_sin_rerotation_cache[key_states.shape[-2]] = (
-                rerotation_cos.to(key_states.dtype).unsqueeze(0),
-                rerotation_sin.to(key_states.dtype).unsqueeze(0),
-            )
-        return self.cos_sin_rerotation_cache[key_states.shape[-2]]
-
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
-        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        # TODO: deprecate this function in favor of `cache_position`
-        # Workaround to make 'key_states.shape[-2] + past_key_value.get_seq_length(self.layer_idx)' <= window_length
-        if len(self.key_cache) <= layer_idx:
-            return 0
-        return self.key_cache[layer_idx].shape[-2]
-
-    def get_max_cache_shape(self) -> Optional[int]:
-        """Returns the maximum sequence length of the cache object, in case of SinkCache it is the window length."""
-        return self.window_length
-
-    def update(
+    def __init__(
         self,
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
-        layer_idx: int,
-        cache_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
+        max_batch_size: int,
+        max_len: int,
+        num_heads: int,
+        head_dim: int,
+        dtype: torch.dtype,
+        device: torch.device,
+    ):
+        super().__init__()
+        self.max_batch_size = max_batch_size
+        self.max_cache_len = max_len
+        self.num_key_value_heads = num_heads
+        self._dtype = dtype
+        # Note: There will be significant perf decrease if switching to use 5D tensors instead.
+        self.key_cache = torch.zeros(
+            (max_batch_size, num_heads, max_len, head_dim),
+            dtype=dtype,
+            device=device,
+        )
+        self.value_cache = torch.zeros(
+            (max_batch_size, num_heads, max_len, head_dim),
+            dtype=dtype,
+            device=device,
+        )
+        # Note: `mark_static_address` is used to tag the cache as a fixed data pointer,
+        # preventing compiled graph breaks when updating the cache.
+        torch._dynamo.mark_static_address(self.key_cache)
+        torch._dynamo.mark_static_address(self.value_cache)
 
-        Parameters:
-            key_states (`torch.Tensor`):
-                The new key states to cache.
-            value_states (`torch.Tensor`):
-                The new value states to cache.
-            layer_idx (`int`):
-                The index of the layer to cache the states for.
-            cache_kwargs (`Dict[str, Any]`, `optional`):
-                Additional arguments for the cache subclass. The following arguments can be used in `SinkCache`: `sin`,
-                `cos` and `partial_rotation_size`. These arguments are used with models using RoPE, to recompute the
-                rotation as the tokens are shifted.
+    def get_max_cache_shape(self, state) -> Optional[int]:
+        return self.max_cache_len, True
 
-        Return:
-            A tuple containing the updated key and value states.
-        """
-        # Optional kwargs for `SinkCache` -- needed on models using RoPE. `partial_rotation_size` is used on models
-        # with partially rotated position embeddings, like Phi or Persimmon.
-        if cache_kwargs is None:
-            cache_kwargs = {}
-        sin = cache_kwargs.get("sin")
-        cos = cache_kwargs.get("cos")
-        partial_rotation_size = cache_kwargs.get("partial_rotation_size")
-        using_rope = cos is not None and sin is not None
+    def update(self, key_states, value_states, cache_kwargs=None) -> Tuple[torch.Tensor, torch.Tensor]:
+        cache_position = cache_kwargs.get("cache_position") if cache_kwargs else None
+        key_states = key_states.to(self.key_cache.dtype)
+        value_states = value_states.to(self.value_cache.dtype)
+        return _static_cache_update(self.key_cache, self.value_cache, key_states, value_states, cache_position)
 
-        # Update the number of seen tokens
-        if layer_idx == 0:
-            self._seen_tokens += key_states.shape[-2]
+    def get_seq_length(self, state, cache_position=None) -> int:
+        if cache_position is not None:
+            return int(cache_position[-1] + 1)
+        # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
+        # limit the check to the first batch member and head dimension.
+        return (self.key_cache[0, 0].any(dim=-1)).sum(), True
 
-        # Update the sin/cos cache, which holds sin/cos values for all possible positions
-        if using_rope and layer_idx == 0:
-            # BC: some models still pass `sin`/`cos` with 2 dims. In those models, they are the full sin/cos. Remove
-            # after all RoPE models have a llama-like cache utilization.
-            if cos.dim() == 2:
-                self._cos_cache = cos
-                self._sin_cache = sin
-            else:
-                if self._cos_cache is None:
-                    self._cos_cache = cos[0, ...]
-                    self._sin_cache = sin[0, ...]
-                elif self._cos_cache.shape[0] < self.window_length:
-                    self._cos_cache = torch.cat([self._cos_cache, cos[0, ...]], dim=0)
-                    self._sin_cache = torch.cat([self._sin_cache, sin[0, ...]], dim=0)
+    def reset(self, state):
+        self.key_cache.zero_()
+        self.value_cache.zero_()
+        return None, False
 
-        # [bsz, num_heads, seq_len, head_dim]
-        if len(self.key_cache) <= layer_idx:
-            # Empty cache
-            self.key_cache.append(key_states)
-            self.value_cache.append(value_states)
-
-        elif key_states.shape[-2] + self.get_seq_length(layer_idx) < self.window_length:
-            # Growing cache
-            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
-            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
-
-        else:
-            # Shifting cache
-            keys_to_keep = self.key_cache[layer_idx][
-                :, :, -self.window_length + self.num_sink_tokens + key_states.shape[-2] :
-            ]
-
-            # On RoPE models, we need to recompute the Key rotation as the tokens are shifted
-            if using_rope:
-                rerotation_cos, rerotation_sin = self._get_rerotation_cos_sin(
-                    key_states, self._cos_cache[: self.window_length], self._sin_cache[: self.window_length]
-                )
-                if partial_rotation_size is not None:
-                    keys_to_keep, keys_pass = (
-                        keys_to_keep[..., :partial_rotation_size],
-                        keys_to_keep[..., partial_rotation_size:],
-                    )
-                keys_to_keep = self._apply_key_rotary_pos_emb(keys_to_keep, rerotation_cos, rerotation_sin)
-                if partial_rotation_size is not None:
-                    keys_to_keep = torch.cat((keys_to_keep, keys_pass), dim=-1)
-
-            # Concatenate sink tokens, shifted & rotated tokens (if needed), and new tokens
-            sink_keys = self.key_cache[layer_idx][:, :, : self.num_sink_tokens]
-            self.key_cache[layer_idx] = torch.cat([sink_keys, keys_to_keep, key_states], dim=-2)
-
-            sink_values = self.value_cache[layer_idx][:, :, : self.num_sink_tokens]
-            values_to_keep = self.value_cache[layer_idx][
-                :, :, -self.window_length + self.num_sink_tokens + value_states.shape[-2] :
-            ]
-            self.value_cache[layer_idx] = torch.cat([sink_values, values_to_keep, value_states], dim=-2)
-
-        return self.key_cache[layer_idx], self.value_cache[layer_idx]
+    def reorder_cache(self, state, beam_idx):
+        dev = self.key_cache.device
+        beam_idx_dev = beam_idx.to(dev)
+        self.key_cache = self.key_cache.index_select(0, beam_idx_dev)
+        self.value_cache = self.value_cache.index_select(0, beam_idx_dev)
+        return None, False
 
 
 class StaticCache(Cache):
@@ -1291,104 +1267,7 @@ class StaticCache(Cache):
         ```
     """
 
-    is_compileable = True
-
-    def __init__(
-        self,
-        config: PretrainedConfig,
-        max_batch_size: int,
-        max_cache_len: Optional[int] = None,
-        device: Union[torch.device, str, None] = None,
-        dtype: torch.dtype = torch.float32,
-        layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
-    ) -> None:
-        super().__init__()
-        self.max_batch_size = max_batch_size
-        self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
-
-        # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
-        self.head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        self._dtype = dtype
-        self.num_key_value_heads = (
-            config.num_attention_heads
-            if getattr(config, "num_key_value_heads", None) is None
-            else config.num_key_value_heads
-        )
-
-        self.key_cache: List[torch.Tensor] = []
-        self.value_cache: List[torch.Tensor] = []
-        # Note: There will be significant perf decrease if switching to use 5D tensors instead.
-        cache_shape = (self.max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
-        device = torch.device(device) if device is not None else None
-        for idx in range(config.num_hidden_layers):
-            if layer_device_map is not None:
-                layer_device = layer_device_map[idx]
-            else:
-                layer_device = device
-            new_layer_key_cache = torch.zeros(cache_shape, dtype=self._dtype, device=layer_device)
-            new_layer_value_cache = torch.zeros(cache_shape, dtype=self._dtype, device=layer_device)
-            # Note: `mark_static_address` is used to tag the cache as a fixed data pointer,
-            # preventing compiled graph breaks when updating the cache.
-            torch._dynamo.mark_static_address(new_layer_key_cache)
-            torch._dynamo.mark_static_address(new_layer_value_cache)
-            self.key_cache.append(new_layer_key_cache)
-            self.value_cache.append(new_layer_value_cache)
-
-    def update(
-        self,
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
-        layer_idx: int,
-        cache_kwargs: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
-        It is VERY important to index using a tensor, otherwise you introduce a copy to the device.
-
-        Parameters:
-            key_states (`torch.Tensor`):
-                The new key states to cache.
-            value_states (`torch.Tensor`):
-                The new value states to cache.
-            layer_idx (`int`):
-                The index of the layer to cache the states for.
-            cache_kwargs (`Dict[str, Any]`, `optional`):
-                Additional arguments for the cache subclass. The `StaticCache` needs the `cache_position` input
-                to know how where to write in the cache.
-
-        Return:
-            A tuple containing the updated key and value states.
-        """
-        if cache_kwargs is None:
-            cache_kwargs = {}
-
-        key_states = key_states.to(self.key_cache[layer_idx].dtype)
-        value_states = value_states.to(self.value_cache[layer_idx].dtype)
-        return _static_cache_update(
-            self.key_cache[layer_idx],
-            self.value_cache[layer_idx],
-            key_states,
-            value_states,
-            cache_kwargs.get("cache_position"),
-        )
-
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
-        """Returns the sequence length of the cached states that were seen by the model."""
-        # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
-        # limit the check to the first batch member and head dimension.
-        # TODO: deprecate this function in favor of `cache_position`
-        return (self.key_cache[layer_idx][0, 0].any(dim=-1)).sum()
-
-    def get_max_cache_shape(self) -> Optional[int]:
-        return self.max_cache_len
-
-    def reset(self):
-        """Resets the cache values while preserving the objects"""
-        for layer_idx in range(len(self.key_cache)):
-            # In-place ops prevent breaking the static address
-            self.key_cache[layer_idx].zero_()
-            self.value_cache[layer_idx].zero_()
+    layer_type = StaticLayer
 
 
 class SlidingWindowCache(StaticCache):
@@ -1964,8 +1843,13 @@ class HybridChunkedCache(Cache):
                 full_key_states = torch.cat((k_out[:, :, :cumulative_length, :], key_states), dim=-2)
                 full_value_states = torch.cat((v_out[:, :, :cumulative_length, :], value_states), dim=-2)
         else:
-            self.key_cache[layer_idx].index_copy_(2, cache_position, key_states)
-            self.value_cache[layer_idx].index_copy_(2, cache_position, value_states)
+            try:
+                self.key_cache[layer_idx].index_copy_(2, cache_position, key_states)
+                self.value_cache[layer_idx].index_copy_(2, cache_position, value_states)
+            except NotImplementedError:
+                # MPS does not support index_copy_
+                self.key_cache[layer_idx][:, :, cache_position] = key_states
+                self.value_cache[layer_idx][:, :, cache_position] = value_states
             return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
         self.key_cache[layer_idx].copy_(full_key_states[:, :, -max_cache_len:, :])
@@ -2153,106 +2037,6 @@ class OffloadedHybridCache(HybridChunkedCache):
             self.device_value_cache[self.active_device_layer].fill_(0.0)
 
 
-class MambaCache:
-    """
-    Cache for mamba model which does not have attention mechanism and key value states.
-
-    Arguments:
-        config (`PretrainedConfig):
-            The configuration file defining the shape-related attributes required to initialize the static cache.
-        max_batch_size (`int`):
-            The maximum batch size with which the model will be used. Note that a new instance must be instantiated if a smaller batch size is used.
-        dtype (`torch.dtype`, *optional*, defaults to `torch.float16`):
-            The default `dtype` to use when initializing the layer.
-        device (`torch.device` or `str`, *optional*):
-            The device on which the cache should be initialized. Should be the same as the layer.
-
-    Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, MambaForCausalLM, MambaCache
-
-        >>> model = MambaForCausalLM.from_pretrained("state-spaces/mamba-130m-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-130m-hf")
-
-        >>> inputs = tokenizer(text="My name is Mamba", return_tensors="pt")
-
-        >>> # Prepare a cache class and pass it to model's forward
-        >>> past_key_values = MambaCache(config=model.config, max_batch_size=1, device=model.device, dtype=model.dtype)
-        >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
-        >>> outputs.past_key_values
-        MambaCache()
-        ```
-    """
-
-    is_compileable = True
-
-    # TODO (joao): add layer_device_map arg and update code in `generate` accordingly
-    def __init__(
-        self,
-        config: PretrainedConfig,
-        max_batch_size: int,
-        dtype: torch.dtype = torch.float16,
-        device: Union[torch.device, str, None] = None,
-    ):
-        self.max_batch_size = max_batch_size
-        self._dtype = dtype
-        self.intermediate_size = config.intermediate_size
-        self.ssm_state_size = config.state_size
-        self.conv_kernel_size = config.conv_kernel
-
-        self.conv_states: List[torch.Tensor] = []
-        self.ssm_states: List[torch.Tensor] = []
-        device = torch.device(device) if device is not None else None
-        for _ in range(config.num_hidden_layers):
-            conv_state: torch.Tensor = torch.zeros(
-                self.max_batch_size,
-                self.intermediate_size,
-                self.conv_kernel_size,
-                device=device,
-                dtype=self._dtype,
-            )
-            ssm_state: torch.Tensor = torch.zeros(
-                self.max_batch_size,
-                self.intermediate_size,
-                self.ssm_state_size,
-                device=device,
-                dtype=self._dtype,
-            )
-
-            torch._dynamo.mark_static_address(conv_state)
-            torch._dynamo.mark_static_address(ssm_state)
-            self.conv_states.append(conv_state)
-            self.ssm_states.append(ssm_state)
-
-    def update_conv_state(
-        self, layer_idx: int, new_conv_state: torch.Tensor, cache_position: torch.LongTensor
-    ) -> torch.Tensor:
-        # This `if` blocks is only reached in multigpu and if `layer_device_map` is not passed. It is used
-        # when the cache is initialized in the forward pass (e.g. Mamba)
-        if self.conv_states[layer_idx].device != new_conv_state.device:
-            self.conv_states[layer_idx] = self.conv_states[layer_idx].to(new_conv_state.device)
-
-        conv_state = self.conv_states[layer_idx]
-        cache_position = cache_position.clamp(0, self.conv_kernel_size - 1)
-
-        conv_state = conv_state.roll(shifts=-1, dims=-1)
-        conv_state[:, :, cache_position] = new_conv_state.to(device=conv_state.device, dtype=conv_state.dtype)
-        self.conv_states[layer_idx].zero_()
-        self.conv_states[layer_idx] += conv_state
-        return self.conv_states[layer_idx]
-
-    def update_ssm_state(self, layer_idx: int, new_ssm_state: torch.Tensor):
-        self.ssm_states[layer_idx] = new_ssm_state.to(self.ssm_states[layer_idx].device)
-        return self.ssm_states[layer_idx]
-
-    def reset(self):
-        for layer_idx in range(len(self.conv_states)):
-            # In-place ops prevent breaking the static address
-            self.conv_states[layer_idx].zero_()
-            self.ssm_states[layer_idx].zero_()
-
-
 class OffloadedStaticCache(StaticCache):
     """
     Static cache class to be used with `torch.compile(model)` that offloads to the CPU or
@@ -2357,10 +2141,6 @@ class OffloadedStaticCache(StaticCache):
             self._device_key_cache.append(key_cache)
             self._device_value_cache.append(value_cache)
 
-        # For backwards compatibility.
-        # TODO(gante): Remove this.
-        self._seen_tokens = 0
-
         # Create new CUDA stream for parallel prefetching.
         self._prefetch_stream = torch.cuda.Stream() if self.device.type == "cuda" else None
 
@@ -2394,10 +2174,6 @@ class OffloadedStaticCache(StaticCache):
         value_states = value_states.to(self.value_cache[layer_idx].dtype)
 
         if layer_idx == 0:
-            # Update seen tokens.
-            # TODO(gante): Remove this.
-            self._seen_tokens += key_states.shape[-2]
-
             # Always there.
             k_out = self.key_cache[0]
             v_out = self.value_cache[0]
@@ -2463,22 +2239,11 @@ class OffloadedStaticCache(StaticCache):
 
     def reset(self) -> None:
         """Resets the cache values while preserving the objects."""
-
-        # For backwards compatibility.
-        # TODO(gante): Remove this.
-        self._seen_tokens = 0
-
         # Zero out cache.
         for layer_idx in range(len(self.key_cache)):
             # In-place ops prevent breaking the static address.
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
-
-    @property
-    def seen_tokens(self) -> int:
-        # For backwards compatibility.
-        # TODO(gante): Remove this.
-        return self._seen_tokens
 
     def _create_key_value_cache_tensors(
         self, shape: Tuple[int, ...], device: torch.device
