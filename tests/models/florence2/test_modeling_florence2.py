@@ -382,7 +382,7 @@ class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_torch
     @require_vision
     def test_batched_generation(self):
-        model = Florence2ForConditionalGeneration.from_pretrained("microsoft/Florence-2-base")
+        model = Florence2ForConditionalGeneration.from_pretrained("microsoft/Florence-2-base").to(torch_device)
 
         processor = AutoProcessor.from_pretrained("microsoft/Florence-2-base")
 
