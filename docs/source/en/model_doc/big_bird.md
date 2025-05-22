@@ -63,7 +63,6 @@ model = AutoModelForMaskedLM.from_pretrained(
     "google/bigbird-roberta-base",
     torch_dtype=torch.float16,
     device_map="auto",
-    attention_type ="block_sparse"
 )
 inputs = tokenizer("Plants create [MASK] through a process known as photosynthesis.", return_tensors="pt").to("cuda")
 
