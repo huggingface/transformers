@@ -65,17 +65,17 @@ logger = logging.get_logger(__name__)
 
 
 @dataclass
+@auto_docstring
 class MusicgenUnconditionalInput(ModelOutput):
-    """
-    Args:
-        encoder_outputs  (`Tuple[torch.FloatTensor]` of length 1, with tensor shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the text encoder model.
-        attention_mask (`torch.LongTensor`)  of shape `(batch_size, sequence_length)`, *optional*):
-            Encoder attention mask to avoid performing attention on padding token indices. Mask values selected in `[0,
-            1]`: 1 for tokens that are **not masked**, 0 for tokens that are **masked**.
-        guidance_scale (`float`, *optional*):
-            Guidance scale for classifier free guidance, setting the balance between the conditional logits (predicted
-            from the prompts) and the unconditional logits (predicted without prompts).
+    r"""
+    encoder_outputs (`Tuple[torch.FloatTensor]` of length 1, with tensor shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the text encoder model.
+    attention_mask (`torch.LongTensor`)  of shape `(batch_size, sequence_length)`, *optional*):
+        Encoder attention mask to avoid performing attention on padding token indices. Mask values selected in `[0,
+        1]`: 1 for tokens that are **not masked**, 0 for tokens that are **masked**.
+    guidance_scale (`float`, *optional*):
+        Guidance scale for classifier free guidance, setting the balance between the conditional logits (predicted
+        from the prompts) and the unconditional logits (predicted without prompts).
     """
 
     encoder_outputs: Tuple[torch.FloatTensor] = None

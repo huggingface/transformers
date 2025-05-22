@@ -89,43 +89,34 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
 
 
 @dataclass
-class Kosmos2ModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Base class for text model's outputs that also contains a pooling of the last hidden states.
+    """
+)
+class Kosmos2ModelOutput(ModelOutput):
+    r"""
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the model.
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+        Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
+    projection_attentions (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
 
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+        Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
+        the weighted average in the self-attention heads.
+    vision_model_output (`BaseModelOutputWithPooling`, *optional*):
+        The output of the [`Kosmos2VisionModel`].
+    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
+        `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
+        encoder_sequence_length, embed_size_per_head)`.
 
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
-        projection_attentions (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
-            the weighted average in the self-attention heads.
-        vision_model_output(`BaseModelOutputWithPooling`, *optional*):
-            The output of the [`Kosmos2VisionModel`].
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
-            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
-            encoder_sequence_length, embed_size_per_head)`.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-            input) to speed up sequential decoding.
+        Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
+        `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
+        input) to speed up sequential decoding.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
@@ -144,45 +135,36 @@ class Kosmos2ModelOutput(ModelOutput):
 
 
 @dataclass
-class Kosmos2ForConditionalGenerationModelOutput(ModelOutput):
-    """
+@auto_docstring(
+    custom_intro="""
     Model output class for `Kosmos2ForConditionalGeneration`.
+    """
+)
+class Kosmos2ForConditionalGenerationModelOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
+        Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
+    projection_attentions (`tuple(torch.FloatTensor)`, *optional*):
+        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`.
 
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+        Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
+        the weighted average in the self-attention heads.
+    vision_model_output (`BaseModelOutputWithPooling`, *optional*):
+        The output of the [`Kosmos2VisionModel`].
+    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+        `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
+        `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
+        encoder_sequence_length, embed_size_per_head)`.
 
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, latent_query_num, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of `Kosmos2ImageToTextProjection`.
-        projection_attentions (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights given by `Kosmos2ImageToTextProjection`, after the attention softmax, used to compute
-            the weighted average in the self-attention heads.
-        vision_model_output(`BaseModelOutputWithPooling`, *optional*):
-            The output of the [`Kosmos2VisionModel`].
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
-            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
-            encoder_sequence_length, embed_size_per_head)`.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-            input) to speed up sequential decoding.
+        Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
+        `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
+        input) to speed up sequential decoding.
     """
 
     loss: Optional[torch.FloatTensor] = None
