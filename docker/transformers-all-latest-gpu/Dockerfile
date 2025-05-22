@@ -14,6 +14,8 @@ ARG PYTORCH='2.6.0'
 ARG INTEL_TORCH_EXT='2.3.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu121'
+# Disable kernel mapping for now until all tests pass
+ENV DISABLE_KERNEL_MAPPING=1
 
 RUN apt update
 RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg git-lfs
@@ -68,6 +70,12 @@ RUN python3 -m pip install --no-cache-dir g2p-en
 
 # For Some bitsandbytes tests
 RUN python3 -m pip install --no-cache-dir einops
+
+# For Some tests with `@require_liger_kernel`
+RUN python3 -m pip install --no-cache-dir liger-kernel
+
+# `kernels` may give different outputs (within 1e-5 range) even with the same model (weights) and the same inputs
+RUN python3 -m pip uninstall -y kernels
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.

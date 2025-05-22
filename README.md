@@ -6,25 +6,46 @@ codespace-legendary-space-dollop
 
 [![Build PR Documentation](https://github.com/nodoubtz/transformers/actions/workflows/build_pr_documentation.yml/badge.svg)](https://github.com/nodoubtz/transformers/actions/workflows/build_pr_documentation.yml)
 
+main
 Transformers is a powerful library designed for natural language processing (NLP) tasks. It provides pre-trained models and tools to fine-tune and deploy state-of-the-art transformer-based architectures.
 
 ## Features
+=======
+```py
+# venv
+python -m venv .my-env
+source .my-env/bin/activate
+# uv
+uv venv .my-env
+source .my-env/bin/activate
+```
+main
 
 - **Pre-trained Models:** Access a wide range of pre-trained transformer models.
 - **Custom Fine-tuning:** Easily fine-tune models for your own datasets and use cases.
 - **Easy Inference:** Perform NLP tasks such as text classification, translation, summarization, and more.
 - **Extensibility:** Build custom transformer architectures and workflows.
 
+main
 ## Installation
 
 To install the library, use the following command:
 
 ```bash
 pip install transformers
+=======
+```py
+# pip
+pip install "transformers[torch]"
+
+# uv
+uv pip install "transformers[torch]"
+main
 ```
 
 ## Getting Started
 
+main
 Here’s a quick example to get you started with Transformers:
 
 ```python
@@ -36,6 +57,17 @@ classifier = pipeline("sentiment-analysis")
 # Perform inference
 result = classifier("I love using Transformers!")
 print(result)
+=======
+```shell
+git clone https://github.com/huggingface/transformers.git
+cd transformers
+
+# pip
+pip install .[torch]
+
+# uv
+uv pip install .[torch]
+main
 ```
 
 ## Documentation
@@ -53,7 +85,16 @@ We welcome contributions! Please follow the guidelines below:
 
 ## License
 
+<
+main
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+=======
+> [!TIP]
+> You can also chat with a model directly from the command line.
+> ```shell
+> transformers chat Qwen/Qwen2.5-0.5B-Instruct
+> ```
+main
 
 ## Acknowledgements
 

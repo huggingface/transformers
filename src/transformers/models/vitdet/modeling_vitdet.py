@@ -25,20 +25,12 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import auto_docstring, logging
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_vitdet import VitDetConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "VitDetConfig"
 
 
 class VitDetEmbeddings(nn.Module):
@@ -535,7 +527,7 @@ class VitDetEncoder(nn.Module):
         depth = config.num_hidden_layers
 
         # stochastic depth decay rule
-        drop_path_rate = [x.item() for x in torch.linspace(0, config.drop_path_rate, depth)]
+        drop_path_rate = [x.item() for x in torch.linspace(0, config.drop_path_rate, depth, device="cpu")]
 
         layers = []
         for i in range(depth):
@@ -609,12 +601,8 @@ def caffe2_msra_fill(module: nn.Module) -> None:
         nn.init.constant_(module.bias, 0)
 
 
+@auto_docstring
 class VitDetPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = VitDetConfig
     base_model_prefix = "vitdet"
     main_input_name = "pixel_values"
@@ -665,44 +653,7 @@ class VitDetPreTrainedModel(PreTrainedModel):
             module.norm3.bias.data.zero_()
 
 
-VITDET_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`VitDetConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-VITDET_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
-            for details.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare VitDet Transformer model outputting raw hidden-states without any specific head on top.",
-    VITDET_START_DOCSTRING,
-)
+@auto_docstring
 class VitDetModel(VitDetPreTrainedModel):
     def __init__(self, config: VitDetConfig):
         super().__init__(config)
@@ -725,8 +676,7 @@ class VitDetModel(VitDetPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(VITDET_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -735,9 +685,7 @@ class VitDetModel(VitDetPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
-        """
-        Returns:
-
+        r"""
         Examples:
 
         ```python
@@ -793,11 +741,10 @@ class VitDetModel(VitDetPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     ViTDet backbone, to be used with frameworks like Mask R-CNN.
-    """,
-    VITDET_START_DOCSTRING,
+    """
 )
 class VitDetBackbone(VitDetPreTrainedModel, BackboneMixin):
     def __init__(self, config):
@@ -814,8 +761,7 @@ class VitDetBackbone(VitDetPreTrainedModel, BackboneMixin):
     def get_input_embeddings(self) -> VitDetEmbeddings:
         return self.embeddings.projection
 
-    @add_start_docstrings_to_model_forward(VITDET_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -823,9 +769,7 @@ class VitDetBackbone(VitDetPreTrainedModel, BackboneMixin):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
-        """
-        Returns:
-
+        r"""
         Examples:
 
         ```python
