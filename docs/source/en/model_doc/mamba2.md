@@ -71,6 +71,24 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 </hfoption>
 </hfoptions>
 
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [torchao](../quantization/torchao) to only quantize the weights to 4-bit integers.
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+from torchao.quantization import Int4WeightOnlyConfig
+
+quantization_config = Int4WeightOnlyConfig(group_size=128)
+quantization_config = TorchAoConfig(quant_type=quant_config)
+tokenizer = AutoTokenizer.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1")
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1", torch_dtype=torch.bfloat16, quantization_config=quantization_config, device_map="auto",)
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
+
+output = model.generate(**input_ids)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
 ## Notes
 
 - Codestral Mamba has `groups=8` which are similar to the number of kv heads in an attention-based model.
