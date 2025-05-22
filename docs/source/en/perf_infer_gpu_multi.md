@@ -13,11 +13,11 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Tensor parallelism
+# Distributed inference
 
-[Tensor parallelism](./perf_train_gpu_many#tensor-parallelism) shards a model onto multiple GPUs and parallelizes computations such as matrix multiplication. It enables fitting larger model sizes into memory and is faster because each GPU can process a tensor slice.
+When a model doesn't fit on a single GPU, distributed inference with [tensor parallelism](./perf_train_gpu_many#tensor-parallelism) can help. Tensor parallelism shards a model onto multiple GPUs and parallelizes computations such as matrix multiplication. It enables fitting larger model sizes into memory and is faster because each GPU can process a tensor slice.
 
-Tensor parallelism adds communication overhead and should be used on single machine setups with multiple GPUs to take advantage of fast intra-node communication. For multi-node training, it may be more efficient to use pipeline or data parallelism depending on your use case.
+However, tensor parallelism adds communication overhead and should be used on single machine setups with multiple GPUs to take advantage of fast intra-node communication. For multi-node training, it may be more efficient to use pipeline or data parallelism depending on your use case.
 
 > [!TIP]
 > Refer to the [Ultra-Scale Playbook](https://huggingface.co/spaces/nanotron/ultrascale-playbook?section=tensor_parallelism) section on tensor parallelism to learn more.
@@ -45,7 +45,7 @@ This guide shows how to enable tensor parallelism with Transformers and differen
 
 ## Partitioning a model
 
-Transformers supports two ways of partitioning a model.
+Transformers supports tensor parallelism if a model has a `tp_plan`. There are two plans to partition a model.
 
 - The `auto` tensor parallelism plan partitions a model (see the supported models above) based on a predefined configuration.
 - You can also manually specify your own partitioning plan and pass it to the `tp_plan` parameter in [`~PretrainedModel.from_pretrained`].
