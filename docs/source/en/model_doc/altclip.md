@@ -36,21 +36,18 @@ It achieves near-SOTA zero-shot retrieval across languages while preserving CLIP
 
 > ### Why not use `pipeline()`?
 >
-> The 🤗 `pipeline()` helper offers a one-line interface for many models,  
-> but it only works when a *task-specific head* is registered for that
-> architecture.  
-> As of today, **AltCLIP ships with its original contrastive head only**
-> (image × text similarity) and does **not** expose a dedicated
-> `VisualQuestionAnswering` head like BLIP, BLIP-2, or ViLT.  
-> Consequently, the generic VQA pipeline rejects AltCLIP with  
-> “Model \<name\> is not supported.”
+> The 🤗 `pipeline()` helper offers a one-liner for many architectures,  
+> but it only works when a *task-specific head* is officially registered.  
+> AltCLIP currently exposes **only its original contrastive head**
+> (image × text similarity) and no `VisualQuestionAnswering` head, so the
+> generic VQA pipeline rejects it with  
+> “*Model \<name\> is not supported*.”
 >
 > **AutoModel + Processor** gives you full control:
 >
-> 1. Load the multilingual checkpoint (`AltCLIPModel` & `AltCLIPProcessor`).
+> 1. Load the checkpoint (`AltCLIPModel` & `AltCLIPProcessor`).
 > 2. Feed any image–text pair(s) in one forward pass.
-> 3. Post-process the *logits_per_image* matrix however you need  
->   (e.g. apply `softmax`, rank captions, compute retrieval metrics, etc.).
+> 3. Post-process `logits_per_image` however you like (softmax, ranking …).
 >
 > ```python
 > from PIL import Image
@@ -66,23 +63,19 @@ It achieves near-SOTA zero-shot retrieval across languages while preserving CLIP
 > image = Image.open(requests.get(url, stream=True).raw)
 > texts = ["a photo of a cat", "a photo of a dog"]
 >
-> # forward pass
 > inputs  = processor(text=texts, images=image, return_tensors="pt", padding=True)
 > outputs = model(**inputs)
 >
-> # similarity → probabilities
 > probs = outputs.logits_per_image.softmax(dim=1)
-> print(probs)  # tensor([[9.9956e-01, 4.3879e-04]], grad_fn=<SoftmaxBackward0>)
+> print(probs)      # tensor([[0.9996, 0.0004]])
 > ```
 >
 > The first caption (“cat”) wins with > 99 % confidence—exactly what we expect
-> for that COCO image. This minimal example satisfies the doc checklist’s
-> “ready-to-use code” requirement while staying framework-agnostic.
-
+> for that COCO image.
 
 <Tip>
 
-`AltCLIPModel` is a subclass of `CLIPModel`, so you can drop it into any code that already expects CLIP.
+`AltCLIPModel` is a subclass of `CLIPModel`, so it drops straight into any code that already uses CLIP.
 
 </Tip>
 
@@ -91,7 +84,6 @@ It achieves near-SOTA zero-shot retrieval across languages while preserving CLIP
 ## Quantization example (large model)
 
 ```bash
-# Dynamic INT-8 quantization with transformers-cli
 transformers-cli quantize BAAI/AltCLIP \
   --method dynamic \
   --dtype int8 \
@@ -100,43 +92,63 @@ transformers-cli quantize BAAI/AltCLIP \
 
 ---
 
-## Attention visualisation
+## Attention visualisation  
 
-> **Not yet supported**  
-> As of *transformers v \<current\>*, `AttentionMaskVisualizer`
-> only works with decoder-style LLMs. It raises  
-> `AttributeError: '_ModelWrapper' object has no attribute '_update_causal_mask'`
-> when called on AltCLIP (an encoder-only, contrastive model).
+> `AttentionMaskVisualizer` does **not yet support encoder-only models**
+> like AltCLIP (see [issue #25096](https://github.com/huggingface/transformers/issues/25096));
+> it errors out with  
+> `_ModelWrapper has no attribute _update_causal_mask`.
 >
-> Once encoder support is added (see
-> [open issue #<id>](https://github.com/huggingface/transformers/issues/XXXXX)),
-> you’ll be able to run:
->
-> ```python
-> from transformers.utils.attention_visualizer import AttentionMaskVisualizer
->
-> viz = AttentionMaskVisualizer("BAAI/AltCLIP")  # will work in a future release
-> viz("<img> What animal is in the picture?", image)
-> ```
->
-> For now you can still inspect attention manually:
->
-> ```python
-> outputs = model(**inputs, output_attentions=True)
-> attentions = outputs.vision_attentions   # list[num_layers] of tensors
-> ```
+> Until that lands you can still **retrieve and plot raw ViT self-attention**
+> in ~15 lines:
+
+```python
+from PIL import Image
+import requests, torch, matplotlib.pyplot as plt
+from transformers import AltCLIPProcessor, AltCLIPModel
+
+# 1 – load model
+model_id  = "BAAI/AltCLIP"
+processor = AltCLIPProcessor.from_pretrained(model_id)
+model     = AltCLIPModel.from_pretrained(model_id).eval()
+
+# 2 – prepare a sample image + text
+url   = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+inputs = processor(text="a photo of a cat", images=image,
+                   return_tensors="pt", padding=True)
+
+# 3 – forward pass with attentions
+with torch.no_grad():
+    out = model(**inputs, output_attentions=True)
+
+att = out.vision_model_output.attentions      # list[num_layers] · (B,H,S,S)
+
+# 4 – pick last layer, head 0 → attention from every patch to CLS token
+layer, head = -1, 0
+grid_len    = int((att[layer].size(-1) - 1) ** 0.5)    # 14 for ViT-B/16
+heatmap     = att[layer][0, head, 1:, 0].reshape(grid_len, grid_len)
+
+plt.imshow(heatmap.cpu(), interpolation="nearest")
+plt.title("AltCLIP · CLS attention (last layer, head 0)")
+plt.axis("off")
+plt.show()
+```
+
+This produces a 14 × 14 heat-map (for ViT-B/16) showing which image regions
+attend most to the global CLS token.
 
 ---
 
 ## API reference
 
-[[autodoc]] AltCLIPConfig - from_text_vision_configs  
+[[autodoc]] AltCLIPConfig — from_text_vision_configs  
 [[autodoc]] AltCLIPTextConfig  
 [[autodoc]] AltCLIPVisionConfig  
 [[autodoc]] AltCLIPProcessor  
-[[autodoc]] AltCLIPModel - forward - get_text_features - get_image_features  
-[[autodoc]] AltCLIPTextModel - forward  
-[[autodoc]] AltCLIPVisionModel - forward  
+[[autodoc]] AltCLIPModel — forward · get_text_features · get_image_features  
+[[autodoc]] AltCLIPTextModel — forward  
+[[autodoc]] AltCLIPVisionModel — forward  
 
 ---
 
