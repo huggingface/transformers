@@ -55,7 +55,7 @@ def _cast_if_autocast_enabled(device_type, *args):
     if not torch.is_autocast_enabled():
         return args
     else:
-        return torch.amp.autocast_mode._cast(args, torch.get_autocast_dtype(device_type))
+        return torch.amp.autocast_mode._cast(args, device_type, torch.get_autocast_dtype(device_type))
 
 
 class NemotronLayerNorm1P(nn.LayerNorm):
@@ -70,7 +70,7 @@ class NemotronLayerNorm1P(nn.LayerNorm):
     ):
         super().__init__(normalized_shape, eps, elementwise_affine, bias, device, dtype)
 
-    def forward(self, input: Tensor) -> Tensor: 
+    def forward(self, input: Tensor) -> Tensor:
         device_type = input.device.type if isinstance(input.device.type, str) and input.device.type != "mps" else "cpu"
         args = _cast_if_autocast_enabled(device_type, input, self.normalized_shape, self.weight + 1, self.bias, self.eps)
         with torch.autocast(device_type=input.device.type, enabled=False):
