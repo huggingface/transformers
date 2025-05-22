@@ -711,6 +711,7 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict["output_hidden_states"] = False
             config.model_config.return_dict = True
             model = model_class(config)
+            model.config._attn_implementation = "eager"
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
