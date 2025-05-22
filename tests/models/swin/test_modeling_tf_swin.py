@@ -259,7 +259,7 @@ class TFSwinModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class._from_config(config,attn_implementation="eager")
+            model = model_class._from_config(config, attn_implementation="eager")
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
             expected_num_attentions = len(self.model_tester.depths)

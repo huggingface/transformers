@@ -1184,7 +1184,7 @@ class GenerationTesterMixin:
                 assistant_model = model_class(config).to(torch_device).eval()
             else:
                 assistant_model = model
-            assistant_model.config._attn_implementation = "eager" 
+            assistant_model.config._attn_implementation = "eager"
             assistant_model.generation_config.num_assistant_tokens = 2  # see b)
             assistant_model.generation_config.num_assistant_tokens_schedule = "constant"  # see b)
             generation_kwargs.update({"assistant_model": assistant_model})

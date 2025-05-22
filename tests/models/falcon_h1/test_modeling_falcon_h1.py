@@ -337,7 +337,7 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class._from_config(config,attn_implementation="eager")
+            model = model_class._from_config(config, attn_implementation="eager")
             model.to(torch_device)
             model.eval()
 
