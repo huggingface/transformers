@@ -143,10 +143,6 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
-    @unittest.skip("Gemma2's eager attn/sdpa attn outputs are expected to be different")
-    def test_sdpa_equivalence(self):
-        pass
-
     @unittest.skip(
         reason="HybridCache can't be gathered because it is not iterable. Adding a simple iter and dumping `distributed_iterator`"
         " as in Dynamic Cache doesn't work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
@@ -156,6 +152,10 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
 
     @unittest.skip("Gemma2 has HybridCache which auto-compiles. Compile and FA2 don't work together.")
     def test_eager_matches_fa2_generate(self):
+        pass
+
+    @unittest.skip("Gemma2 eager/FA2 attention outputs are expected to be different")
+    def test_flash_attn_2_equivalence(self):
         pass
 
 

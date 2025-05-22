@@ -15,8 +15,6 @@
 
 import unittest
 
-from parameterized import parameterized
-
 from transformers import AutoTokenizer, Mamba2Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
@@ -42,6 +40,29 @@ if is_torch_available():
         Mamba2Model,
     )
     from transformers.models.mamba2.modeling_mamba2 import Mamba2Cache, Mamba2Mixer
+
+
+class Mamba2ConfigTester(ConfigTester):
+    def _create_config(self, hidden_size: int, num_heads: int, expand: int, head_dim: int):
+        _input_dict = self.inputs_dict.copy()
+        _input_dict["hidden_size"] = hidden_size
+        _input_dict["num_heads"] = num_heads
+        _input_dict["expand"] = expand
+        _input_dict["head_dim"] = head_dim
+        return self.config_class(**_input_dict)
+
+    def test_hidden_size_compatibility(self):
+        self._create_config(hidden_size=2, num_heads=2, expand=2, head_dim=2)
+        self._create_config(hidden_size=4, num_heads=4, expand=2, head_dim=2)
+        self._create_config(hidden_size=2, num_heads=4, expand=4, head_dim=2)
+        with self.parent.assertRaises(ValueError):
+            self._create_config(hidden_size=2, num_heads=4, expand=2, head_dim=4)
+        with self.parent.assertRaises(ValueError):
+            self._create_config(hidden_size=4, num_heads=2, expand=4, head_dim=2)
+
+    def run_common_tests(self):
+        self.test_hidden_size_compatibility()
+        return super().run_common_tests()
 
 
 class Mamba2ModelTester:
@@ -233,7 +254,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def setUp(self):
         self.model_tester = Mamba2ModelTester(self)
-        self.config_tester = ConfigTester(
+        self.config_tester = Mamba2ConfigTester(
             self, config_class=Mamba2Config, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
 
@@ -339,14 +360,9 @@ class Mamba2IntegrationTest(unittest.TestCase):
         self.prompt = ("[INST]Write a hello world program in C++.",)
 
     @require_read_token
-    @parameterized.expand(
-        [
-            (torch_device,),
-        ]
-    )
     @slow
     @require_torch
-    def test_simple_generate(self, device):
+    def test_simple_generate(self):
         """
         Simple generate test to avoid regressions.
         Note: state-spaces (cuda) implementation and pure torch implementation
@@ -357,9 +373,9 @@ class Mamba2IntegrationTest(unittest.TestCase):
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
         model = Mamba2ForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16)
-        model.to(device)
+        model.to(torch_device)
         input_ids = tokenizer("[INST]Write a hello world program in C++.[/INST]", return_tensors="pt")["input_ids"].to(
-            device
+            torch_device
         )
 
         out = model.generate(input_ids, do_sample=False, use_cache=True, max_new_tokens=30)

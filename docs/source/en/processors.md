@@ -106,6 +106,8 @@ dataset[0]["text"]
 Remember to resample the sampling rate to match the pretrained models required sampling rate.
 
 ```py
+from datasets import Audio
+
 dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))
 ```
 

@@ -297,10 +297,6 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip("Cohere2's eager attn/sdpa attn outputs are expected to be different")
-    def test_sdpa_equivalence(self):
-        pass
-
     @unittest.skip(reason="SiglipVisionModel does not support standalone training")
     def test_training(self):
         pass
