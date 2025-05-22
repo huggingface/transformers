@@ -17,17 +17,14 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
-from ...utils import logging
-
-
-logger = logging.get_logger(__name__)
 
 
 class NGPTConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`NGPTModel`]. It is used to instantiate an nGPT
+    This is the configuration class to store the configuration of a [`NGPTModel`]. It is used to instantiate a Normalized-GPT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the nGPT-8B.
+    defaults will yield a similar configuration to that of the Normalized-Nemotron-8B.
+    e.g. [nvidia/Normalized-Nemotron-8B-Reasoning](https://huggingface.co/nvidia/Normalized-Nemotron-8B-Reasoning)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -35,7 +32,7 @@ class NGPTConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 131072):
-            Vocabulary size of the nGPT model. Defines the number of different tokens that can be represented by the
+            Vocabulary size of the Normalized-GPT model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`NGPTModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
@@ -136,10 +133,10 @@ class NGPTConfig(PretrainedConfig):
     ```python
     >>> from transformers import NGPTModel, NGPTConfig
 
-    >>> # Initializing a NGPT-8B style configuration
+    >>> # Initializing a Normalized-Nemotron-8B style configuration
     >>> configuration = NGPTConfig()
 
-    >>> # Initializing a model from the ngpt-8b style configuration
+    >>> # Initializing a model from the Normalized-Nemotron-8B style configuration
     >>> model = NGPTModel(configuration)
 
     >>> # Accessing the model configuration

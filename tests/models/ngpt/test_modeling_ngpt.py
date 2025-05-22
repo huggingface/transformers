@@ -175,7 +175,7 @@ class NGPTIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = [
             "What is the largest planet in solar system?\nAnswer: Jupiter\n\nWhat is the answer",
         ]
-        model_id = ""  # FIXME: add model id
+        model_id = "nvidia/Normalized-Nemotron-8B-Reasoning"
         model = NGPTForCausalLM.from_pretrained(
             model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa"
         )
@@ -201,7 +201,7 @@ class NGPTIntegrationTest(unittest.TestCase):
             }
         )
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
-        model_id = "nvidia/ngpt-8b-instruct"  # FIXME: add model id
+        model_id = "nvidia/Normalized-Nemotron-8B-Reasoning"
         model = NGPTForCausalLM.from_pretrained(
             model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="eager"
         )
@@ -219,7 +219,7 @@ class NGPTIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = [
             "What is the largest planet in solar system?\nAnswer: Jupiter\n\nWhat is the answer",
         ]
-        model_id = "nvidia/ngpt-8b-instruct"  # FIXME: add model id
+        model_id = "nvidia/Normalized-Nemotron-8B-Reasoning"
         model = NGPTForCausalLM.from_pretrained(
             model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_2"
         )
