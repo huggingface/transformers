@@ -46,6 +46,7 @@ from ..dynamic_module_utils import (
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..integrations.fsdp import is_fsdp_managed_module
+from ..masking_utils import create_masks_for_generate
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils import ExtensionsTrie
@@ -74,6 +75,7 @@ from .candidate_generator import (
 from .configuration_utils import (
     NEED_SETUP_CACHE_CLASSES_MAPPING,
     QUANT_BACKEND_CLASSES_MAPPING,
+    CompileConfig,
     GenerationConfig,
     GenerationMode,
 )
@@ -649,12 +651,22 @@ class GenerationMixin:
                 causal_mask_creation_function = getattr(
                     decoder, "_prepare_4d_causal_attention_mask_with_cache_position", None
                 )
+
+            # If it's not defined, it means the model uses the new general mask API
             if causal_mask_creation_function is None:  # can't be found
-                logger.warning_once(
-                    f"{self.__class__.__name__} has no `_prepare_4d_causal_attention_mask_with_cache_position` method "
-                    "defined in its base modeling class. Compiled forward passes will be sub-optimal. If you're "
-                    "writing code, see Llama for an example implementation. If you're a user, please report this "
-                    "issue on GitHub."
+                output_attentions = kwargs.get("output_attentions", False)
+                token_type_ids = getattr(model_input, "token_type_ids", None)
+                # Some models may overwrite the general one
+                causal_mask_creation_function = getattr(self, "create_masks_for_generate", create_masks_for_generate)
+                attention_mask = causal_mask_creation_function(
+                    config=self.config,
+                    # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
+                    input_embeds=torch.empty((batch_size, sequence_length), dtype=self.dtype),
+                    attention_mask=attention_mask,
+                    cache_position=cache_position,
+                    past_key_values=past_key_values,
+                    output_attentions=output_attentions,
+                    token_type_ids=token_type_ids,
                 )
             else:
                 attention_mask = causal_mask_creation_function(
@@ -1246,12 +1258,6 @@ class GenerationMixin:
                     device=device,
                 )
             )
-        if generation_config.forced_decoder_ids is not None:
-            # TODO (sanchit): move this exception to GenerationConfig.validate() when TF & FLAX are aligned with PT
-            raise ValueError(
-                "You have explicitly specified `forced_decoder_ids`. Please remove the `forced_decoder_ids` argument "
-                "in favour of `input_ids` or `decoder_input_ids` respectively.",
-            )
 
         # TODO (joao): find a strategy to specify the order of the processors
         processors = self._merge_criteria_processor_list(processors, logits_processor)
@@ -1752,16 +1758,21 @@ class GenerationMixin:
                 use_model_defaults is None and model_base_version >= version.parse("4.50.0")
             ):
                 modified_values = {}
-                default_generation_config = GenerationConfig()
-                for key, default_value in default_generation_config.__dict__.items():
+                global_default_generation_config = GenerationConfig()
+                model_generation_config = self.generation_config
+                # we iterate over the model's generation config: it may hold custom keys, which we'll want to copy
+                for key, model_gen_config_value in model_generation_config.__dict__.items():
                     if key.startswith("_") or key == "transformers_version":  # metadata
                         continue
-                    custom_gen_config_value = getattr(generation_config, key)
-                    model_gen_config_value = getattr(self.generation_config, key)
-                    if custom_gen_config_value == default_value and model_gen_config_value != default_value:
+                    global_default_value = getattr(global_default_generation_config, key, None)
+                    custom_gen_config_value = getattr(generation_config, key, None)
+                    if (
+                        custom_gen_config_value == global_default_value
+                        and model_gen_config_value != global_default_value
+                    ):
                         modified_values[key] = model_gen_config_value
                         setattr(generation_config, key, model_gen_config_value)
-                if len(modified_values) > 0:
+                if use_model_defaults is None and len(modified_values) > 0:
                     logger.warning_once(
                         f"`generation_config` default values have been modified to match model-specific defaults: "
                         f"{modified_values}. If this is not desired, please set these values explicitly."
@@ -1980,7 +1991,9 @@ class GenerationMixin:
         instantiated, writes it to `model_kwargs`, under the name expected by the model.
         """
 
-        cache_name = "past_key_values" if "mamba" not in self.__class__.__name__.lower() else "cache_params"
+        is_hybrid_cache = any(class_name in self.__class__.__name__.lower() for class_name in ["mamba", "falconh1"])
+        cache_name = "past_key_values" if not is_hybrid_cache else "cache_params"
+
         requires_cross_attention_cache = (
             self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
         )
@@ -3532,6 +3545,19 @@ class GenerationMixin:
         compile_forward = self._valid_auto_compile_criteria(model_kwargs, generation_config)
         if compile_forward:
             os.environ["TOKENIZERS_PARALLELISM"] = "0"
+            # If we use FA2 and a static cache, we cannot compile with fullgraph
+            if self.config._attn_implementation == "flash_attention_2" and getattr(
+                model_kwargs.get("past_key_values"), "is_compileable", False
+            ):
+                if generation_config.compile_config is None:
+                    generation_config.compile_config = CompileConfig(fullgraph=False)
+                # only raise warning if the user passed an explicit compile-config (otherwise, simply change the default without confusing the user)
+                elif generation_config.compile_config.fullgraph:
+                    logger.warning_once(
+                        "When using Flash Attention 2 and a static cache, you cannot use the option `CompileConfig(fullgraph=True)` as "
+                        "FA2 introduces graph breaks. We overrode the option with `fullgraph=False`."
+                    )
+                    generation_config.compile_config.fullgraph = False
             model_forward = self.get_compiled_call(generation_config.compile_config)
 
         if generation_config.prefill_chunk_size is not None:
