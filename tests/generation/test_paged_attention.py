@@ -4,6 +4,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
+from transformers.testing_utils import require_torch_gpu, run_slow, require_flash_attn
 
 
 _TEST_PROMPTS = [
@@ -23,6 +24,9 @@ _EXPECTED_OUTPUTS = [
 ]
 
 
+@run_slow
+@require_torch_gpu
+@require_flash_attn
 class TestBatchGeneration(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
