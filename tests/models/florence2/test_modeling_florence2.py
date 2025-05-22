@@ -23,6 +23,8 @@ from transformers import (
     AutoProcessor,
     Florence2Config,
     Florence2ForConditionalGeneration,
+    Florence2LanguageConfig,
+    Florence2VisionConfig,
     is_torch_available,
     is_vision_available,
 )
@@ -52,87 +54,110 @@ class Florence2VisionText2TextModelTester:
         self,
         parent,
         batch_size=13,
+        num_channels=3,
+        image_size=8,
         seq_length=13,
-        encoder_seq_length=15,
-        text_config={
-            "vocab_size": 51289,
-            "activation_dropout": 0.1,
-            "activation_function": "gelu",
-            "add_bias_logits": False,
-            "add_final_layer_norm": False,
-            "attention_dropout": 0.1,
-            "bos_token_id": 0,
-            "classif_dropout": 0.1,
-            "classifier_dropout": 0.0,
-            "d_model": 8,
-            "decoder_attention_heads": 1,
-            "decoder_ffn_dim": 8,
-            "decoder_layerdrop": 0.0,
-            "decoder_layers": 1,
-            "decoder_start_token_id": 2,
-            "dropout": 0.1,
-            "early_stopping": True,
-            "encoder_attention_heads": 1,
-            "encoder_ffn_dim": 8,
-            "encoder_layerdrop": 0.0,
-            "encoder_layers": 1,
-            "eos_token_id": 2,
-            "forced_eos_token_id": 2,
-            "forced_bos_token_id": 0,
-            "gradient_checkpointing": False,
-            "init_std": 0.02,
-            "is_encoder_decoder": True,
-            "label2id": {"LABEL_0": 0, "LABEL_1": 1, "LABEL_2": 2},
-            "max_position_embeddings": 64,
-            "no_repeat_ngram_size": 3,
-            "normalize_before": False,
-            "num_hidden_layers": 1,
-            "pad_token_id": 1,
-            "scale_embedding": False,
-            "num_beams": 3,
-        },
+        encoder_seq_length=18,
         is_training=True,
-        vision_config={
-            "model_type": "davit",
-            "drop_path_rate": 0.1,
-            "patch_size": [7],
-            "patch_stride": [4],
-            "patch_padding": [1],
-            "patch_prenorm": [False],
-            "dim_embed": [8],
-            "num_heads": [1],
-            "num_groups": [1],
-            "depths": [1],
-            "window_size": 12,
-            "projection_dim": 8,
-            "visual_temporal_embedding": {"type": "COSINE", "max_temporal_embeddings": 100},
-            "image_pos_embed": {"type": "learned_abs_2d", "max_pos_embeddings": 50},
-            "image_feature_source": ["spatial_avg_pool", "temporal_avg_pool"],
-        },
+        use_labels=False,
+        vocab_size=99,
+        max_position_embeddings=64,
+        encoder_layers=1,
+        encoder_ffn_dim=8,
+        decoder_layers=1,
+        decoder_ffn_dim=8,
+        num_attention_heads=1,
+        d_model=8,
+        hidden_act="gelu",
+        dropout=0.1,
+        eos_token_id=2,
+        bos_token_id=0,
+        pad_token_id=1,
+        depths=[1],
+        patch_size=[7],
+        patch_stride=[4],
+        patch_padding=[3],
+        patch_prenorm=[False],
+        dim_embed=[8],
+        num_heads=[1],
+        num_groups=[1],
+        window_size=12,
+        drop_path_rate=0.1,
+        projection_dim=8,
     ):
         self.parent = parent
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.bos_token_id = text_config["bos_token_id"]
-        self.pad_token_id = text_config["pad_token_id"]
-        self.eos_token_id = text_config["eos_token_id"]
-
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.is_training = is_training
-
         self.batch_size = batch_size
-        self.num_channels = 3
-        self.image_size = 8
+        self.num_channels = num_channels
+        self.image_size = image_size
         self.seq_length = seq_length
         self.encoder_seq_length = encoder_seq_length
+        self.is_training = is_training
+        self.num_hidden_layers = decoder_layers
+        self.hidden_size = d_model
+
+        # Language model configs
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.encoder_layers = encoder_layers
+        self.encoder_ffn_dim = encoder_ffn_dim
+        self.decoder_layers = decoder_layers
+        self.decoder_ffn_dim = decoder_ffn_dim
+        self.num_attention_heads = num_attention_heads
+        self.d_model = d_model
+        self.activation_function = hidden_act
+        self.dropout = dropout
+        self.eos_token_id = eos_token_id
+        self.bos_token_id = bos_token_id
+        self.pad_token_id = pad_token_id
+
+        # Vision model configs
+        self.drop_path_rate = drop_path_rate
+        self.patch_size = patch_size
+        self.depths = depths
+        self.patch_stride = patch_stride
+        self.patch_padding = patch_padding
+        self.patch_prenorm = patch_prenorm
+        self.dim_embed = dim_embed
+        self.num_heads = num_heads
+        self.num_groups = num_groups
+        self.window_size = window_size
+        self.projection_dim = projection_dim
 
     def get_config(self):
-        return Florence2Config(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
-            is_encoder_decoder=True,
+        text_config = Florence2LanguageConfig(
+            vocab_size=self.vocab_size,
+            max_position_embeddings=self.max_position_embeddings,
+            encoder_layers=self.encoder_layers,
+            encoder_ffn_dim=self.encoder_ffn_dim,
+            encoder_attention_heads=self.num_attention_heads,
+            decoder_layers=self.decoder_layers,
+            decoder_ffn_dim=self.decoder_ffn_dim,
+            decoder_attention_heads=self.num_attention_heads,
+            d_model=self.d_model,
+            activation_function=self.activation_function,
+            dropout=self.dropout,
+            attention_dropout=self.dropout,
+            activation_dropout=self.dropout,
+            eos_token_id=self.eos_token_id,
+            bos_token_id=self.bos_token_id,
+            pad_token_id=self.pad_token_id,
         )
+
+        vision_config = Florence2VisionConfig(
+            drop_path_rate=self.drop_path_rate,
+            patch_size=self.patch_size,
+            depths=self.depths,
+            patch_stride=self.patch_stride,
+            patch_padding=self.patch_padding,
+            patch_prenorm=self.patch_prenorm,
+            dim_embed=self.dim_embed,
+            num_heads=self.num_heads,
+            num_groups=self.num_groups,
+            window_size=self.window_size,
+            projection_dim=self.projection_dim,
+        )
+
+        return Florence2Config.from_text_vision_configs(text_config=text_config, vision_config=vision_config)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
@@ -146,15 +171,16 @@ class Florence2VisionText2TextModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
             3,
         )
-        input_ids[:, -1] = self.eos_token_id  # Eos Token
+        input_ids[:, -1] = self.eos_token_id
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        config = self.get_config()
 
         inputs_dict = {
             "input_ids": input_ids,
             "pixel_values": pixel_values,
             "decoder_input_ids": decoder_input_ids,
         }
+
+        config = self.get_config()
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):

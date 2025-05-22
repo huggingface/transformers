@@ -32,34 +32,50 @@ class Florence2VisionConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        drop_path_rate (`float`, *optional*, defaults to 0.1):
-            The dropout rate of the drop path layer.
-        patch_size (`Tuple[int]`, *optional*, defaults to (7, 3, 3, 3)):
-            The patch size of the image.
-        patch_stride (`Tuple[int]`, *optional*, defaults to (4, 2, 2, 2)):
-            The patch stride of the image.
-        patch_padding (`Tuple[int]`, *optional*, defaults to (3, 1, 1, 1)):
-            The patch padding of the image.
-        patch_prenorm (`Tuple[bool]`, *optional*, defaults to (false, true, true, true)):
-            Whether to apply layer normalization before the patch embedding layer.
-        dim_embed (`Tuple[int]`, *optional*, defaults to (256, 512, 1024, 2048)):
-            The dimension of the embedding layer.
-        num_heads (`Tuple[int]`, *optional*, defaults to (8, 16, 32, 64)):
-            The number of attention heads.
-        num_groups (`Tuple[int]`, *optional*, defaults to (8, 16, 32, 64)):
-            The number of groups.
-        depths (`Tuple[int]`, *optional*, defaults to (1, 1, 9, 1)):
+        in_chans (`int`, *optional*, defaults to 3):
+            Number of input image channels.
+        num_classes (`int`, *optional*, defaults to 1000):
+            Number of classes for classification head
+        depths (`Tuple[int]`, *optional*, defaults to `(1, 1, 9, 1)`):
             The depth of the model.
+        patch_size (`Tuple[int]`, *optional*, defaults to `(7, 3, 3, 3)`):
+            The patch size of the image.
+        patch_stride (`Tuple[int]`, *optional*, defaults to `(4, 2, 2, 2)`):
+            The patch stride of the image.
+        patch_padding (`Tuple[int]`, *optional*, defaults to `(3, 1, 1, 1)`):
+            The patch padding of the image.
+        patch_prenorm (`Tuple[bool]`, *optional*, defaults to `(False, True, True, True)`):
+            Whether to apply layer normalization before the patch embedding layer.
+        dim_embed (`Tuple[int]`, *optional*, defaults to `(256, 512, 1024, 2048)`):
+            The dimension of the embedding layer.
+        num_heads (`Tuple[int]`, *optional*, defaults to `(8, 16, 32, 64)`):
+            The number of attention heads.
+        num_groups (`Tuple[int]`, *optional*, defaults to `(8, 16, 32, 64)`):
+            The number of groups.
         window_size (`int`, *optional*, defaults to 12):
             The window size of the model.
+        drop_path_rate (`float`, *optional*, defaults to 0.1):
+            The dropout rate of the drop path layer.
+        mlp_ratio (`int`, *optional*, defaults to 4.0):
+            Ratio of mlp hidden dim to embedding dim.
+        qkv_bias (`bool`, *optional*, defaults to `True`):
+            If True, add a learnable bias to query, key, value.
+        norm_layer_type (`str *optional*, defaults to `"layernorm"`):
+            Norm layer type, can be `"layernorm"` or `"batchnorm"`
+        conv_at_attn (`bool`, *optional*, defaults to `True`):
+            If True, add a convolution layer before attention layer
+        conv_at_ffn (`bool`, *optional*, defaults to `True`):
+            If True, add a convolution layer before fully connected layer
         projection_dim (`int`, *optional*, defaults to 1024):
             The dimension of the projection layer.
-        visual_temporal_embedding (`dict`, *optional*):
+        visual_temporal_embedding (`dict`, *optional*, defaults to `{'type': 'COSINE', 'max_temporal_embeddings': 100}`):
             The configuration of the visual temporal embedding.
-        image_pos_embed (`dict`, *optional*):
+        image_pos_embed (`dict`, *optional*, defaults to `{'type': 'learned_abs_2d', 'max_pos_embeddings': 50}`):
             The configuration of the image position embedding.
-        image_feature_source (`Tuple[str]`, *optional*, defaults to ("spatial_avg_pool", "temporal_avg_pool")):
+        image_feature_source (`Tuple[str]`, *optional*, defaults to `('spatial_avg_pool', 'temporal_avg_pool')`):
             The source of the image feature.
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     Example:
 
     ```python
@@ -75,7 +91,7 @@ class Florence2VisionConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "florence2_vision"
+    model_type = "davit"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -94,13 +110,14 @@ class Florence2VisionConfig(PretrainedConfig):
         drop_path_rate=0.1,
         mlp_ratio=4.0,
         qkv_bias=True,
-        norm_layer_type="layernorm",  # string to be resolved in model
+        norm_layer_type="layernorm",
         conv_at_attn=True,
         conv_at_ffn=True,
         projection_dim=1024,
         visual_temporal_embedding={"type": "COSINE", "max_temporal_embeddings": 100},
         image_pos_embed={"type": "learned_abs_2d", "max_pos_embeddings": 50},
         image_feature_source=("spatial_avg_pool", "temporal_avg_pool"),
+        init_std=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -126,6 +143,7 @@ class Florence2VisionConfig(PretrainedConfig):
         self.visual_temporal_embedding = visual_temporal_embedding
         self.image_pos_embed = image_pos_embed
         self.image_feature_source = image_feature_source
+        self.init_std = init_std
 
 
 class Florence2LanguageConfig(PretrainedConfig):
@@ -143,44 +161,54 @@ class Florence2LanguageConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 51289):
             Vocabulary size of the Florence2Language model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Florence2LanguageModel`].
-        d_model (`int`, *optional*, defaults to 1024):
-            Dimensionality of the layers and the pooler layer.
-        encoder_layers (`int`, *optional*, defaults to 12):
-            Number of encoder layers.
-        decoder_layers (`int`, *optional*, defaults to 12):
-            Number of decoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_ffn_dim (`int`, *optional*, defaults to 4096):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 4096):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
-        activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
         max_position_embeddings (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        init_std (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        encoder_layers (`int`, *optional*, defaults to 12):
+            Number of encoder layers.
+        encoder_ffn_dim (`int`, *optional*, defaults to 4096):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+        encoder_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        decoder_layers (`int`, *optional*, defaults to 12):
+            Number of decoder layers.
+        decoder_ffn_dim (`int`, *optional*, defaults to 4096):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+        decoder_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer decoder.
         encoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
         decoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
+        activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        d_model (`int`, *optional*, defaults to 1024):
+            Dimensionality of the layers and the pooler layer.
+        dropout (`float`, *optional*, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        activation_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for activations inside the fully connected layer.
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         scale_embedding (`bool`, *optional*, defaults to `False`):
             Scale embeddings by diving by sqrt(d_model).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        pad_token_id (`int`, *optional*, defaults to 1):
+            The id of the _padding_ token.
+        bos_token_id (`int`, *optional*, defaults to 0):
+            The id of the _beginning-of-stream_ token.
+        eos_token_id (`int`, *optional*, defaults to 2):
+            The id of the _end-of-stream_ token.
+        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
+            Whether the model is used as an encoder/decoder or not.
+        decoder_start_token_id (`int`, *optional*, defaults to 2):
+            If an encoder-decoder model starts decoding with a different token than _bos_, the id of that token.
         forced_eos_token_id (`int`, *optional*, defaults to 2):
             The id of the token to force as the last generated token when `max_length` is reached. Usually set to
             `eos_token_id`.
@@ -283,15 +311,17 @@ class Florence2Config(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vision_config (`Florence2VisionConfig`,  *optional*):
-            Custom vision config or dict
-        text_config (`Union[AutoConfig, dict]`, *optional*):
-            The config object of the text backbone.
+        text_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`Florence2LanguageConfig`].
+        vision_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`Florence2VisionConfig`].
         vocab_size (`int`, *optional*, defaults to 51289):
             Vocabulary size of the Florence2model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`~Florence2ForConditionalGeneration`]
         projection_dim (`int`, *optional*, defaults to 1024):
             Dimension of the multimodal projection space.
+        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
+            Whether the model is used as an encoder/decoder or not.
 
     Example:
 
@@ -322,27 +352,47 @@ class Florence2Config(PretrainedConfig):
 
     def __init__(
         self,
-        vision_config=None,
         text_config=None,
+        vision_config=None,
         vocab_size=51289,
         projection_dim=1024,
+        is_encoder_decoder=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
         self.projection_dim = projection_dim
 
-        if vision_config is None:
-            vision_config = {}
-            logger.info("vision_config is None. Initializing the Florence2VisionConfig with default values.")
-
         if text_config is None:
             text_config = {}
             logger.info("text_config is None.  Initializing the Florence2LanguageConfig with default values.")
 
+        if vision_config is None:
+            vision_config = {}
+            logger.info("vision_config is None. Initializing the Florence2VisionConfig with default values.")
+
         self.vision_config = Florence2VisionConfig(**vision_config)
         self.text_config = Florence2LanguageConfig(**text_config)
 
-        super().__init__(**kwargs)
+        super().__init__(
+            vocab_size=vocab_size,
+            projection_dim=projection_dim,
+            is_encoder_decoder=is_encoder_decoder,
+            **kwargs,
+        )
+
+    @classmethod
+    def from_text_vision_configs(
+        cls, text_config: Florence2LanguageConfig, vision_config: Florence2VisionConfig, **kwargs
+    ):
+        r"""
+        Instantiate a [`Florence2Config`] (or a derived class) from siglip2 text model configuration and siglip2 vision
+        model configuration.
+
+        Returns:
+            [`Florence2Config`]: An instance of a configuration object
+        """
+
+        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
 
-__all__ = ["Florence2Config"]
+__all__ = ["Florence2Config", "Florence2LanguageConfig", "Florence2VisionConfig"]

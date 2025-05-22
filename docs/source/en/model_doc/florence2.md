@@ -29,6 +29,14 @@ The abstract from the paper is the following:
 This model was contributed by [hlky](https://huggingface.co/hlky).
 The original code can be found [here](https://huggingface.co/microsoft/Florence-2-base/tree/main).
 
+## Florence2VisionConfig
+
+[[autodoc]] Florence2VisionConfig
+
+## Florence2LanguageConfig
+
+[[autodoc]] Florence2LanguageConfig
+
 ## Florence2Config
 
 [[autodoc]] Florence2Config
