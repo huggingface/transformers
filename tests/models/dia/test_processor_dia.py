@@ -21,8 +21,6 @@ import pytest
 from transformers import DiaTokenizer, is_speech_available
 from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
 
-from .test_feature_extraction_dia import floats_list
-
 
 if is_speech_available():
     from transformers import DiaAudioProcessor, DiaProcessor

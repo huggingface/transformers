@@ -17,6 +17,7 @@
 from typing import List, Optional, Tuple
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 
 
@@ -89,16 +90,17 @@ class DiaTokenizer(PreTrainedTokenizer):
 
         return token_id
 
-    def convert_tokens_to_string(self, tokens):
+    def convert_tokens_to_string(self, tokens: List[str]) -> str:
         """Converts a sequence of tokens (string) in a single string."""
         bstring = b""
         for token in tokens:
             if token in self.added_tokens_decoder:
-                tok_string = self.added_tokens_decoder[token].encode("utf-8")
+                added_token_obj = self.added_tokens_decoder[token]
+                tok_string = str(added_token_obj).encode("utf-8")
             elif token in self.added_tokens_encoder:
                 tok_string = token.encode("utf-8")
             else:
-                tok_string = bytes([ord(token)])
+                tok_string = token.encode("utf-8")  # Assume general string token
             bstring += tok_string
         string = bstring.decode("utf-8", errors="ignore")
         return string
@@ -107,4 +109,12 @@ class DiaTokenizer(PreTrainedTokenizer):
         return ()
 
 
-__all__ = ["DiaTokenizer"]
+class DiaTokenizerFast(PreTrainedTokenizerFast):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def _tokenize(self, text: str) -> List[str]:
+        return super()._tokenize(text)
+
+
+__all__ = ["DiaTokenizer", "DiaTokenizerFast"]
