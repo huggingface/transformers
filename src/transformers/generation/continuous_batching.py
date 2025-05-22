@@ -779,21 +779,21 @@ class ContinuousBatchProcessor:
     def get_model_kwargs(self) -> PagedAttentionArgs:
         """Get model keyword arguments for the current batch."""
         # torch.set_printoptions(threshold=100000,linewidth=10000)
-        return dict(
-            input_ids=self.input_ids,
-            position_ids=self.position_ids,
-            attention_mask=self.attention_mask,
-            cumulative_seqlens_q=self.cumulative_seqlens_q,
-            cumulative_seqlens_k=self.cumulative_seqlens_k,
-            write_index=self.write_index,
-            read_index=self.read_index,
-            logits_indices=self.logits_indices,
-            max_seqlen_q=self.max_seqlen_q,
-            max_seqlen_k=self.max_seqlen_k,
-            block_tables=self.cache._block_tables,
-            cache=self.cache,
-            use_cache=False,
-        )
+        return {
+            "input_ids": self.input_ids,
+            "position_ids": self.position_ids,
+            "attention_mask": self.attention_mask,
+            "cumulative_seqlens_q": self.cumulative_seqlens_q,
+            "cumulative_seqlens_k": self.cumulative_seqlens_k,
+            "write_index": self.write_index,
+            "read_index": self.read_index,
+            "logits_indices": self.logits_indices,
+            "max_seqlen_q": self.max_seqlen_q,
+            "max_seqlen_k": self.max_seqlen_k,
+            "block_tables": self.cache._block_tables,
+            "cache": self.cache,
+            "use_cache": False,
+        }
 
     def __repr__(self):
         return (

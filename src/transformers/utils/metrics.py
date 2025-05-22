@@ -331,7 +331,7 @@ class ContinuousBatchProcessorMetrics:
             logger.warning(f"Failed to record batch metrics: {e}")
 
     @traced
-    def record_kv_cache_memory_metrics(self, cache: "PagedAttentionCache") -> None:
+    def record_kv_cache_memory_metrics(self, cache) -> None:
         """Record memory usage of the PagedAttentionCache without GPU synchronization.
 
         This calculates the theoretical memory usage based on cache configuration
