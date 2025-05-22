@@ -28,7 +28,6 @@ rendered properly in your Markdown viewer.
 
 [BERTweet](https://huggingface.co/papers/2005.10200) shares the same architecture as [BERT-base](./bert), but it’s pretrained like [RoBERTa](./roberta) on English Tweets. It performs really well on Tweet-related tasks like part-of-speech tagging, named entity recognition, and text classification.
 
-Because of this Twitter-native training, BERTweet performs really well on tweet-related NLP tasks like part-of-speech tagging, named entity recognition, and text classification — even outperforming big models like RoBERTa-base and XLM-R-base in those areas. 
 
 You can find all the original BERTweet checkpoints under the [VinAI Research](https://huggingface.co/vinai?search_models=BERTweet) organization.
 
