@@ -247,7 +247,7 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
         is_training: Optional[bool] = None,
     ):
         if self.config.text_config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and torch.any(attention_mask == 0.0):
                 return attention_mask
             return None
         is_training = is_training if is_training is not None else self.training
