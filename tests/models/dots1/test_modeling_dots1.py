@@ -16,12 +16,16 @@
 import gc
 import unittest
 
+import pytest
+
 from transformers import AutoTokenizer, Dots1Config, is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
     cleanup,
+    require_flash_attn,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -56,8 +60,9 @@ class Dots1ModelTester:
         intermediate_size=37,
         moe_intermediate_size=12,
         num_hidden_layers=5,
-        num_attention_heads=4,
-        num_key_value_heads=4,
+        num_attention_heads=2,
+        num_key_value_heads=2,
+        head_dim=16,
         n_shared_experts=1,
         n_routed_experts=8,
         n_group=1,
@@ -71,7 +76,8 @@ class Dots1ModelTester:
         rms_norm_eps=1e-6,
         use_cache=True,
         pad_token_id=0,
-        bos_token_id=None,
+        bos_token_id=1,
+        max_window_layers=3,
         pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=10000.0,
@@ -79,8 +85,8 @@ class Dots1ModelTester:
         attention_bias=False,
         attention_dropout=0.0,
         routed_scaling_factor=1.0,
-        use_sliding_window=False,
-        sliding_window=4096,
+        use_sliding_window=True,
+        sliding_window=50,
         type_vocab_size=16,
         type_sequence_label_size=2,
         num_labels=3,
@@ -102,6 +108,7 @@ class Dots1ModelTester:
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
+        self.head_dim = head_dim
         self.n_shared_experts = n_shared_experts
         self.n_routed_experts = n_routed_experts
         self.n_group = n_group
@@ -125,6 +132,7 @@ class Dots1ModelTester:
         self.routed_scaling_factor = routed_scaling_factor
         self.use_sliding_window = use_sliding_window
         self.sliding_window = sliding_window
+        self.max_window_layers = max_window_layers
 
         self.type_vocab_size = type_vocab_size
         self.type_sequence_label_size = type_sequence_label_size
@@ -164,6 +172,7 @@ class Dots1ModelTester:
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
+            head_dim=self.head_dim,
             n_shared_experts=self.n_shared_experts,
             n_routed_experts=self.n_routed_experts,
             n_group=self.n_group,
@@ -187,6 +196,7 @@ class Dots1ModelTester:
             routed_scaling_factor=self.routed_scaling_factor,
             use_sliding_window=self.use_sliding_window,
             sliding_window=self.sliding_window,
+            max_window_layers=self.max_window_layers,
         )
 
     def create_and_check_model(
@@ -254,13 +264,24 @@ class Dots1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip("dots.llm1's moe is not compatible.")
+    @unittest.skip("dots.llm1's moe is not compatible `token_indices, weight_indices = torch.where(mask)`.")
     def test_generate_compilation_all_outputs(self):
         pass
 
-    @unittest.skip("dots.llm1's moe is not compatible.")
+    @unittest.skip("dots.llm1's moe is not compatible `token_indices, weight_indices = torch.where(mask)`")
     def test_generate_compile_model_forward(self):
         pass
+
+    @unittest.skip("dots.llm1's moe is not compatible token_indices, weight_indices = torch.where(mask).")
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        self.skipTest(reason="dots.llm1 flash attention does not support right padding")
 
 
 @require_torch_accelerator

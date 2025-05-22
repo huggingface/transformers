@@ -10,11 +10,9 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 )
 from ..llama.modeling_llama import (
     KwargsForCausalLM,
-    LlamaForCausalLM,
-    LlamaModel,
     LlamaRMSNorm,
 )
-from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3RotaryEmbedding
+from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3ForCausalLM, Qwen3Model, Qwen3RotaryEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -52,11 +50,11 @@ class Dots1PreTrainedModel(DeepseekV3PreTrainedModel):
     pass
 
 
-class Dots1Model(LlamaModel):
+class Dots1Model(Qwen3Model):
     pass
 
 
-class Dots1ForCausalLM(LlamaForCausalLM):
+class Dots1ForCausalLM(Qwen3ForCausalLM):
     def forward(
         self,
         **super_kwargs: Unpack[KwargsForCausalLM],

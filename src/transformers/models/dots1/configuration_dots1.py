@@ -82,6 +82,8 @@ class Dots1Config(PretrainedConfig):
             Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 4096):
             Size of the sliding window for attention. If not specified, defaults to `4096`.
+        max_window_layers (`int`, *optional*, defaults to 28):
+            The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
 
     Examples:
         ```python
@@ -98,7 +100,7 @@ class Dots1Config(PretrainedConfig):
     model_type = "dots1"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    base_model_tp_plan = {  #  # TODO: only replicate attention layers when > first_k_dense_replace
+    base_model_tp_plan = {  # TODO: only replicate attention layers when > first_k_dense_replace
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
@@ -144,9 +146,6 @@ class Dots1Config(PretrainedConfig):
         initializer_range=0.02,
         rms_norm_eps=1e-6,
         use_cache=True,
-        pad_token_id=None,
-        bos_token_id=None,
-        eos_token_id=151643,
         pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=10000.0,
@@ -156,6 +155,7 @@ class Dots1Config(PretrainedConfig):
         routed_scaling_factor=1.0,
         use_sliding_window=False,
         sliding_window=4096,
+        max_window_layers=28,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -186,12 +186,10 @@ class Dots1Config(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.routed_scaling_factor = routed_scaling_factor
         self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window  # we check `use_sliding_window` in the modeling code
+        self.sliding_window = sliding_window if use_sliding_window else None
+        self.max_window_layers = max_window_layers
 
         super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
