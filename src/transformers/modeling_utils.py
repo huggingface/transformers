@@ -165,6 +165,7 @@ if is_safetensors_available():
 if is_kernels_available():
     from kernels import get_kernel
 
+
 logger = logging.get_logger(__name__)
 
 
