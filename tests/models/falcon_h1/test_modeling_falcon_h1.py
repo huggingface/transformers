@@ -479,7 +479,7 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 @require_torch_gpu
 class FalconH1ModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_llama_3_1_hard(self):
+    def test_falcon_h1_hard(self):
         """
         An integration test for Falcon-H1.
         """
