@@ -88,9 +88,6 @@ class PerceptionLMConfig(PretrainedConfig):
     ```"""
 
     model_type = "perception_lm"
-    attribute_map = {
-        "image_token_id": "image_token_index",
-    }
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
@@ -98,10 +95,12 @@ class PerceptionLMConfig(PretrainedConfig):
         vision_config=None,
         text_config=None,
         projector_pooling_ratio=1,
-        image_token_index=128002,
+        image_token_id=128002,
+        video_token_id=128003,
         **kwargs,
     ):
-        self.image_token_index = image_token_index
+        self.image_token_id = image_token_id
+        self.video_token_id = video_token_id
         if isinstance(vision_config, dict):
             vision_config = PerceptionEncoderConfig(**vision_config)
         elif isinstance(vision_config, PerceptionEncoderConfig):

@@ -129,7 +129,7 @@ DEFAULT_SPECIAL_TOKENS = {
         "<|begin_of_text|>",
         "<|end_of_text|>",
         "<|image|>",
-        "<|reserved_special_token_1|>",
+        "<|video|>",
         "<|reserved_special_token_2|>",
         "<|reserved_special_token_3|>",
         "<|start_header_id|>",
@@ -139,6 +139,35 @@ DEFAULT_SPECIAL_TOKENS = {
     ]
     + [f"<|reserved_special_token_{i}|>" for i in range(5, 256 - 5)]
 }
+
+CHAT_TEMPLATE = (
+    "{{- bos_token }}"
+    "{%- if messages[0]['role'] == 'system' -%}"
+    "    {%- set system_message = messages[0]['content']|trim %}\n"
+    "    {%- set messages = messages[1:] %}\n"
+    "{%- else %}"
+    "    {%- set system_message = 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.' %}"
+    "{%- endif %}"
+    "{{- '<|start_header_id|>system<|end_header_id|>\\n\\n' }}"
+    "{{- system_message }}"
+    "{{- '<|eot_id|>' }}"
+    "{%- for message in messages %}"
+    "{{- '<|start_header_id|>' + message['role'] + '<|end_header_id|>\\n\\n' }}"
+    "{%- for content in message['content'] | selectattr('type', 'equalto', 'image') %}"
+    "{{ '<|image|>' }}"
+    "{%- endfor %}"
+    "{%- for content in message['content'] | selectattr('type', 'equalto', 'video') %}"
+    "{{ '<|video|>' }}"
+    "{%- endfor %}"
+    "{%- for content in message['content'] | selectattr('type', 'equalto', 'text') %}"
+    "{{- content['text'] | trim }}"
+    "{%- endfor %}"
+    "{{'<|eot_id|>' }}"
+    "{%- endfor %}"
+    "{%- if add_generation_prompt %}"
+    "{{- '<|start_header_id|>assistant<|end_header_id|>\\n\\n' }}"
+    "{%- endif %}"
+)
 
 
 def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
@@ -381,7 +410,7 @@ def write_model(
             text_config=text_config.to_dict(),
             vision_config=vision_config.to_dict(),
             projector_pooling_ratio=projector_pooling_ratio,
-            image_token_index=image_token_id,
+            image_token_id=image_token_id,
         )
 
         config.save_pretrained(tmp_model_path)
@@ -432,33 +461,6 @@ class Llama3Converter(TikTokenConverter):
         super().__init__(vocab_file, additional_special_tokens=special_tokens, **kwargs)
         tokenizer = self.converted()
 
-        chat_template = (
-            "{{- bos_token }}"
-            "{%- if messages[0]['role'] == 'system' -%}"
-            "    {%- set system_message = messages[0]['content']|trim %}\n"
-            "    {%- set messages = messages[1:] %}\n"
-            "{%- else %}"
-            "    {%- set system_message = 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.' %}"
-            "{%- endif %}"
-            "{{- '<|start_header_id|>system<|end_header_id|>\\n\\n' }}"
-            "{{- system_message }}"
-            "{{- '<|eot_id|>' }}"
-            "{%- for message in messages %}"
-            "{{- '<|start_header_id|>' + message['role'] + '<|end_header_id|>\\n\\n' }}"
-            "{%- for content in message['content'] | selectattr('type', 'in', ['image', 'video']) %}"
-            "{{ '<|image|>' }}"
-            "{%- endfor %}"
-            "{%- for content in message['content'] | selectattr('type', 'equalto', 'text') %}"
-            "{{- content['text'] | trim }}"
-            "{%- endfor %}"
-            "{{'<|eot_id|>' }}"
-            "{%- endfor %}"
-            "{%- if add_generation_prompt %}"
-            "{{- '<|start_header_id|>assistant<|end_header_id|>\\n\\n' }}"
-            "{%- endif %}"
-        )
-        additional_kwargs = {"chat_template": chat_template}
-
         self.converted_tokenizer = PreTrainedTokenizerFast(
             tokenizer_object=tokenizer,
             bos_token="<|begin_of_text|>",
@@ -466,8 +468,10 @@ class Llama3Converter(TikTokenConverter):
             model_input_names=["input_ids", "attention_mask"],
             model_max_length=context_length,
             clean_up_tokenization_spaces=True,
-            **additional_kwargs,
+            extra_special_tokens={"image_token": "<|image|>", "video_token": "<|video|>", "pad_token": "<|end_of_text|>"},
         )
+        self.converted_tokenizer.image_token_id = self.converted_tokenizer.encode(self.converted_tokenizer.image_token, add_special_tokens=False)[0]
+        self.converted_tokenizer.video_token_id = self.converted_tokenizer.encode(self.converted_tokenizer.video_token, add_special_tokens=False)[0]
         self.update_post_processor(self.converted_tokenizer)
         # finer special_tokens_map.json
         self.converted_tokenizer._bos_token = BOS_ADDED_TOKEN
@@ -509,13 +513,9 @@ def write_tokenizer(
         special_tokens,
         context_length,
     ).converted_tokenizer
-    tokenizer.image_token = "<|image|>"
-    tokenizer.image_token_id = tokenizer.encode("<|image|>", add_special_tokens=False)[
-        0
-    ]
 
+    tokenizer.image_token_id = tokenizer.encode(tokenizer.image_token, add_special_tokens=False)[0]
     processor_config = {
-        "image_token": "<|image|>",
         "pooling_ratio": params["model"]["pooling_ratio"],
         "patch_size": params["model"]["vision_model"]["patch_size"],
         "processor_class": "PerceptionLMProcessor",
@@ -540,6 +540,7 @@ def write_tokenizer(
         image_processor=image_preprocessor,
         video_processor=video_preprocessor,
         tokenizer=tokenizer,
+        chat_template=CHAT_TEMPLATE,
         **processor_config,
     )
 
