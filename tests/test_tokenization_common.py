@@ -3023,6 +3023,9 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
+                if hasattr(tokenizer, "is_fast") and tokenizer.is_fast:
+                    self.skipTest(f"{tokenizer.__class__.__name__} is fast")
+
                 string_sequence = "Testing the prepare_for_model method."
                 ids = tokenizer.encode(string_sequence, add_special_tokens=False)
                 prepared_input_dict = tokenizer.prepare_for_model(ids, add_special_tokens=True)
@@ -3806,6 +3809,13 @@ class TokenizerTesterMixin:
                 output_p = tokenizer_p.create_token_type_ids_from_sequences(input_simple, input_pair)
                 self.assertEqual(output_p, output_r)
 
+    # TODO: REMOVE test @itazap
+    @unittest.skip(
+        reason="remove for 2 reasons: 1.build_inputs_with_special_tokens is only used by "
+        "slow tokenizers by .encode (in prepare_for_model) "
+        "2. build_inputs_with_special_tokens should be internalized anyway (for slow)"
+        "3. build_inputs_with_special_tokens is tested by encode tests"
+    )
     def test_build_inputs_with_special_tokens(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
@@ -3815,19 +3825,6 @@ class TokenizerTesterMixin:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
                 tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
-                # # Input string
-                # input_simple = tokenizer_p.tokenize("This is a sample input", add_special_tokens=False)
-                # input_pair = tokenizer_p.tokenize("This is a sample pair", add_special_tokens=False)
-
-                # # Generate output
-                # output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple)
-                # output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple)
-                # self.assertEqual(output_p, output_r)
-
-                # # Generate pair output
-                # output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple, input_pair)
-                # output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple, input_pair)
-                # self.assertEqual(output_p, output_r)
 
                 input_pairs = [
                     ("", ""),
@@ -3842,12 +3839,13 @@ class TokenizerTesterMixin:
                     input_pair = tokenizer_p.encode(sample_pair, add_special_tokens=False)
 
                     # Generate output
-                    output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple)
+                    output_r = tokenizer_r.encode_plus(sample_input)["input_ids"]
                     output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple)
                     self.assertEqual(output_p, output_r)
 
                     # Generate pair output
-                    output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple, input_pair)
+                    output_r = tokenizer_r.batch_encode_plus([sample_input, sample_pair])["input_ids"]
+                    output_r = [item for sublist in output_r for item in sublist]
                     output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple, input_pair)
                     self.assertEqual(output_p, output_r)
 
@@ -4220,6 +4218,12 @@ class TokenizerTesterMixin:
                         for i_no, i_with in zip(no_special_tokens[key], with_special_tokens[key]):
                             self.assertEqual(len(i_no), len(i_with) - simple_num_special_tokens_to_add)
 
+    # TODO: REMOVE test @itazap
+    @unittest.skip(
+        reason="remove for 2 reasons: 1. prepare_for_model is only used by slow tokenizers by .encode "
+        "2. prepare_for_model should be internalized anyway (for slow)"
+        "3. prepare_for_model is tested by encode tests"
+    )
     def test_compare_prepare_for_model(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
