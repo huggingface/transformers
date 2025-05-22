@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.53.0.dev0"
+__version__ = "4.52.0.dev0"
 
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -276,7 +276,6 @@ _import_structure = {
         "TorchAoConfig",
         "VptqConfig",
     ],
-    "video_utils": [],
 }
 
 # tokenizers-backed objects
@@ -335,39 +334,6 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
-    _import_structure["video_processing_utils"] = ["BaseVideoProcessor"]
-    _import_structure["models.blip"].append("BlipImageProcessorFast")
-    _import_structure["models.clip"].append("CLIPImageProcessorFast")
-    _import_structure["models.convnext"].append("ConvNextImageProcessorFast")
-    _import_structure["models.deformable_detr"].append("DeformableDetrImageProcessorFast")
-    _import_structure["models.deit"].append("DeiTImageProcessorFast")
-    _import_structure["models.depth_pro"].append("DepthProImageProcessorFast")
-    _import_structure["models.detr"].append("DetrImageProcessorFast")
-    _import_structure["models.gemma3"].append("Gemma3ImageProcessorFast")
-    _import_structure["models.got_ocr2"].append("GotOcr2ImageProcessorFast")
-    _import_structure["models.llava"].append("LlavaImageProcessorFast")
-    _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
-    _import_structure["models.llava_onevision"].append("LlavaOnevisionImageProcessorFast")
-    _import_structure["models.phi4_multimodal"].append("Phi4MultimodalImageProcessorFast")
-    _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
-    _import_structure["models.qwen2_vl"].append("Qwen2VLImageProcessorFast")
-    _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
-    _import_structure["models.segformer"].append("SegformerImageProcessorFast")
-    _import_structure["models.siglip"].append("SiglipImageProcessorFast")
-    _import_structure["models.siglip2"].append("Siglip2ImageProcessorFast")
-    _import_structure["models.vit"].append("ViTImageProcessorFast")
-
-try:
-    if not (is_torchvision_available() and is_timm_available()):
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .utils import dummy_timm_and_torchvision_objects
-
-    _import_structure["utils.dummy_timm_and_torchvision_objects"] = [
-        name for name in dir(dummy_timm_and_torchvision_objects) if not name.startswith("_")
-    ]
-else:
-    _import_structure["models.timm_wrapper"].extend(["TimmWrapperImageProcessor"])
 
 # PyTorch-backed objects
 try:
@@ -477,7 +443,6 @@ else:
     _import_structure["modeling_outputs"] = []
     _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update"]
     _import_structure["modeling_utils"] = ["PreTrainedModel", "AttentionInterface"]
-    _import_structure["masking_utils"] = ["AttentionMaskInterface"]
     _import_structure["optimization"] = [
         "Adafactor",
         "get_constant_schedule",
@@ -844,27 +809,6 @@ if TYPE_CHECKING:
         from .utils.dummy_torchvision_objects import *
     else:
         from .image_processing_utils_fast import BaseImageProcessorFast
-        from .video_processing_utils import BaseVideoProcessor
-        from .models.blip import BlipImageProcessorFast
-        from .models.clip import CLIPImageProcessorFast
-        from .models.convnext import ConvNextImageProcessorFast
-        from .models.deformable_detr import DeformableDetrImageProcessorFast
-        from .models.deit import DeiTImageProcessorFast
-        from .models.depth_pro import DepthProImageProcessorFast
-        from .models.detr import DetrImageProcessorFast
-        from .models.gemma3 import Gemma3ImageProcessorFast
-        from .models.got_ocr2 import GotOcr2ImageProcessorFast
-        from .models.llava import LlavaImageProcessorFast
-        from .models.llava_next import LlavaNextImageProcessorFast
-        from .models.llava_onevision import LlavaOnevisionImageProcessorFast
-        from .models.phi4_multimodal import Phi4MultimodalImageProcessorFast
-        from .models.pixtral import PixtralImageProcessorFast
-        from .models.qwen2_vl import Qwen2VLImageProcessorFast
-        from .models.rt_detr import RTDetrImageProcessorFast
-        from .models.segformer import SegformerImageProcessorFast
-        from .models.siglip import SiglipImageProcessorFast
-        from .models.siglip2 import Siglip2ImageProcessorFast
-        from .models.vit import ViTImageProcessorFast
 
     try:
         if not (is_torchvision_available() and is_timm_available()):
@@ -967,7 +911,6 @@ if TYPE_CHECKING:
             TorchExportableModuleWithStaticCache,
             convert_and_export_with_cache,
         )
-        from .masking_utils import AttentionMaskInterface
         from .model_debugging_utils import (
             model_addition_debugger_context,
         )
