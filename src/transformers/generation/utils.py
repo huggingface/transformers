@@ -39,8 +39,8 @@ from ..cache_utils import (
     OffloadedHybridCache,
     QuantizedCacheConfig,
 )
-from ..continuous_batching import ContinuousMixin
 from ..configuration_utils import PretrainedConfig
+from ..continuous_batching import ContinuousMixin
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..integrations.fsdp import is_fsdp_managed_module
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput

@@ -54,7 +54,7 @@ if is_torchao_available():
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
-from .generation import CompileConfig, ContinuousMixin, GenerationConfig
+from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
 from .integrations.accelerate import find_tied_parameters, init_empty_weights
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
