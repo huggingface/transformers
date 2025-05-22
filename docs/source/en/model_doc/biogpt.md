@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 # BioGPT
 
-[BioGPT](https://huggingface.co/papers/2210.10341) is a generative Transformer model based on the GPT-2 architecture and pre-trained on 15 million PubMed abstracts. That makes it great at writing, understanding, and analyzing biomedical text.
+[BioGPT](https://huggingface.co/papers/2210.10341) is a generative Transformer model based on [GPT-2](./gpt2) and pretrained on 15 million PubMed abstracts. It is designed for biomedical language tasks.
 
 You can find all the original BioGPT checkpoints under the [BioGPT](https://huggingface.co/models?search=biogpt) collection.
 
