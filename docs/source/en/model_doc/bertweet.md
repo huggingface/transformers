@@ -32,7 +32,7 @@ rendered properly in your Markdown viewer.
 You can find all the original BERTweet checkpoints under the [VinAI Research](https://huggingface.co/vinai?search_models=BERTweet) organization.
 
 > [!TIP]
-> This implementation is the same as BERT, except for tokenization method. Refer to [BERT](https://huggingface.co/docs/transformers/en/model_doc/bert) documentation for API reference information.
+> Refer to the [BERT](./bert) docs for more examples of how to apply BERTweet to different language tasks.
 
 The example below demonstrates how to predict the `<mask>` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
