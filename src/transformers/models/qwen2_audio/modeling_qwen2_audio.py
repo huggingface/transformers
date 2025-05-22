@@ -91,11 +91,6 @@ def eager_attention_forward(
     **kwargs,
 ):
     if scaling is None:
-        logger.warning_once(
-            "You are using a model's `eager` attention module but are not passing its appropriate attention scaling."
-            " We default to `head_dim**-0.5`. If this is unexpected, please report this to the Transformers GitHub"
-            " repo: https://github.com/huggingface/transformers/issues/new"
-        )
         scaling = query.size(-1) ** -0.5
 
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling

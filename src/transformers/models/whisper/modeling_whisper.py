@@ -216,7 +216,7 @@ class WhisperPositionalEmbedding(nn.Embedding):
             return self.weight[position_ids]
 
 
-# TODO: copy from bart after merge
+# Copied from transformers.models.bart.modeling_bart.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -232,8 +232,8 @@ def eager_attention_forward(
         scaling = query.size(-1) ** -0.5
 
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-    if attention_mask is not None and attention_mask.ndim == 4:
-        attn_weights = attn_weights + attention_mask[:, :, :, : key.shape[-2]]
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
@@ -368,8 +368,7 @@ class WhisperAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Whisper, MBART->WHISPER
-# TODO: fix copies
+# Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Whisper, MBART->WHISPER
 class WhisperEncoderLayer(nn.Module):
     def __init__(self, config: WhisperConfig):
         super().__init__()
@@ -596,7 +595,7 @@ class WhisperPreTrainedModel(PreTrainedModel):
 
         return input_lengths
 
-    # TODO: copy from bart after merge
+    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: Optional[Union[torch.Tensor, "BlockMask"]],
