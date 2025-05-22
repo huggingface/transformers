@@ -1,0 +1,11 @@
+messages:
+  - role: system
+    content: >-
+      There was a place like earth. One day people started chasing and you run
+      so fast to the edge of the road only to look down and it open an open
+      world then you jump falling in slow bur fast motion passing other worlds
+      and then you land on earth
+  - role: user
+    content: 'Write me a cartoon movie {{input,}} placeholders '
+model: openai/gpt-4.1
+modelParameters: {}
