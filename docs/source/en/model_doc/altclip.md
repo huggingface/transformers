@@ -3,7 +3,6 @@ Copyright 2022 The HuggingFace Team
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# add appropriate badges
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <!-- example badge -->
