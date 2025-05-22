@@ -102,12 +102,29 @@ transformers-cli quantize BAAI/AltCLIP \
 
 ## Attention visualisation
 
-```python
-from transformers.utils.attention_visualizer import AttentionMaskVisualizer
-
-viz = AttentionMaskVisualizer("BAAI/AltCLIP")
-viz("<img>Identify the main object in this image")
-```
+> **Not yet supported**  
+> As of *transformers v \<current\>*, `AttentionMaskVisualizer`
+> only works with decoder-style LLMs. It raises  
+> `AttributeError: '_ModelWrapper' object has no attribute '_update_causal_mask'`
+> when called on AltCLIP (an encoder-only, contrastive model).
+>
+> Once encoder support is added (see
+> [open issue #<id>](https://github.com/huggingface/transformers/issues/XXXXX)),
+> you’ll be able to run:
+>
+> ```python
+> from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+>
+> viz = AttentionMaskVisualizer("BAAI/AltCLIP")  # will work in a future release
+> viz("<img> What animal is in the picture?", image)
+> ```
+>
+> For now you can still inspect attention manually:
+>
+> ```python
+> outputs = model(**inputs, output_attentions=True)
+> attentions = outputs.vision_attentions   # list[num_layers] of tensors
+> ```
 
 ---
 
