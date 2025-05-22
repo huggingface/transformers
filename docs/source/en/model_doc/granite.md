@@ -31,7 +31,7 @@ You can find all the original Granite checkpoints under the [IBM-Granite](https:
 > [!TIP]
 > Click on the Granite models in the right sidebar for more examples of how to apply Granite to different language tasks.
 
-The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`, and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
