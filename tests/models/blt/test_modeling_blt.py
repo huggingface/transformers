@@ -47,7 +47,7 @@ if is_torch_available():
         BLTModel,
         BLTTokenizer,
     )
-    from transformers.models.blt.modeling_blt import BLTRotaryEmbedding
+    from transformers.models.blt_old.modeling_blt import BLTRotaryEmbedding
 
 
 class BLTModelTester:

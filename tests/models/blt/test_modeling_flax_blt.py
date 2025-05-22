@@ -26,7 +26,7 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 if is_flax_available():
     import jax.numpy as jnp
 
-    from transformers.models.blt.modeling_flax_blt import FlaxBLTForCausalLM, FlaxBLTModel
+    from transformers.models.blt_old.modeling_flax_blt import FlaxBLTForCausalLM, FlaxBLTModel
 
 
 if is_tokenizers_available():
