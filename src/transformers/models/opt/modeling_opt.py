@@ -187,7 +187,7 @@ class OPTAttention(nn.Module):
             value_states,
             attention_mask,
             dropout=0.0 if not self.training else self.dropout,
-            scaling=self.scaling,
+            scaling=1.0,
             **kwargs,
         )
 
