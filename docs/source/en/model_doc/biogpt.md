@@ -84,6 +84,37 @@ echo -e "Ibuprofen is best used for" | transformers run --task text-generation -
 </hfoption>
 </hfoptions>
 
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bit precision.
+
+```py
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.bfloat16,
+    bnb_4bit_use_double_quant=True
+)
+
+tokenizer = AutoTokenizer.from_pretrained("microsoft/BioGPT-Large")
+model = AutoModelForCausalLM.from_pretrained(
+    "microsoft/BioGPT-Large", 
+    quantization_config=bnb_config,
+    torch_dtype=torch.bfloat16,
+    device_map="auto"
+)
+
+input_text = "Ibuprofen is best used for"
+inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
+with torch.no_grad():
+    generated_ids = model.generate(**inputs, max_length=50)    
+output = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+print(output)
+```
+
 ## Notes
 
 - Pad inputs on the right because BioGPT uses absolute position embeddings.
