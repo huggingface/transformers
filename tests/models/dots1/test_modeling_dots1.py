@@ -254,6 +254,14 @@ class Dots1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip("dots.llm1's moe is not compatible.")
+    def test_generate_compilation_all_outputs(self):
+        pass
+
+    @unittest.skip("dots.llm1's moe is not compatible.")
+    def test_generate_compile_model_forward(self):
+        pass
+
 
 @require_torch_accelerator
 class Dots1IntegrationTest(unittest.TestCase):
