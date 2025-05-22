@@ -978,18 +978,18 @@ class ProcessorMixin(PushToHubMixin):
         if "auto_map" in processor_dict:
             del processor_dict["auto_map"]
 
-        unused_kwargs = cls.validate_init_kwargs(processor_config=processor_dict, valid_kwargs=cls.valid_kwargs)
-        processor = cls(*args, **processor_dict)
+        # override processor_dict with given kwargs
+        processor_dict.update(kwargs)
+        # validate both processor_dict and given kwargs
+        unused_kwargs, used_kwargs = cls.validate_init_kwargs(
+            processor_config=processor_dict, valid_kwargs=cls.valid_kwargs
+        )
+        # instantiate processor with used (and valid) kwargs only
+        processor = cls(*args, **used_kwargs)
 
-        # Update processor with kwargs if needed
-        for key in set(kwargs.keys()):
-            if hasattr(processor, key):
-                setattr(processor, key, kwargs.pop(key))
-
-        kwargs.update(unused_kwargs)
         logger.info(f"Processor {processor}")
         if return_unused_kwargs:
-            return processor, kwargs
+            return processor, unused_kwargs
         else:
             return processor
 
@@ -1280,12 +1280,16 @@ class ProcessorMixin(PushToHubMixin):
 
     @staticmethod
     def validate_init_kwargs(processor_config, valid_kwargs):
-        kwargs_from_config = processor_config.keys()
-        unused_kwargs = {}
-        unused_keys = set(kwargs_from_config) - set(valid_kwargs)
-        if unused_keys:
-            unused_kwargs = {k: processor_config[k] for k in unused_keys}
-        return unused_kwargs
+        kwargs_from_config = set(processor_config.keys())
+        valid_kwargs_set = set(valid_kwargs)
+
+        unused_keys = kwargs_from_config - valid_kwargs_set
+        used_keys = kwargs_from_config & valid_kwargs_set
+
+        unused_kwargs = {k: processor_config[k] for k in unused_keys} if unused_keys else {}
+        used_kwargs = {k: processor_config[k] for k in used_keys} if used_keys else {}
+
+        return unused_kwargs, used_kwargs
 
     def prepare_and_validate_optional_call_args(self, *args):
         """
