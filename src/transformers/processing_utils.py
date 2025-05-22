@@ -469,7 +469,6 @@ class ProcessorMixin(PushToHubMixin):
     feature_extractor_class = None
     tokenizer_class = None
     _auto_class = None
-    valid_kwargs: list[str] = []
 
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
@@ -980,10 +979,19 @@ class ProcessorMixin(PushToHubMixin):
 
         # override processor_dict with given kwargs
         processor_dict.update(kwargs)
+
+        # check if there is an overlap between args and processor_dict
+        accepted_args_and_kwargs = cls.__init__.__code__.co_varnames[: cls.__init__.__code__.co_argcount][1:]
+
         # validate both processor_dict and given kwargs
         unused_kwargs, valid_kwargs = cls.validate_init_kwargs(
-            processor_config=processor_dict, valid_kwargs=cls.valid_kwargs
+            processor_config=processor_dict, valid_kwargs=accepted_args_and_kwargs
         )
+
+        # remove args that are in processor_dict to avoid duplicate arguments
+        args_to_remove = [i for i, arg in enumerate(accepted_args_and_kwargs) if arg in processor_dict]
+        args = [arg for i, arg in enumerate(args) if i not in args_to_remove]
+
         # instantiate processor with used (and valid) kwargs only
         processor = cls(*args, **valid_kwargs)
 
