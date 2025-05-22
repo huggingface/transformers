@@ -25,6 +25,7 @@ from ..utils import add_start_docstrings
 from ..utils.logging import get_logger
 
 
+# TODO (joao): We shouldn't need this, but there would be a circular import
 if TYPE_CHECKING:
     from ..generation.configuration_utils import GenerationConfig
 
