@@ -75,7 +75,7 @@ print(output)
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers CLI">
 
 ```bash
 echo -e "Ibuprofen is best used for" \
