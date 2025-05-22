@@ -40,8 +40,6 @@ The example below demonstrates how to generate text based on an image with [`Pip
 import torch
 from transformers import pipeline
 
-import torch
-from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
