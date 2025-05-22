@@ -1222,6 +1222,9 @@ def is_keras_nlp_available():
 
 def is_in_notebook():
     try:
+        # Check if we are running inside Marimo
+        if "marimo" in sys.modules:
+            return True
         # Test adapted from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
         get_ipython = sys.modules["IPython"].get_ipython
         if "IPKernelApp" not in get_ipython().config:
@@ -2069,10 +2072,7 @@ class _LazyModule(ModuleType):
         try:
             return importlib.import_module("." + module_name, self.__name__)
         except Exception as e:
-            raise RuntimeError(
-                f"Failed to import {self.__name__}.{module_name} because of the following error (look up to see its"
-                f" traceback):\n{e}"
-            ) from e
+            raise e
 
     def __reduce__(self):
         return (self.__class__, (self._name, self.__file__, self._import_structure))
