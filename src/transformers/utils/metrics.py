@@ -1,11 +1,22 @@
 import functools
 import logging
 import time
+from enum import Enum
 from typing import Any, Callable, List, Optional, Tuple, Union
 
 import torch
 
-from ..generation.utils import RequestStatus
+
+class RequestStatus(Enum):
+    """Status of a generation request through its lifecycle."""
+
+    PENDING = "pending"
+    PREFILLING = "prefilling"
+    PREFILLING_SPLIT = "prefilling_split"
+    SPLIT_PENDING_REMAINDER = "split_pending_remainder"
+    DECODING = "decoding"
+    FINISHED = "finished"
+    FAILED = "failed"
 
 
 try:

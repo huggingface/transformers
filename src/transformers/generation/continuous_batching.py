@@ -21,6 +21,7 @@ import time
 from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass, field
+from enum import Enum
 from functools import partial
 from typing import Deque, Dict, List, Optional, Set, Tuple, Union
 
@@ -32,8 +33,19 @@ from tqdm import tqdm
 from ..cache_utils import Cache
 from ..configuration_utils import PretrainedConfig
 from ..generation.configuration_utils import GenerationConfig
-from ..generation.utils import GenerationMixin, RequestStatus
 from ..utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
+
+
+class RequestStatus(Enum):
+    """Status of a generation request through its lifecycle."""
+
+    PENDING = "pending"
+    PREFILLING = "prefilling"
+    PREFILLING_SPLIT = "prefilling_split"
+    SPLIT_PENDING_REMAINDER = "split_pending_remainder"
+    DECODING = "decoding"
+    FINISHED = "finished"
+    FAILED = "failed"
 
 
 # Setup your logger
@@ -1045,9 +1057,7 @@ class ContinuousBatchingManager:
     retrieving results, and managing the background generation thread.
     """
 
-    def __init__(
-        self, model: GenerationMixin, generation_config: GenerationConfig, max_queue_size=0, streaming: bool = True
-    ):
+    def __init__(self, model, generation_config: GenerationConfig, max_queue_size=0, streaming: bool = True):
         """Initialize the continuous batching manager.
 
         Args:
