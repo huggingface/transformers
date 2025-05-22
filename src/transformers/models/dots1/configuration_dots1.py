@@ -149,7 +149,7 @@ class Dots1Config(PretrainedConfig):
         routed_scaling_factor=1.0,
         use_sliding_window=False,
         sliding_window=4096,
-        max_window_layers=28,
+        max_window_layers=62,
         **kwargs,
     ):
         self.vocab_size = vocab_size
