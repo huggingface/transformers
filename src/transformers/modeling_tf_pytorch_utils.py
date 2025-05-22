@@ -78,9 +78,17 @@ def convert_tf_weight_name_to_pt_weight_name(
         tf_name = tf_name[len(name_scope) :]
         tf_name = tf_name.lstrip("/")
     tf_name = tf_name.replace(":0", "")  # device ids
-    tf_name = re.sub(
+    # '$1___$2' is replaced by $2 (can be used to duplicate or remove layers in TF2.0 vs PyTorch)
+    if tf_name.count("___") == 1:
+        old_name, new_name = tf_name.split("___")
+        if "/" in old_name and "/" in new_name:
+            name_base = old_name.rsplit("/", 1)[-1]  + "/"
+            tf_name = name_base + new_name
+
+    regex_tf_name = re.sub(
         r"/[^/]*___([^/]*)/", r"/\1/", tf_name
-    )  # '$1___$2' is replaced by $2 (can be used to duplicate or remove layers in TF2.0 vs PyTorch)
+    )
+    assert regex_tf_name == tf_name
     tf_name = tf_name.replace(
         "_._", "/"
     )  # '_._' is replaced by a level separation (can be used to convert TF2.0 lists in PyTorch nn.ModulesList)
