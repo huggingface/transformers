@@ -135,6 +135,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] SuperPointImageProcessor
 
 - preprocess
+
+## SuperPointImageProcessorFast
+
+[[autodoc]] SuperPointImageProcessorFast
+- preprocess
 - post_process_keypoint_detection
 
 ## SuperPointForKeypointDetection
