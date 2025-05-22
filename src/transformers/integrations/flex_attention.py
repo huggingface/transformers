@@ -32,14 +32,12 @@ import torch
 from packaging import version
 
 from ..utils import is_torch_flex_attn_available
-from ..utils.import_utils import _torch_version
+from ..utils.import_utils import _torch_version, is_torchdynamo_compiling
 
 
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask, flex_attention
-    from torch.nn.attention.flex_attention import (
-        create_block_mask as create_block_causal_mask_flex,
-    )
+    from torch.nn.attention.flex_attention import create_block_mask as create_block_causal_mask_flex
 
 
 class WrappedFlexAttention:
@@ -79,6 +77,24 @@ class WrappedFlexAttention:
         return self._compiled_flex_attention
 
 
+def compile_friendly_flex_attention(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    training=False,
+    **kwargs,
+) -> torch.Tensor:
+    # First call initialise singleton wrapper object, second call invokes the object method to return compiled flex attention
+    # Do not use compiled version if already compiling forward (it raises issues)
+    flex_attention_compiled = WrappedFlexAttention(training)() if not is_torchdynamo_compiling() else flex_attention
+    return flex_attention_compiled(
+        query,
+        key,
+        value,
+        **kwargs,
+    )
+
+
 Offset = Union[torch.Tensor, int]
 
 
@@ -90,6 +106,10 @@ def make_flex_block_causal_mask(
     offsets: Optional[Tuple[Offset, Offset]] = None,
 ) -> "BlockMask":
     """
+    IMPORTANT NOTICE: This function is deprecated in favor of using the mask primitives in `masking_utils.py`,
+    and will be removed in a future version without warnings. New code should not use it. It is only kept here
+    for BC for now, while models using it are being patched accordingly.
+
     Create a block causal document mask for a batch of sequences, both packed and unpacked.
     Create Block causal logic and passing it into :func:`torch.nn.attention.flex_attention.create_block_mask`.
     The resultant BlockMask is a compressed representation of the full block causal
@@ -133,7 +153,6 @@ def make_flex_block_causal_mask(
         """
         Defines the logic of a block causal mask by combining both a standard causal mask
         and a block diagonal document mask.
-
         See :func:`~torchtune.modules.attention_utils.create_block_causal_mask`
         for an illustration.
         """
@@ -171,24 +190,6 @@ def make_flex_block_causal_mask(
         KV_LEN=key_length,
         device=device,
         _compile=True,
-    )
-
-
-@torch.compiler.disable(recursive=False)
-def compile_friendly_flex_attention(
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    training=False,
-    **kwargs,
-) -> torch.Tensor:
-    # First call initialise singleton wrapper object, second call invokes the object method to return compiled flex attention
-    flex_attention_compiled = WrappedFlexAttention(training)()
-    return flex_attention_compiled(
-        query,
-        key,
-        value,
-        **kwargs,
     )
 
 
