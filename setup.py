@@ -125,7 +125,7 @@ _deps = [
     "jaxlib>=0.4.1,<=0.4.13",
     "jieba",
     "jinja2>=3.1.0",
-    "kenlm@git+https://github.com/ydshieh/kenlm@78f664fb3dafe1468d868d71faf19534530698d5",
+    "kenlm",
     # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
     "keras>2.9,<2.16",
     "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
@@ -201,6 +201,9 @@ _deps = [
     "pytest-rich",
     "libcst",
     "rich",
+    "opentelemetry-api",
+    "opentelemetry-exporter-otlp",
+    "opentelemetry-sdk",
 ]
 
 
@@ -315,7 +318,7 @@ extras["audio"] = deps_list(
     "librosa",
     "pyctcdecode",
     "phonemizer",
-    "kenlm@git+https://github.com/ydshieh/kenlm@78f664fb3dafe1468d868d71faf19534530698d5",
+    "kenlm",
 )
 # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
 extras["speech"] = deps_list("torchaudio") + extras["audio"]
@@ -434,6 +437,9 @@ extras["torchhub"] = deps_list(
 )
 
 extras["benchmark"] = deps_list("optimum-benchmark")
+
+# OpenTelemetry dependencies for metrics collection in continuous batching
+extras["open-telemetry"] = deps_list("opentelemetry-api", "opentelemetry-exporter-otlp", "opentelemetry-sdk")
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [

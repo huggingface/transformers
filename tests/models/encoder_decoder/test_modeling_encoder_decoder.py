@@ -412,6 +412,10 @@ class EncoderDecoderMixin:
         labels,
         **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
@@ -444,6 +448,10 @@ class EncoderDecoderMixin:
         # Similar to `check_encoder_decoder_model_output_attentions`, but with `output_attentions` triggered from the
         # config file. Contrarily to most models, changing the model's config won't work -- the defaults are loaded
         # from the inner models' configurations.
+
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
 
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]

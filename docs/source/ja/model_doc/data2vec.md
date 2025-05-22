@@ -58,7 +58,7 @@ Data2Vec の使用を開始するのに役立つ公式 Hugging Face およびコ
 - カスタム データセットで [`TFData2VecVisionForImageClassification`] を微調整するには、[このノートブック](https://colab.research.google.com/github/sayakpaul/TF-2.0-Hacks/blob/master/data2vec_vision_image_classification.ipynb) を参照してください。 ）。
 
 **Data2VecText ドキュメント リソース**
-- [テキスト分類タスクガイド](../tasks/sequence_classification)
+- [テキスト分類タスクガイド(英語版)](../../en/tasks/sequence_classification)
 - [トークン分類タスクガイド](../tasks/token_classification)
 - [質問回答タスク ガイド](../tasks/question_answering)
 - [因果言語モデリング タスク ガイド](../tasks/language_modeling)
