@@ -738,7 +738,8 @@ class HubertPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _supports_flex_attn = True
+    # Compile issues
+    _supports_flex_attn = False
 
     def _init_weights(self, module):
         """Initialize the weights"""

@@ -762,9 +762,10 @@ class PegasusXPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = [r"PegasusXEncoderLayer", r"PegasusXDecoderLayer"]
     _supports_flash_attn_2 = True
-    # TODO: Flaky logits
+    # Flaky logits
     _supports_sdpa = False
-    _supports_flex_attn = True
+    # Compile issues
+    _supports_flex_attn = False
     _supports_cache_class = True
     _supports_static_cache = True
 

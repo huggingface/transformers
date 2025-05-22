@@ -464,7 +464,7 @@ class BlenderbotPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    # TODO: compilation issues
+    # Compile issues
     _supports_flex_attn = False
     _supports_cache_class = True
     _supports_static_cache = True

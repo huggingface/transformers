@@ -728,6 +728,9 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+
         for model_class in self.all_model_classes:
             self.check_musicgen_model_output_attentions(model_class, config, **inputs_dict)
             self.check_musicgen_model_output_attentions_from_config(model_class, config, **inputs_dict)
@@ -804,6 +807,9 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
         config.text_encoder.output_attentions = True
         config.decoder.output_attentions = True
+
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
 
         # no need to test all models as different heads yield the same functionality
         model_class = self.all_model_classes[0]
