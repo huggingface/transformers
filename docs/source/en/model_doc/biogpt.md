@@ -65,7 +65,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 input_text = "Ibuprofen is best used for"
-inputs = tokenizer(input_text, return_tensors="pt").to("cuda)
+inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     generated_ids = model.generate(**inputs, max_length=50)
