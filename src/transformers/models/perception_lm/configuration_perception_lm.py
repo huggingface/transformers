@@ -23,17 +23,78 @@ logger = logging.get_logger(__name__)
 
 
 class PerceptionEncoderConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`PerceptionEncoder`]. It is used to instantiate a
+    PerceptionEncoder model according to the specified arguments, defining the model architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        model_type (`str`, *optional*, defaults to `"perception_encoder"`):
+            The type of the model.
+        use_cls_token (`bool`, *optional*, defaults to `True`):
+            Whether to use a CLS token.
+        architecture (`str`, *optional*, defaults to `"vit_pe_core_large_patch14_336"`):
+            The architecture of the model.
+        width (`int`, *optional*, defaults to `1024`):
+            The width of the model.
+        img_size (`Tuple[int, int]`, *optional*, defaults to `(448, 448)`):
+            The size of the input image.
+        depth (`int`, *optional*, defaults to `23`):
+            The depth of the model.
+        num_classes (`int`, *optional*, defaults to `0`):
+            The number of classes for classification.
+        global_pool (`str`, *optional*, defaults to `""`):
+            The global pooling strategy.
+        use_post_transformer_norm (`bool`, *optional*, defaults to `False`):
+            Whether to use post-transformer normalization.
+        init_values (`float`, *optional*, defaults to `0.1`):
+            The initialization values.
+        ref_feat_shape (`Tuple[int, int]`, *optional*, defaults to `(32, 32)`):
+            The shape of the reference feature.
+
+    Example:
+
+    ```python
+    >>> from transformers import PerceptionEncoder, PerceptionEncoderConfig
+
+    >>> # Initializing a PerceptionEncoder configuration
+    >>> configuration = PerceptionEncoderConfig()
+
+    >>> # Initializing a model from the configuration
+    >>> model = PerceptionEncoder(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+    """
     model_type = "perception_encoder"
-    use_cls_token = True
-    architecture = "vit_pe_core_large_patch14_336"
-    width = 1024
-    img_size = (448, 448)
-    depth = 23
-    num_classes = 0
-    global_pool = ""
-    use_post_transformer_norm = False
-    init_values = 0.1
-    ref_feat_shape = (32, 32)
+    def __init__(
+        self,
+        use_cls_token=True,
+        architecture="vit_pe_core_large_patch14_336",
+        width=1024,
+        img_size=(448, 448),
+        depth=23,
+        num_classes=0,
+        global_pool="",
+        use_post_transformer_norm=False,
+        init_values=0.1,
+        ref_feat_shape=(32, 32),
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.use_cls_token = use_cls_token
+        self.architecture = architecture
+        self.width = width
+        self.img_size = img_size
+        self.depth = depth
+        self.num_classes = num_classes
+        self.global_pool = global_pool
+        self.use_post_transformer_norm = use_post_transformer_norm
+        self.init_values = init_values
+        self.ref_feat_shape = ref_feat_shape
 
 class PerceptionLMConfig(PretrainedConfig):
     r"""
