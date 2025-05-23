@@ -806,6 +806,7 @@ class FalconH1Mixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
+        print("ckpt torch fwd")
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
 
