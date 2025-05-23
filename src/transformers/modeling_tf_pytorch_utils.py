@@ -82,12 +82,10 @@ def convert_tf_weight_name_to_pt_weight_name(
     if tf_name.count("___") == 1:
         old_name, new_name = tf_name.split("___")
         if "/" in old_name and "/" in new_name:
-            name_base = old_name.rsplit("/", 1)[-1]  + "/"
+            name_base = old_name.rsplit("/", 1)[-1] + "/"
             tf_name = name_base + new_name
 
-    regex_tf_name = re.sub(
-        r"/[^/]*___([^/]*)/", r"/\1/", tf_name
-    )
+    regex_tf_name = re.sub(r"/[^/]*___([^/]*)/", r"/\1/", tf_name)
     assert regex_tf_name == tf_name
     tf_name = tf_name.replace(
         "_._", "/"
