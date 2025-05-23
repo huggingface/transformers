@@ -4461,6 +4461,7 @@ class ModelTesterMixin:
         del loss
 
         model = torch.compile(model, fullgraph=True, mode="reduce-overhead")
+
         # forward compilation
         set_seed(42)
         loss = model(**inputs).loss
