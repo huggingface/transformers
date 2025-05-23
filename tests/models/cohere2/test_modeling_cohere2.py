@@ -23,9 +23,11 @@ from pytest import mark
 from transformers import AutoModelForCausalLM, AutoTokenizer, Cohere2Config, is_torch_available, pipeline
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
+    Expectations,
     require_flash_attn,
     require_read_token,
     require_torch,
+    require_torch_large_accelerator,
     require_torch_large_gpu,
     slow,
     torch_device,
@@ -129,8 +131,8 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
 
 
 @slow
-@require_read_token
-@require_torch_large_gpu
+# @require_read_token
+@require_torch_large_accelerator
 class Cohere2IntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
@@ -164,10 +166,15 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
     def test_model_fp16(self):
         model_id = "CohereForAI/c4ai-command-r7b-12-2024"
-        EXPECTED_TEXTS = [
-            "<BOS_TOKEN>Hello I am doing a project for a school assignment and I need to create a website for a fictional company. I have",
-            "<PAD><PAD><BOS_TOKEN>Hi today I'm going to show you how to make a simple and easy to make a chocolate cake.\n",
-        ]
+        # fmt: off
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("xpu", 3): ["<BOS_TOKEN>Hello I am doing a project for my school and I need to create a website for a fictional company. I have the", "<PAD><PAD><BOS_TOKEN>Hi today I'm going to show you how to make a simple and easy to make a chocolate cake.\n"],
+                ("cuda", 7): ["<BOS_TOKEN>Hello I am doing a project for a school assignment and I need to create a website for a fictional company. I have", "<PAD><PAD><BOS_TOKEN>Hi today I'm going to show you how to make a simple and easy to make a chocolate cake.\n",],
+            }
+        )
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
+        # fmt: on
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16, attn_implementation="eager"
@@ -179,16 +186,13 @@ class Cohere2IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
 
-        self.assertEqual(output_text, EXPECTED_TEXTS)
+        self.assertEqual(output_text, EXPECTED_TEXT)
 
     def test_model_pipeline_bf16(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Cohere2 before this PR
         model_id = "CohereForAI/c4ai-command-r7b-12-2024"
         # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project for a school assignment and I need to create a website for a fictional company. I have",
-            "Hi today I'm going to show you how to make a simple and easy to make a chocolate cake.\n",
-        ]
+        EXPECTED_TEXTS = ["Hello I am doing a project for a school assignment and I need to create a website for a fictional company. I have", "Hi today I'm going to show you how to make a simple and easy to make a chocolate cake.\n",]
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
@@ -232,9 +236,15 @@ class Cohere2IntegrationTest(unittest.TestCase):
         )
 
         model_id = "CohereForAI/c4ai-command-r7b-12-2024"
-        EXPECTED_TEXT_COMPLETION = [
-            "Hello I am doing a project on the effects of social media on mental health. I have a few questions. 1. What is the relationship",
-        ]
+        # fmt: off
+        EXPECTED_TEXT_COMPLETIONS = Expectations(
+            {
+                ("xpu", 3): ["Hello I am doing a project for a friend and I am stuck on a few things. I have a 2004 Ford F-"],
+                ("cuda", 7): ["Hello I am doing a project on the effects of social media on mental health. I have a few questions. 1. What is the relationship",],
+            }
+        )
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
+        # fmt: on
 
         tokenizer = AutoTokenizer.from_pretrained(model_id, pad_token="<PAD>", padding_side="right")
         # Load model
@@ -279,6 +289,9 @@ class Cohere2IntegrationTest(unittest.TestCase):
         we need to correctly slice the attention mask in all cases (because we use a HybridCache).
         Outputs for every attention functions should be coherent and identical.
         """
+        if torch_device == "xpu" and attn_implementation == "flash_attention_2":
+            self.skipTest(reason="Intel XPU doesn't support falsh_attention_2 as of now.")
+
         model_id = "CohereForAI/c4ai-command-r7b-12-2024"
         EXPECTED_COMPLETIONS = [
             " the mountains, the lakes, the rivers, the waterfalls, the waterfalls, the waterfalls, the waterfalls",
@@ -302,5 +315,6 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
         out = model.generate(**inputs, max_new_tokens=20)[:, input_size:]
         output_text = tokenizer.batch_decode(out)
+        print(f"output_text: {output_text}")
 
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
