@@ -129,8 +129,8 @@
       title: Hyperparameter search
     title: Trainer API
   - sections:
-    - local: gpu_selection
-      title: GPU selection
+    - local: accelerator_selection
+      title: Accelerator selection
     - local: accelerate
       title: Accelerate
     - local: fsdp
