@@ -366,6 +366,18 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
             image_features (List[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
             and are of shape `(num_patches, image_length, embed_dim)`).
         """
+        vision_feature_layer = (
+            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
+        )
+        vision_feature_select_strategy = (
+            vision_feature_select_strategy
+            if vision_feature_select_strategy is not None
+            else self.config.vision_feature_select_strategy
+        )
+        vision_aspect_ratio = (
+            vision_aspect_ratio if vision_aspect_ratio is not None else self.config.vision_aspect_ratio
+        )
+
         # ! infer image_num_patches from image_sizes
         if batch_num_images is None:
             # treat this as a single-image case for backward compatibility
