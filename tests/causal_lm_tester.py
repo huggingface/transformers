@@ -30,7 +30,6 @@ if is_torch_available():
     import torch
 
 
-# TODO Matt: Add this to a proper file later
 class CausalLMModelTester:
     _required_attributes = ("base_model_class", "config_class", "causal_lm_class")
     forced_config_args = [
