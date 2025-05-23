@@ -411,9 +411,8 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
                     image_feature = torch.cat((image_feature, image_newline[None].to(image_feature)), dim=0)
             new_image_features.append(image_feature)
             feature_lens.append(image_feature.size(0))
-        image_features = torch.cat(new_image_features, dim=0)
-        feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features.device)
-        return image_features, feature_lens
+        feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features[0].device)
+        return new_image_features, feature_lens
 
     def get_image_features(
         self,

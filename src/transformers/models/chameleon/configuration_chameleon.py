@@ -188,6 +188,7 @@ class ChameleonConfig(PretrainedConfig):
     ```"""
 
     model_type = "chameleon"
+    has_no_defaults_at_init = True
     sub_configs = {"vq_config": ChameleonVQVAEConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -247,6 +248,7 @@ class ChameleonConfig(PretrainedConfig):
         self.vq_config = ChameleonVQVAEConfig(**vq_config)
 
         self.vocabulary_map = vocabulary_map
+        self.image_token_id = vocabulary_map.get("<image>")
 
         super().__init__(
             pad_token_id=pad_token_id,
