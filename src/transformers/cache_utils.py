@@ -154,7 +154,7 @@ class Cache:
     This class handles basic propagation of operations across layers.
     """
 
-    layer_type = None  # Subclasses must define their layer type
+    layer_type = ()  # Subclasses must define their layer type
 
     def build_static(self, 
                   config: PretrainedConfig,
@@ -164,7 +164,6 @@ class Cache:
                   dtype: torch.dtype = torch.float32,
                   layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
-        self.layer_type = StaticLayer
         max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
         num_key_value_heads = (
             config.num_attention_heads
@@ -201,7 +200,7 @@ class Cache:
                 layer = self.layer_type(key_states, value_states)
                 self.layers.append(layer)
         # Pass args and kwargs to builder
-        if self.__class__ is StaticCache:
+        if self.layer_type == (StaticLayer,):
             self.build_static(*args, **kwargs)
 
     @property
@@ -755,7 +754,7 @@ class DynamicCache(Cache):
         DynamicCache()
         ```
     """
-    layer_type = DynamicLayer
+    layer_type = (DynamicLayer,)
 
 # Utilities for `DynamicCache` <> torch.export support
 def _flatten_dynamic_cache(
@@ -1267,7 +1266,7 @@ class StaticCache(Cache):
         ```
     """
 
-    layer_type = StaticLayer
+    layer_type = (StaticLayer,)
 
 
 class SlidingWindowCache(StaticCache):
