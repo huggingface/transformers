@@ -626,7 +626,7 @@ class Bert2DModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "google-bert2d/bert2d-base-uncased"
+        model_name = "yigitbekir/Bert2D-cased-Turkish-128K-WWM-NSW2"
         model = Bert2DModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -657,7 +657,7 @@ class Bert2DModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 class Bert2DModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = Bert2DModel.from_pretrained("google-bert2d/bert2d-base-uncased")
+        model = Bert2DModel.from_pretrained("yigitbekir/Bert2D-cased-Turkish-128K-WWM-NSW2")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
@@ -670,7 +670,7 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head_relative_embedding_key(self):
-        model = Bert2DModel.from_pretrained("zhiheng-huang/bert2d-base-uncased-embedding-relative-key")
+        model = Bert2DModel.from_pretrained("yigitbekir/Bert2D-cased-Turkish-128K-WWM-NSW2")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
@@ -685,7 +685,7 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head_relative_embedding_key_query(self):
-        model = Bert2DModel.from_pretrained("zhiheng-huang/bert2d-base-uncased-embedding-relative-key-query")
+        model = Bert2DModel.from_pretrained("yigitbekir/Bert2D-cased-Turkish-128K-WWM-NSW2")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
@@ -701,8 +701,10 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
     def test_sdpa_ignored_mask(self):
         pkv = []
 
-        model = Bert2DModel.from_pretrained("hf-internal-testing/tiny-random-Bert2DModel", attn_implementation="eager")
-        model_sdpa = Bert2DModel.from_pretrained("hf-internal-testing/tiny-random-Bert2DModel", attn_implementation="sdpa")
+        model = Bert2DModel.from_pretrained("yigitbekir/Bert2D-cased-Turkish-128K-WWM-NSW2", attn_implementation="eager")
+        model_sdpa = Bert2DModel.from_pretrained(
+            "yigitbekir/Bert2D-cased-Turkish-128K-WWM-NSW2", attn_implementation="sdpa"
+        )
 
         model = model.eval()
         model_sdpa = model_sdpa.eval()
@@ -712,7 +714,7 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
             head_dim = model.config.hidden_size // model.config.num_attention_heads
             pkv.append([torch.rand(1, num_heads, 3, head_dim), torch.rand(1, num_heads, 3, head_dim)])
 
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-Bert2DModel")
+        tokenizer = AutoTokenizer.from_pretrained("yigitbekir/Bert2D-cased-Turkish-128K-WWM-NSW2")
         inp = tokenizer("I am in Paris and", return_tensors="pt")
 
         del inp["attention_mask"]
@@ -736,7 +738,7 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
-        bert2d_model = "google-bert2d/bert2d-base-uncased"
+        bert2d_model = "yigitbekir/Bert2D-cased-Turkish-128K-WWM-NSW2"
         device = "cpu"
         attn_implementation = "sdpa"
         max_length = 512

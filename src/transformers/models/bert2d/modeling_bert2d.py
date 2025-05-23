@@ -166,6 +166,23 @@ class Bert2DEmbeddings(nn.Module):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         past_key_values_length: int = 0,
     ) -> torch.Tensor:
+        r"""
+        word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
+            which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
+            For example, in the sentence "Tokenization is useful", if "Tokenization" is split into "Token" and "##ization",
+            both "Token" and "##ization" will have the same `word_id` (e.g., 0), "is" will have `word_id` 1, and "useful"
+            will have `word_id` 2. These are used to compute word-level absolute position embeddings.
+        subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
+            within its parent word. The specific assignment scheme depends on the tokenizer's configuration
+            (e.g., `subword_embedding_order`, `max_intermediate_subword_positions_per_word`). For example, with
+            `subword_embedding_order="ending_first"`, the first token of a word typically gets `0`, the last token of the
+            same word gets `1`, and intermediate tokens get other IDs (e.g., `2`, `3`, ...). If a word is composed
+            of a single token, its `subword_id` might be `0` (or `1` if it's a subword itself that starts the sequence of
+            subwords for that "word"). These are used to compute subword-level relative position embeddings.
+            Together, `word_ids` and `subword_ids` create a 2D positional ID system.
+        """
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
@@ -898,6 +915,21 @@ class Bert2DModel(Bert2DPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
+        word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
+            which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
+            For example, in the sentence "Tokenization is useful", if "Tokenization" is split into "Token" and "##ization",
+            both "Token" and "##ization" will have the same `word_id` (e.g., 0), "is" will have `word_id` 1, and "useful"
+            will have `word_id` 2. These are used to compute word-level absolute position embeddings.
+        subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
+            within its parent word. The specific assignment scheme depends on the tokenizer's configuration
+            (e.g., `subword_embedding_order`, `max_intermediate_subword_positions_per_word`). For example, with
+            `subword_embedding_order="ending_first"`, the first token of a word typically gets `0`, the last token of the
+            same word gets `1`, and intermediate tokens get other IDs (e.g., `2`, `3`, ...). If a word is composed
+            of a single token, its `subword_id` might be `0` (or `1` if it's a subword itself that starts the sequence of
+            subwords for that "word"). These are used to compute subword-level relative position embeddings.
+            Together, `word_ids` and `subword_ids` create a 2D positional ID system.
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
@@ -1056,18 +1088,33 @@ class Bert2DForPreTraining(Bert2DPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], Bert2DForPreTrainingOutput]:
         r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-                config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked),
-                the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-            next_sentence_label (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-                Labels for computing the next sequence prediction (classification) loss. Input should be a sequence
-                pair (see `input_ids` docstring) Indices should be in `[0, 1]`:
+        word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
+            which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
+            For example, in the sentence "Tokenization is useful", if "Tokenization" is split into "Token" and "##ization",
+            both "Token" and "##ization" will have the same `word_id` (e.g., 0), "is" will have `word_id` 1, and "useful"
+            will have `word_id` 2. These are used to compute word-level absolute position embeddings.
+        subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
+            within its parent word. The specific assignment scheme depends on the tokenizer's configuration
+            (e.g., `subword_embedding_order`, `max_intermediate_subword_positions_per_word`). For example, with
+            `subword_embedding_order="ending_first"`, the first token of a word typically gets `0`, the last token of the
+            same word gets `1`, and intermediate tokens get other IDs (e.g., `2`, `3`, ...). If a word is composed
+            of a single token, its `subword_id` might be `0` (or `1` if it's a subword itself that starts the sequence of
+            subwords for that "word"). These are used to compute subword-level relative position embeddings.
+            Together, `word_ids` and `subword_ids` create a 2D positional ID system.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked),
+            the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        next_sentence_label (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the next sequence prediction (classification) loss. Input should be a sequence
+            pair (see `input_ids` docstring) Indices should be in `[0, 1]`:
 
-                - 0 indicates sequence B is a continuation of sequence A,
-                - 1 indicates sequence B is a random sequence.
-            kwargs (`Dict[str, any]`, optional, defaults to *{}*):
-                Used to hide legacy arguments that have been deprecated.
+            - 0 indicates sequence B is a continuation of sequence A,
+            - 1 indicates sequence B is a random sequence.
+        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+            Used to hide legacy arguments that have been deprecated.
 
         Returns:
 
@@ -1173,6 +1220,21 @@ class Bert2DLMHeadModel(Bert2DPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
+        word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
+            which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
+            For example, in the sentence "Tokenization is useful", if "Tokenization" is split into "Token" and "##ization",
+            both "Token" and "##ization" will have the same `word_id` (e.g., 0), "is" will have `word_id` 1, and "useful"
+            will have `word_id` 2. These are used to compute word-level absolute position embeddings.
+        subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
+            within its parent word. The specific assignment scheme depends on the tokenizer's configuration
+            (e.g., `subword_embedding_order`, `max_intermediate_subword_positions_per_word`). For example, with
+            `subword_embedding_order="ending_first"`, the first token of a word typically gets `0`, the last token of the
+            same word gets `1`, and intermediate tokens get other IDs (e.g., `2`, `3`, ...). If a word is composed
+            of a single token, its `subword_id` might be `0` (or `1` if it's a subword itself that starts the sequence of
+            subwords for that "word"). These are used to compute subword-level relative position embeddings.
+            Together, `word_ids` and `subword_ids` create a 2D positional ID system.
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
@@ -1287,6 +1349,21 @@ class Bert2DForMaskedLM(Bert2DPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
         r"""
+        word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
+            which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
+            For example, in the sentence "Tokenization is useful", if "Tokenization" is split into "Token" and "##ization",
+            both "Token" and "##ization" will have the same `word_id` (e.g., 0), "is" will have `word_id` 1, and "useful"
+            will have `word_id` 2. These are used to compute word-level absolute position embeddings.
+        subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
+            within its parent word. The specific assignment scheme depends on the tokenizer's configuration
+            (e.g., `subword_embedding_order`, `max_intermediate_subword_positions_per_word`). For example, with
+            `subword_embedding_order="ending_first"`, the first token of a word typically gets `0`, the last token of the
+            same word gets `1`, and intermediate tokens get other IDs (e.g., `2`, `3`, ...). If a word is composed
+            of a single token, its `subword_id` might be `0` (or `1` if it's a subword itself that starts the sequence of
+            subwords for that "word"). These are used to compute subword-level relative position embeddings.
+            Together, `word_ids` and `subword_ids` create a 2D positional ID system.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
@@ -1387,6 +1464,21 @@ class Bert2DForNextSentencePrediction(Bert2DPreTrainedModel):
         **kwargs,
     ) -> Union[Tuple[torch.Tensor], NextSentencePredictorOutput]:
         r"""
+        word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
+            which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
+            For example, in the sentence "Tokenization is useful", if "Tokenization" is split into "Token" and "##ization",
+            both "Token" and "##ization" will have the same `word_id` (e.g., 0), "is" will have `word_id` 1, and "useful"
+            will have `word_id` 2. These are used to compute word-level absolute position embeddings.
+        subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
+            within its parent word. The specific assignment scheme depends on the tokenizer's configuration
+            (e.g., `subword_embedding_order`, `max_intermediate_subword_positions_per_word`). For example, with
+            `subword_embedding_order="ending_first"`, the first token of a word typically gets `0`, the last token of the
+            same word gets `1`, and intermediate tokens get other IDs (e.g., `2`, `3`, ...). If a word is composed
+            of a single token, its `subword_id` might be `0` (or `1` if it's a subword itself that starts the sequence of
+            subwords for that "word"). These are used to compute subword-level relative position embeddings.
+            Together, `word_ids` and `subword_ids` create a 2D positional ID system.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
             (see `input_ids` docstring). Indices should be in `[0, 1]`:
@@ -1498,6 +1590,21 @@ class Bert2DForSequenceClassification(Bert2DPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
+        word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
+            which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
+            For example, in the sentence "Tokenization is useful", if "Tokenization" is split into "Token" and "##ization",
+            both "Token" and "##ization" will have the same `word_id` (e.g., 0), "is" will have `word_id` 1, and "useful"
+            will have `word_id` 2. These are used to compute word-level absolute position embeddings.
+        subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
+            within its parent word. The specific assignment scheme depends on the tokenizer's configuration
+            (e.g., `subword_embedding_order`, `max_intermediate_subword_positions_per_word`). For example, with
+            `subword_embedding_order="ending_first"`, the first token of a word typically gets `0`, the last token of the
+            same word gets `1`, and intermediate tokens get other IDs (e.g., `2`, `3`, ...). If a word is composed
+            of a single token, its `subword_id` might be `0` (or `1` if it's a subword itself that starts the sequence of
+            subwords for that "word"). These are used to compute subword-level relative position embeddings.
+            Together, `word_ids` and `subword_ids` create a 2D positional ID system.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -1589,6 +1696,21 @@ class Bert2DForMultipleChoice(Bert2DPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], MultipleChoiceModelOutput]:
         r"""
+        word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
+            which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
+            For example, in the sentence "Tokenization is useful", if "Tokenization" is split into "Token" and "##ization",
+            both "Token" and "##ization" will have the same `word_id` (e.g., 0), "is" will have `word_id` 1, and "useful"
+            will have `word_id` 2. These are used to compute word-level absolute position embeddings.
+        subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
+            within its parent word. The specific assignment scheme depends on the tokenizer's configuration
+            (e.g., `subword_embedding_order`, `max_intermediate_subword_positions_per_word`). For example, with
+            `subword_embedding_order="ending_first"`, the first token of a word typically gets `0`, the last token of the
+            same word gets `1`, and intermediate tokens get other IDs (e.g., `2`, `3`, ...). If a word is composed
+            of a single token, its `subword_id` might be `0` (or `1` if it's a subword itself that starts the sequence of
+            subwords for that "word"). These are used to compute subword-level relative position embeddings.
+            Together, `word_ids` and `subword_ids` create a 2D positional ID system.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
@@ -1678,6 +1800,21 @@ class Bert2DForTokenClassification(Bert2DPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
+        word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
+            which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
+            For example, in the sentence "Tokenization is useful", if "Tokenization" is split into "Token" and "##ization",
+            both "Token" and "##ization" will have the same `word_id` (e.g., 0), "is" will have `word_id` 1, and "useful"
+            will have `word_id` 2. These are used to compute word-level absolute position embeddings.
+        subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
+            within its parent word. The specific assignment scheme depends on the tokenizer's configuration
+            (e.g., `subword_embedding_order`, `max_intermediate_subword_positions_per_word`). For example, with
+            `subword_embedding_order="ending_first"`, the first token of a word typically gets `0`, the last token of the
+            same word gets `1`, and intermediate tokens get other IDs (e.g., `2`, `3`, ...). If a word is composed
+            of a single token, its `subword_id` might be `0` (or `1` if it's a subword itself that starts the sequence of
+            subwords for that "word"). These are used to compute subword-level relative position embeddings.
+            Together, `word_ids` and `subword_ids` create a 2D positional ID system.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
@@ -1748,6 +1885,21 @@ class Bert2DForQuestionAnswering(Bert2DPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], QuestionAnsweringModelOutput]:
         r"""
+        word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
+            which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
+            For example, in the sentence "Tokenization is useful", if "Tokenization" is split into "Token" and "##ization",
+            both "Token" and "##ization" will have the same `word_id` (e.g., 0), "is" will have `word_id` 1, and "useful"
+            will have `word_id` 2. These are used to compute word-level absolute position embeddings.
+        subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
+            within its parent word. The specific assignment scheme depends on the tokenizer's configuration
+            (e.g., `subword_embedding_order`, `max_intermediate_subword_positions_per_word`). For example, with
+            `subword_embedding_order="ending_first"`, the first token of a word typically gets `0`, the last token of the
+            same word gets `1`, and intermediate tokens get other IDs (e.g., `2`, `3`, ...). If a word is composed
+            of a single token, its `subword_id` might be `0` (or `1` if it's a subword itself that starts the sequence of
+            subwords for that "word"). These are used to compute subword-level relative position embeddings.
+            Together, `word_ids` and `subword_ids` create a 2D positional ID system.
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
