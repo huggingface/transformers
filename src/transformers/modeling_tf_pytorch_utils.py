@@ -79,8 +79,11 @@ def convert_tf_weight_name_to_pt_weight_name(
         tf_name = tf_name.lstrip("/")
     tf_name = tf_name.replace(":0", "")  # device ids
     # '$1___$2' is replaced by $2 (can be used to duplicate or remove layers in TF2.0 vs PyTorch)
-    if tf_name.count("___") == 1:
-        old_name, new_name = tf_name.split("___")
+    if "___" in tf_name:
+        name_segments = tf_name.split("___")
+        # There should almost always be only one instance of "___" in the name, but in pathological cases
+        # using [-1] here matches the original (blowup-prone) regex: re.sub(r"/[^/]*___([^/]*)/", r"/\1/")
+        old_name, new_name = name_segments[0], name_segments[-1]
         if "/" in old_name and "/" in new_name:
             name_base = old_name.rsplit("/", 1)[-1] + "/"
             tf_name = name_base + new_name
