@@ -1003,12 +1003,14 @@ class FalconH1Mixer(nn.Module):
             # Init cache
             if ssm_state is not None and cache_params is not None:
                 cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
+                
         if self.mamba_rms_norm:
             scan_output = self.norm(y, gate)
         else:
             scan_output = y * torch.nn.functional.silu(gate)
 
         # end ssd naive
+        
         if d_mlp > 0:
             y = torch.cat([F.silu(z0) * x0, scan_output], dim=-1)
         # 4. Final linear projection

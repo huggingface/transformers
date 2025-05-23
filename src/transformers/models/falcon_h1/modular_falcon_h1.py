@@ -822,6 +822,7 @@ class FalconH1Mixer(nn.Module):
             scan_output = y * torch.nn.functional.silu(gate)
 
         # end ssd naive
+        
         if d_mlp > 0:
             y = torch.cat([F.silu(z0) * x0, scan_output], dim=-1)
         # 4. Final linear projection
