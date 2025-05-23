@@ -410,8 +410,7 @@ class MusicgenMelodyPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["MusicgenMelodyDecoderLayer", "MusicgenMelodyAttention"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    # compilation errors occurr atm
-    _supports_flex_attn = False
+    _supports_flex_attn = True
 
     def _init_weights(self, module):
         std = self.config.initializer_factor
@@ -1292,8 +1291,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    # compilation errors occurr atm
-    _supports_flex_attn = False
+    _supports_flex_attn = True
 
     def __init__(
         self,
