@@ -21,11 +21,11 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers.modeling_attn_mask_utils import _prepare_4d_attention_mask
-
 from ...activations import ACT2FN
 from ...cache_utils import DynamicCache
 from ...configuration_utils import PretrainedConfig
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
@@ -1570,8 +1570,14 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+        mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
+        causal_mask = mask_function(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+            output_attentions=output_attentions,
         )
 
         hidden_states = inputs_embeds

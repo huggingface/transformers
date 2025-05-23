@@ -196,6 +196,18 @@ class Cache:
         else:
             return None
 
+    def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
+        """
+        Return a tuple (kv_length, kv_offset) corresponding to the length and offset that will be returned for
+        the given layer at `layer_idx`.
+        The masks are then prepared according to the given lengths (kv_length, kv_offset) and patterns (i.e. sliding_window, chunk_size),
+        for each layer.
+        """
+        query_length = cache_position.shape[0]
+        past_seen_tokens = self.get_seq_length()
+        kv_length = query_length + past_seen_tokens
+        return kv_length, 0
+
 
 @dataclass
 class CacheConfig:
@@ -1084,8 +1096,6 @@ class SinkCache(Cache):
         ```
     """
 
-    is_sliding = True
-
     def __init__(self, window_length: int, num_sink_tokens: int) -> None:
         super().__init__()
         self.key_cache: List[torch.Tensor] = []
@@ -1390,6 +1400,16 @@ class StaticCache(Cache):
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
 
+    def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
+        """
+        Return a tuple (kv_length, kv_offset) corresponding to the length and offset that will be returned for
+        the given layer at `layer_idx`.
+        The masks are then prepared according to the given lengths (kv_length, kv_offset) and patterns (i.e. sliding_window, chunk_size),
+        for each layer.
+        """
+        kv_length = self.get_max_cache_shape()
+        return kv_length, 0
+
 
 class SlidingWindowCache(StaticCache):
     """
@@ -1446,7 +1466,6 @@ class SlidingWindowCache(StaticCache):
         ```
     """
 
-    is_sliding = True
     is_compileable = True
 
     def __init__(
@@ -1465,6 +1484,7 @@ class SlidingWindowCache(StaticCache):
                 "config and it's not set to None."
             )
         max_cache_len = min(config.sliding_window, max_cache_len)
+        self.sliding_window = config.sliding_window
         super().__init__(
             config=config,
             max_batch_size=max_batch_size,
@@ -1508,6 +1528,21 @@ class SlidingWindowCache(StaticCache):
             # In-place ops prevent breaking the static address
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
+
+    def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
+        """
+        Return a tuple (kv_length, kv_offset) corresponding to the length and offset that will be returned for
+        the given layer at `layer_idx`.
+        The masks are then prepared according to the given lengths (kv_length, kv_offset) and patterns (i.e. sliding_window, chunk_size),
+        for each layer.
+        """
+        query_length = cache_position.shape[0]
+        first_cache_position = cache_position[0]
+        # torch.clamp() is equivalent to max() but should be compile-friendly/exportable as first_cache_position is a Tensor
+        kv_offset = torch.clamp(first_cache_position - self.sliding_window + 1, min=0)
+        # This is not general (see HybridChunkedCache for the whole general case), but it's what the cache returns
+        kv_length = max(query_length, self.get_max_cache_shape())
+        return kv_length, kv_offset
 
 
 class EncoderDecoderCache(Cache):
@@ -1761,12 +1796,17 @@ class HybridCache(Cache):
             else config.num_key_value_heads
         )
 
-        layer_switch = config.sliding_window_pattern if hasattr(config, "sliding_window_pattern") else 2  # 2 is for BC
-        self.is_sliding_list = [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)]
+        # If the attribute does not exist in the config, fallback to a simple StaticCache
+        if hasattr(config, "layer_types"):
+            self.is_sliding = [layer_type != "full_attention" for layer_type in config.layer_types]
+        else:
+            self.is_sliding = [False] * config.num_hidden_layers
+
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
         global_cache_shape = (self.max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         sliding_cache_shape = (self.max_batch_size, self.num_key_value_heads, self.sliding_window_len, self.head_dim)
+        self.sliding_window = min(config.sliding_window, max_cache_len)
         device = torch.device(device) if device is not None else None
         for i in range(config.num_hidden_layers):
             if layer_device_map is not None:
@@ -1775,7 +1815,7 @@ class HybridCache(Cache):
                 layer_device = device
             # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
             # breaks when updating the cache.
-            cache_shape = sliding_cache_shape if self.is_sliding_list[i] else global_cache_shape
+            cache_shape = sliding_cache_shape if self.is_sliding[i] else global_cache_shape
             new_layer_key_cache = torch.zeros(cache_shape, dtype=self._dtype, device=layer_device)
             new_layer_value_cache = torch.zeros(cache_shape, dtype=self._dtype, device=layer_device)
             torch._dynamo.mark_static_address(new_layer_key_cache)
@@ -1796,7 +1836,7 @@ class HybridCache(Cache):
         if cache_position is None:
             raise ValueError("`cache_position` must be provided for HybridCache.")
 
-        is_sliding_layer = self.is_sliding_list[layer_idx]
+        is_sliding_layer = self.is_sliding[layer_idx]
 
         # These two `if` blocks are only reached in multigpu and if `layer_device_map` is not passed. They are used
         # when the cache is initialized in the forward pass (e.g. Gemma2)
@@ -1842,6 +1882,26 @@ class HybridCache(Cache):
             # In-place ops prevent breaking the static address
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
+
+    def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
+        """
+        Return a tuple (kv_length, kv_offset) corresponding to the length and offset that will be returned for
+        the given layer at `layer_idx`.
+        The masks are then prepared according to the given lengths (kv_length, kv_offset) and patterns (i.e. sliding_window, chunk_size),
+        for each layer.
+        """
+        if self.is_sliding[layer_idx]:
+            query_length = cache_position.shape[0]
+            first_cache_position = cache_position[0]
+
+            local_mask_kv_offset = torch.clamp(first_cache_position - self.sliding_window + 1, min=0)
+            # This is not general (see HybridChunkedCache for the whole general case), but it's what the cache returns
+            local_mask_kv_length = max(query_length, self.sliding_window)
+            return local_mask_kv_length, local_mask_kv_offset
+
+        full_mask_kv_offset = 0
+        full_mask_kv_length = self.get_max_cache_shape()
+        return full_mask_kv_length, full_mask_kv_offset
 
 
 class HybridChunkedCache(Cache):
@@ -1907,16 +1967,17 @@ class HybridChunkedCache(Cache):
         else:
             self.sliding_window = config.sliding_window
         self.max_cache_len = max_cache_len
-        self._sliding_window_max_len = min(self.sliding_window, max_cache_len)
+        # Sliding layers can't be larger than the overall max cache len
+        self.sliding_window = min(self.sliding_window, self.max_cache_len)
         self.max_batch_size = max_batch_size
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self._dtype = dtype
 
-        if hasattr(config.get_text_config(), "no_rope_layers"):
-            self.is_sliding = config.no_rope_layers
+        # If the attribute does not exist in the config, fallback to a simple StaticCache
+        if hasattr(config, "layer_types"):
+            self.is_sliding = [layer_type != "full_attention" for layer_type in config.layer_types]
         else:
-            layer_switch = getattr(config, "sliding_window_pattern", 2)
-            self.is_sliding = [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)]
+            self.is_sliding = [False] * config.num_hidden_layers
 
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
@@ -1929,7 +1990,7 @@ class HybridChunkedCache(Cache):
         num_key_value_heads = key_states.shape[1]
         device = key_states.device
         global_cache_shape = (self.max_batch_size, num_key_value_heads, self.max_cache_len, self.head_dim)
-        sliding_cache_shape = (self.max_batch_size, num_key_value_heads, self._sliding_window_max_len, self.head_dim)
+        sliding_cache_shape = (self.max_batch_size, num_key_value_heads, self.sliding_window, self.head_dim)
         # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
         # breaks when updating the cache.
         cache_shape = sliding_cache_shape if self.is_sliding[layer_idx] else global_cache_shape
@@ -1999,11 +2060,7 @@ class HybridChunkedCache(Cache):
         key_states = key_states.to(k_out.dtype)
         value_states = value_states.to(v_out.dtype)
 
-        if self.is_sliding[layer_idx]:
-            update_fn = self._sliding_update
-        else:
-            update_fn = self._static_update
-
+        update_fn = self._sliding_update if self.is_sliding[layer_idx] else self._static_update
         return update_fn(
             cache_position,
             layer_idx,
@@ -2037,6 +2094,37 @@ class HybridChunkedCache(Cache):
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
         self.cumulative_length = [0 for _ in range(len(self.cumulative_length))]
+
+    def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
+        """
+        Return a tuple (kv_length, kv_offset) corresponding to the length and offset that will be returned for
+        the given layer at `layer_idx`.
+        The masks are then prepared according to the given lengths (kv_length, kv_offset) and patterns (i.e. sliding_window, chunk_size),
+        for each layer.
+        """
+        if self.is_sliding[layer_idx]:
+            query_length = cache_position.shape[0]
+            first_cache_position = cache_position[0]
+
+            local_mask_kv_offset = torch.clamp(first_cache_position - self.sliding_window + 1, min=0)
+            # This is the true general case for any Cache using local attention (sliding or chunked)
+            if first_cache_position >= self.sliding_window:
+                # Here the Cache is already full
+                local_mask_kv_length = self.sliding_window + query_length - 1
+            elif (
+                first_cache_position < self.sliding_window
+                and first_cache_position + query_length > self.sliding_window
+            ):
+                # Here the Cache becomes full with the new input
+                local_mask_kv_length = first_cache_position + query_length
+            else:
+                # Here the Cache is still smaller than the local size, but we return the local size as it's static
+                local_mask_kv_length = self.sliding_window
+            return local_mask_kv_length, local_mask_kv_offset
+
+        full_mask_kv_offset = 0
+        full_mask_kv_length = self.get_max_cache_shape()
+        return full_mask_kv_length, full_mask_kv_offset
 
 
 class OffloadedHybridCache(HybridChunkedCache):
@@ -2076,7 +2164,7 @@ class OffloadedHybridCache(HybridChunkedCache):
         device = key_states.device if self.is_sliding[layer_idx] else self.offload_device
         pin_memory = not self.is_sliding[layer_idx]
         global_cache_shape = (self.max_batch_size, num_key_value_heads, self.max_cache_len, self.head_dim)
-        sliding_cache_shape = (self.max_batch_size, num_key_value_heads, self._sliding_window_max_len, self.head_dim)
+        sliding_cache_shape = (self.max_batch_size, num_key_value_heads, self.sliding_window, self.head_dim)
         # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
         # breaks when updating the cache.
         cache_shape = sliding_cache_shape if self.is_sliding[layer_idx] else global_cache_shape
