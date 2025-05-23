@@ -36,8 +36,6 @@ from .processing_utils import Unpack, VideosKwargs
 from .utils import (
     VIDEO_PROCESSOR_NAME,
     TensorType,
-    add_model_info_to_auto_map,
-    add_model_info_to_custom_pipelines,
     add_start_docstrings,
     cached_file,
     copy_func,
@@ -629,16 +627,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             logger.info(
                 f"loading configuration file {video_processor_file} from cache at {resolved_video_processor_file}"
             )
-
-        if not is_local:
-            if "auto_map" in video_processor_dict:
-                video_processor_dict["auto_map"] = add_model_info_to_auto_map(
-                    video_processor_dict["auto_map"], pretrained_model_name_or_path
-                )
-            if "custom_pipelines" in video_processor_dict:
-                video_processor_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
-                    video_processor_dict["custom_pipelines"], pretrained_model_name_or_path
-                )
         return video_processor_dict, kwargs
 
     @classmethod

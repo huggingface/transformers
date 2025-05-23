@@ -420,17 +420,23 @@ class _BaseAutoModelClass:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping.keys()
-        trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, config._name_or_path, has_local_code, has_remote_code
-        )
+        if has_remote_code:
+            class_ref = config.auto_map[cls.__name__]
+            if "--" in class_ref:
+                upstream_repo = class_ref.split("--")[0]
+            else:
+                upstream_repo = None
+            trust_remote_code = resolve_trust_remote_code(
+                trust_remote_code, config._name_or_path, has_local_code, has_remote_code, upstream_repo=upstream_repo
+            )
 
         if has_remote_code and trust_remote_code:
-            class_ref = config.auto_map[cls.__name__]
             if "--" in class_ref:
                 repo_id, class_ref = class_ref.split("--")
             else:
                 repo_id = config.name_or_path
             model_class = get_class_from_dynamic_module(class_ref, repo_id, **kwargs)
+            model_class.register_for_auto_class(auto_class=cls)
             cls.register(config.__class__, model_class, exist_ok=True)
             _ = kwargs.pop("code_revision", None)
             model_class = add_generation_mixin_to_remote_model(model_class)
@@ -545,8 +551,17 @@ class _BaseAutoModelClass:
 
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping.keys()
+        upstream_repo = None
+        if has_remote_code:
+            class_ref = config.auto_map[cls.__name__]
+            if "--" in class_ref:
+                upstream_repo = class_ref.split("--")[0]
         trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
+            trust_remote_code,
+            pretrained_model_name_or_path,
+            has_local_code,
+            has_remote_code,
+            upstream_repo=upstream_repo,
         )
         kwargs["trust_remote_code"] = trust_remote_code
 
@@ -554,12 +569,12 @@ class _BaseAutoModelClass:
         kwargs["adapter_kwargs"] = adapter_kwargs
 
         if has_remote_code and trust_remote_code:
-            class_ref = config.auto_map[cls.__name__]
             model_class = get_class_from_dynamic_module(
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs, **kwargs
             )
             _ = hub_kwargs.pop("code_revision", None)
             cls.register(config.__class__, model_class, exist_ok=True)
+            model_class.register_for_auto_class(auto_class=cls)
             model_class = add_generation_mixin_to_remote_model(model_class)
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
