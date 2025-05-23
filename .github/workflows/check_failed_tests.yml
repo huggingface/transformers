@@ -12,6 +12,9 @@ on:
       job:
         required: true
         type: string
+      report_repo_id:
+        required: true
+        type: string
 
 
 env:
@@ -138,6 +141,7 @@ jobs:
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
           JOB_NAME: ${{ inputs.job }}
+          REPORT_REPO_ID: ${{ inputs.report_repo_id }}
         run: |
           python3 utils/process_bad_commit_report.py
 
@@ -149,6 +153,7 @@ jobs:
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
           JOB_NAME: ${{ inputs.job }}
+          REPORT_REPO_ID: ${{ inputs.report_repo_id }}
         run: |
           {
             echo 'REPORT_TEXT<<EOF'
