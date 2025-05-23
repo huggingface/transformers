@@ -288,6 +288,5 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
 
 __all__ = [
     "ColPaliForRetrieval",
-    "ColPaliForRetrievalOutput",
     "ColPaliPreTrainedModel",
 ]

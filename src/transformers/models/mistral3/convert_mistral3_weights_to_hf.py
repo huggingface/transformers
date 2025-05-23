@@ -161,7 +161,7 @@ def convert_config(original_config: dict, max_position_embeddings: int = 131072)
         vision_config=new_vision_config,
         text_config=new_text_config,
         multimodal_projector_bias=adapter_bias,
-        image_token_index=image_token_id,
+        image_token_id=image_token_id,
         spatial_merge_size=spatial_merge_size,
         vision_feature_layer=-1,
     )
