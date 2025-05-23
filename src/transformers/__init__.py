@@ -516,38 +516,6 @@ else:
     _import_structure["tf_utils"] = []
 
 
-# FLAX-backed objects
-try:
-    if not is_flax_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .utils import dummy_flax_objects
-
-    _import_structure["utils.dummy_flax_objects"] = [
-        name for name in dir(dummy_flax_objects) if not name.startswith("_")
-    ]
-else:
-    _import_structure["generation"].extend(
-        [
-            "FlaxForcedBOSTokenLogitsProcessor",
-            "FlaxForcedEOSTokenLogitsProcessor",
-            "FlaxForceTokensLogitsProcessor",
-            "FlaxGenerationMixin",
-            "FlaxLogitsProcessor",
-            "FlaxLogitsProcessorList",
-            "FlaxLogitsWarper",
-            "FlaxMinLengthLogitsProcessor",
-            "FlaxTemperatureLogitsWarper",
-            "FlaxSuppressTokensAtBeginLogitsProcessor",
-            "FlaxSuppressTokensLogitsProcessor",
-            "FlaxTopKLogitsWarper",
-            "FlaxTopPLogitsWarper",
-            "FlaxWhisperTimeStampLogitsProcessor",
-        ]
-    )
-    _import_structure["modeling_flax_outputs"] = []
-    _import_structure["modeling_flax_utils"] = ["FlaxPreTrainedModel"]
-
 # Direct imports for type-checking
 if TYPE_CHECKING:
     # All modeling imports
