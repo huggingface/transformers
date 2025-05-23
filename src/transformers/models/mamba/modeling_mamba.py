@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, Iterable
 
 import torch
 import torch.utils.checkpoint
@@ -96,10 +96,26 @@ class MambaCache:
     def __init__(
         self,
         config,
-        max_batch_size: int,
+        max_batch_size: Optional[int] = None,
         dtype: torch.dtype = torch.float16,
         device: Union[torch.device, str, None] = None,
     ):
+        # `config` can be DDP data for compatibility with `torch.distributed`. See #36121 and #36373.
+        # In this case, it is `map(gather_map, zip(*caches))`, where each item in the iterable contains
+        # the conv and ssm states for a layer gathered across replicas by torch.distributed.
+        # WARNING: DDP data must be passed as the first argument. We keep the name `config` for backwards compatibility.
+        if max_batch_size is None and isinstance(config, Iterable):
+            self.conv_states: List[torch.Tensor] = []
+            self.ssm_states: List[torch.Tensor] = []
+            for conv_state, ssm_state in config:
+                self.conv_states.append(conv_state)
+                self.ssm_states.append(ssm_state)
+            return
+
+        # Handle normal initialization case
+        if config is None or max_batch_size is None:
+            raise ValueError("config and max_batch_size must be provided to initialize MambaCache")
+
         self.max_batch_size = max_batch_size
         self._dtype = dtype
         self.intermediate_size = config.intermediate_size
@@ -129,6 +145,31 @@ class MambaCache:
             torch._dynamo.mark_static_address(ssm_state)
             self.conv_states.append(conv_state)
             self.ssm_states.append(ssm_state)
+
+    def __getitem__(self, layer_idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Support for backwards-compatible `past_key_value` indexing, e.g. `past_key_value[0][0].shape[2]` to get the
+        sequence length.
+        """
+        if layer_idx < len(self):
+            return (self.conv_states[layer_idx], self.ssm_states[layer_idx])
+        else:
+            raise KeyError(f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}")
+
+    def __iter__(self):
+        """
+        Support for backwards-compatible `past_key_value` iteration, e.g. `for x in past_key_value:` to iterate over
+        conv and ssm states
+        """
+        for layer_idx in range(len(self)):
+            yield (self.conv_states[layer_idx], self.ssm_states[layer_idx])
+
+    def __len__(self):
+        """
+        Support for backwards-compatible `past_key_value` length, e.g. `len(past_key_value)`. This value corresponds
+        to the number of layers in the model.
+        """
+        return len(self.conv_states)
 
     def update_conv_state(
         self, layer_idx: int, new_conv_state: torch.Tensor, cache_position: torch.LongTensor
