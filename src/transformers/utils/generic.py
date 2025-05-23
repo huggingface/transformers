@@ -31,7 +31,6 @@ from typing import Any, Callable, ContextManager, List, Optional, TypedDict
 import numpy as np
 from packaging import version
 
-from . import logging
 from .import_utils import (
     get_torch_version,
     is_flax_available,
@@ -40,9 +39,6 @@ from .import_utils import (
     is_torch_available,
     is_torch_fx_proxy,
 )
-
-
-logger = logging.get_logger(__name__)
 
 
 if is_torch_available():
