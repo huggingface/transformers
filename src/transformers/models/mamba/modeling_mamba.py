@@ -65,7 +65,7 @@ class MambaCache:
     Arguments:
         config (`PretrainedConfig):
             The configuration file defining the shape-related attributes required to initialize the static cache.
-        max_batch_size (`int`, *optional*):
+        max_batch_size (`int`):
             The maximum batch size with which the model will be used. Note that a new instance must be instantiated if a smaller batch size is used.
         dtype (`torch.dtype`, *optional*, defaults to `torch.float16`):
             The default `dtype` to use when initializing the layer.
