@@ -4344,12 +4344,6 @@ class ModelTesterMixin:
             sliding_mask[i, start : i + 1] = True
         sliding_mask = sliding_mask.to(torch_device)
 
-        # We need to set eager as otherwise `output_attentions` is not supported
-        config._attn_implementation = "eager"
-        for sub in config.sub_configs:
-            subconfig = getattr(config, sub)
-            subconfig._attn_implementation = "eager"
-
         config.sliding_window = sliding_window
         inputs["attention_mask"] = torch.ones(batch_size, seq_len).to(torch.int64).to(torch_device)
         for model_class in self.all_model_classes:
@@ -4359,7 +4353,8 @@ class ModelTesterMixin:
             if hasattr(config, "layer_types"):
                 del config_dict["layer_types"]
             new_config = config.__class__(**config_dict)
-            model = model_class(new_config).to(torch_device)
+            # We need to set eager as otherwise `output_attentions` is not supported
+            model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
             model.eval()
             layer_types = getattr(model.config, "layer_types", ["sliding_attention"] * config.num_hidden_layers)
             attentions = model(**inputs, output_attentions=True).attentions
@@ -4376,7 +4371,8 @@ class ModelTesterMixin:
             if hasattr(config, "layer_types"):
                 del config_dict["layer_types"]
             new_config = config.__class__(**config_dict)
-            model = model_class(new_config).to(torch_device)
+            # We need to set eager as otherwise `output_attentions` is not supported
+            model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
             model.eval()
             attentions_not_sliding = model(**inputs, output_attentions=True).attentions
             for layer_attention in attentions_not_sliding:
