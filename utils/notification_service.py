@@ -544,11 +544,11 @@ class Message:
                 commit_info = api.upload_file(
                     path_or_fileobj=file_path,
                     path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/{filename}.txt",
-                    repo_id="hf-internal-testing/transformers_daily_ci",
+                    repo_id=report_repo_id,
                     repo_type="dataset",
                     token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
                 )
-                new_failures_url = f"https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/{filename}.txt"
+                new_failures_url = f"https://huggingface.co/datasets/{report_repo_id}/raw/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/{filename}.txt"
 
                 # extra processing to save to json format
                 new_failed_tests = {}
@@ -576,7 +576,7 @@ class Message:
                 _ = api.upload_file(
                     path_or_fileobj=file_path,
                     path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/{filename}.json",
-                    repo_id="hf-internal-testing/transformers_daily_ci",
+                    repo_id=report_repo_id,
                     repo_type="dataset",
                     token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
                 )
@@ -1185,6 +1185,8 @@ if __name__ == "__main__":
         "run_torch_cuda_extensions_gpu": "DeepSpeed",
     }
 
+    report_repo_id = os.getenv("REPORT_REPO_ID")
+
     # if it is not a scheduled run, upload the reports to a subfolder under `report_repo_folder`
     report_repo_subfolder = ""
     if os.getenv("GITHUB_EVENT_NAME") != "schedule":
@@ -1304,7 +1306,7 @@ if __name__ == "__main__":
         api.upload_file(
             path_or_fileobj=f"ci_results_{job_name}/{test_to_result_name[test_name]}_results.json",
             path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/{test_to_result_name[test_name]}_results.json",
-            repo_id="hf-internal-testing/transformers_daily_ci",
+            repo_id=report_repo_id,
             repo_type="dataset",
             token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
         )
@@ -1332,7 +1334,7 @@ if __name__ == "__main__":
     api.upload_file(
         path_or_fileobj=f"ci_results_{job_name}/job_links.json",
         path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/job_links.json",
-        repo_id="hf-internal-testing/transformers_daily_ci",
+        repo_id=report_repo_id,
         repo_type="dataset",
         token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
     )
