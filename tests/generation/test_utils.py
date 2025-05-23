@@ -1148,6 +1148,10 @@ class GenerationTesterMixin:
             # enable cache
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
 
+            # force eager attention to support output attentions
+            if self.has_attentions:
+                config._attn_implementation = "eager"
+
             # NOTE: assisted generation only works with cache on at the moment.
             if not hasattr(config.get_text_config(), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
@@ -1230,6 +1234,10 @@ class GenerationTesterMixin:
             # enable cache
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
 
+            # force eager attention to support output attentions
+            if self.has_attentions:
+                config._attn_implementation = "eager"
+
             # NOTE: assisted generation only works with cache on at the moment.
             if not hasattr(config.get_text_config(), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
@@ -1283,6 +1291,10 @@ class GenerationTesterMixin:
 
             # enable cache if the model is not openai-gpt, xlnet, cpm, or xlm
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+
+            # force eager attention to support output attentions
+            if self.has_attentions:
+                config._attn_implementation = "eager"
 
             # Encoder-decoder models are not supported
             if config.is_encoder_decoder:
@@ -1347,6 +1359,10 @@ class GenerationTesterMixin:
 
             # enable cache
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
+
+            # force eager attention to support output attentions
+            if self.has_attentions:
+                config._attn_implementation = "eager"
 
             # NOTE: assisted generation only works with cache on at the moment.
             if not hasattr(config.get_text_config(), "use_cache"):
