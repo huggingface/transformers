@@ -2347,9 +2347,15 @@ class GenerationMixin(ContinuousMixin):
         if custom_generate is not None:
             trust_remote_code = kwargs.pop("trust_remote_code", None)
             # Get all `generate` arguments in a single variable. Custom functions are responsible for handling them:
-            # they receive the same inputs as `generate`, only with `model` instead of `self`. They can access to
-            # methods from `GenerationMixin` through `model`.
-            global_keys_to_exclude = {"self", "kwargs"}
+            # they receive the same inputs as `generate`, with `model` instead of `self` and excluding the arguments to
+            # trigger the custom generation. They can access to methods from `GenerationMixin` through `model`.
+            global_keys_to_exclude = {
+                "self",
+                "kwargs",
+                "global_keys_to_exclude",
+                "trust_remote_code",
+                "custom_generate",
+            }
             generate_arguments = {key: value for key, value in locals().items() if key not in global_keys_to_exclude}
             generate_arguments.update(kwargs)
 
