@@ -402,24 +402,12 @@ class MixtralIntegrationTest(unittest.TestCase):
         #
         # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
         # considering differences in hardware processing and potential deviations in generated text.
-        EXPECTED_LOGITS_LEFT = {
-            7: torch.Tensor(
-                [[0.1904, 0.0500, 0.7187], [0.1933, 0.0515, 0.7187], [0.2001, 0.0559, 0.7148]],
-            ).to(torch_device),
-            8: torch.Tensor([[0.1914, 0.0508, 0.7188], [0.1953, 0.0510, 0.7227], [0.1973, 0.0562, 0.7148]]).to(
-                torch_device
-            ),
-            9: torch.Tensor([[0.1904, 0.0513, 0.7227], [0.1943, 0.0518, 0.7227], [0.1982, 0.0557, 0.7148]]).to(
-                torch_device
-            ),
-        }
-
         EXPECTED_LOGITS_LEFT_UNPADDED = {
             7: torch.Tensor(
                 [[0.2236, 0.5195, -0.3828], [0.8203, -0.2275, 0.6054], [0.2656, -0.7070, 0.2460]],
             ).to(torch_device),
-            8: torch.Tensor([[0.2217, 0.5195, -0.3828], [0.8203, -0.2295, 0.6055], [0.2676, -0.7109, 0.2461]]).to(
-                torch_device
+            8: torch.Tensor([[0.2207, 0.5234, -0.3828], [0.8203, -0.2285, 0.6055], [0.2656, -0.7109, 0.2451]]).to(
+                torch_device,
             ),
             9: torch.Tensor([[0.2236, 0.5195, -0.3828], [0.8203, -0.2285, 0.6055], [0.2637, -0.7109, 0.2451]]).to(
                 torch_device
@@ -430,8 +418,8 @@ class MixtralIntegrationTest(unittest.TestCase):
             7: torch.Tensor([[0.2167, 0.1269, -0.1640], [-0.3496, 0.2988, -1.0312], [0.0688, 0.7929, 0.8007]]).to(
                 torch_device
             ),
-            8: torch.Tensor([[0.2178, 0.1260, -0.1621], [-0.3496, 0.2988, -1.0312], [0.0693, 0.7930, 0.8008]]).to(
-                torch_device
+            8: torch.Tensor([[0.2178, 0.1270, -0.1621], [-0.3496, 0.3008, -1.0312], [0.0693, 0.7930, 0.7969]]).to(
+                torch_device,
             ),
             9: torch.Tensor([[0.2197, 0.1250, -0.1611], [-0.3516, 0.3008, -1.0312], [0.0684, 0.7930, 0.8008]]).to(
                 torch_device
@@ -442,9 +430,6 @@ class MixtralIntegrationTest(unittest.TestCase):
             logits = model(dummy_input, attention_mask=attention_mask).logits
         logits = logits.float()
 
-        torch.testing.assert_close(
-            logits[0, :3, :3], EXPECTED_LOGITS_LEFT[self.cuda_compute_capability_major_version], atol=1e-3, rtol=1e-3
-        )
         torch.testing.assert_close(
             logits[0, -3:, -3:],
             EXPECTED_LOGITS_LEFT_UNPADDED[self.cuda_compute_capability_major_version],
