@@ -42,7 +42,6 @@ from transformers import (
     set_seed,
 )
 from transformers.integrations import HfDeepSpeedConfig
-from transformers.integrations.executorch import patch_mask_interface
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
     is_deepspeed_zero3_enabled,
@@ -4463,11 +4462,9 @@ class ModelTesterMixin:
 
         model = torch.compile(model, fullgraph=True, mode="reduce-overhead")
 
-        # Using `fullgraph=True` requires this context manager on Python<3.11 - can be removed when CI version is upgraded
-        with patch_mask_interface():
-            # forward compilation
-            set_seed(42)
-            loss = model(**inputs).loss
+        # forward compilation
+        set_seed(42)
+        loss = model(**inputs).loss
         # backward compilation
         loss.backward()
         # check grad matches
