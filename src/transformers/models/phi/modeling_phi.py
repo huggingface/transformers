@@ -400,7 +400,6 @@ class PhiModel(PhiPreTrainedModel):
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
         )
 
         inputs_embeds = self.embed_dropout(inputs_embeds)  # diff with Llama

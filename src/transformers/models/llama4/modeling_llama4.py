@@ -570,7 +570,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
-                "output_attentions": output_attentions,
             }
             # Create the masks
             causal_mask_mapping = {
