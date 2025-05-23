@@ -193,8 +193,10 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    hf_model.load_state_dict(state_dict, strict=True)
+    missing_keys, unexpected_keys = hf_model.load_state_dict(state_dict, strict=True)
     hf_model = hf_model.to(device)
+    print("Missing keys:", missing_keys)
+    print("Unexpected keys:", unexpected_keys)
 
     img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")

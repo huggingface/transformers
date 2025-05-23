@@ -15,22 +15,26 @@
 """PyTorch SAM 2 model."""
 
 import collections
+import collections.abc
 import copy
 import math
 import warnings
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from torch import Tensor, nn
+from torch import Tensor
 
 from ...activations import ACT2FN
-from ...modeling_utils import PreTrainedModel
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_sam2 import Sam2Config, Sam2ImageEncoderConfig, Sam2MaskDecoderConfig, Sam2PromptEncoderConfig
 
@@ -53,7 +57,6 @@ def load_cuda_kernels():
 
     root = Path(__file__).resolve().parent.parent.parent / "kernels" / "sam2"
     src_files = [root / "connected_components.cu"]
-
     CUDA_KERNELS = load(
         "CUDA_KERNELS",
         src_files,
@@ -614,10 +617,13 @@ class Sam2TwoWayAttentionBlock(nn.Module):
         skip_first_layer_pe: bool = False,
     ) -> None:
         super().__init__()
-        self.self_attn = Sam2Attention(config.two_way_transformer_embedding_dim, config.two_way_transformer_num_heads)
+        self.self_attn = Sam2Attention(
+            config, config.two_way_transformer_embedding_dim, config.two_way_transformer_num_heads
+        )
         self.layer_norm1 = nn.LayerNorm(config.two_way_transformer_embedding_dim)
 
         self.cross_attn_token_to_image = Sam2Attention(
+            config,
             config.two_way_transformer_embedding_dim,
             config.two_way_transformer_num_heads,
             downsample_rate=config.two_way_transformer_attention_downsample_rate,
@@ -635,6 +641,7 @@ class Sam2TwoWayAttentionBlock(nn.Module):
 
         self.layer_norm4 = nn.LayerNorm(config.two_way_transformer_embedding_dim)
         self.cross_attn_image_to_token = Sam2Attention(
+            config,
             config.two_way_transformer_embedding_dim,
             config.two_way_transformer_num_heads,
             downsample_rate=config.two_way_transformer_attention_downsample_rate,
@@ -695,6 +702,7 @@ class Sam2TwoWayTransformer(nn.Module):
             )
 
         self.final_attn_token_to_image = Sam2Attention(
+            config,
             config.two_way_transformer_embedding_dim,
             config.two_way_transformer_num_heads,
             downsample_rate=config.two_way_transformer_attention_downsample_rate,
@@ -1421,6 +1429,29 @@ def apply_rotary_enc(
     return xq_out.type_as(xq).to(xq.device), xk_out.type_as(xk).to(xk.device)
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class Sam2Attention(nn.Module):
     """
     An attention layer that allows for downscaling the size of the embedding
@@ -1429,18 +1460,24 @@ class Sam2Attention(nn.Module):
 
     def __init__(
         self,
+        config,
         embedding_dim: int,
         num_heads: int,
         downsample_rate: int = 1,
         dropout: float = 0.0,
         kv_in_dim: int = None,
-    ) -> None:
+    ):
         super().__init__()
-        self.embedding_dim = embedding_dim
+        self.config = config
+        self.embed_dim = embedding_dim
         self.kv_in_dim = kv_in_dim if kv_in_dim is not None else embedding_dim
         self.internal_dim = embedding_dim // downsample_rate
         self.num_heads = num_heads
+        self.scale = self.internal_dim**-0.5
         assert self.internal_dim % num_heads == 0, "num_heads must divide embedding_dim."
+
+        # Needed for flash attention
+        self.is_causal = False
 
         self.q_proj = nn.Linear(embedding_dim, self.internal_dim)
         self.k_proj = nn.Linear(self.kv_in_dim, self.internal_dim)
@@ -1456,11 +1493,16 @@ class Sam2Attention(nn.Module):
         return hidden_states.transpose(1, 2)
 
     def _recombine_heads(self, hidden_states: Tensor, point_batch_size: int) -> Tensor:
-        batch, n_heads, n_tokens, c_per_head = hidden_states.shape
-        hidden_states = hidden_states.transpose(1, 2)
+        batch, n_tokens, n_heads, c_per_head = hidden_states.shape
         return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
 
-    def forward(self, query: Tensor, key: Tensor, value: Tensor) -> Tensor:
+    def forward(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ):
         # Input projections
         query = self.q_proj(query)
         key = self.k_proj(key)
@@ -1468,24 +1510,34 @@ class Sam2Attention(nn.Module):
 
         point_batch_size = query.shape[1]
         # Separate into heads
-        query = self._separate_heads(query, self.num_heads)
-        key = self._separate_heads(key, self.num_heads)
-        value = self._separate_heads(value, self.num_heads)
+        query_states = self._separate_heads(query, self.num_heads)
+        key_states = self._separate_heads(key, self.num_heads)
+        value_states = self._separate_heads(value, self.num_heads)
+        scale = query_states.shape[-1] ** -0.5
 
-        dropout_p = self.dropout_p if self.training else 0.0
-        # Attention
-        with torch.backends.cuda.sdp_kernel(
-            enable_flash=USE_FLASH_ATTN,
-            # if Flash attention kernel is off, then math kernel needs to be enabled
-            enable_math=(OLD_GPU and dropout_p > 0.0) or MATH_KERNEL_ON,
-            enable_mem_efficient=OLD_GPU,
-        ):
-            out = F.scaled_dot_product_attention(query, key, value, dropout_p=dropout_p)
-
-        out = self._recombine_heads(out, point_batch_size)
-        out = self.out_proj(out)
-
-        return out
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attn_output, _ = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask=None,
+            dropout=0.0 if not self.training else self.dropout_p,
+            scaling=scale,
+            is_causal=False,
+            **kwargs,
+        )
+        attn_output = self._recombine_heads(attn_output, point_batch_size)
+        attn_output = self.out_proj(attn_output)
+        return attn_output
 
 
 class Sam2RoPEAttention(Sam2Attention):
@@ -1508,7 +1560,10 @@ class Sam2RoPEAttention(Sam2Attention):
         self.freqs_cis = freqs_cis
         self.rope_k_repeat = rope_k_repeat
 
-    def forward(self, q: Tensor, k: Tensor, v: Tensor, num_k_exclude_rope: int = 0) -> Tensor:
+    def forward(
+        self, q: Tensor, k: Tensor, v: Tensor, num_k_exclude_rope: int = 0, **kwargs: Unpack[FlashAttentionKwargs]
+    ) -> Tensor:
+        point_batch_size = q.shape[1]
         # Input projections
         q = self.q_proj(q)
         k = self.k_proj(k)
@@ -1535,20 +1590,32 @@ class Sam2RoPEAttention(Sam2Attention):
             repeat_freqs_k=self.rope_k_repeat,
         )
 
-        dropout_p = self.dropout_p if self.training else 0.0
-        # Attention
-        with torch.backends.cuda.sdp_kernel(
-            enable_flash=USE_FLASH_ATTN,
-            # if Flash attention kernel is off, then math kernel needs to be enabled
-            enable_math=(OLD_GPU and dropout_p > 0.0) or MATH_KERNEL_ON,
-            enable_mem_efficient=OLD_GPU,
-        ):
-            out = F.scaled_dot_product_attention(q, k, v, dropout_p=dropout_p)
+        scale = q.shape[-1] ** -0.5
 
-        out = self._recombine_heads(out)
-        out = self.out_proj(out)
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        return out
+        attn_output, _ = attention_interface(
+            self,
+            q,
+            k,
+            v,
+            attention_mask=None,
+            dropout=0.0 if not self.training else self.dropout_p,
+            scaling=scale,
+            is_causal=False,
+            **kwargs,
+        )
+        attn_output = self._recombine_heads(attn_output, point_batch_size)
+        attn_output = self.out_proj(attn_output)
+        return attn_output
 
 
 class Sam2MemoryAttentionLayer(nn.Module):
@@ -1559,6 +1626,7 @@ class Sam2MemoryAttentionLayer(nn.Module):
         super().__init__()
         self.dim_feedforward = config.dim_feedforward
         self.self_attn = Sam2RoPEAttention(
+            config,
             rope_theta=config.rope_theta,
             feat_sizes=config.rope_feat_sizes,
             embedding_dim=config.rope_embedding_dim,
@@ -1567,6 +1635,7 @@ class Sam2MemoryAttentionLayer(nn.Module):
             dropout=config.rope_dropout,
         )
         self.cross_attn_image = Sam2RoPEAttention(
+            config,
             rope_theta=config.rope_theta,
             feat_sizes=config.rope_feat_sizes,
             embedding_dim=config.rope_embedding_dim,
@@ -1880,6 +1949,8 @@ class Sam2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "sam2"
     # main_input_name = "pixel_values"
     # _no_split_modules = ["SamVisionAttention"]
+    _supports_sdpa = True
+    _supports_flash_attn_2 = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -1986,6 +2057,8 @@ SAM2_INPUTS_DOCSTRING = r"""
 )
 class Sam2Model(Sam2PreTrainedModel):
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
+    # need to be ignored, as it's a buffer and will not be correctly detected as tied weight
+    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -2072,6 +2145,11 @@ class Sam2Model(Sam2PreTrainedModel):
             )
 
         self.post_init()
+
+    def _tie_weights(self):
+        self.prompt_encoder.shared_embedding.positional_embedding.data = (
+            self.shared_image_embedding.positional_embedding.data
+        )
 
     def get_image_wide_positional_embeddings(self):
         size = self.prompt_encoder.image_embedding_size
