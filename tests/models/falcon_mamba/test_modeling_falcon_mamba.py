@@ -504,7 +504,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         inputs = tok(texts, return_tensors="pt", padding=True, return_token_type_ids=False).to(torch_device)
         model = AutoModelForCausalLM.from_pretrained(model_id, device_map=0, torch_dtype=torch.bfloat16)
 
-        out = model.generate(**inputs, max_new_tokens=20)
+        out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         out = tok.batch_decode(out, skip_special_tokens=True)
 
         self.assertListEqual(out, EXPECTED_OUTPUT)
@@ -514,7 +514,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
             inputs_embeds = model.get_input_embeddings()(inputs.pop("input_ids"))
 
         inputs["inputs_embeds"] = inputs_embeds
-        out = model.generate(**inputs, max_new_tokens=20)
+        out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         out = tok.batch_decode(out, skip_special_tokens=True)
 
         # Remove the prefix of the expected output
