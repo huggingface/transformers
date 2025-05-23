@@ -453,7 +453,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         self.text = "Hello today"
 
     def test_generation_bf16(self):
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16, device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
 
         inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -466,7 +466,9 @@ class FalconMambaIntegrationTests(unittest.TestCase):
     @require_bitsandbytes
     def test_generation_4bit(self):
         quantization_config = BitsAndBytesConfig(load_in_4bit=True)
-        model = AutoModelForCausalLM.from_pretrained(self.model_id, quantization_config=quantization_config)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, quantization_config=quantization_config).to(
+            torch_device
+        )
 
         inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
