@@ -1,3 +1,5 @@
+[![Deploy static content to Pages](https://github.com/nodoubtz/2lit-formers/actions/workflows/static.yml/badge.svg)](https://github.com/nodoubtz/2lit-formers/actions/workflows/static.yml)
+
 [![Self-hosted runner (push-caller)](https://github.com/nodoubtz/transformers/actions/workflows/self-push-caller.yml/badge.svg?branch=main)](https://github.com/nodoubtz/transformers/actions/workflows/self-push-caller.yml)
 # Transformers
 
