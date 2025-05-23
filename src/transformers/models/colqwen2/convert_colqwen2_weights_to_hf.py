@@ -83,6 +83,10 @@ def rename_state_dict_keys(state_dict: Dict[str, Any]) -> Dict[str, Any]:
         else:
             # The original ColQwen2 inherits from Qwen2VL, so we simply need to add the `vlm.` prefix
             # to all remaining keys.
+            if key.startswith("model."):
+                key = key.replace("model.", "model.language_model.")
+            if key.startswith("visual."):
+                key = key.replace("visual.", "model.visual.")
             new_key = "vlm." + key
         new_state_dict[new_key] = value
     return new_state_dict

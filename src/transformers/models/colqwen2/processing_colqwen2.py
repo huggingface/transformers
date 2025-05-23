@@ -19,18 +19,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from typing import List, Optional, Union
+
+import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_torch_available
-
-
-if is_torch_available():
-    import torch
 
 
 class ColQwen2ProcessorKwargs(ProcessingKwargs, total=False):
@@ -263,7 +259,7 @@ class ColQwen2Processor(ProcessorMixin):
         Prepare for the model one or several image(s). This method is a wrapper around the `__call__` method of the ColQwen2Processor's
         [`ColQwen2Processor.__call__`].
 
-        This method forwards the `images` and `kwargs` arguments to Qwen2VLImageProcessor's [`~Qwen2VLImageProcessor.__call__`].
+        This method forwards the `images` and `kwargs` arguments to the image processor.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -298,7 +294,7 @@ class ColQwen2Processor(ProcessorMixin):
         Prepare for the model one or several texts. This method is a wrapper around the `__call__` method of the ColQwen2Processor's
         [`ColQwen2Processor.__call__`].
 
-        This method forwards the `text` and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`].
+        This method forwards the `text` and `kwargs` arguments to the tokenizer.
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):

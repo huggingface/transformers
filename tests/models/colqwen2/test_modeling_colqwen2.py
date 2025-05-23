@@ -23,26 +23,15 @@ from datasets import load_dataset
 
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
-from transformers import (
-    is_torch_available,
-    is_vision_available,
-)
+from transformers import is_torch_available
 from transformers.models.colqwen2.configuration_colqwen2 import ColQwen2Config
 from transformers.models.colqwen2.modeling_colqwen2 import ColQwen2ForRetrieval, ColQwen2ForRetrievalOutput
 from transformers.models.colqwen2.processing_colqwen2 import ColQwen2Processor
-from transformers.testing_utils import (
-    require_torch,
-    require_vision,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    pass
 
 
 class ColQwen2ForRetrievalModelTester:
@@ -287,10 +276,10 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class ColQwen2ModelIntegrationTest(unittest.TestCase):
-    model_name: ClassVar[str] = "vidore/colqwen2-v1.0-hf"
+    model_name: ClassVar[str] = "../vidore/colqwen2-v1.0-hf-internal"
 
     def setUp(self):
-        self.processor = ColQwen2Processor.from_pretrained(self.model_name)
+        self.processor = ColQwen2Processor.from_pretrained("vidore/colqwen2-v1.0-hf")
 
     def tearDown(self):
         gc.collect()
@@ -334,9 +323,9 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         # Further validation: fine-grained check, with a hardcoded score from the original Hf implementation.
         expected_scores = torch.tensor(
             [
-                [16.1250, 8.0000, 14.6250],
-                [9.6250, 17.3750, 10.3125],
-                [15.0625, 10.8750, 20.1250],
+                [16.2500, 7.8750, 14.6875],
+                [9.5000, 17.1250, 10.5000],
+                [14.9375, 10.9375, 20.0000],
             ],
             dtype=scores.dtype,
         )

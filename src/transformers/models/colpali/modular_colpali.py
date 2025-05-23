@@ -16,26 +16,13 @@
 
 from typing import List, Optional, Union
 
-from transformers.models.paligemma.processing_paligemma import (
-    IMAGE_TOKEN,
-    PaliGemmaProcessor,
-    build_string_from_input,
-)
+from transformers.models.paligemma.processing_paligemma import IMAGE_TOKEN, PaliGemmaProcessor, build_string_from_input
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, make_flat_list_of_images
-from ...processing_utils import (
-    ProcessingKwargs,
-    Unpack,
-)
-from ...tokenization_utils_base import (
-    PreTokenizedInput,
-    TextInput,
-)
-from ...utils import (
-    is_torch_available,
-    logging,
-)
+from ...processing_utils import ProcessingKwargs, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import is_torch_available, logging
 
 
 if is_torch_available():
@@ -234,7 +221,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
         Prepare for the model one or several image(s). This method is a wrapper around the `__call__` method of the ColPaliProcessor's
         [`ColPaliProcessor.__call__`].
 
-        This method forwards the `images` and `kwargs` arguments to SiglipImageProcessor's [`~SiglipImageProcessor.__call__`].
+        This method forwards the `images` and `kwargs` arguments to the image processor.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -269,7 +256,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
         Prepare for the model one or several texts. This method is a wrapper around the `__call__` method of the ColPaliProcessor's
         [`ColPaliProcessor.__call__`].
 
-        This method forwards the `text` and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`].
+        This method forwards the `text` and `kwargs` arguments to the tokenizer.
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
