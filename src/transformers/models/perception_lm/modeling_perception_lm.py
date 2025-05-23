@@ -34,13 +34,13 @@ from transformers.generation.utils import GenerationMixin
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple
-from ..auto import AutoModelForCausalLM
+from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_perception_lm import PerceptionEncoderConfig, PerceptionLMConfig
 
 
-class PerceptionEncoder(nn.Module):
+class PerceptionEncoder(PreTrainedModel):
     def __init__(self, config: PerceptionEncoderConfig):
-        super().__init__()
+        super().__init__(config)
         self.use_cls_token = config.use_cls_token
         self.eva_pe = timm.create_model(
             config.architecture,
@@ -60,9 +60,6 @@ class PerceptionEncoder(nn.Module):
             return x[:, 1:, :]
         else:
             return x
-
-    def _initialize_weights(self):
-        pass
 
 
 class AdaptiveAvgPooling(nn.Module):
@@ -192,7 +189,7 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
         super().__init__(config)
         self.multi_modal_projector = PerceptionLMMultiModalProjector(config)
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
-        self.vision_tower = PerceptionEncoder(config.vision_config)
+        self.vision_tower = AutoModel.from_config(config.vision_config)
         self.post_init()
 
     def get_input_embeddings(self):
@@ -469,4 +466,4 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         )
 
 
-__all__ = ["PerceptionLMForConditionalGeneration", "PerceptionLMPreTrainedModel"]
+__all__ = ["PerceptionLMForConditionalGeneration", "PerceptionLMPreTrainedModel", "PerceptionEncoder"]

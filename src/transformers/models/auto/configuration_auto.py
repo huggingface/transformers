@@ -826,6 +826,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("sam_hq_vision_model", "sam_hq"),
         ("llama4_text", "llama4"),
         ("blip_2_qformer", "blip_2"),
+        ("perception_encoder", "perception_lm"),
     ]
 )
 

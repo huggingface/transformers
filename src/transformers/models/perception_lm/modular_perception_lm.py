@@ -49,6 +49,7 @@ from ...utils import (
 )
 
 from ..auto import AutoModelForCausalLM
+from ..auto import AutoModel
 
 from .configuration_perception_lm import PerceptionEncoderConfig, PerceptionLMConfig
 
@@ -60,9 +61,9 @@ _CONFIG_FOR_DOC = "PerceptionLMConfig"
 _CHECKPOINT_FOR_DOC = "facebook/Perception-LM-1B"
 
 
-class PerceptionEncoder(nn.Module):
+class PerceptionEncoder(PreTrainedModel):
     def __init__(self, config: PerceptionEncoderConfig):
-        super().__init__()
+        super().__init__(config)
         self.use_cls_token = config.use_cls_token
         self.eva_pe = timm.create_model(
             config.architecture,
@@ -82,9 +83,6 @@ class PerceptionEncoder(nn.Module):
             return x[:, 1:, :]
         else:
             return x
-
-    def _initialize_weights(self):
-        pass
 
 
 class AdaptiveAvgPooling(nn.Module):
@@ -149,7 +147,7 @@ class PerceptionLMModel(LlavaModel):
     def __init__(self, config: PerceptionLMConfig):
         super().__init__(config)
         del self.vision_tower
-        self.vision_tower = PerceptionEncoder(config.vision_config)
+        self.vision_tower = AutoModel.from_config(config.vision_config)
         self.multi_modal_projector = PerceptionLMMultiModalProjector(config)
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
 
@@ -446,4 +444,4 @@ class PerceptionLMForConditionalGeneration(
         )
 
 
-__all__ = ["PerceptionLMForConditionalGeneration", "PerceptionLMPreTrainedModel"]
+__all__ = ["PerceptionLMForConditionalGeneration", "PerceptionLMPreTrainedModel", "PerceptionEncoder"]
