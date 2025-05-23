@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -101,38 +100,6 @@ class NemotronModelTest(GemmaModelTest):
     @unittest.skip("Eager and SDPA do not produce the same outputs, thus this test fails")
     def test_model_outputs_equivalence(self, **kwargs):
         pass
-
-    @require_torch_sdpa
-    @require_torch_accelerator
-    @slow
-    def test_sdpa_equivalence(self):
-        for model_class in self.all_model_classes:
-            if not model_class._supports_sdpa:
-                self.skipTest(reason="Model does not support SDPA")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_sdpa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, attn_implementation="sdpa"
-                )
-                model_sdpa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, attn_implementation="eager")
-                model.to(torch_device)
-
-                dummy_input = inputs_dict[model_class.main_input_name]
-                dummy_input = dummy_input.to(torch_device)
-                outputs = model(dummy_input, output_hidden_states=True)
-                outputs_sdpa = model_sdpa(dummy_input, output_hidden_states=True)
-
-                logits = outputs.hidden_states[-1]
-                logits_sdpa = outputs_sdpa.hidden_states[-1]
-
-                # nemotron sdpa needs a high tolerance
-                assert torch.allclose(logits_sdpa, logits, atol=1e-2)
 
     @require_flash_attn
     @require_torch_gpu

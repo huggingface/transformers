@@ -66,6 +66,7 @@ from transformers.testing_utils import (
     backend_max_memory_allocated,
     backend_memory_allocated,
     backend_reset_max_memory_allocated,
+    backend_reset_peak_memory_stats,
     evaluate_side_effect_factory,
     execute_subprocess_async,
     get_gpu_count,
@@ -97,7 +98,6 @@ from transformers.testing_utils import (
     require_torch_fp16,
     require_torch_gpu,
     require_torch_multi_accelerator,
-    require_torch_multi_gpu,
     require_torch_non_multi_accelerator,
     require_torch_non_multi_gpu,
     require_torch_tensorrt_fx,
@@ -1368,6 +1368,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             per_device_train_batch_size=2,
             torch_compile=True,
             max_steps=1,  # compile happens on the first step
+            report_to="none",
         )
         trainer = Trainer(model=tiny_llama, args=args, train_dataset=train_dataset)  # noqa
         trainer.train()
@@ -1654,7 +1655,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertFalse(is_any_loss_nan_or_inf(log_history_filter))
 
     def test_train_and_eval_dataloaders(self):
-        if torch_device == "cuda":
+        if torch_device in ["cuda", "xpu"]:
             n_gpu = max(1, backend_device_count(torch_device))
         else:
             n_gpu = 1
@@ -3299,6 +3300,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 --learning_rate 2e-5
                 --num_train_epochs 1
                 --output_dir {tmpdir}
+                --report_to none
                 --auto_find_batch_size 0
                 """.split()
             with self.assertRaises(RuntimeError):
@@ -3764,7 +3766,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             train_output = trainer.train()
             self.assertEqual(train_output.global_step, int(self.n_epochs))
 
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_num_batches_in_training_with_gradient_accumulation(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             for num_train_epochs in [1, 2]:
@@ -4105,7 +4107,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         mod = MyModule()
 
         # 1. without TorchDynamo (eager baseline)
-        a = torch.ones(1024, 1024, device="cuda", requires_grad=True)
+        a = torch.ones(1024, 1024, device=torch_device, requires_grad=True)
         a.grad = None
         trainer = CustomTrainer(model=mod)
         # warmup
@@ -4114,17 +4116,17 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         # resets
         gc.collect()
-        torch.cuda.empty_cache()
-        torch.cuda.reset_peak_memory_stats()
+        backend_empty_cache(torch_device)
+        backend_reset_peak_memory_stats(torch_device)
 
         orig_loss = trainer.training_step(mod, {"x": a})
-        orig_peak_mem = torch.cuda.max_memory_allocated()
+        orig_peak_mem = backend_max_memory_allocated(torch_device)
         torchdynamo.reset()
         del trainer
 
         # 2. TorchDynamo nvfuser
         with tempfile.TemporaryDirectory() as tmp_dir:
-            a = torch.ones(1024, 1024, device="cuda", requires_grad=True)
+            a = torch.ones(1024, 1024, device=torch_device, requires_grad=True)
             a.grad = None
             args = TrainingArguments(output_dir=tmp_dir, torch_compile_backend="nvfuser")
             trainer = CustomTrainer(model=mod, args=args)
@@ -4134,11 +4136,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             # resets
             gc.collect()
-            torch.cuda.empty_cache()
-            torch.cuda.reset_peak_memory_stats()
+            backend_empty_cache(torch_device)
+            backend_reset_peak_memory_stats(torch_device)
 
             loss = trainer.training_step(mod, {"x": a})
-            peak_mem = torch.cuda.max_memory_allocated()
+            peak_mem = backend_max_memory_allocated(torch_device)
             torchdynamo.reset()
             del trainer
 
@@ -4560,7 +4562,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             config = RegressionModelConfig(a=1.5, b=2.5)
             trainer = Trainer(
                 model=RegressionPreTrainedModel(config),
-                args=TrainingArguments(output_dir=tmp_dir),
+                args=TrainingArguments(output_dir=tmp_dir, report_to="none"),
                 processing_class=image_processor,
             )
             trainer.save_model()
@@ -4576,7 +4578,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             config = RegressionModelConfig(a=1.5, b=2.5)
             trainer = Trainer(
                 model=RegressionPreTrainedModel(config),
-                args=TrainingArguments(output_dir=tmp_dir),
+                args=TrainingArguments(output_dir=tmp_dir, report_to="none"),
                 processing_class=feature_extractor,
             )
             trainer.save_model()
@@ -4596,7 +4598,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             config = RegressionModelConfig(a=1.5, b=2.5)
             trainer = Trainer(
                 model=RegressionPreTrainedModel(config),
-                args=TrainingArguments(output_dir=tmp_dir),
+                args=TrainingArguments(output_dir=tmp_dir, report_to="none"),
                 processing_class=processor,
             )
             trainer.save_model()
