@@ -18,7 +18,7 @@ import unittest
 
 import numpy as np
 
-from transformers import Emu3Processor, GPT2TokenizerFast
+from transformers import AutoProcessor, Emu3Processor, GPT2TokenizerFast
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -53,11 +53,8 @@ class Emu3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.save_pretrained(cls.tmpdirname)
         cls.image_token = processor.image_token
 
-    @staticmethod
-    def prepare_processor_dict():
-        return {
-            "chat_template": "{% for message in messages %}{% if message['role'] != 'system' %}{{ message['role'].upper() + ': '}}{% endif %}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>' }}{% endfor %}{# Render all text next #}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ content['text'] + ' '}}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ content['text'] + ' '}}{% endgeneration %}{% endfor %}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'ASSISTANT:' }}{% endif %}",
-        }  # fmt: skip
+    def get_processor(self):
+        return AutoProcessor.from_pretrained(self.tmpdirname)
 
     def test_processor_for_generation(self):
         processor_components = self.prepare_components()
