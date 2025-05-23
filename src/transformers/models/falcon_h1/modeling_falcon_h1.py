@@ -601,7 +601,7 @@ class FalconH1Mixer(nn.Module):
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
         else:
-            logger.warning_once("The fast path for FalconH1 will be used when running the model on a GPU")
+            logger.warning_once("Dhia The fast path for FalconH1 will be used when running the model on a GPU")
 
         self.zxbcdt_multipliers = config.ssm_multipliers
         self.ssm_in_multiplier = config.ssm_in_multiplier
@@ -806,16 +806,29 @@ class FalconH1Mixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
+        print("ckpt torch fwd")
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
 
         # 1. Gated MLP's linear projection
         input_states = apply_mask_to_padding_states(input_states, attention_mask)
+        input_states = input_states * self.ssm_in_multiplier  # ADD Mup Multipliers
         projected_states = self.in_proj(input_states)
-        gate, hidden_states_B_C, dt = projected_states.split(
-                [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
-        )
-
+        projected_states = projected_states * self.mup_vector  # ADD Mup Multipliers
+        d_mlp = (
+                    projected_states.shape[-1]
+                    - 2 * self.intermediate_size
+                    - 2 * self.n_groups * self.ssm_state_size
+                    - self.num_heads
+                ) // 2
+        if d_mlp > 0:
+            z0, x0, gate, hidden_states_B_C, dt = projected_states.split([
+                d_mlp, d_mlp, self.intermediate_size, self.conv_dim, self.num_heads
+            ], dim=-1)
+        else:
+            gate, hidden_states_B_C, dt = projected_states.split([
+                self.intermediate_size, self.conv_dim, self.num_heads
+            ], dim=-1)
         use_precomputed_states = (
             cache_params is not None
             and cache_params.has_previous_state
@@ -925,8 +938,8 @@ class FalconH1Mixer(nn.Module):
             hidden_states = hidden_states.reshape(batch_size, seq_len, -1, self.head_dim).float()
             B = B.reshape(batch_size, seq_len, -1, self.ssm_state_size).float()
             C = C.reshape(batch_size, seq_len, -1, self.ssm_state_size).float()
-            B = B.repeat(1, 1, self.num_heads // self.n_groups, 1)
-            C = C.repeat(1, 1, self.num_heads // self.n_groups, 1)
+            B = B.repeat_interleave(self.num_heads // self.n_groups, dim=2, output_size=self.num_heads)
+            C = C.repeat_interleave(self.num_heads // self.n_groups, dim=2, output_size=self.num_heads)
             pad_size = (self.chunk_size - seq_len % self.chunk_size) % self.chunk_size
 
             D_residual = self.D[..., None] * pad_tensor_by_size(hidden_states, pad_size)
@@ -996,14 +1009,14 @@ class FalconH1Mixer(nn.Module):
             # Init cache
             if ssm_state is not None and cache_params is not None:
                 cache_params.ssm_states[self.layer_idx].copy_(ssm_state)
-
         if self.mamba_rms_norm:
             scan_output = self.norm(y, gate)
         else:
             scan_output = y * torch.nn.functional.silu(gate)
 
         # end ssd naive
-
+        if d_mlp > 0:
+            y = torch.cat([F.silu(z0) * x0, scan_output], dim=-1)
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.to(dtype))  # [batch, seq_len, hidden_size]
         return contextualized_states
@@ -1016,8 +1029,8 @@ class FalconH1Mixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
-        if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
-            return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
+        # if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
+        #     return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
         dtype = hidden_states.dtype
         if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
             # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
