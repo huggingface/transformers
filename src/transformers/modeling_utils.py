@@ -4147,6 +4147,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         tp_size = kwargs.pop("tp_size", None)
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
+        use_kernels = kwargs.pop("use_kernels", False)
 
         # Load models with hardcoded key mapping on class for VLMs only,  to keep BC and standardize model
         if any(allowed_name in cls.__name__.lower() for allowed_name in VLMS):
@@ -4556,6 +4557,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Prepare the full device map
         if device_map is not None:
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, torch_dtype, keep_in_fp32_regex)
+
+        # check if using kernels
+        if use_kernels:
+            from kernels import Device, kernelize
+
+            if torch.cuda.is_available():
+                kernelize(model, device=Device(type="cuda"))
+            # only cuda supported for now
+            else:
+                kernelize(model, device=Device(type="cpu"))
 
         # Finalize model weight initialization
         if from_tf:
