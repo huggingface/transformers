@@ -55,7 +55,13 @@ def _cast_if_autocast_enabled(device_type, *args):
     if not torch.is_autocast_enabled():
         return args
     else:
-        return torch.amp.autocast_mode._cast(args, device_type, torch.get_autocast_dtype(device_type))
+        # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
+        target_dtype = (
+            torch.get_autocast_dtype(device_type)
+            if hasattr(torch, "get_autocast_dtype")
+            else torch.get_autocast_gpu_dtype()
+        )
+        return torch.amp.autocast_mode._cast(args, device_type, target_dtype)
 
 
 class NemotronLayerNorm1P(nn.LayerNorm):
@@ -354,7 +360,12 @@ class NemotronFlashAttention2(NemotronAttention):
         )
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_dtype(device_type)
+                # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
+                target_dtype = (
+                    torch.get_autocast_dtype(device_type)
+                    if hasattr(torch, "get_autocast_dtype")
+                    else torch.get_autocast_gpu_dtype()
+                )
             # Handle the case where the model is quantized
             elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
