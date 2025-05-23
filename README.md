@@ -1,6 +1,4 @@
-Main
-Main
-nodoubtz-patch-1
+[![Self-hosted runner (push-caller)](https://github.com/nodoubtz/transformers/actions/workflows/self-push-caller.yml/badge.svg?branch=main)](https://github.com/nodoubtz/transformers/actions/workflows/self-push-caller.yml)
 # Transformers
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
