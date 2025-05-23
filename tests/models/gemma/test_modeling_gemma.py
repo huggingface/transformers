@@ -24,7 +24,6 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     get_device_properties,
-    is_flaky,
     require_bitsandbytes,
     require_flash_attn,
     require_read_token,
