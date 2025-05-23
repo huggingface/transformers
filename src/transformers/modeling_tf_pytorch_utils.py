@@ -78,7 +78,7 @@ def convert_tf_weight_name_to_pt_weight_name(
         tf_name = tf_name[len(name_scope) :]
         tf_name = tf_name.lstrip("/")
     tf_name = tf_name.replace(":0", "")  # device ids
-    if len(tf_name) > 2048 or tf_name.count("___") > 10:
+    if (len(tf_name) > 2048 and "___" in tf_name) or tf_name.count("___") > 10:
         raise ValueError("TF variable name is too long or contains too many ___ separators: " + tf_name)
     tf_name = re.sub(
         r"/[^/]*___([^/]*)/", r"/\1/", tf_name
