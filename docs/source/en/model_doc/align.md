@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 # ALIGN
 
-[ALIGN](https://huggingface.co/papers/2102.05918) trains on over 1.8 billion raw HTML alt‑text and image pairs, mining captions directly from web pages rather than curated datasets. It uses a simple dual‑encoder: EfficientNet processes images and BERT processes text, and a contrastive loss pulls matching image–text embeddings together while pushing mismatches apart. Once trained, encode any image and candidate captions into a shared vector space for zero‑shot retrieval or classification—no extra labels needed. This scale‑first approach slashes curation costs and powers state‑of‑the‑art image–text retrieval and zero‑shot ImageNet classification—but replicating it at full scale demands substantial GPU resources. The Hub's kakaobrain/align-base checkpoint provides the best available open‑source weights.
+[ALIGN](https://huggingface.co/papers/2102.05918) is pretrained on a noisy 1.8 billion alt‑text and image pair dataset to show that scale can make up for the noise. It uses a dual‑encoder architecture, [EfficientNet](./efficientnet) for images and [BERT](./bert) for text, and a contrastive loss to align similar image–text embeddings together while pushing different embeddings apart. Once trained, ALIGN can encode any image and candidate captions into a shared vector space for zero‑shot retrieval or classification without requiring extra labels. This scale‑first approach reduces dataset curation costs and powers state‑of‑the‑art image–text retrieval and zero‑shot ImageNet classification.
 
 You can find all the original ALIGN checkpoints under the [kakaobrain/align-base](https://huggingface.co/kakaobrain/align-base) collection.
 
