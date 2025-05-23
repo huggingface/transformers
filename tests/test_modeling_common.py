@@ -4577,7 +4577,9 @@ class ModelTesterMixin:
             # Flex attention relies on triton on compilation
             # However, triton cannot handle hidden dimensions of less than 16
             # --> forcing at least a hidden dim of 16
-            config.hidden_size *= max(16 // getattr(config, "head_dim", config.hidden_size // config.num_attention_heads), 1)
+            config.hidden_size *= max(
+                16 // getattr(config, "head_dim", config.hidden_size // config.num_attention_heads), 1
+            )
             if hasattr(config, "head_dim"):
                 config.head_dim = max(16, config.head_dim)
 
