@@ -35,7 +35,7 @@ You can find all the RoFormer checkpoints on the [Hub](https://huggingface.co/mo
 The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline>
+<hfoption id="Pipeline">
 
 ```py
 # uncomment to install rjieba which is needed for the tokenizer
