@@ -98,9 +98,7 @@ Special thanks to the contributors who have made this project possible. For a de
 =======
 codespace-legendary-space-dollop-q4q7w9j666wfv6x
 =======
-[![Deploy static content to Pages](https://github.com/nodoubtz/transformers/actions/workflows/static.yml/badge.svg?branch=Main)](https://github.com/nodoubtz/transformers/actions/workflows/static.yml)
-codespace-legendary-space-dolmain
-=======
+  [![Deploy static content to Pages](https://github.com/nodoubtz/transformers/actions/workflows/static.yml/badge.svg)](https://github.com/nodoubtz/transformers/actions/workflows/static.yml)
 [![Self-hosted runner (nightly-past-ci-caller)](https://github.com/nodoubtz/transformers/actions/workflows/self-nightly-past-ci-caller.yml/badge.svg)](https://github.com/nodoubtz/transformers/actions/workflows/self-nightly-past-ci-caller.yml)
 codespace-legendary-space-dollopmain
 [![Secret Leaks](https://github.com/nodoubtz/transformers/actions/workflows/trufflehog.yml/badge.svg)](https://github.com/nodoubtz/transformers/actions/workflows/trufflehog.yml)
