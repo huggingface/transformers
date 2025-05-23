@@ -601,7 +601,7 @@ class FalconH1Mixer(nn.Module):
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
         else:
-            logger.warning_once("Dhia The fast path for FalconH1 will be used when running the model on a GPU")
+            logger.warning_once("The fast path for FalconH1 will be used when running the model on a GPU")
 
         self.zxbcdt_multipliers = config.ssm_multipliers
         self.ssm_in_multiplier = config.ssm_in_multiplier
@@ -1028,8 +1028,8 @@ class FalconH1Mixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ):
-        # if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
-        #     return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
+        if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
+            return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
         dtype = hidden_states.dtype
         if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
             # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
