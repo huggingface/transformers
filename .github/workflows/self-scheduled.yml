@@ -28,6 +28,10 @@ on:
         default: ''
         required: false
         type: string
+      report_repo_id:
+        required: true
+        type: string
+
 
 env:
   HF_HOME: /mnt/cache
@@ -584,6 +588,7 @@ jobs:
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
       quantization_matrix: ${{ needs.setup.outputs.quantization_matrix }}
       ci_event: ${{ inputs.ci_event }}
+      report_repo_id: ${{ inputs.report_repo_id }}
 
     secrets: inherit
 
