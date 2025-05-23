@@ -109,37 +109,37 @@ echo -e "水在零度时会[MASK]" | transformers run --task fill-mask --model j
 
 ## RoFormerModel
 
-[[autodoc]] RoFormerModel 
+[[autodoc]] RoFormerModel
     - forward
 
 ## RoFormerForCausalLM
 
-[[autodoc]] RoFormerForCausalLM 
+[[autodoc]] RoFormerForCausalLM
     - forward
 
 ## RoFormerForMaskedLM
 
-[[autodoc]] RoFormerForMaskedLM 
+[[autodoc]] RoFormerForMaskedLM
     - forward
 
 ## RoFormerForSequenceClassification
 
-[[autodoc]] RoFormerForSequenceClassification 
+[[autodoc]] RoFormerForSequenceClassification
     - forward
 
 ## RoFormerForMultipleChoice
 
-[[autodoc]] RoFormerForMultipleChoice 
+[[autodoc]] RoFormerForMultipleChoice
     - forward
 
 ## RoFormerForTokenClassification
 
-[[autodoc]] RoFormerForTokenClassification 
+[[autodoc]] RoFormerForTokenClassification
     - forward
 
 ## RoFormerForQuestionAnswering
 
-[[autodoc]] RoFormerForQuestionAnswering 
+[[autodoc]] RoFormerForQuestionAnswering
     - forward
 
 </pt>
@@ -147,37 +147,37 @@ echo -e "水在零度时会[MASK]" | transformers run --task fill-mask --model j
 
 ## TFRoFormerModel
 
-[[autodoc]] TFRoFormerModel 
+[[autodoc]] TFRoFormerModel
     - call
 
 ## TFRoFormerForMaskedLM
 
-[[autodoc]] TFRoFormerForMaskedLM 
+[[autodoc]] TFRoFormerForMaskedLM
     - call
 
 ## TFRoFormerForCausalLM
 
-[[autodoc]] TFRoFormerForCausalLM 
+[[autodoc]] TFRoFormerForCausalLM
     - call
 
 ## TFRoFormerForSequenceClassification
 
-[[autodoc]] TFRoFormerForSequenceClassification 
+[[autodoc]] TFRoFormerForSequenceClassification
     - call
 
 ## TFRoFormerForMultipleChoice
 
-[[autodoc]] TFRoFormerForMultipleChoice 
+[[autodoc]] TFRoFormerForMultipleChoice
     - call
 
 ## TFRoFormerForTokenClassification
 
-[[autodoc]] TFRoFormerForTokenClassification 
+[[autodoc]] TFRoFormerForTokenClassification
     - call
 
 ## TFRoFormerForQuestionAnswering
 
-[[autodoc]] TFRoFormerForQuestionAnswering 
+[[autodoc]] TFRoFormerForQuestionAnswering
     - call
 
 </tf>
@@ -185,30 +185,30 @@ echo -e "水在零度时会[MASK]" | transformers run --task fill-mask --model j
 
 ## FlaxRoFormerModel
 
-[[autodoc]] FlaxRoFormerModel 
-    - **call**
+[[autodoc]] FlaxRoFormerModel
+    - __call__
 
 ## FlaxRoFormerForMaskedLM
 
-[[autodoc]] FlaxRoFormerForMaskedLM 
-    - **call**
+[[autodoc]] FlaxRoFormerForMaskedLM
+    - __call__
 
 ## FlaxRoFormerForSequenceClassification
 
-[[autodoc]] FlaxRoFormerForSequenceClassification 
-    - **call**
+[[autodoc]] FlaxRoFormerForSequenceClassification
+    - __call__
 
 ## FlaxRoFormerForMultipleChoice
 
-[[autodoc]] FlaxRoFormerForMultipleChoice 
-    - **call**
+[[autodoc]] FlaxRoFormerForMultipleChoice
+    - __call__
 
 ## FlaxRoFormerForTokenClassification
 
-[[autodoc]] FlaxRoFormerForTokenClassification 
-    - **call**
+[[autodoc]] FlaxRoFormerForTokenClassification
+    - __call__
 
 ## FlaxRoFormerForQuestionAnswering
 
-[[autodoc]] FlaxRoFormerForQuestionAnswering 
-    - **call**
+[[autodoc]] FlaxRoFormerForQuestionAnswering
+    - __call__
