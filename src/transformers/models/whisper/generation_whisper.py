@@ -231,20 +231,20 @@ class WhisperGenerationMixin(GenerationMixin):
             tensor containing the timestamps in seconds for each predicted token
         """
         # Create a list with `decoder_layers` elements, each a tensor of shape
-        # (batch size * num_beams, attention_heads, output length, input length).
+        # (batch size * num beams, attention_heads, output length, input length).
         cross_attentions = []
         for i in range(self.config.decoder_layers):
             cross_attentions.append(torch.cat([x[i] for x in generate_outputs.cross_attentions], dim=2))
 
         # Select specific cross-attention layers and heads. This is a tensor
-        # of shape (batch size * num_beams, num selected, output length, input length).
+        # of shape (batch size * num beams, num selected heads, output length, input length).
         weights = torch.stack([cross_attentions[l][:, h] for l, h in alignment_heads])
         weights = weights.permute([1, 0, 2, 3])
 
         weight_length = None
 
         if "beam_indices" in generate_outputs:
-            # If beam search has been used, the sequence length of the outputs may not be the real sequence length:
+            # If beam search was used, the sequence length of the outputs may not be the real sequence length:
             # beam search may end up returning a sequence that finished a few steps earlier while decoding.
             # In that case, the `cross_attentions` weights are too long and we have to make sure that they have
             # the right `output_length`
