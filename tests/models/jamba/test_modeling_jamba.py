@@ -622,7 +622,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
             }
         )
         # fmt: on
-        output_sentences = EXPECTED_TEXTS.get_expectation()
+        expected_sentences = EXPECTED_TEXTS.get_expectation()
 
         self.model.to(torch_device)
 
@@ -631,8 +631,8 @@ class JambaModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         out = self.model.generate(**inputs, do_sample=False, max_new_tokens=10)
         output_sentences = self.tokenizer.batch_decode(out)
-        self.assertEqual(output_sentences[0], output_sentences[0])
-        self.assertEqual(output_sentences[1], output_sentences[1])
+        self.assertEqual(output_sentences[0], expected_sentences[0])
+        self.assertEqual(output_sentences[1], expected_sentences[1])
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
         if self.device_properties == ("cuda", 8):

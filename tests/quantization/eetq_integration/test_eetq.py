@@ -88,7 +88,7 @@ class EetqTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        backend_empty_cache(torch.device)
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_quantized_model_conversion(self):

@@ -481,7 +481,7 @@ class TorchAoSerializationFP8GPUTest(TorchAoSerializationTest):
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
-        if not (get_device_properties()[0] == "cuda" or get_device_properties()[1] >= 9):
+        if not (get_device_properties()[0] == "cuda" and get_device_properties()[1] >= 9):
             raise unittest.SkipTest("CUDA compute capability 9.0 or higher required for FP8 tests")
 
         from torchao.quantization import Float8WeightOnlyConfig
@@ -501,7 +501,7 @@ class TorchAoSerializationA8W4Test(TorchAoSerializationTest):
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
-        if not (get_device_properties()[0] == "cuda" or get_device_properties()[1] >= 9):
+        if not (get_device_properties()[0] == "cuda" and get_device_properties()[1] >= 9):
             raise unittest.SkipTest("CUDA compute capability 9.0 or higher required for FP8 tests")
 
         from torchao.quantization import Int8DynamicActivationInt4WeightConfig
