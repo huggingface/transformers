@@ -25,21 +25,21 @@ rendered properly in your Markdown viewer.
 
 # RoFormer
 
-[RoFormer](https://huggingface.co/papers/2104.09864) is an enhansed transformer model with rotary position embeddings applied to the self-attention mechanism (particularly to Query and Key matrices). The purpose of the ReFormer is to represent the benefits of rotary position encoding (RoPE). Benefits include natural incorporation of the relative position and decaying inter-token dependencies (due to being based on complex number ideas), flexibility in sequence length, faster convergence during training, as well as an ability to be integrated into a linear self-attention mechanism.
+[RoFormer](https://huggingface.co/papers/2104.09864) introduces Rotary Position Embedding (RoPE) to encode token positions by rotating the inputs in 2D space. This allows a model to track absolute positions and model relative relationships. RoPE can scale to longer sequences, account for the natural decay of token dependencies, and works with the more efficient linear self-attention.
 
-The RoFormer was originally evaluated on various NLP tasks including both English and Chineese datasets. Some of them mentioned in the paper include machine translation, performance during pre-training, fine-tuning on GLUE tasks and dealing with long texts showed RoFormer outperforming the chosen baseline models like BERTDelvin, model Vaswani et al.[2017], WoBERT Su and others.
-
-You can find all the original [RoFormer](link) checkpoints under the [RoFormer](link) collection.
+You can find all the RoFormer checkpoints on the [Hub](https://huggingface.co/models?search=roformer).
 
 > [!TIP]
-> Click on the [RoFormer] models in the right sidebar for more examples of how to apply [RoFormer] to different NLP tasks.
+> Click on the RoFormer models in the right sidebar for more examples of how to apply RoFormer to different language tasks.
 
-The example below demonstrates how to predict masked tokens using the mask-filling [`Pipeline`] or the [`AutoModel`] class, and from the command line.
+The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline>
 
 ```py
+# uncomment to install rjieba which is needed for the tokenizer
+# !pip install rjieba
 import torch
 from transformers import pipeline
 
@@ -57,6 +57,8 @@ print(output)
 <hfoption id="AutoModel">
 
 ```py
+# uncomment to install rjieba which is needed for the tokenizer
+# !pip install rjieba
 import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
@@ -83,7 +85,7 @@ echo -e "水在零度时会[MASK]" | transformers run --task fill-mask --model j
 
 ## Notes
 
-- The current implementation of the RoFormer is an encoder-only model. The original code can be found [here](https://github.com/ZhuiyiTechnology/roformer)
+- The current RoFormer implementation is an encoder-only model. The original code can be found in the [ZhuiyiTechnology/roformer](https://github.com/ZhuiyiTechnology/roformer) repository.
 
 ## RoFormerConfig
 
@@ -91,97 +93,122 @@ echo -e "水在零度时会[MASK]" | transformers run --task fill-mask --model j
 
 ## RoFormerTokenizer
 
-[[autodoc]] RoFormerTokenizer - build_inputs_with_special_tokens - get_special_tokens_mask - create_token_type_ids_from_sequences - save_vocabulary
+[[autodoc]] RoFormerTokenizer 
+    - build_inputs_with_special_tokens
+    - get_special_tokens_mask
+    - create_token_type_ids_from_sequences
+    - save_vocabulary
 
 ## RoFormerTokenizerFast
 
-[[autodoc]] RoFormerTokenizerFast - build_inputs_with_special_tokens
+[[autodoc]] RoFormerTokenizerFast 
+    - build_inputs_with_special_tokens
 
 <frameworkcontent>
 <pt>
 
 ## RoFormerModel
 
-[[autodoc]] RoFormerModel - forward
+[[autodoc]] RoFormerModel 
+    - forward
 
 ## RoFormerForCausalLM
 
-[[autodoc]] RoFormerForCausalLM - forward
+[[autodoc]] RoFormerForCausalLM 
+    - forward
 
 ## RoFormerForMaskedLM
 
-[[autodoc]] RoFormerForMaskedLM - forward
+[[autodoc]] RoFormerForMaskedLM 
+    - forward
 
 ## RoFormerForSequenceClassification
 
-[[autodoc]] RoFormerForSequenceClassification - forward
+[[autodoc]] RoFormerForSequenceClassification 
+    - forward
 
 ## RoFormerForMultipleChoice
 
-[[autodoc]] RoFormerForMultipleChoice - forward
+[[autodoc]] RoFormerForMultipleChoice 
+    - forward
 
 ## RoFormerForTokenClassification
 
-[[autodoc]] RoFormerForTokenClassification - forward
+[[autodoc]] RoFormerForTokenClassification 
+    - forward
 
 ## RoFormerForQuestionAnswering
 
-[[autodoc]] RoFormerForQuestionAnswering - forward
+[[autodoc]] RoFormerForQuestionAnswering 
+    - forward
 
 </pt>
 <tf>
 
 ## TFRoFormerModel
 
-[[autodoc]] TFRoFormerModel - call
+[[autodoc]] TFRoFormerModel 
+    - call
 
 ## TFRoFormerForMaskedLM
 
-[[autodoc]] TFRoFormerForMaskedLM - call
+[[autodoc]] TFRoFormerForMaskedLM 
+    - call
 
 ## TFRoFormerForCausalLM
 
-[[autodoc]] TFRoFormerForCausalLM - call
+[[autodoc]] TFRoFormerForCausalLM 
+    - call
 
 ## TFRoFormerForSequenceClassification
 
-[[autodoc]] TFRoFormerForSequenceClassification - call
+[[autodoc]] TFRoFormerForSequenceClassification 
+    - call
 
 ## TFRoFormerForMultipleChoice
 
-[[autodoc]] TFRoFormerForMultipleChoice - call
+[[autodoc]] TFRoFormerForMultipleChoice 
+    - call
 
 ## TFRoFormerForTokenClassification
 
-[[autodoc]] TFRoFormerForTokenClassification - call
+[[autodoc]] TFRoFormerForTokenClassification 
+    - call
 
 ## TFRoFormerForQuestionAnswering
 
-[[autodoc]] TFRoFormerForQuestionAnswering - call
+[[autodoc]] TFRoFormerForQuestionAnswering 
+    - call
 
 </tf>
 <jax>
 
 ## FlaxRoFormerModel
 
-[[autodoc]] FlaxRoFormerModel - **call**
+[[autodoc]] FlaxRoFormerModel 
+    - **call**
 
 ## FlaxRoFormerForMaskedLM
 
-[[autodoc]] FlaxRoFormerForMaskedLM - **call**
+[[autodoc]] FlaxRoFormerForMaskedLM 
+    - **call**
 
 ## FlaxRoFormerForSequenceClassification
 
-[[autodoc]] FlaxRoFormerForSequenceClassification - **call**
+[[autodoc]] FlaxRoFormerForSequenceClassification 
+    - **call**
 
 ## FlaxRoFormerForMultipleChoice
 
-[[autodoc]] FlaxRoFormerForMultipleChoice - **call**
+[[autodoc]] FlaxRoFormerForMultipleChoice 
+    - **call**
 
 ## FlaxRoFormerForTokenClassification
 
-[[autodoc]] FlaxRoFormerForTokenClassification - **call**
+[[autodoc]] FlaxRoFormerForTokenClassification 
+    - **call**
 
 ## FlaxRoFormerForQuestionAnswering
 
-[[autodoc]] FlaxRoFormerForQuestionAnswering - **call**
+[[autodoc]] FlaxRoFormerForQuestionAnswering 
+    - **call**
