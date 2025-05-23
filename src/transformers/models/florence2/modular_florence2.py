@@ -568,8 +568,8 @@ class Florence2VisionBlock(nn.Module):
 class Florence2VisionPreTrainedModel(PreTrainedModel):
     config_class = Florence2VisionConfig
     main_input_name = "pixel_values"
-    # _supports_sdpa = False
-    # _supports_flash_attn_2 = False
+    _supports_sdpa = True
+    _supports_flash_attn_2 = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm, nn.BatchNorm2d]) -> None:
         """Initialize the weights"""
@@ -819,7 +819,11 @@ class Florence2PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.Embedding, nn.LayerNorm]) -> None:
         std = self.config.text_config.init_std
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, Florence2VisionModelWithProjection):
+            nn.init.normal_(module.image_projection, mean=0.0, std=std)
+        elif isinstance(module, Florence2ForConditionalGeneration):
+            nn.init.normal_(module.image_projection, mean=0.0, std=std)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -925,7 +929,7 @@ class Florence2VisionModelWithProjection(Florence2PreTrainedModel):
     def _build_image_projection_layers(self, config: Florence2VisionConfig):
         image_dim_out = config.dim_embed[-1]
         dim_projection = config.projection_dim
-        self.image_projection = nn.Parameter(torch.empty(image_dim_out, dim_projection))
+        self.image_projection = nn.Parameter(torch.ones(image_dim_out, dim_projection))
         self.image_proj_norm = nn.LayerNorm(dim_projection)
         image_pos_embed_config = config.image_pos_embed
         if image_pos_embed_config["type"] == "learned_abs_2d":
@@ -1020,7 +1024,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
     def _build_image_projection_layers(self, config: Florence2Config):
         image_dim_out = config.vision_config.dim_embed[-1]
         dim_projection = config.vision_config.projection_dim
-        self.image_projection = nn.Parameter(torch.zeros(image_dim_out, dim_projection))
+        self.image_projection = nn.Parameter(torch.ones(image_dim_out, dim_projection))
         self.image_proj_norm = nn.LayerNorm(dim_projection)
         image_pos_embed_config = config.vision_config.image_pos_embed
         if image_pos_embed_config["type"] == "learned_abs_2d":
