@@ -1148,6 +1148,10 @@ class GenerationTesterMixin:
             # enable cache
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
 
+            # force eager attention to support output attentions
+            if self.has_attentions:
+                config._attn_implementation = "eager"
+
             # NOTE: assisted generation only works with cache on at the moment.
             if not hasattr(config.get_text_config(), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
@@ -1228,6 +1232,10 @@ class GenerationTesterMixin:
             # enable cache
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
 
+            # force eager attention to support output attentions
+            if self.has_attentions:
+                config._attn_implementation = "eager"
+
             # NOTE: assisted generation only works with cache on at the moment.
             if not hasattr(config.get_text_config(), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
@@ -1281,6 +1289,10 @@ class GenerationTesterMixin:
 
             # enable cache if the model is not openai-gpt, xlnet, cpm, or xlm
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+
+            # force eager attention to support output attentions
+            if self.has_attentions:
+                config._attn_implementation = "eager"
 
             # Encoder-decoder models are not supported
             if config.is_encoder_decoder:
@@ -1345,6 +1357,10 @@ class GenerationTesterMixin:
 
             # enable cache
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
+
+            # force eager attention to support output attentions
+            if self.has_attentions:
+                config._attn_implementation = "eager"
 
             # NOTE: assisted generation only works with cache on at the moment.
             if not hasattr(config.get_text_config(), "use_cache"):
@@ -1414,6 +1430,7 @@ class GenerationTesterMixin:
         attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            config._attn_implementation = "eager"  # head mask works only in eager mode and will be removed soon
             text_config = config.get_text_config()
             if self.has_attentions:
                 config._attn_implementation = "eager"  # can't output attentions otherwise
@@ -2143,6 +2160,7 @@ class GenerationTesterMixin:
             compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
 
             generation_kwargs = {
+                "use_cache": True,
                 "do_sample": False,
                 "max_new_tokens": 5,
                 "return_dict_in_generate": True,
@@ -4952,6 +4970,68 @@ class GenerationIntegrationTests(unittest.TestCase):
         input_ids = tokenized_inputs.input_ids.to(model_cpu.device)
         _ = model_cpu.generate(input_ids, **generate_kwargs)
         self.assertFalse(hasattr(model_cpu, "_compiled_call"))
+
+    def test_custom_generate_from_argument_in_generate(self):
+        """Tests that the `custom_generate` argument is used when passed to `generate`"""
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+        # Note: `transformers-community/custom_generate_example` has a custom decoding method with a `left_padding`
+        # argument (int), which prepends as many pad tokens.
+        gen_out = model.generate(
+            **model_inputs,
+            left_padding=5,
+            max_new_tokens=5,
+            custom_generate="transformers-community/custom_generate_example",
+            trust_remote_code=True,
+        )
+        text_output = tokenizer.decode(gen_out[0])
+        self.assertTrue(text_output.startswith("<unk><unk><unk><unk><unk>"))  # <unk> is the pad token
+
+    def test_custom_generate_from_model_repo_with_custom_generate_code(self):
+        """
+        Tests that models from model repos containing custom generation code override `generate` with the custom code
+        """
+        model = AutoModelForCausalLM.from_pretrained(
+            "transformers-community/custom_generate_example", device_map="auto", trust_remote_code=True
+        )
+        generate_signature = inspect.signature(model.generate)
+        # `left_padding` is a custom argument, doesn't exist in the base `generate` method
+        self.assertTrue(generate_signature.parameters.get("left_padding"))
+
+    def test_custom_generate_bad_requirements(self):
+        """Tests that we check the `requirements.txt` file from custom generation repos"""
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+        with self.assertRaises(ImportError):
+            # Note: `transformers-community/custom_generate_bad_requirements` has a `requirements.txt` with
+            # impossible requirements
+            model.generate(
+                **model_inputs,
+                custom_generate="transformers-community/custom_generate_bad_requirements",
+                trust_remote_code=True,
+            )
+
+    def test_custom_generate_requires_trust_remote_code(self):
+        """Tests that `trust_remote_code` is required when using `custom_generate`"""
+        # Case 1: A model from a repo containing custom generation code must be loaded with `trust_remote_code`
+        with self.assertRaises(ValueError):
+            AutoModelForCausalLM.from_pretrained("transformers-community/custom_generate_example", device_map="auto")
+
+        # Case 2: Using the `custom_generate` argument in `generate` requires `trust_remote_code` if the code is not
+        # local
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-MistralForCausalLM", device_map="auto"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model_inputs = tokenizer("Hello, world!", return_tensors="pt").to(model.device)
+        with self.assertRaises(ValueError):
+            model.generate(**model_inputs, custom_generate="transformers-community/custom_generate_example")
 
 
 @require_torch

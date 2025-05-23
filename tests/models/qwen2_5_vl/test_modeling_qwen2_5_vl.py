@@ -29,6 +29,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    backend_empty_cache,
     is_flaky,
     require_cv2,
     require_flash_attn,
@@ -346,10 +347,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         pass
 
     @unittest.skip(reason="Compile not yet supported because in Qwen2_5_VL models")
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported because in Qwen2_5_VL models")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
@@ -365,10 +362,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         reason="VLMs can't generate from inputs embeds and pixels. This can be tested as part of bacbone LM, no need to run the tes for VLMs"
     )
     def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip(reason="Can't compile fullgraph due to dynamic control flow in `prepare_inputs_for_generate`")
-    def test_generate_compile_fullgraph(self):
         pass
 
     @is_flaky()  # TODO (joao/raushan): Investigate why this test is flaky on this model
@@ -421,7 +414,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     @slow
     def test_small_model_integration_test(self):

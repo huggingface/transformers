@@ -27,7 +27,6 @@ import shutil
 import tempfile
 import warnings
 from collections import defaultdict
-from collections.abc import MutableMapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
@@ -58,12 +57,20 @@ from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
 from .integrations.accelerate import find_tied_parameters, init_empty_weights
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
+from .integrations.eager_paged import eager_paged_attention_forward
 from .integrations.flash_attention import flash_attention_forward
+from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.sdpa_attention import sdpa_attention_forward
+from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
-    SUPPORTED_TP_STYLES,
+    ALL_PARALLEL_STYLES,
+    _get_parameter_tp_plan,
+    initialize_tensor_parallelism,
+    repack_weights,
+    replace_state_dict_local_with_dtensor,
     shard_and_distribute_module,
+    verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
 from .pytorch_utils import (  # noqa: F401
@@ -119,9 +126,11 @@ from .utils import (
     replace_return_docstrings,
     strtobool,
 )
+from .utils.generic import GeneralInterface
 from .utils.hub import create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
     ENV_VARS_TRUE_VALUES,
+    is_huggingface_hub_greater_or_equal,
     is_sagemaker_mp_enabled,
     is_torch_fx_proxy,
     is_torchdynamo_compiling,
@@ -159,6 +168,7 @@ if is_safetensors_available():
 if is_kernels_available():
     from kernels import get_kernel
 
+
 logger = logging.get_logger(__name__)
 
 
@@ -166,6 +176,9 @@ _init_weights = True
 _is_quantized = False
 _is_ds_init_called = False
 _torch_distributed_available = torch.distributed.is_available()
+
+if _torch_distributed_available and is_torch_greater_or_equal("2.5"):
+    from torch.distributed.tensor import DTensor
 
 
 def is_fsdp_enabled():
@@ -789,7 +802,7 @@ def _load_state_dict_into_meta_model(
                 param_name,
                 casting_dtype,
                 to_contiguous,
-                int(os.environ["RANK"]),  # the rank
+                device_mesh.get_local_rank(),
                 device_mesh,
             )
         else:
@@ -880,6 +893,7 @@ def _get_resolved_checkpoint_files(
     user_agent: dict,
     revision: str,
     commit_hash: Optional[str],
+    transformers_explicit_filename: Optional[str] = None,
 ) -> Tuple[Optional[List[str]], Optional[Dict]]:
     """Get all the checkpoint filenames based on `pretrained_model_name_or_path`, and optional metadata if the
     checkpoints are sharded.
@@ -891,7 +905,11 @@ def _get_resolved_checkpoint_files(
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         is_local = os.path.isdir(pretrained_model_name_or_path)
         if is_local:
-            if from_tf and os.path.isfile(
+            if transformers_explicit_filename is not None:
+                # If the filename is explicitly defined, load this by default.
+                archive_file = os.path.join(pretrained_model_name_or_path, subfolder, transformers_explicit_filename)
+                is_sharded = transformers_explicit_filename.endswith(".safetensors.index.json")
+            elif from_tf and os.path.isfile(
                 os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index")
             ):
                 # Load from a TF 1.0 checkpoint in priority if from_tf
@@ -979,7 +997,10 @@ def _get_resolved_checkpoint_files(
             resolved_archive_file = download_url(pretrained_model_name_or_path)
         else:
             # set correct filename
-            if from_tf:
+            if transformers_explicit_filename is not None:
+                filename = transformers_explicit_filename
+                is_sharded = transformers_explicit_filename.endswith(".safetensors.index.json")
+            elif from_tf:
                 filename = TF2_WEIGHTS_NAME
             elif from_flax:
                 filename = FLAX_WEIGHTS_NAME
@@ -1948,9 +1969,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         if self._tp_plan is not None and is_torch_greater_or_equal("2.3"):
             for _, v in self._tp_plan.items():
-                if v not in SUPPORTED_TP_STYLES:
+                if v not in ALL_PARALLEL_STYLES:
                     raise ValueError(
-                        f"Unsupported tensor parallel style {v}. Supported styles are {SUPPORTED_TP_STYLES}"
+                        f"Unsupported tensor parallel style {v}. Supported styles are {ALL_PARALLEL_STYLES}"
                     )
 
     def dequantize(self):
@@ -3404,6 +3425,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         if safe_serialization and not is_safetensors_available():
             raise ImportError("`safe_serialization` requires the `safetensors library: `pip install safetensors`.")
 
+        # we need to check against tp_size, not tp_plan, as tp_plan is substituted to the class one
+        if self._tp_size is not None and not is_huggingface_hub_greater_or_equal("0.31.4"):
+            raise ImportError(
+                "Saving a model with tensor parallelism requires `huggingface_hub` version 0.31.4 or higher."
+            )
+
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
@@ -3531,8 +3558,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Rename state_dict keys before saving to file. Do nothing unless overridden in a particular model.
         # (initially introduced with TimmWrapperModel to remove prefix and make checkpoints compatible with timm)
         state_dict = self._fix_state_dict_keys_on_save(state_dict)
+        # If model was sharded, we cannot properly determine sizes of tensors that `local_*` strategy was used,
+        # therefore we replace them with DTensors that are equivalently sharded
+        if self._tp_size is not None:
+            state_dict = replace_state_dict_local_with_dtensor(state_dict, self._tp_plan, self._device_mesh)
 
         if safe_serialization:
+            # TODO: fix safe_serialization for tied weights
             # Safetensors does not allow tensor aliasing.
             # We're going to remove aliases before saving
             ptrs = collections.defaultdict(list)
@@ -3649,7 +3681,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         for shard_file, tensors in filename_to_tensors:
             shard = {}
             for tensor in tensors:
-                shard[tensor] = state_dict[tensor].contiguous()
+                if isinstance(state_dict[tensor], DTensor):
+                    full_tensor = state_dict[tensor].full_tensor()
+                    # to get the correctly ordered tensor we need to repack if packed
+                    if _get_parameter_tp_plan(tensor, self._tp_plan) in ("local_packed_rowwise",):
+                        full_tensor = repack_weights(full_tensor, -1, self._tp_size, 2)
+                    shard[tensor] = full_tensor.contiguous()  # only do contiguous after it's permuted correctly
+                else:
+                    shard[tensor] = state_dict[tensor].contiguous()
                 # delete reference, see https://github.com/huggingface/transformers/pull/34890
                 del state_dict[tensor]
 
@@ -4007,6 +4046,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 `torchrun [args] script.py`. This will be much faster than using a `device_map`, but has limitations.
             tp_size (`str`, *optional*):
                 A torch tensor parallel degree. If not provided would default to world size.
+            device_mesh (`torch.distributed.DeviceMesh`, *optional*):
+                A torch device mesh. If not provided would default to world size. Used only for tensor parallel for now.
             offload_folder (`str` or `os.PathLike`, *optional*):
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_state_dict (`bool`, *optional*):
@@ -4104,6 +4145,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         gguf_file = kwargs.pop("gguf_file", None)
         tp_plan = kwargs.pop("tp_plan", None)
         tp_size = kwargs.pop("tp_size", None)
+        device_mesh = kwargs.pop("device_mesh", None)
+        trust_remote_code = kwargs.pop("trust_remote_code", None)
 
         # Load models with hardcoded key mapping on class for VLMs only,  to keep BC and standardize model
         if any(allowed_name in cls.__name__.lower() for allowed_name in VLMS):
@@ -4113,7 +4156,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # Not used anymore -- remove them from the kwargs
         _ = kwargs.pop("resume_download", None)
-        _ = kwargs.pop("trust_remote_code", None)
         _ = kwargs.pop("mirror", None)
         _ = kwargs.pop("_fast_init", True)
         _ = kwargs.pop("low_cpu_mem_usage", None)
@@ -4139,59 +4181,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # We need to correctly dispatch the model on the current process device. The easiest way for this is to use a simple
         # `device_map` pointing to the correct device
-        device_mesh = None
         if tp_plan is not None:
-            if not is_torch_greater_or_equal("2.5"):
-                raise EnvironmentError("tensor parallel is only supported for `torch>=2.5`.")
-
-            # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
-            device_type = torch._C._get_accelerator().type
-
-            if not torch.distributed.is_initialized():
-                try:
-                    rank = int(os.environ["RANK"])
-                    world_size = int(os.environ["WORLD_SIZE"])
-                    if device_type == "cuda":
-                        torch.distributed.init_process_group(
-                            "nccl", rank=rank, world_size=world_size, init_method="env://"
-                        )
-                        torch.cuda.set_device(int(os.environ["LOCAL_RANK"]))
-                    elif device_type == "cpu":
-                        cpu_backend = "ccl" if int(os.environ.get("CCL_WORKER_COUNT", 0)) else "gloo"
-                        torch.distributed.init_process_group(cpu_backend, rank=rank, world_size=world_size)
-                    elif device_type == "xpu":
-                        torch.distributed.init_process_group("ccl", rank=rank, world_size=world_size)
-                        torch.xpu.set_device(int(os.environ["LOCAL_RANK"]))
-                    elif device_type == "hpu":
-                        torch.distributed.init_process_group("hccl", rank=rank, world_size=world_size)
-                        torch.hpu.set_device(int(os.environ["LOCAL_RANK"]))
-
-                except Exception as e:
-                    raise EnvironmentError(
-                        "We tried to initialize torch.distributed for you, but it failed, make"
-                        "sure you init torch distributed in your script to use `tp_plan='auto'`"
-                    ) from e
-
-            # Get device with index assuming equal number of devices per host
-            if device_type == "xpu":
-                index = torch.xpu.current_device()
-            elif device_type == "hpu":
-                index = torch.hpu.current_device()
+            if device_mesh is None and tp_plan is not None:
+                tp_plan, device_map, device_mesh = initialize_tensor_parallelism(tp_plan, tp_size=None)
             else:
-                index = None if device_type == "cpu" else torch.cuda.current_device()
-            tp_device = torch.device(device_type, index)
-
-            if index is not None and index > 0:
-                import sys
-
-                sys.stdout = open(os.devnull, "w")
-                sys.stderr = open(os.devnull, "w")
-            # This is the easiest way to dispatch to the current process device
-            device_map = tp_device
-
-            # Assuming sharding the model onto the world when tp_size not provided
-            tp_size = tp_size if tp_size is not None else torch.distributed.get_world_size()
-            device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
+                # TODO: make device_mesh support multiple dimensions
+                if device_mesh.ndim == 1:
+                    raise ValueError("device_mesh must be 1 dimensional and will be used for TP")
+                device_map = torch.device(device_mesh.device_type, int(os.environ["LOCAL_RANK"]))
 
         if use_auth_token is not None:
             warnings.warn(
@@ -4361,6 +4358,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
             model_kwargs = kwargs
 
+        transformers_explicit_filename = getattr(config, "transformers_weights", None)
+
+        if transformers_explicit_filename is not None:
+            if not transformers_explicit_filename.endswith(
+                ".safetensors"
+            ) and not transformers_explicit_filename.endswith(".safetensors.index.json"):
+                raise ValueError(
+                    "The transformers file in the config seems to be incorrect: it is neither a safetensors file "
+                    "(*.safetensors) nor a safetensors index file (*.safetensors.index.json): "
+                    f"{transformers_explicit_filename}"
+                )
+
         pre_quantized = hasattr(config, "quantization_config")
         if pre_quantized and not AutoHfQuantizer.supports_quant_method(config.quantization_config):
             pre_quantized = False
@@ -4429,6 +4438,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             user_agent=user_agent,
             revision=revision,
             commit_hash=commit_hash,
+            transformers_explicit_filename=transformers_explicit_filename,
         )
 
         is_sharded = sharded_metadata is not None
@@ -4584,6 +4594,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # record tp degree the model sharded to
         model._tp_size = tp_size
+        model._device_mesh = device_mesh
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
@@ -4591,30 +4602,44 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # Set model in evaluation mode to deactivate DropOut modules by default
         model.eval()
 
-        # If it is a model with generation capabilities, attempt to load the generation config
+        # If it is a model with generation capabilities, attempt to load generation files (generation config,
+        # custom generate function)
         if model.can_generate() and generation_config is not None:
             logger.info("The user-defined `generation_config` will be used to override the default generation config.")
             model.generation_config = model.generation_config.from_dict(generation_config.to_dict())
         elif model.can_generate() and pretrained_model_name_or_path is not None:
+            repo_loading_kwargs = {
+                "cache_dir": cache_dir,
+                "force_download": force_download,
+                "proxies": proxies,
+                "local_files_only": local_files_only,
+                "token": token,
+                "revision": revision,
+                "subfolder": subfolder,
+                **kwargs,
+            }
+            # Load generation config
             try:
                 model.generation_config = GenerationConfig.from_pretrained(
                     pretrained_model_name_or_path,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    local_files_only=local_files_only,
-                    token=token,
-                    revision=revision,
-                    subfolder=subfolder,
                     _from_auto=from_auto_class,
                     _from_pipeline=from_pipeline,
-                    **kwargs,
+                    **repo_loading_kwargs,
                 )
             except OSError:
                 logger.info(
                     "Generation config file not found, using a generation config created from the model config."
                 )
                 pass
+            # Load custom generate function if `pretrained_model_name_or_path` defines it (and override `generate`)
+            if hasattr(model, "load_custom_generate"):
+                try:
+                    custom_generate = model.load_custom_generate(
+                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **repo_loading_kwargs
+                    )
+                    model.generate = functools.partial(custom_generate, model=model)
+                except OSError:  # there is no custom generate function
+                    pass
 
         # Dispatch model with hooks on all devices if necessary (not needed with a tp_plan, so we skip it as it slightly
         # harm performances)
@@ -4960,6 +4985,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         if hf_quantizer is not None:
             expected_keys = hf_quantizer.update_expected_keys(model_to_load, expected_keys, checkpoint_keys)
 
+        if logger.level >= logging.WARNING:
+            verify_tp_plan(expected_keys, getattr(model_to_load, "_tp_plan", None))
+
         # Warmup cuda to load the weights much faster on devices
         if device_map is not None and not is_hqq_or_quark:
             expanded_device_map = expand_device_map(device_map, expected_keys)
@@ -5078,7 +5106,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                         name,
                         casting_dtype,
                         to_contiguous,
-                        os.environ["RANK"],
+                        device_mesh.get_local_rank(),
                         device_mesh,
                     )
 
@@ -6052,7 +6080,7 @@ def get_disk_only_shard_files(device_map, weight_map):
     return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
 
 
-class AttentionInterface(MutableMapping):
+class AttentionInterface(GeneralInterface):
     """
     Dict-like object keeping track of allowed attention functions. You can easily add a new attention function
     with a call to `register()`. If a model needs to locally overwrite an existing attention function, say `sdpa`,
@@ -6064,38 +6092,11 @@ class AttentionInterface(MutableMapping):
     _global_mapping = {
         "flash_attention_2": flash_attention_forward,
         "flex_attention": flex_attention_forward,
+        "paged_attention": paged_attention_forward,
         "sdpa": sdpa_attention_forward,
+        "sdpa_paged": sdpa_attention_paged_forward,
+        "eager_paged": eager_paged_attention_forward,
     }
-
-    def __init__(self):
-        self._local_mapping = {}
-
-    def __getitem__(self, key):
-        # First check if instance has a local override
-        if key in self._local_mapping:
-            return self._local_mapping[key]
-        return self._global_mapping[key]
-
-    def __setitem__(self, key, value):
-        # Allow local update of the default functions without impacting other instances
-        self._local_mapping.update({key: value})
-
-    def __delitem__(self, key):
-        del self._local_mapping[key]
-
-    def __iter__(self):
-        # Ensure we use all keys, with the overwritten ones on top
-        return iter({**self._global_mapping, **self._local_mapping})
-
-    def __len__(self):
-        return len(self._global_mapping.keys() | self._local_mapping.keys())
-
-    @classmethod
-    def register(cls, key: str, value: Callable):
-        cls._global_mapping.update({key: value})
-
-    def valid_keys(self) -> List[str]:
-        return list(self.keys())
 
 
 # Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones
