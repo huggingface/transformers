@@ -134,9 +134,7 @@ That utility only works on models with a `.generate()` step that emits token‑l
 
 ## Notes
 
-- ALIGN uses a dual-encoder architecture with EfficientNet for images and BERT for text processing
-- The model is designed for zero-shot image-text retrieval tasks
-- Pre-trained on 1.8B image-text pairs from the web
+- ALIGN projects the text and visual features into latent space and the dot product between the projected image and text features is used as the similarity score. The example below demonstrates how to calculate the image-text similarity score with [`AlignProcessor`] and [`AlignModel`].
 
 ```py
 # Example of using ALIGN for image-text similarity
