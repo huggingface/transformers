@@ -2155,7 +2155,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         # task id and lang id prompts should not have timestamp tokens
         self.assertEqual(generate_outputs["sequences"].shape[-1] - 2, generate_outputs["token_timestamps"].shape[-1])
-
         self.assertEqual(len(generate_outputs["sequences"]), num_return_sequences * num_samples)
 
     @slow
