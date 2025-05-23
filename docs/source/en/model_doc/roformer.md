@@ -93,7 +93,7 @@ echo -e "水在零度时会[MASK]" | transformers run --task fill-mask --model j
 
 ## RoFormerTokenizer
 
-[[autodoc]] RoFormerTokenizer 
+[[autodoc]] RoFormerTokenizer
     - build_inputs_with_special_tokens
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences
@@ -101,11 +101,8 @@ echo -e "水在零度时会[MASK]" | transformers run --task fill-mask --model j
 
 ## RoFormerTokenizerFast
 
-[[autodoc]] RoFormerTokenizerFast 
+[[autodoc]] RoFormerTokenizerFast
     - build_inputs_with_special_tokens
-
-<frameworkcontent>
-<pt>
 
 ## RoFormerModel
 
@@ -142,9 +139,6 @@ echo -e "水在零度时会[MASK]" | transformers run --task fill-mask --model j
 [[autodoc]] RoFormerForQuestionAnswering
     - forward
 
-</pt>
-<tf>
-
 ## TFRoFormerModel
 
 [[autodoc]] TFRoFormerModel
@@ -179,9 +173,6 @@ echo -e "水在零度时会[MASK]" | transformers run --task fill-mask --model j
 
 [[autodoc]] TFRoFormerForQuestionAnswering
     - call
-
-</tf>
-<jax>
 
 ## FlaxRoFormerModel
 
