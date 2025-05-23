@@ -75,6 +75,13 @@ class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.padding_token_id = processor.tokenizer.pad_token_id
         cls.image_seq_len = 2
 
+    @staticmethod
+    def prepare_processor_dict():
+        return {
+            "chat_template": "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{% for message in messages %}<|im_start|>{{ message['role'] }}\n{% if message['content'] is string %}{{ message['content'] }}{% elif message['content'] is iterable %}{% for item in message['content'] %}{% if item['type'] == 'text' %}{{ item['text'] }}{% elif item['type'] == 'image' %}<fim_prefix><|img|><fim_suffix>{% endif %}{% endfor %}{% endif %}<|im_end|>\n{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}",
+            "size_conversion": {490: 2, 980: 2},
+        }  # fmt: skip
+
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
 
