@@ -19,6 +19,8 @@ from typing import List, Optional, Tuple, Union
 
 import math
 
+import timm
+
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -45,10 +47,6 @@ from ...utils import (
     logging,
     auto_docstring,
 )
-from timm.models.eva import (
-    vit_pe_core_large_patch14_336,
-    vit_pe_core_gigantic_patch14_448,
-)
 
 from ..auto import AutoModelForCausalLM
 
@@ -65,32 +63,17 @@ _CHECKPOINT_FOR_DOC = "facebook/Perception-LM-1B"
 class PerceptionEncoder(nn.Module):
     def __init__(self, config: PerceptionEncoderConfig):
         super().__init__()
-        assert config.pool_type == "none"
         self.use_cls_token = config.use_cls_token
-        kwargs = {
-            "img_size": (config.image_size, config.image_size),
-            "depth": config.layers,
-            "num_classes": 0,
-            "global_pool": "",
-            "use_post_transformer_norm": config.use_ln_post,
-            "init_values": config.ls_init_value,
-            "ref_feat_shape": (
-                config.image_size // config.patch_size,
-                config.image_size // config.patch_size,
-            ),
-        }
-        if config.layers == 23 and config.width == 1024:
-            self.eva_pe = vit_pe_core_large_patch14_336(
-                **kwargs,
-            )
-        elif config.layers == 47 and config.width == 1536:
-            self.eva_pe = vit_pe_core_gigantic_patch14_448(
-                **kwargs,
-            )
-        else:
-            raise ValueError(
-                f"Unsupported PE config: {config.layers} layers and {config.width} width"
-            )
+        self.eva_pe = timm.create_model(
+            config.architecture,
+            img_size=config.img_size,
+            depth=config.depth,
+            num_classes=config.num_classes,
+            global_pool=config.global_pool,
+            use_post_transformer_norm=config.use_post_transformer_norm,
+            init_values=config.init_values,
+            ref_feat_shape=config.ref_feat_shape,
+        )
         self.eva_pe._initialize_weights = lambda x: x  # disable weight initialization
 
     def forward(self, x):

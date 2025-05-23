@@ -344,12 +344,32 @@ def write_model(
             for k, v in loaded.items()
             if "vision_model" in k
         }
-        vision_config = PerceptionEncoderConfig(**model_params["vision_model"])
-        perception_encoder = PerceptionEncoder(vision_config)
-        state_dict = checkpoint_filter_fn(
-            state_dict, perception_encoder.eva_pe
+        vision_params = model_params["vision_model"]
+        if vision_params["layers"] == 23 and vision_params["width"] == 1024:
+            vision_model_name = "vit_pe_core_large_patch14_336"
+        elif vision_params["layers"] == 47 and vision_params["width"] == 1536:
+            vision_model_name = "vit_pe_core_gigantic_patch14_448"
+        else:
+            raise ValueError(f"Unsupported PE config: {vision_params['layers']} layers and {vision_params['width']} width")
+        
+        vision_config = PerceptionEncoderConfig(
+            use_cls_token=vision_params["use_cls_token"],
+            width=vision_params["width"],
+            model_name=vision_model_name,
+            img_size=(vision_params["image_size"], vision_params["image_size"]),
+            depth=vision_params["layers"],
+            num_classes=0,
+            global_pool="",
+            use_post_transformer_norm=vision_params["use_ln_post"],
+            init_values=vision_params["ls_init_value"],
+            ref_feat_shape=(
+                vision_params["image_size"] // vision_params["patch_size"],
+                vision_params["image_size"] // vision_params["patch_size"],
+            ),
         )
-        state_dict = { "vision_tower.eva_pe." + k: v for k, v in state_dict.items()}
+        perception_encoder = PerceptionEncoder(vision_config)
+        state_dict = checkpoint_filter_fn(state_dict, perception_encoder.eva_pe)
+        state_dict = {"vision_tower.eva_pe." + k: v for k, v in state_dict.items()}
         for k, v in state_dict.items():
             index_dict["weight_map"][k] = filename
             param_count += v.numel()
@@ -468,10 +488,18 @@ class Llama3Converter(TikTokenConverter):
             model_input_names=["input_ids", "attention_mask"],
             model_max_length=context_length,
             clean_up_tokenization_spaces=True,
-            extra_special_tokens={"image_token": "<|image|>", "video_token": "<|video|>", "pad_token": "<|end_of_text|>"},
+            extra_special_tokens={
+                "image_token": "<|image|>",
+                "video_token": "<|video|>",
+                "pad_token": "<|end_of_text|>",
+            },
         )
-        self.converted_tokenizer.image_token_id = self.converted_tokenizer.encode(self.converted_tokenizer.image_token, add_special_tokens=False)[0]
-        self.converted_tokenizer.video_token_id = self.converted_tokenizer.encode(self.converted_tokenizer.video_token, add_special_tokens=False)[0]
+        self.converted_tokenizer.image_token_id = self.converted_tokenizer.encode(
+            self.converted_tokenizer.image_token, add_special_tokens=False
+        )[0]
+        self.converted_tokenizer.video_token_id = self.converted_tokenizer.encode(
+            self.converted_tokenizer.video_token, add_special_tokens=False
+        )[0]
         self.update_post_processor(self.converted_tokenizer)
         # finer special_tokens_map.json
         self.converted_tokenizer._bos_token = BOS_ADDED_TOKEN
@@ -514,7 +542,9 @@ def write_tokenizer(
         context_length,
     ).converted_tokenizer
 
-    tokenizer.image_token_id = tokenizer.encode(tokenizer.image_token, add_special_tokens=False)[0]
+    tokenizer.image_token_id = tokenizer.encode(
+        tokenizer.image_token, add_special_tokens=False
+    )[0]
     processor_config = {
         "pooling_ratio": params["model"]["pooling_ratio"],
         "patch_size": params["model"]["vision_model"]["patch_size"],

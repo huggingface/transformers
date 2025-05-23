@@ -13,26 +13,26 @@
 # limitations under the License.
 """PerceptionLM model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from transformers.configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
+from typing import Tuple
 
 
 logger = logging.get_logger(__name__)
 
+
 class PerceptionEncoderConfig(PretrainedConfig):
-    image_size: int = 448
-    patch_size: int = 14
-    width: int = 1024
-    layers: int = 23
-    heads: int = 16
-    use_cls_token: bool = True
-    use_abs_posemb: bool = True
-    ls_init_value: float = 0.1
-    drop_path: float = 0.1
-    mlp_ratio: float = 4.0
-    use_ln_post: bool = False
-    pool_type: str = "none"
+    model_type = "perception_encoder"
+    architecture = "vit_pe_core_large_patch14_336"
+    width = 1024
+    img_size = (448, 448)
+    depth = 23
+    num_classes = 0
+    global_pool = ""
+    use_post_transformer_norm = False
+    init_values = 0.1
+    ref_feat_shape = (32, 32)
 
 class PerceptionLMConfig(PretrainedConfig):
     r"""
