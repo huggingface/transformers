@@ -4353,7 +4353,8 @@ class ModelTesterMixin:
             if hasattr(config, "layer_types"):
                 del config_dict["layer_types"]
             new_config = config.__class__(**config_dict)
-            model = model_class(new_config).to(torch_device)
+            # We need to set eager as otherwise `output_attentions` is not supported
+            model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
             model.eval()
             layer_types = getattr(model.config, "layer_types", ["sliding_attention"] * config.num_hidden_layers)
             attentions = model(**inputs, output_attentions=True).attentions
@@ -4370,7 +4371,8 @@ class ModelTesterMixin:
             if hasattr(config, "layer_types"):
                 del config_dict["layer_types"]
             new_config = config.__class__(**config_dict)
-            model = model_class(new_config).to(torch_device)
+            # We need to set eager as otherwise `output_attentions` is not supported
+            model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
             model.eval()
             attentions_not_sliding = model(**inputs, output_attentions=True).attentions
             for layer_attention in attentions_not_sliding:
