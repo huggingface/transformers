@@ -76,7 +76,7 @@ class Dots1Config(PretrainedConfig):
             Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 4096):
             Size of the sliding window for attention. If not specified, defaults to `4096`.
-        max_window_layers (`int`, *optional*, defaults to 28):
+        max_window_layers (`int`, *optional*, defaults to 62):
             The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
 
     Examples:
