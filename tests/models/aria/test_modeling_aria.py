@@ -21,6 +21,7 @@ import requests
 from transformers import (
     AriaConfig,
     AriaForConditionalGeneration,
+    AriaModel,
     AriaTextConfig,
     AutoProcessor,
     AutoTokenizer,
@@ -29,8 +30,10 @@ from transformers import (
 )
 from transformers.models.idefics3 import Idefics3VisionConfig
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_bitsandbytes,
     require_torch,
+    require_torch_large_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -174,9 +177,10 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
     Model tester for `AriaForConditionalGeneration`.
     """
 
-    all_model_classes = (AriaForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (AriaModel, AriaForConditionalGeneration) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
+    test_torchscript = False
     _is_composite = True
 
     def setUp(self):
@@ -280,6 +284,18 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
+    @unittest.skip(reason="Aria uses nn.MHA which is not compatible with offloading")
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip(reason="Aria uses nn.MHA which is not compatible with offloading")
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip(reason="Aria uses nn.MHA which is not compatible with offloading")
+    def test_disk_offload_safetensors(self):
+        pass
+
 
 @require_torch
 class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
@@ -288,9 +304,10 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     @slow
+    @require_torch_large_accelerator
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let's make sure we test the preprocessing to replace what is used
@@ -313,6 +330,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_torch_large_accelerator
     @require_bitsandbytes
     def test_small_model_integration_test_llama_single(self):
         # Let's make sure we test the preprocessing to replace what is used
@@ -335,6 +353,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_torch_large_accelerator
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched(self):
         # Let's make sure we test the preprocessing to replace what is used
@@ -362,6 +381,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_torch_large_accelerator
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         # Let's make sure we test the preprocessing to replace what is used
@@ -388,6 +408,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
+    @require_torch_large_accelerator
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched_regression(self):
         # Let's make sure we test the preprocessing to replace what is used
@@ -416,7 +437,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @require_torch
+    @require_torch_large_accelerator
     @require_vision
     @require_bitsandbytes
     def test_batched_generation(self):
@@ -501,6 +522,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
 
     @slow
+    @require_torch_large_accelerator
     @require_bitsandbytes
     def test_generation_no_images(self):
         model_id = "rhymes-ai/Aria"

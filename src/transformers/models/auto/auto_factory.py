@@ -452,7 +452,7 @@ class _BaseAutoModelClass:
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         config = kwargs.pop("config", None)
-        trust_remote_code = kwargs.pop("trust_remote_code", None)
+        trust_remote_code = kwargs.get("trust_remote_code", None)
         kwargs["_from_auto"] = True
         hub_kwargs_names = [
             "cache_dir",
@@ -531,7 +531,6 @@ class _BaseAutoModelClass:
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path,
                 return_unused_kwargs=True,
-                trust_remote_code=trust_remote_code,
                 code_revision=code_revision,
                 _commit_hash=commit_hash,
                 **hub_kwargs,
@@ -549,6 +548,7 @@ class _BaseAutoModelClass:
         trust_remote_code = resolve_trust_remote_code(
             trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
         )
+        kwargs["trust_remote_code"] = trust_remote_code
 
         # Set the adapter kwargs
         kwargs["adapter_kwargs"] = adapter_kwargs
@@ -730,13 +730,13 @@ def add_generation_mixin_to_remote_model(model_class):
 
     # 3. Prior to v4.45, we could detect whether a model was `generate`-compatible if it had its own `generate` and/or
     # `prepare_inputs_for_generation` method.
-    has_custom_generate = hasattr(model_class, "generate") and "GenerationMixin" not in str(
+    has_custom_generate_in_class = hasattr(model_class, "generate") and "GenerationMixin" not in str(
         getattr(model_class, "generate")
     )
     has_custom_prepare_inputs = hasattr(model_class, "prepare_inputs_for_generation") and "GenerationMixin" not in str(
         getattr(model_class, "prepare_inputs_for_generation")
     )
-    if has_custom_generate or has_custom_prepare_inputs:
+    if has_custom_generate_in_class or has_custom_prepare_inputs:
         model_class_with_generation_mixin = type(
             model_class.__name__, (model_class, GenerationMixin), {**model_class.__dict__}
         )
