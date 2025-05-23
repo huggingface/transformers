@@ -1182,7 +1182,7 @@ class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
             attentions=all_self_attns,
         )
 
-    # Copied from transformers.models.phi3.modeling_phi3.Phi3Model._update_causal_mask with Phi3->Qwen2VL
+    # Copied from transformers.models.phimoe.modeling_phimoe.PhimoeModel._update_causal_mask with Phimoe->Qwen2VL
     def _update_causal_mask(
         self,
         attention_mask: Union[torch.Tensor, "BlockMask"],
@@ -1270,7 +1270,7 @@ class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
         return causal_mask
 
     @staticmethod
-    # Copied from transformers.models.mistral.modeling_mistral.MistralModel._prepare_4d_causal_attention_mask_with_cache_position with Mistral->Qwen2VL
+    # Copied from transformers.models.phimoe.modeling_phimoe.PhimoeModel._prepare_4d_causal_attention_mask_with_cache_position with Phimoe->Qwen2VL
     def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor,
         sequence_length: int,
@@ -1314,12 +1314,13 @@ class Qwen2VLTextModel(Qwen2VLPreTrainedModel):
             diagonal_attend_mask = torch.arange(target_length, device=cache_position.device) > cache_position.reshape(
                 -1, 1
             )
-            if config.get_text_config().sliding_window is not None:
+            text_config = config.get_text_config()
+            if getattr(text_config, "use_sliding_window", True) and text_config.sliding_window is not None:
                 # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
                 # the check is needed to verify is current checkpoint was trained with sliding window or not
                 if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > target_length:
                     sliding_attend_mask = torch.arange(target_length, device=cache_position.device) <= (
-                        cache_position.reshape(-1, 1) - config.get_text_config().sliding_window
+                        cache_position.reshape(-1, 1) - text_config.sliding_window
                     )
                     diagonal_attend_mask.bitwise_or_(sliding_attend_mask)
             causal_mask *= diagonal_attend_mask
@@ -1674,7 +1675,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         return output if return_dict else output.to_tuple()
 
     @staticmethod
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel._prepare_4d_causal_attention_mask_with_cache_position
+    # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._prepare_4d_causal_attention_mask_with_cache_position
     def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor,
         sequence_length: int,

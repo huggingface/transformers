@@ -1,4 +1,4 @@
-FROM rocm/dev-ubuntu-22.04:6.2.4
+FROM rocm/pytorch:rocm6.4_ubuntu22.04_py3.10_pytorch_release_2.6.0
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -11,9 +11,6 @@ RUN apt update && \
 RUN git lfs install
 
 RUN python3 -m pip install --no-cache-dir --upgrade pip numpy
-
-RUN python3 -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.2.4
-
 RUN python3 -m pip install --no-cache-dir --upgrade importlib-metadata setuptools ninja git+https://github.com/facebookresearch/detectron2.git pytesseract "itsdangerous<2.1.0"
 
 ARG REF=main
