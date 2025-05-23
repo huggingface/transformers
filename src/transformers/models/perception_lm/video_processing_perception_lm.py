@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
-#
+# Copyright 2025 Meta Platforms, Inc. and the HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -24,7 +23,6 @@ from ...utils.import_utils import requires
 from ...video_processing_utils import (
     BaseVideoProcessor,
 )
-
 
 if is_vision_available():
     from ...image_utils import PILImageResampling
