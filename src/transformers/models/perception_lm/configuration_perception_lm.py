@@ -24,6 +24,7 @@ logger = logging.get_logger(__name__)
 
 class PerceptionEncoderConfig(PretrainedConfig):
     model_type = "perception_encoder"
+    use_cls_token = True
     architecture = "vit_pe_core_large_patch14_336"
     width = 1024
     img_size = (448, 448)
@@ -120,4 +121,4 @@ class PerceptionLMConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-__all__ = ["PerceptionLMConfig"]
+__all__ = ["PerceptionLMConfig", "PerceptionEncoderConfig"]
