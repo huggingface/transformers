@@ -4344,6 +4344,12 @@ class ModelTesterMixin:
             sliding_mask[i, start : i + 1] = True
         sliding_mask = sliding_mask.to(torch_device)
 
+        # We need to set eager as otherwise `output_attentions` is not supported
+        config._attn_implementation = "eager"
+        for sub in config.sub_configs:
+            subconfig = getattr(config, sub)
+            subconfig._attn_implementation = "eager"
+
         config.sliding_window = sliding_window
         inputs["attention_mask"] = torch.ones(batch_size, seq_len).to(torch.int64).to(torch_device)
         for model_class in self.all_model_classes:
