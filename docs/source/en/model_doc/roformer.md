@@ -76,8 +76,8 @@ print(decoded)
 </hfoption>
 <hfoption id="transformers CLI">
 
-```py
-echo -e "水在零度时会[MASK]" | transformers run --task fill-mask --model junnyu/roformer_chinese_base --device 0
+```bash
+echo -e "水在零度时会[MASK]" | transformers-cli run --task fill-mask --model junnyu/roformer_chinese_base --device 0
 ```
 
 </hfoption>
@@ -103,6 +103,9 @@ echo -e "水在零度时会[MASK]" | transformers run --task fill-mask --model j
 
 [[autodoc]] RoFormerTokenizerFast
     - build_inputs_with_special_tokens
+
+<frameworkcontent>
+<pt>
 
 ## RoFormerModel
 
@@ -139,6 +142,9 @@ echo -e "水在零度时会[MASK]" | transformers run --task fill-mask --model j
 [[autodoc]] RoFormerForQuestionAnswering
     - forward
 
+</pt>
+<tf>
+
 ## TFRoFormerModel
 
 [[autodoc]] TFRoFormerModel
@@ -174,6 +180,9 @@ echo -e "水在零度时会[MASK]" | transformers run --task fill-mask --model j
 [[autodoc]] TFRoFormerForQuestionAnswering
     - call
 
+</tf>
+<jax>
+
 ## FlaxRoFormerModel
 
 [[autodoc]] FlaxRoFormerModel
@@ -203,3 +212,6 @@ echo -e "水在零度时会[MASK]" | transformers run --task fill-mask --model j
 
 [[autodoc]] FlaxRoFormerForQuestionAnswering
     - __call__
+
+</jax>
+</frameworkcontent>
