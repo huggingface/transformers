@@ -170,6 +170,9 @@ class Mistral3Model(LlavaModel):
             selected_image_feature = torch.cat(hs_pool, dim=-1)
 
         image_features = self.multi_modal_projector(selected_image_feature.squeeze(0), image_sizes)
+        downsample_ratio = self.vision_tower.patch_size * self.config.spatial_merge_size
+        split_sizes = [(height // downsample_ratio) * (width // downsample_ratio) for height, width in image_sizes]
+        image_features = torch.split(image_features.squeeze(0), split_sizes)
         return image_features
 
     def forward(
@@ -215,6 +218,7 @@ class Mistral3Model(LlavaModel):
                 vision_feature_layer=vision_feature_layer,
                 image_sizes=image_sizes,
             )
+            image_features = torch.cat(image_features, dim=0)
 
             special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
             special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)

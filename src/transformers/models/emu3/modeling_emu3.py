@@ -1488,7 +1488,12 @@ class Emu3Model(Emu3PreTrainedModel):
                 The tensors corresponding to the input images.
         """
         image_tokens = self.get_image_tokens(pixel_values, image_sizes)
-        image_features = self.get_input_embeddings()(image_tokens).unsqueeze(0)
+        split_sizes = [
+            (height // self.vqmodel.vision_spatial_factor) * (width // self.vqmodel.vision_spatial_factor + 1)
+            for height, width in image_sizes
+        ]
+        image_features = self.get_input_embeddings()(image_tokens)
+        image_features = torch.split(image_features, split_sizes)
         return image_features
 
     @torch.no_grad
