@@ -105,6 +105,7 @@ def compute_segments(
     mask_probs,
     pred_scores,
     pred_labels,
+    stuff_classes,
     mask_threshold: float = 0.5,
     overlap_mask_area_threshold: float = 0.8,
     target_size: Optional[Tuple[int, int]] = None,
@@ -134,10 +135,12 @@ def compute_segments(
         if not mask_exists:
             continue
 
-        if pred_class in stuff_memory_list:
-            current_segment_id = stuff_memory_list[pred_class]
-        else:
-            current_segment_id += 1
+        if pred_class in stuff_classes:
+            if pred_class in stuff_memory_list:
+                segmentation[final_mask] = stuff_memory_list[pred_class]
+                continue
+            else:
+                stuff_memory_list[pred_class] = current_segment_id
 
         segmentation[final_mask] = current_segment_id
         segment_score = round(pred_scores[k].item(), 6)
@@ -179,7 +182,7 @@ class EoMTImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.num_labels = num_labels
 
-    def scale_image_size(self, image_size, segmentation_type="semantic"):
+    def scale_image_size(self, image_size, segmentation_type: str):
         target_h, target_w = self.size["height"], self.size["width"]
         orig_h, orig_w = image_size
 
@@ -264,7 +267,10 @@ class EoMTImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_type: str,
+        segmentation_type: str = "semantic",
+        segmentation_maps: Optional[ImageInput] = None,
+        mask_labels: Optional[Dict[int, int]] = None,
+        class_labels: Optional[Dict[int, int]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
@@ -371,9 +377,9 @@ class EoMTImageProcessor(BaseImageProcessor):
 
         output_logits = []
 
-        for i, (sums, counts) in enumerate(zip(logit_sums, logit_counts)):
+        for idx, (sums, counts) in enumerate(zip(logit_sums, logit_counts)):
             combined = sums / counts.clamp(min=1)
-            combined = F.interpolate(combined[None, ...], size=original_image_sizes[i], mode="bilinear")[0]
+            combined = F.interpolate(combined[None, ...], size=original_image_sizes[idx], mode="bilinear")[0]
             output_logits.append(combined)
 
         return output_logits
@@ -456,6 +462,7 @@ class EoMTImageProcessor(BaseImageProcessor):
                 mask_probs=mask_probs,
                 pred_scores=pred_scores,
                 pred_labels=pred_labels,
+                stuff_classes=stuff_classes,
                 mask_threshold=mask_threshold,
                 overlap_mask_area_threshold=overlap_mask_area_threshold,
                 target_size=original_image_sizes[i] if original_image_sizes is not None else None,

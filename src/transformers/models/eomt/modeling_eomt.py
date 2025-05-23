@@ -31,7 +31,7 @@ from torch import Tensor, nn
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput, requires_backends
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import can_return_tuple, is_accelerate_available, is_scipy_available, logging
+from ...utils import auto_docstring, can_return_tuple, is_accelerate_available, is_scipy_available, logging
 from .configuration_eomt import EoMTConfig
 
 
@@ -41,6 +41,7 @@ if is_accelerate_available():
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
+
 logger = logging.get_logger(__name__)
 
 
@@ -985,6 +986,7 @@ class MaskHead(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 class EoMTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1019,6 +1021,11 @@ class EoMTPreTrainedModel(PreTrainedModel):
 
 
 # ToDo: How to add gradient checkpointing to the model?
+@auto_docstring(
+    custom_intro="""
+    The EoMT Model with heads on top for instance/semantic/panoptic segmentation.
+    """
+)
 class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
     def __init__(self, config: EoMTConfig) -> None:
         super().__init__(config)
@@ -1105,6 +1112,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
 
         return attn_mask
 
+    @auto_docstring
     @can_return_tuple
     def forward(
         self,
