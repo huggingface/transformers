@@ -9,7 +9,7 @@ from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, TokenClassifierOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -19,6 +19,8 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    add_code_sample_docstrings,
+    can_return_tuple,
 )
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_swissai import SwissAIConfig
@@ -185,7 +187,7 @@ class SwissAIAttention(nn.Module):
         key_states = self.k_proj(hidden_states)
         key_states = key_states.view(hidden_shape).transpose(1, 2)
         key_states = self.k_norm(key_states)
-        
+
         value_states = self.v_proj(hidden_states)
         value_states = value_states.view(hidden_shape).transpose(1, 2)
 
@@ -255,7 +257,7 @@ class SwissAIDecoderLayer(nn.Module):
         self.mlp = SwissAIMLP(config)
         self.attention_layernorm = SwissAIRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.feedforward_layernorm = SwissAIRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        
+
         self.post_norm = config.post_norm
 
     def forward(
@@ -883,4 +885,85 @@ class SwissAIForCausalLM(SwissAIPreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["SwissAIForCausalLM", "SwissAIModel", "SwissAIPreTrainedModel"]
+@add_start_docstrings(
+    """
+    The SwissAI Model transformer with a token classification head on top (a linear layer on top of the hidden-states
+    output) e.g. for Named-Entity-Recognition (NER) tasks.
+    """,
+    SWISSAI_START_DOCSTRING,
+)
+class SwissAIForTokenClassification(SwissAIPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.model = SwissAIModel(config)
+        if getattr(config, "classifier_dropout", None) is not None:
+            classifier_dropout = config.classifier_dropout
+        elif getattr(config, "hidden_dropout", None) is not None:
+            classifier_dropout = config.hidden_dropout
+        else:
+            classifier_dropout = 0.1
+        self.dropout = nn.Dropout(classifier_dropout)
+        self.score = nn.Linear(config.hidden_size, config.num_labels)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
+    @can_return_tuple
+    @add_start_docstrings_to_model_forward(SWISSAI_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        output_type=TokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+    ) -> TokenClassifierOutput:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+
+        outputs: BaseModelOutputWithPast = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+        sequence_output = outputs.last_hidden_state
+        sequence_output = self.dropout(sequence_output)
+        logits = self.score(sequence_output)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits, labels, self.config)
+
+        return TokenClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+__all__ = ["SwissAIForCausalLM", "SwissAIModel", "SwissAIPreTrainedModel", "SwissAIForTokenClassification"]

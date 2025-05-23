@@ -1329,6 +1329,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SqueezeBertForTokenClassification"),
         ("stablelm", "StableLmForTokenClassification"),
         ("starcoder2", "Starcoder2ForTokenClassification"),
+        ("swissai", "SwissAIForTokenClassification"),
         ("t5", "T5ForTokenClassification"),
         ("umt5", "UMT5ForTokenClassification"),
         ("xlm", "XLMForTokenClassification"),
