@@ -313,15 +313,8 @@ class BambaAttention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
-
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
