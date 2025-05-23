@@ -297,7 +297,6 @@ class Emu3Config(PretrainedConfig):
     """
 
     model_type = "emu3"
-    has_no_defaults_at_init = True
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {"text_config": Emu3TextConfig, "vq_config": Emu3VQVAEConfig}
 
@@ -321,7 +320,7 @@ class Emu3Config(PretrainedConfig):
         self.vq_config = vq_config
         self.text_config = text_config
         self.vocabulary_map = vocabulary_map
-        self.image_token_id = vocabulary_map.get("<image>")
+        self.image_token_id = vocabulary_map.get("<image>") if vocabulary_map is not None else None
 
         super().__init__(**kwargs)
 
