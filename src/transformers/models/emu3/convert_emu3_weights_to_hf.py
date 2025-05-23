@@ -218,7 +218,6 @@ KEYS_TO_MODIFY_MAPPING = {
     "^quant_conv": "model.vqmodel.quant_conv",
     "^quantize": "model.vqmodel.quantize",
     r"lm_head\.weight": "lm_head.weight",
-    # r"^text_model\.model\.vqmodel": "vqmodel",
     # rename QKV proj for the VQ-VAE model because we use SiglipAttention
     r"\.q\.": ".q_proj.",
     r"\.k\.": ".k_proj.",
