@@ -25,7 +25,6 @@ rendered properly in your Markdown viewer.
 
 [Granite](https://huggingface.co/papers/2408.13359) is a 3B parameter language model trained with the Power scheduler. Discovering a good learning rate for pretraining large language models is difficult because it depends on so many variables (batch size, number of training tokens, etc.) and it is expensive to perform a hyperparameter search. The Power scheduler is based on a power-law relationship between the variables and their transferability to larger models. Combining the Power scheduler with Maximum Update Parameterization (MUP) allows a model to be pretrained with one set of hyperparameters regardless of all the variables.
 
-
 You can find all the original Granite checkpoints under the [IBM-Granite](https://huggingface.co/ibm-granite) organization.
 
 > [!TIP]
@@ -39,7 +38,6 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 ```python
 import torch
 from transformers import pipeline
-
 
 pipe = pipeline(
     task="text-generation",
@@ -73,7 +71,7 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 <hfoption id="transformers CLI">
 
 ```python
-echo -e "Explain quantum computing simply." | transformers run --task text-generation --model ibm-granite/granite-3.3-8b-instruct --device 0
+echo -e "Explain quantum computing simply." | transformers-cli run --task text-generation --model ibm-granite/granite-3.3-8b-instruct --device 0
 ```
 </hfoption>
 </hfoptions>
