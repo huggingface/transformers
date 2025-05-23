@@ -3,7 +3,7 @@ import unittest
 import warnings
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.testing_utils import require_compressed_tensors, require_torch
+from transformers.testing_utils import backend_empty_cache, require_compressed_tensors, require_torch, torch_device
 from transformers.utils import is_torch_available
 from transformers.utils.quantization_config import CompressedTensorsConfig
 
@@ -41,7 +41,7 @@ class StackCompressedModelTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_compressed_uncompressed_model_shapes(self):
@@ -160,7 +160,7 @@ class RunCompressedTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_default_run_compressed__True(self):

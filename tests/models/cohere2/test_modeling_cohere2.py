@@ -133,15 +133,6 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
 @require_torch_large_gpu
 class Cohere2IntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
-
-    @classmethod
-    def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     def test_model_bf16(self):
         model_id = "CohereForAI/c4ai-command-r7b-12-2024"
