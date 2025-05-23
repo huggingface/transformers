@@ -44,6 +44,9 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "deepseek-community/Janus-Pro-1B",
             extra_special_tokens=special_image_tokens,
         )
+        # Set the processor to use the default system prompt to False as it's used based on input modality.
+        # Hence set to False to avoid any issues in the test irrespective of inputs.
+        processor.use_default_system_prompt = False
         processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
@@ -53,11 +56,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
     def get_processor(self):
-        processor = AutoProcessor.from_pretrained(self.tmpdirname)
-        # Set the processor to use the default system prompt to False as it's used based on input modality.
-        # Hence set to False to avoid any issues in the test irrespective of inputs.
-        processor.use_default_system_prompt = False
-        return processor
+        return AutoProcessor.from_pretrained(self.tmpdirname)
 
     def test_chat_template_single(self):
         """
