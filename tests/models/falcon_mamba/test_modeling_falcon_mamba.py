@@ -518,7 +518,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         out = tok.batch_decode(out, skip_special_tokens=True)
 
         # Remove the prefix of the expected output
-        EXPECTED_OUTPUT = [EXPECTED_OUTPUT[i][len(texts[i]):] for i in range(len(texts))]
+        EXPECTED_OUTPUT = [EXPECTED_OUTPUT[i][len(texts[i]) :] for i in range(len(texts))]
         self.assertListEqual(out, EXPECTED_OUTPUT)
 
     @require_torch_multi_accelerator
