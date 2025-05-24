@@ -620,18 +620,7 @@ class FalconH1Mixer(nn.Module):
         input_states = input_states * self.ssm_in_multiplier   # ADD Mup Multipliers
         projected_states = self.in_proj(input_states)
         projected_states = projected_states * self.mup_vector  # ADD Mup Multipliers
-        d_mlp = (
-                    projected_states.shape[-1]
-                    - 2 * self.intermediate_size
-                    - 2 * self.n_groups * self.ssm_state_size
-                    - self.num_heads
-                ) // 2
-        if d_mlp > 0:
-            z0, x0, gate, hidden_states_B_C, dt = projected_states.split([
-                d_mlp, d_mlp, self.intermediate_size, self.conv_dim, self.num_heads
-            ], dim=-1)
-        else:
-            gate, hidden_states_B_C, dt = projected_states.split([
+        gate, hidden_states_B_C, dt = projected_states.split([
                 self.intermediate_size, self.conv_dim, self.num_heads
             ], dim=-1)
 
@@ -823,8 +812,6 @@ class FalconH1Mixer(nn.Module):
 
         # end ssd naive
 
-        if d_mlp > 0:
-            y = torch.cat([F.silu(z0) * x0, scan_output], dim=-1)
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.to(dtype))  # [batch, seq_len, hidden_size]
         return contextualized_states

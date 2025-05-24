@@ -336,7 +336,6 @@ class FalconH1Attention(nn.Module):
     def __init__(self, config: FalconH1Config, layer_idx: int):
         super().__init__()
         self.config = config
-        print("ckpt self.config._attn_implementation :", self.config._attn_implementation)
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
@@ -807,23 +806,13 @@ class FalconH1Mixer(nn.Module):
 
         # 1. Gated MLP's linear projection
         input_states = apply_mask_to_padding_states(input_states, attention_mask)
-        input_states = input_states * self.ssm_in_multiplier  # ADD Mup Multipliers
+        input_states = input_states * self.ssm_in_multiplier   # ADD Mup Multipliers
         projected_states = self.in_proj(input_states)
         projected_states = projected_states * self.mup_vector  # ADD Mup Multipliers
-        d_mlp = (
-                    projected_states.shape[-1]
-                    - 2 * self.intermediate_size
-                    - 2 * self.n_groups * self.ssm_state_size
-                    - self.num_heads
-                ) // 2
-        if d_mlp > 0:
-            z0, x0, gate, hidden_states_B_C, dt = projected_states.split([
-                d_mlp, d_mlp, self.intermediate_size, self.conv_dim, self.num_heads
-            ], dim=-1)
-        else:
-            gate, hidden_states_B_C, dt = projected_states.split([
+        gate, hidden_states_B_C, dt = projected_states.split([
                 self.intermediate_size, self.conv_dim, self.num_heads
             ], dim=-1)
+
         use_precomputed_states = (
             cache_params is not None
             and cache_params.has_previous_state
@@ -1012,8 +1001,6 @@ class FalconH1Mixer(nn.Module):
 
         # end ssd naive
 
-        if d_mlp > 0:
-            y = torch.cat([F.silu(z0) * x0, scan_output], dim=-1)
         # 4. Final linear projection
         contextualized_states = self.out_proj(scan_output.to(dtype))  # [batch, seq_len, hidden_size]
         return contextualized_states
