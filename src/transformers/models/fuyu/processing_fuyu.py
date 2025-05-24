@@ -343,7 +343,6 @@ class FuyuProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = []
     image_processor_class = "FuyuImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
