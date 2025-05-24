@@ -2244,6 +2244,14 @@ class Trainer:
                 ignore_keys_for_eval=ignore_keys_for_eval,
             )
 
+    def get_total_train_batch_size(self, args):
+        tp_size = 1
+        if self.is_deepspeed_enabled and getattr(self.args, "hf_deepspeed_config", None):
+            tp_size = self.args.hf_deepspeed_config.config.get("tensor_parallel", {}).get("autotp_size", 1)
+
+        total_train_batch_size = self._train_batch_size * args.gradient_accumulation_steps * args.world_size // tp_size
+        return total_train_batch_size
+
     def _inner_training_loop(
         self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
     ):
@@ -2274,7 +2282,8 @@ class Trainer:
         # number of training epochs: num_train_epochs
         # number of training steps per epoch: num_update_steps_per_epoch
         # total number of training steps to execute: max_steps
-        total_train_batch_size = self._train_batch_size * args.gradient_accumulation_steps * args.world_size
+        total_train_batch_size = self.get_total_train_batch_size(args)
+
         (
             num_train_epochs,
             num_update_steps_per_epoch,
