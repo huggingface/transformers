@@ -19,19 +19,31 @@ import json
 import operator
 import os
 import re
+import requests
 import sys
 import time
-from typing import Any, Dict, List, Optional, Union
 
-import requests
-from get_ci_error_statistics import get_jobs
-from get_previous_daily_ci import get_last_daily_ci_reports, get_last_daily_ci_run, get_last_daily_ci_workflow_run_id
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 from huggingface_hub import HfApi
 from slack_sdk import WebClient
 
 
-api = HfApi()
-client = WebClient(token=os.environ["CI_SLACK_BOT_TOKEN"])
+from get_ci_error_statistics import get_jobs
+from get_previous_daily_ci import get_last_daily_ci_reports, get_last_daily_ci_run, get_last_daily_ci_workflow_run_id
+
+
+# A map associating the job names (specified by `inputs.job` in a workflow file) with the keys of
+# `additional_files`. This is used to remove some entries in `additional_files` that are not concerned by a
+# specific job. See below.
+job_to_test_map = {
+    "run_models_gpu": "Models",
+    "run_trainer_and_fsdp_gpu": "Trainer & FSDP",
+    "run_pipelines_torch_gpu": "PyTorch pipelines",
+    "run_pipelines_tf_gpu": "TensorFlow pipelines",
+    "run_examples_gpu": "Examples directory",
+    "run_torch_cuda_extensions_gpu": "DeepSpeed",
+}
 
 NON_MODEL_TEST_MODULES = [
     "deepspeed",
@@ -516,6 +528,7 @@ class Message:
         if len(self.selected_warnings) > 0:
             blocks.append(self.warnings)
 
+        new_failure_blocks = []
         for idx, (prev_workflow_run_id, prev_ci_artifacts) in enumerate(
             [self.prev_ci_artifacts] + self.other_ci_artifacts
         ):
@@ -524,8 +537,6 @@ class Message:
                 new_failure_blocks = self.get_new_model_failure_blocks(
                     prev_ci_artifacts=prev_ci_artifacts, with_header=False
                 )
-                if len(new_failure_blocks) > 0:
-                    blocks.extend(new_failure_blocks)
 
             # To save the list of new model failures and uploaed to hub repositories
             extra_blocks = self.get_new_model_failure_blocks(prev_ci_artifacts=prev_ci_artifacts, to_truncate=False)
@@ -548,7 +559,6 @@ class Message:
                     repo_type="dataset",
                     token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
                 )
-                new_failures_url = f"https://huggingface.co/datasets/{report_repo_id}/raw/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/{filename}.txt"
 
                 # extra processing to save to json format
                 new_failed_tests = {}
@@ -580,13 +590,14 @@ class Message:
                     repo_type="dataset",
                     token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
                 )
+                new_failures_url = f"https://huggingface.co/datasets/{report_repo_id}/raw/{commit_info.oid}/{report_repo_folder}/ci_results_{job_name}/{filename}.json"
 
                 if idx == 0:
                     block = {
                         "type": "section",
                         "text": {
-                            "type": "plain_text",
-                            "text": f"There are {nb_new_failed_tests} new failed tests.",
+                            "type": "mrkdwn",
+                            "text": f"*There are {nb_new_failed_tests} new failed tests*\n\n(compared to previous run: <https://github.com/huggingface/transformers/actions/runs/{prev_workflow_run_id}|{prev_workflow_run_id}>)",
                         },
                         "accessory": {
                             "type": "button",
@@ -595,6 +606,24 @@ class Message:
                         },
                     }
                     blocks.append(block)
+                else:
+                    block = {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            # TODO: We should NOT assume it's always Nvidia CI, but it's the case at this moment.
+                            "text": f"*There are {nb_new_failed_tests} failed tests unique to this run*\n\n(compared to Nvidia CI: <https://github.com/huggingface/transformers/actions/runs/{prev_workflow_run_id}|{prev_workflow_run_id}>)",
+                        },
+                        "accessory": {
+                            "type": "button",
+                            "text": {"type": "plain_text", "text": "Check failures"},
+                            "url": new_failures_url,
+                        },
+                    }
+                    blocks.append(block)
+
+        if len(new_failure_blocks) > 0:
+            blocks.extend(new_failure_blocks)
 
         return json.dumps(blocks)
 
@@ -787,7 +816,7 @@ class Message:
                     {"type": "header", "text": {"type": "plain_text", "text": "New failures", "emoji": True}}
                 )
             else:
-                failure_text = f"*New failures*\n\n{failure_text}"
+                failure_text = f"{failure_text}"
             blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": failure_text}})
 
         return blocks
@@ -943,6 +972,9 @@ def pop_default(l: list[Any], i: int, default: Any) -> Any:
 
 
 if __name__ == "__main__":
+    api = HfApi()
+    client = WebClient(token=os.environ["CI_SLACK_BOT_TOKEN"])
+
     SLACK_REPORT_CHANNEL_ID = os.environ["SLACK_REPORT_CHANNEL"]
 
     # runner_status = os.environ.get("RUNNER_STATUS")
@@ -1173,18 +1205,6 @@ if __name__ == "__main__":
     elif ci_event.startswith("Push CI (AMD)"):
         additional_files = {}
 
-    # A map associating the job names (specified by `inputs.job` in a workflow file) with the keys of
-    # `additional_files`. This is used to remove some entries in `additional_files` that are not concerned by a
-    # specific job. See below.
-    job_to_test_map = {
-        "run_models_gpu": "Models",
-        "run_trainer_and_fsdp_gpu": "Trainer & FSDP",
-        "run_pipelines_torch_gpu": "PyTorch pipelines",
-        "run_pipelines_tf_gpu": "TensorFlow pipelines",
-        "run_examples_gpu": "Examples directory",
-        "run_torch_cuda_extensions_gpu": "DeepSpeed",
-    }
-
     report_repo_id = os.getenv("REPORT_REPO_ID")
 
     # if it is not a scheduled run, upload the reports to a subfolder under `report_repo_folder`
@@ -1278,8 +1298,25 @@ if __name__ == "__main__":
         os.makedirs(os.path.join(os.getcwd(), f"ci_results_{job_name}"))
 
     nvidia_daily_ci_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml"
+    amd_daily_ci_workflows = (
+        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi210-caller.yml",
+        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi250-caller.yml",
+    )
     is_nvidia_daily_ci_workflow = os.environ.get("GITHUB_WORKFLOW_REF").startswith(nvidia_daily_ci_workflow)
+    is_amd_daily_ci_workflow = os.environ.get("GITHUB_WORKFLOW_REF").startswith(amd_daily_ci_workflows)
+
     is_scheduled_ci_run = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
+    # For AMD workflow runs: the different AMD CI callers (MI210/MI250/MI300, etc.) are triggered by `workflow_run`
+    #  event of `.github/workflows/self-scheduled-amd-caller.yml`.
+    if is_amd_daily_ci_workflow:
+        # Get the path to the file on the runner that contains the full event webhook payload.
+        event_payload_path = os.environ.get("GITHUB_EVENT_PATH")
+        # Load the event payload
+        with open(event_payload_path) as fp:
+            event_payload = json.load(fp)
+            # The event that triggers the `workflow_run` event.
+            if "workflow_run" in event_payload:
+                is_scheduled_ci_run = event_payload["event"] == "schedule"
 
     # The values are used as the file names where to save the corresponding CI job results.
     test_to_result_name = {
@@ -1380,13 +1417,6 @@ if __name__ == "__main__":
                 prev_ci_artifacts = (target_workflow_run_id, ci_artifacts)
             else:
                 other_ci_artifacts.append((target_workflow_run_id, ci_artifacts))
-
-    job_to_test_map.update(
-        {
-            "run_models_gpu": "Models",
-            "run_trainer_and_fsdp_gpu": "Trainer & FSDP",
-        }
-    )
 
     ci_name_in_report = ""
     if job_name in job_to_test_map:

@@ -602,6 +602,8 @@ jobs:
       docker: ${{ inputs.docker }}
       start_sha: ${{ github.sha }}
       job: ${{ inputs.job }}
+      slack_report_channel: ${{ inputs.slack_report_channel }}
+      ci_event: ${{ inputs.ci_event }}
       report_repo_id: ${{ inputs.report_repo_id }}
 
     secrets: inherit

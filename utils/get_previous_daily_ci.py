@@ -28,7 +28,14 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
 
     url = f"https://api.github.com/repos/huggingface/transformers/actions/workflows/{workflow_id}/runs"
     # On `main` branch + event being `schedule` + not returning PRs + only `num_runs` results
-    url += f"?branch=main&event=schedule&exclude_pull_requests=true&per_page={num_runs}"
+    url += f"?branch=main&exclude_pull_requests=true&per_page={num_runs}"
+
+    # This is specific to what we allow to trigger the scheduled runs
+    ci_event = os.environ.get("CI_EVENT", "")
+    if ci_event.startswith("Scheduled CI (AMD)"):
+        url += "&event=workflow_run"
+    else:
+        url += "&event=schedule"
 
     result = requests.get(url, headers=headers).json()
 
