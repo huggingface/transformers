@@ -65,7 +65,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants create energy through a process known as" | transformers run --task text-generation --model mistralai/Mamba-Codestral-7B-v0.1 --device 0
+echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model mistralai/Mamba-Codestral-7B-v0.1 --device 0
 ```
 
 </hfoption>
@@ -78,10 +78,8 @@ The example below uses [torchao](../quantization/torchao) to only quantize the w
 ```py
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
-from torchao.quantization import Int4WeightOnlyConfig
 
-quantization_config = Int4WeightOnlyConfig(group_size=128)
-quantization_config = TorchAoConfig(quant_type=quant_config)
+quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1")
 model = AutoModelForCausalLM.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1", torch_dtype=torch.bfloat16, quantization_config=quantization_config, device_map="auto",)
 input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
