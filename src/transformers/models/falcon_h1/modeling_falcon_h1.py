@@ -336,6 +336,7 @@ class FalconH1Attention(nn.Module):
     def __init__(self, config: FalconH1Config, layer_idx: int):
         super().__init__()
         self.config = config
+        print("ckpt self.config._attn_implementation :", self.config._attn_implementation)
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
