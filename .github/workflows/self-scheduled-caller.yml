@@ -17,7 +17,9 @@ on:
         type: string
         required: false
         default: ""
-
+  push:
+    branches:
+      - all_jobs_can_compare_against_prev_runs_clean_trigger
 
 # Used for `push` to easily modiffy the target workflow runs to compare against
 env:
