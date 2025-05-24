@@ -610,9 +610,10 @@ class FalconH1Mixer(nn.Module):
     ):
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+        # Add Multipliers
         hidden_states = hidden_states * self.ssm_in_multiplier
         projected_states = self.in_proj(hidden_states)
-        projected_states = projected_states * self.mup_vector
+        projected_states = projected_states * self.mup_vector  # ADD Mup Multipliers
         d_to_remove = 2 * self.intermediate_size + 2 * self.n_groups * self.ssm_state_size + self.num_heads
 
         # Set up dimensions for reshapes later
@@ -806,7 +807,8 @@ class FalconH1Mixer(nn.Module):
 
         # 1. Gated MLP's linear projection
         input_states = apply_mask_to_padding_states(input_states, attention_mask)
-        input_states = input_states * self.ssm_in_multiplier   # ADD Mup Multipliers
+        # Add Multipliers
+        input_states = input_states * self.ssm_in_multiplier
         projected_states = self.in_proj(input_states)
         projected_states = projected_states * self.mup_vector  # ADD Mup Multipliers
         gate, hidden_states_B_C, dt = projected_states.split([
