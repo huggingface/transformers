@@ -7,53 +7,29 @@ on:
     types: [completed]
   push:
     branches:
-      - run_amd_scheduled_ci_caller*
+      - all_jobs_can_compare_against_prev_runs_clean_trigger
 
 jobs:
   model-ci:
-    name: Model CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled.yaml@main
-    with:
-      job: run_models_gpu
-      slack_report_channel: "#amd-hf-ci"
-      runner: mi250
-      docker: huggingface/transformers-pytorch-amd-gpu
-      ci_event: Scheduled CI (AMD) - mi250
-      report_repo_id: optimum-amd/transformers_daily_ci
-    secrets: inherit
+    name: PyTorch pipelines
+    strategy:
+      fail-fast: false
+      matrix:
+        machine_type: [aws-g4dn-4xlarge-cache]
+    runs-on:
+      group: '${{ matrix.machine_type }}'
+    container:
+      image: huggingface/transformers-pytorch-gpu
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
 
-  torch-pipeline:
-    name: Torch pipeline CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled.yaml@main
-    with:
-      job: run_pipelines_torch_gpu
-      slack_report_channel: "#amd-hf-ci"
-      runner: mi250
-      docker: huggingface/transformers-pytorch-amd-gpu
-      ci_event: Scheduled CI (AMD) - mi250
-      report_repo_id: optimum-amd/transformers_daily_ci
-    secrets: inherit
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
-  example-ci:
-    name: Example CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled.yaml@main
-    with:
-      job: run_examples_gpu
-      slack_report_channel: "#amd-hf-ci"
-      runner: mi250
-      docker: huggingface/transformers-pytorch-amd-gpu
-      ci_event: Scheduled CI (AMD) - mi250
-      report_repo_id: optimum-amd/transformers_daily_ci
-    secrets: inherit
-
-  deepspeed-ci:
-    name: DeepSpeed CI
-    uses: huggingface/hf-workflows/.github/workflows/transformers_amd_ci_scheduled.yaml@main
-    with:
-      job: run_torch_cuda_extensions_gpu
-      slack_report_channel: "#amd-hf-ci"
-      runner: mi250
-      docker: huggingface/transformers-pytorch-deepspeed-amd-gpu
-      ci_event: Scheduled CI (AMD) - mi250
-      report_repo_id: optimum-amd/transformers_daily_ci
-    secrets: inherit
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m utils/notification_service.py
