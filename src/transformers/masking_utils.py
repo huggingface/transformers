@@ -623,7 +623,11 @@ def _preprocess_mask_arguments(
         return True, attention_mask, None, None
 
     # For TGI/vLLM backends, or other custom attention without equivalent mask creation: we don't need a mask!
-    if config._attn_implementation not in ALL_MASK_ATTENTION_FUNCTIONS:
+    # Note: it's not ideal to check the `_global_mapping` attribute instead of the object itself, however otherwise
+    # full graph dynamo tracing (i.e. torch.export or compile with `fullgraph=True`) will fail on Python<3.11
+    # with `torch._dynamo.exc.Unsupported: 'inline in skipfiles:Mapping.__contains__ | __contains__, skipped
+    # according trace_rules.lookup SKIP_DIRS'` -- can be removed when we require Python>=3.11
+    if config._attn_implementation not in ALL_MASK_ATTENTION_FUNCTIONS._global_mapping:
         return True, None, None, None
 
     # Move the mask to correct device, and potentially switch dtype for efficiency
@@ -640,30 +644,12 @@ def _preprocess_mask_arguments(
     return False, attention_mask, kv_length, kv_offset
 
 
-def _get_mask_interface(config: PretrainedConfig, output_attentions: bool = False) -> Callable:
-    """
-    Return the mask interface (a function) to be used, based on the type of attention found in the config.
-
-    Args:
-        config (`PretrainedConfig`):
-            The model config.
-        output_attentions (`bool`, optional):
-            Whether we return the attention scores or not. By default `False`.
-    """
-    mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
-    # Sdpa fallbacks to eager in the Attention modules if `output_attentions=True`
-    if config._attn_implementation == "sdpa" and output_attentions:
-        mask_interface = ALL_MASK_ATTENTION_FUNCTIONS["eager"]
-    return mask_interface
-
-
 def create_causal_mask(
     config: PretrainedConfig,
     input_embeds: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
-    output_attentions: bool = False,
     or_mask_function: Optional[Callable] = None,
     and_mask_function: Optional[Callable] = None,
 ) -> Optional[Union[torch.Tensor, "BlockMask"]]:
@@ -685,8 +671,6 @@ def create_causal_mask(
             A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
         past_key_values (`Cache`, optional):
             The past key values, if we use a cache.
-        output_attentions (`bool`, optional):
-            Whether we return the attention scores or not. By default `False`.
         or_mask_function (`Callable`, optional):
             An optional mask function to combine with the causal mask function (by doing the union of both). This is
             useful to easily overlay another mask on top of the causal one, for example for image tokens handling.
@@ -708,7 +692,7 @@ def create_causal_mask(
 
     batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
     mask_factory_function = causal_mask_function
-    mask_interface = _get_mask_interface(config, output_attentions)
+    mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
@@ -747,7 +731,6 @@ def create_sliding_window_causal_mask(
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
-    output_attentions: bool = False,
     or_mask_function: Optional[Callable] = None,
     and_mask_function: Optional[Callable] = None,
 ) -> Optional[Union[torch.Tensor, "BlockMask"]]:
@@ -770,8 +753,6 @@ def create_sliding_window_causal_mask(
             A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
         past_key_values (`Cache`, optional):
             The past key values, if we use a cache.
-        output_attentions (`bool`, optional):
-            Whether we return the attention scores or not. By default `False`.
         or_mask_function (`Callable`, optional):
             An optional mask function to combine with the sliding causal mask function (by doing the union of both). This is
             useful to easily overlay another mask on top of the sliding causal one, for example for image tokens handling.
@@ -797,7 +778,7 @@ def create_sliding_window_causal_mask(
 
     batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
     mask_factory_function = sliding_window_causal_mask_function(sliding_window)
-    mask_interface = _get_mask_interface(config, output_attentions)
+    mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
@@ -837,7 +818,6 @@ def create_chunked_causal_mask(
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
-    output_attentions: bool = False,
     or_mask_function: Optional[Callable] = None,
     and_mask_function: Optional[Callable] = None,
 ) -> Optional[Union[torch.Tensor, "BlockMask"]]:
@@ -860,8 +840,6 @@ def create_chunked_causal_mask(
             A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
         past_key_values (`Cache`, optional):
             The past key values, if we use a cache.
-        output_attentions (`bool`, optional):
-            Whether we return the attention scores or not. By default `False`.
         or_mask_function (`Callable`, optional):
             An optional mask function to combine with the chunked causal mask function (by doing the union of both). This is
             useful to easily overlay another mask on top of the chunked causal one, for example for image tokens handling.
@@ -894,7 +872,7 @@ def create_chunked_causal_mask(
 
     batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
     mask_factory_function = chunked_causal_mask_function(chunk_size)
-    mask_interface = _get_mask_interface(config, output_attentions)
+    mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
@@ -941,7 +919,6 @@ def create_masks_for_generate(
     attention_mask: Optional[torch.Tensor],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
-    output_attentions: bool = False,
     or_mask_function: Optional[Callable] = None,
     and_mask_function: Optional[Callable] = None,
     **kwargs,
@@ -963,8 +940,6 @@ def create_masks_for_generate(
             A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
         past_key_values (`Cache`, optional):
             The past key values, if we use a cache.
-        output_attentions (`bool`, optional):
-            Whether we return the attention scores or not. By default `False`.
         or_mask_function (`Callable`, optional):
             An optional mask function to combine with the other mask function (by doing the union of both). This is
             useful to easily overlay another mask on top of the causal one, for example for image tokens handling.
@@ -981,7 +956,6 @@ def create_masks_for_generate(
         "attention_mask": attention_mask,
         "cache_position": cache_position,
         "past_key_values": past_key_values,
-        "output_attentions": output_attentions,
         "or_mask_function": or_mask_function,
         "and_mask_function": and_mask_function,
     }

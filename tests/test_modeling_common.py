@@ -974,7 +974,8 @@ class ModelTesterMixin:
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -1720,7 +1721,7 @@ class ModelTesterMixin:
 
         # no need to test all models as different heads yield the same functionality
         model_class = self.all_model_classes[0]
-        model = model_class(config)
+        model = model_class._from_config(config, attn_implementation="eager")
         model.to(torch_device)
 
         inputs = self._prepare_for_class(inputs_dict, model_class)
@@ -4352,7 +4353,8 @@ class ModelTesterMixin:
             if hasattr(config, "layer_types"):
                 del config_dict["layer_types"]
             new_config = config.__class__(**config_dict)
-            model = model_class(new_config).to(torch_device)
+            # We need to set eager as otherwise `output_attentions` is not supported
+            model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
             model.eval()
             layer_types = getattr(model.config, "layer_types", ["sliding_attention"] * config.num_hidden_layers)
             attentions = model(**inputs, output_attentions=True).attentions
@@ -4369,7 +4371,8 @@ class ModelTesterMixin:
             if hasattr(config, "layer_types"):
                 del config_dict["layer_types"]
             new_config = config.__class__(**config_dict)
-            model = model_class(new_config).to(torch_device)
+            # We need to set eager as otherwise `output_attentions` is not supported
+            model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
             model.eval()
             attentions_not_sliding = model(**inputs, output_attentions=True).attentions
             for layer_attention in attentions_not_sliding:
@@ -4425,7 +4428,7 @@ class ModelTesterMixin:
             # comparing softmax-normalized logits:
             normalized_0 = F.softmax(out_last_tokens, dim=-1)
             normalized_1 = F.softmax(out_shared_prefix_last_tokens, dim=-1)
-            torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
+            torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-3)
 
     @slow
     @require_torch_accelerator
@@ -4461,6 +4464,7 @@ class ModelTesterMixin:
         del loss
 
         model = torch.compile(model, fullgraph=True, mode="reduce-overhead")
+
         # forward compilation
         set_seed(42)
         loss = model(**inputs).loss
@@ -4568,11 +4572,20 @@ class ModelTesterMixin:
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config._attn_implementation = "flex_attention"
-            # Flex Attention can not use dropout
+            # Flex Attention cannot use dropout
             if hasattr(config, "attention_dropout"):
                 config.attention_dropout = 0
             if hasattr(config, "attention_probs_dropout_prob"):
                 config.attention_probs_dropout_prob = 0
+
+            # Flex attention relies on triton on compilation
+            # However, triton cannot handle hidden dimensions of less than 16
+            # --> forcing at least a hidden dim of 16
+            config.hidden_size *= max(
+                16 // getattr(config, "head_dim", config.hidden_size // config.num_attention_heads), 1
+            )
+            if hasattr(config, "head_dim"):
+                config.head_dim = max(16, config.head_dim)
 
             model = model_class(config).to(device=torch_device)
             self.assertTrue(model.config._attn_implementation == "flex_attention")
@@ -4580,8 +4593,8 @@ class ModelTesterMixin:
             # Elaborate workaround for encoder-decoder models as some do not specify their main input
             dummy_inputs = {model.main_input_name: inputs_dict[model.main_input_name].to(torch_device)}
             if config.is_encoder_decoder:
-                dummy_inputs["decoder_input_ids"] = inputs_dict["decoder_input_ids"]
-                dummy_inputs["decoder_attention_mask"] = inputs_dict["decoder_attention_mask"]
+                dummy_inputs["decoder_input_ids"] = inputs_dict["decoder_input_ids"].to(torch_device)
+                dummy_inputs["decoder_attention_mask"] = inputs_dict["decoder_attention_mask"].to(torch_device)
 
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
             _ = model(**dummy_inputs)

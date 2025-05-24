@@ -33,7 +33,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...models.gemma.test_modeling_gemma import GemmaModelTest, GemmaModelTester
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_configuration_common import ConfigTester
 
 
@@ -48,17 +48,28 @@ if is_torch_available():
     )
 
 
-class Gemma2ModelTester(GemmaModelTester):
+class Gemma2ModelTester(CausalLMModelTester):
     if is_torch_available():
         config_class = Gemma2Config
-        model_class = Gemma2Model
-        for_causal_lm_class = Gemma2ForCausalLM
-        for_sequence_class = Gemma2ForSequenceClassification
-        for_token_class = Gemma2ForTokenClassification
+        base_model_class = Gemma2Model
+        causal_lm_class = Gemma2ForCausalLM
+        sequence_class = Gemma2ForSequenceClassification
+        token_class = Gemma2ForTokenClassification
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": Gemma2Model,
+            "text-classification": Gemma2ForSequenceClassification,
+            "token-classification": Gemma2ForTokenClassification,
+            "text-generation": Gemma2ForCausalLM,
+            "zero-shot": Gemma2ForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
 
 @require_torch
-class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
+class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
         (Gemma2Model, Gemma2ForCausalLM, Gemma2ForSequenceClassification, Gemma2ForTokenClassification)
         if is_torch_available()
@@ -75,10 +86,12 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
+
     test_headmasking = False
     test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
+    model_tester_class = Gemma2ModelTester
 
     def setUp(self):
         self.model_tester = Gemma2ModelTester(self)

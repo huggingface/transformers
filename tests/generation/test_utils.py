@@ -1157,7 +1157,8 @@ class GenerationTesterMixin:
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             config.is_decoder = True
-            model = model_class(config).to(torch_device).eval()
+            model = model_class._from_config(config, attn_implementation="eager").to(torch_device).eval()
+            config = model.config
             # Sets assisted generation arguments such that:
             # a) no EOS is generated, to ensure generation doesn't break early
             # b) the assistant model always generates two tokens when it is called, to ensure the input preparation of
@@ -1187,6 +1188,7 @@ class GenerationTesterMixin:
                 assistant_model = model_class(config).to(torch_device).eval()
             else:
                 assistant_model = model
+            assistant_model.config._attn_implementation = "eager"
             assistant_model.generation_config.num_assistant_tokens = 2  # see b)
             assistant_model.generation_config.num_assistant_tokens_schedule = "constant"  # see b)
             generation_kwargs.update({"assistant_model": assistant_model})
@@ -1367,7 +1369,8 @@ class GenerationTesterMixin:
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             config.is_decoder = True
-            model = model_class(config).to(torch_device).eval()
+            model = model_class._from_config(config, attn_implementation="eager").to(torch_device).eval()
+            config = model.config
             # Sets assisted generation arguments such that:
             # a) no EOS is generated, to ensure generation doesn't break early
             # b) the assistant model always generates two tokens when it is called, to ensure the input preparation of

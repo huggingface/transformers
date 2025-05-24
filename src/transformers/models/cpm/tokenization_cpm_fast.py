@@ -144,10 +144,6 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
         self.jieba = jieba
         self.translator = str.maketrans(" \n", "\u2582\u2583")
 
-    @property
-    def can_save_slow_tokenizer(self) -> bool:
-        return os.path.isfile(self.vocab_file) if self.vocab_file else False
-
     # Copied from transformers.models.xlnet.tokenization_xlnet_fast.XLNetTokenizerFast.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
