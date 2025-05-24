@@ -19,18 +19,15 @@ import json
 import operator
 import os
 import re
-import requests
 import sys
 import time
-
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
-from huggingface_hub import HfApi
-from slack_sdk import WebClient
 
-
+import requests
 from get_ci_error_statistics import get_jobs
 from get_previous_daily_ci import get_last_daily_ci_reports, get_last_daily_ci_run, get_last_daily_ci_workflow_run_id
+from huggingface_hub import HfApi
+from slack_sdk import WebClient
 
 
 # A map associating the job names (specified by `inputs.job` in a workflow file) with the keys of
