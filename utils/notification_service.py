@@ -552,7 +552,7 @@ class Message:
 
                 # upload results to Hub dataset
                 file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/{filename}.txt")
-                commit_info = api.upload_file(
+                _ = api.upload_file(
                     path_or_fileobj=file_path,
                     path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/{filename}.txt",
                     repo_id=report_repo_id,
@@ -583,7 +583,7 @@ class Message:
 
                 # upload results to Hub dataset
                 file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/{filename}.json")
-                _ = api.upload_file(
+                commit_info = api.upload_file(
                     path_or_fileobj=file_path,
                     path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/{filename}.json",
                     repo_id=report_repo_id,
