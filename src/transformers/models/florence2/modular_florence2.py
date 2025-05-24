@@ -313,7 +313,7 @@ class Florence2VisionConvEmbed(nn.Module):
 
     def __init__(
         self,
-        config: Florence2LanguageConfig,
+        config: Florence2VisionConfig,
         stage_idx: int,
         norm_layer: nn.Module = nn.LayerNorm,
     ):
@@ -381,7 +381,7 @@ class Florence2VisionChannelAttention(nn.Module):
 class Florence2VisionChannelBlock(nn.Module):
     def __init__(
         self,
-        config: Florence2LanguageConfig,
+        config: Florence2VisionConfig,
         stage_idx: int,
         channel_drop_path_rate: float,
         act_layer: nn.Module = nn.GELU,
@@ -453,7 +453,7 @@ def window_reverse(windows: torch.Tensor, batch_size: int, window_size: int, H: 
 class Florence2VisionWindowAttention(nn.Module):
     def __init__(
         self,
-        config: Florence2LanguageConfig,
+        config: Florence2VisionConfig,
         dim: int,
         num_heads: int,
         window_size: int,
@@ -502,8 +502,8 @@ class Florence2VisionWindowAttention(nn.Module):
         x = x.view(-1, self.window_size, self.window_size, C)
         x = window_reverse(x, B, self.window_size, Hp, Wp)
 
-        if pad_r > 0 or pad_b > 0:
-            x = x[:, :H, :W, :].contiguous()
+        # if pad_r > 0 or pad_b > 0:
+        x = x[:, :H, :W, :].contiguous()
 
         x = x.view(B, H * W, C)
 
@@ -513,7 +513,7 @@ class Florence2VisionWindowAttention(nn.Module):
 class Florence2VisionSpatialBlock(nn.Module):
     def __init__(
         self,
-        config: Florence2LanguageConfig,
+        config: Florence2VisionConfig,
         stage_idx: int,
         drop_path_rate: float,
         norm_layer: nn.Module = nn.LayerNorm,
@@ -571,7 +571,7 @@ class Florence2VisionSpatialBlock(nn.Module):
 class Florence2VisionBlock(nn.Module):
     def __init__(
         self,
-        config: Florence2LanguageConfig,
+        config: Florence2VisionConfig,
         stage_idx: int,
         drop_path_rate: float,
         channel_drop_path_rate: float,
