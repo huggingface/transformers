@@ -2232,7 +2232,7 @@ class OffloadedHybridCache(HybridChunkedCache):
 
     def _prefetch_layer_in_context(self, layer_idx: int) -> None:
         """Performs the actual copy of the layer to device cache."""
-        if len(self.key_cache) >= layer_idx:
+        if len(self.key_cache) > layer_idx:
             self.device_key_cache[self.active_device_layer].copy_(self.key_cache[layer_idx], non_blocking=True)
             self.device_value_cache[self.active_device_layer].copy_(self.value_cache[layer_idx], non_blocking=True)
         # The layer was not yet initialized
