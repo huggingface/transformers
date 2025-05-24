@@ -31,7 +31,7 @@ from torch import Tensor, nn
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput, requires_backends
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple, is_accelerate_available, is_scipy_available, logging
+from ...utils import auto_docstring, can_return_tuple, is_accelerate_available, is_scipy_available
 from .configuration_eomt import EoMTConfig
 
 
@@ -41,8 +41,6 @@ if is_accelerate_available():
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
-
-logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -784,13 +782,7 @@ class EoMTAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -877,8 +869,6 @@ class EoMTDropPath(nn.Module):
 
 
 class EoMTLayer(nn.Module):
-    """This corresponds to the Block class in the original implementation."""
-
     def __init__(self, config: EoMTConfig) -> None:
         super().__init__()
 
@@ -1213,8 +1203,8 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
         # Probably later only return last state for mask and class logits
         return EoMTForUniversalSegmentationOutput(
             loss=loss,
-            masks_queries_logits=masks_queries_logits_per_layer,
-            class_queries_logits=class_queries_logits_per_layer,
+            masks_queries_logits=masks_queries_logits,
+            class_queries_logits=class_queries_logits,
             last_hidden_state=sequence_output,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
