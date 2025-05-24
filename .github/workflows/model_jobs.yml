@@ -93,13 +93,13 @@ jobs:
         run: |
           python3 utils/print_env.py
 
-      - name: Installed torch 2.7.0
-        working-directory: /transformers
-        run: python3 -m pip install torch==2.7.0 torchvision torchaudio
-
-#      - name: Installed torch 2.7 RC
+#      - name: Installed torch 2.7.0
 #        working-directory: /transformers
-#        run: python3 -m pip install torch==2.7.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/test/cu126
+#        run: python3 -m pip install torch==2.7.0 torchvision torchaudio
+
+      - name: Installed torch 2.7.1 RC
+        working-directory: /transformers
+        run: python3 -m pip install torch==2.7.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/test/cu126
 
       - name: Show installed libraries and their versions
         working-directory: /transformers
@@ -111,7 +111,7 @@ jobs:
         run: |
           echo "${{ inputs.machine_type }}"
 
-          if [ "${{ inputs.machine_type }}" = "aws-g4dn-4xlarge-cache" ]; then
+          if [ "${{ inputs.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
             machine_type=single-gpu
           elif [ "${{ inputs.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
             machine_type=multi-gpu
