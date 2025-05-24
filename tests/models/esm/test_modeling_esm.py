@@ -17,6 +17,7 @@ import tempfile
 import unittest
 
 import pytest
+from parameterized import parameterized
 
 from transformers import EsmConfig, is_torch_available
 from transformers.testing_utils import (
@@ -352,7 +353,7 @@ class EsmModelIntegrationTest(TestCasePlus):
         with torch.no_grad():
             model = EsmForMaskedLM.from_pretrained("facebook/esm2_t6_8M_UR50D")
             model.eval()
-            input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
+            input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]]).to(model.device)
             output = model(input_ids)[0]
 
             vocab_size = 33
@@ -370,7 +371,7 @@ class EsmModelIntegrationTest(TestCasePlus):
             model = EsmModel.from_pretrained("facebook/esm2_t6_8M_UR50D")
             model.eval()
 
-            input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
+            input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]]).to(model.device)
             output = model(input_ids)[0]
             # compare the actual values for a slice.
             expected_slice = torch.tensor(
@@ -378,9 +379,11 @@ class EsmModelIntegrationTest(TestCasePlus):
             )
             torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
+    @parameterized.expand([({"load_in_8bit": True},), ({"load_in_4bit": True},)])
     @require_bitsandbytes
-    def test_inference_bitsandbytes(self):
-        model = EsmForMaskedLM.from_pretrained("facebook/esm2_t36_3B_UR50D", load_in_8bit=True)
+    def test_inference_bitsandbytes(self, bnb_kwargs):
+        model = EsmForMaskedLM.from_pretrained("facebook/esm2_t36_3B_UR50D", **bnb_kwargs)
+        model.eval()
 
         input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]]).to(model.device)
         # Just test if inference works
