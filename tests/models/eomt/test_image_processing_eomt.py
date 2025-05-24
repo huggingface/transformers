@@ -1,12 +1,19 @@
 import unittest
 
+import numpy as np
+
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
+if is_torch_available():
+    import torch
+
 if is_vision_available():
+    from PIL import Image
+
     from transformers import EoMTImageProcessor
 
 
@@ -31,7 +38,7 @@ class EoMTImageProcessingTester:
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
         self.do_resize = do_resize
-        self.size = size if size is not None else {"height": 384, "width": 384}
+        self.size = size if size is not None else {"height": 18, "width": 18}
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -95,7 +102,62 @@ class EoMTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
+        print(image_processor)
         self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+
+    def test_call_numpy(self):
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random numpy tensors
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)
+            for image in image_inputs:
+                self.assertIsInstance(image, np.ndarray)
+
+            # Test not batched input
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+            expected_output_image_shape = (1, 3, 18, 18)
+            self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+
+            # Test batched
+            encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
+            expected_output_image_shape = (2, 3, 18, 18)
+            self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+
+    @unittest.skip(reason="Not supported")
+    def test_call_numpy_4_channels(self):
+        pass
+
+    def test_call_pil(self):
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)
+        for image in image_inputs:
+            self.assertIsInstance(image, Image.Image)
+
+        # Test Non batched input
+        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+        expected_output_image_shape = (1, 3, 18, 18)
+        self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+
+        # Test batched
+        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
+        expected_output_image_shape = (2, 3, 18, 18)
+        self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+
+    def test_call_pytorch(self):
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+
+        for image in image_inputs:
+            self.assertIsInstance(image, torch.Tensor)
+
+        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+        expected_output_image_shape = (1, 3, 18, 18)
+        self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+
+        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
+        expected_output_image_shape = (2, 3, 18, 18)
+        self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
