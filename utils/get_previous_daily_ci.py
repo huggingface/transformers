@@ -30,16 +30,13 @@ def get_daily_ci_runs(token, num_runs=7, workflow_id=None):
     # On `main` branch + event being `schedule` + not returning PRs + only `num_runs` results
     url += f"?branch=main&exclude_pull_requests=true&per_page={num_runs}"
 
-    # This is specific to what we allow to trigger the scheduled runs
-    ci_event = os.environ.get("CI_EVENT", "")
-    if ci_event.startswith("Scheduled CI (AMD)"):
-        url += "&event=workflow_run"
-    else:
-        url += "&event=schedule"
+    result = requests.get(f"{url}&event=schedule", headers=headers).json()
+    workflow_runs = result["workflow_runs"]
+    if len(workflow_runs) == 0:
+        result = requests.get(f"{url}&event=workflow_run", headers=headers).json()
+        workflow_runs = result["workflow_runs"]
 
-    result = requests.get(url, headers=headers).json()
-
-    return result["workflow_runs"]
+    return workflow_runs
 
 
 def get_last_daily_ci_run(token, workflow_run_id=None, workflow_id=None, commit_sha=None):
