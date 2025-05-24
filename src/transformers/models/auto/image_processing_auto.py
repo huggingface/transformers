@@ -511,15 +511,20 @@ class AutoImageProcessor:
                         "`use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. "
                         "This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`."
                     )
-            # Update class name to reflect the use_fast option. If class is not found, we fall back to the slow version.
+            if use_fast and not image_processor_type.endswith("Fast"):
+                image_processor_type += "Fast"
             if use_fast and not is_torchvision_available():
+                # check if there is a slow image processor class to fallback to
+                image_processor_class = get_image_processor_class_from_name(image_processor_type[:-4])
+                if image_processor_class is None:
+                    raise ValueError(
+                        f"`{image_processor_type}` requires `torchvision` to be installed. Please install `torchvision` and try again."
+                    )
                 logger.warning_once(
                     "Using `use_fast=True` but `torchvision` is not available. Falling back to the slow image processor."
                 )
                 use_fast = False
             if use_fast:
-                if not image_processor_type.endswith("Fast"):
-                    image_processor_type += "Fast"
                 for _, image_processors in IMAGE_PROCESSOR_MAPPING_NAMES.items():
                     if image_processor_type in image_processors:
                         break
@@ -532,10 +537,14 @@ class AutoImageProcessor:
                     )
                 image_processor_class = get_image_processor_class_from_name(image_processor_type)
             else:
-                image_processor_type = (
+                image_processor_type_slow = (
                     image_processor_type[:-4] if image_processor_type.endswith("Fast") else image_processor_type
                 )
-                image_processor_class = get_image_processor_class_from_name(image_processor_type)
+                image_processor_class = get_image_processor_class_from_name(image_processor_type_slow)
+                if image_processor_class is None and image_processor_type.endswith("Fast"):
+                    raise ValueError(
+                        f"`{image_processor_type}` does not have a slow version. Please set `use_fast=True` when instantiating the processor."
+                    )
 
         has_remote_code = image_processor_auto_map is not None
         has_local_code = image_processor_class is not None or type(config) in IMAGE_PROCESSOR_MAPPING
