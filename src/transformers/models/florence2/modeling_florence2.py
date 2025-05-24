@@ -317,8 +317,6 @@ class Florence2VisionChannelAttention(nn.Module):
         self.groups = groups
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         self.proj = nn.Linear(dim, dim)
-        head_dim = dim // groups
-        self.scale = head_dim**-0.5
 
     def forward(self, x: torch.Tensor, size):
         B, N, C = x.shape
@@ -326,7 +324,8 @@ class Florence2VisionChannelAttention(nn.Module):
         qkv = self.qkv(x).reshape(B, N, 3, self.groups, C // self.groups).permute(2, 0, 3, 1, 4)
         q, k, v = qkv.unbind(0)
 
-        q = q * self.scale
+        # Dynamic scale
+        q = q * N**-0.5
         attention = q.transpose(-1, -2) @ k
         attention = attention.softmax(dim=-1)
         x = (attention @ v.transpose(-1, -2)).transpose(-1, -2)
