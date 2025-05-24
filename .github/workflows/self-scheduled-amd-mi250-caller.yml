@@ -5,9 +5,7 @@ on:
     workflows: ["Self-hosted runner (AMD scheduled CI caller)"]
     branches: ["main"]
     types: [completed]
-  push:
-    branches:
-      - all_jobs_can_compare_against_prev_runs_clean_trigger
+
 
 jobs:
   model-ci:
