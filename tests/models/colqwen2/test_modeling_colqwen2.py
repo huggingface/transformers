@@ -276,10 +276,10 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class ColQwen2ModelIntegrationTest(unittest.TestCase):
-    model_name: ClassVar[str] = "../vidore/colqwen2-v1.0-hf-internal"
+    model_name: ClassVar[str] = "vidore/colqwen2-v1.0-hf"
 
     def setUp(self):
-        self.processor = ColQwen2Processor.from_pretrained("vidore/colqwen2-v1.0-hf")
+        self.processor = ColQwen2Processor.from_pretrained(self.model_name)
 
     def tearDown(self):
         gc.collect()
