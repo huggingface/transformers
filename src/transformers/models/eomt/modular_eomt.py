@@ -226,7 +226,6 @@ def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Ten
     return loss
 
 
-# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerHungarianMatcher
 class Mask2FormerHungarianMatcher(nn.Module):
     """This class computes an assignment between the labels and the predictions of the network.
 
@@ -333,7 +332,6 @@ class Mask2FormerHungarianMatcher(nn.Module):
         return matched_indices
 
 
-# Slight diff in cos_class pased to Hungarian loss from mask2former.
 class Mask2FormerLoss(nn.Module):
     def __init__(self, config: EoMTConfig, weight_dict: Dict[str, float]):
         """
@@ -1045,6 +1043,13 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
     ):
+        r"""
+        mask_labels (`List[torch.Tensor]`, *optional*):
+            List of mask labels of shape `(num_labels, height, width)` to be fed to a model
+        class_labels (`List[torch.LongTensor]`, *optional*):
+            list of target class labels of shape `(num_labels, height, width)` to be fed to a model. They identify the
+            labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
+        """
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1133,7 +1138,6 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
                 )
                 loss += self.get_loss(loss_dict)
 
-        # Probably later only return last state for mask and class logits
         return EoMTForUniversalSegmentationOutput(
             loss=loss,
             masks_queries_logits=masks_queries_logits,

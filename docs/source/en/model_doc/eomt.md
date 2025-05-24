@@ -31,6 +31,10 @@ The original code can be found [here](https://github.com/tue-mps/eomt).
 
 - Use the Hugging Face implementation of EoMT for inference with pre-trained models.
 
+## EoMTImageProcessor
+
+[[autodoc]] EoMTImageProcessor
+
 ## EoMTConfig
 
 [[autodoc]] EoMTConfig

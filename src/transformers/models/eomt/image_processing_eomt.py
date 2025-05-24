@@ -168,7 +168,7 @@ class EoMTImageProcessor(BaseImageProcessor):
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the input to a certain `size`.
-        size (`int`, *optional*, defaults to 800):
+        size (`int`, *optional*, defaults to 640):
             Resize the input to the given size. Only has an effect if `do_resize` is set to `True`. If size is a
             sequence like `(width, height)`, output size will be matched to this. If size is an int, smaller edge of
             the image will be matched to this number. i.e, if `height > width`, then image will be rescaled to `(size *
