@@ -286,8 +286,8 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
+    # add new test because we need to delete "pixel values" for LVLMs
+    def test_inputs_embeds_without_pixel_values(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -307,9 +307,8 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
             with torch.no_grad():
                 model(**inputs)
 
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
+    # add new test because we need to delete "pixel values" for LVLMs
+    def test_inputs_embeds_matches_input_ids_without_pixel_values(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
