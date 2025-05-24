@@ -277,6 +277,7 @@ _import_structure = {
         "VptqConfig",
     ],
     "video_utils": [],
+    "models.glpn": ["GLPNImageProcessorFast"],
 }
 
 # tokenizers-backed objects
@@ -754,6 +755,7 @@ if TYPE_CHECKING:
         is_vision_available,
         logging,
     )
+    from .models.glpn import GLPNImageProcessorFast
 
     # bitsandbytes config
     from .utils.quantization_config import (
