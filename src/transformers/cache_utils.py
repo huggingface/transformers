@@ -1968,7 +1968,7 @@ class HybridChunkedCache(Cache):
             self.sliding_window = config.sliding_window
         self.max_cache_len = max_cache_len
         # Sliding layers can't be larger than the overall max cache len
-        self.sliding_window = min(config.sliding_window, self.max_cache_len)
+        self.sliding_window = min(self.sliding_window, self.max_cache_len)
         self.max_batch_size = max_batch_size
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self._dtype = dtype
@@ -2232,7 +2232,7 @@ class OffloadedHybridCache(HybridChunkedCache):
 
     def _prefetch_layer_in_context(self, layer_idx: int) -> None:
         """Performs the actual copy of the layer to device cache."""
-        if len(self.key_cache) >= layer_idx:
+        if len(self.key_cache) > layer_idx:
             self.device_key_cache[self.active_device_layer].copy_(self.key_cache[layer_idx], non_blocking=True)
             self.device_value_cache[self.active_device_layer].copy_(self.value_cache[layer_idx], non_blocking=True)
         # The layer was not yet initialized

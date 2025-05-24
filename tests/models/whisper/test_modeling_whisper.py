@@ -676,7 +676,8 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
 
@@ -2155,7 +2156,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         # task id and lang id prompts should not have timestamp tokens
         self.assertEqual(generate_outputs["sequences"].shape[-1] - 2, generate_outputs["token_timestamps"].shape[-1])
-
         self.assertEqual(len(generate_outputs["sequences"]), num_return_sequences * num_samples)
 
     @slow
