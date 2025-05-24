@@ -207,6 +207,7 @@ if TYPE_CHECKING:
     from .mvp import *
     from .myt5 import *
     from .nemotron import *
+    from .ngpt import *
     from .nllb import *
     from .nllb_moe import *
     from .nougat import *
