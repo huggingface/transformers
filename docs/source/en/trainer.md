@@ -372,14 +372,14 @@ accelerate launch \
 
 ### torch.compile
 
-[torch.compile](./perf_torch_compile) can significantly speed up training and reduce computational overhead. Configure your torch.compile settings in [`TrainingArguments`]. Set `torch.compile` to `True`, and select a backend and compile mode.
+[torch.compile](./perf_torch_compile) can significantly speed up training and reduce computational overhead. Configure your torch.compile settings in [`TrainingArguments`]. Set `torch_compile` to `True`, and select a backend and compile mode.
 
 ```py
 from transformers import TrainingArguments
 
 training_args = TrainingArguments(
-    torch.compile=True,
-    torch.compile_backend="inductor",
+    torch_compile=True,
+    torch_compile_backend="inductor",
     torch_compile_mode="default",
     ...,
 )

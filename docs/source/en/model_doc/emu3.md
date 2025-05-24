@@ -174,6 +174,10 @@ for i, image in enumerate(images['pixel_values']):
 [[autodoc]] Emu3TextModel
     - forward
 
+## Emu3Model
+
+[[autodoc]] Emu3Model
+
 ## Emu3ForCausalLM
 
 [[autodoc]] Emu3ForCausalLM

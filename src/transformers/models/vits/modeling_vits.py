@@ -27,20 +27,13 @@ from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
-from ...modeling_outputs import (
-    BaseModelOutput,
-    ModelOutput,
-)
+from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import auto_docstring, logging
 from .configuration_vits import VitsConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-# General docstring
-_CONFIG_FOR_DOC = "VitsConfig"
 
 
 @dataclass
@@ -1246,12 +1239,8 @@ class VitsTextEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class VitsPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = VitsConfig
     base_model_prefix = "vits"
     main_input_name = "input_ids"
@@ -1277,57 +1266,10 @@ class VitsPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-VITS_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`VitsConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-VITS_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-            1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        speaker_id (`int`, *optional*):
-            Which speaker embedding to use. Only used for multispeaker models.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The complete VITS model, for text-to-speech synthesis.",
-    VITS_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The complete VITS model, for text-to-speech synthesis.
+    """
 )
 class VitsModel(VitsPreTrainedModel):
     def __init__(self, config: VitsConfig):
@@ -1359,8 +1301,7 @@ class VitsModel(VitsPreTrainedModel):
     def get_encoder(self):
         return self.text_encoder
 
-    @add_start_docstrings_to_model_forward(VITS_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=VitsModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1372,11 +1313,11 @@ class VitsModel(VitsPreTrainedModel):
         labels: Optional[torch.FloatTensor] = None,
     ) -> Union[Tuple[Any], VitsModelOutput]:
         r"""
+        speaker_id (`int`, *optional*):
+            Which speaker embedding to use. Only used for multispeaker models.
         labels (`torch.FloatTensor` of shape `(batch_size, config.spectrogram_bins, sequence_length)`, *optional*):
             Float values of target spectrogram. Timesteps set to `-100.0` are ignored (masked) for the loss
             computation.
-
-        Returns:
 
         Example:
 

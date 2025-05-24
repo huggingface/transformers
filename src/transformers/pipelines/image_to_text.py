@@ -15,6 +15,7 @@
 
 from typing import List, Union
 
+from ..generation import GenerationConfig
 from ..utils import (
     add_end_docstrings,
     is_tf_available,
@@ -47,6 +48,10 @@ class ImageToTextPipeline(Pipeline):
     """
     Image To Text pipeline using a `AutoModelForVision2Seq`. This pipeline predicts a caption for a given image.
 
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+
     Example:
 
     ```python
@@ -65,6 +70,12 @@ class ImageToTextPipeline(Pipeline):
     See the list of available models on
     [huggingface.co/models](https://huggingface.co/models?pipeline_tag=image-to-text).
     """
+
+    _pipeline_calls_generate = True
+    # Make sure the docstring is updated when the default generation config is changed
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

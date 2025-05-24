@@ -3,6 +3,7 @@ import itertools
 import types
 from typing import Dict
 
+from ..generation import GenerationConfig
 from ..utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
 
@@ -40,10 +41,16 @@ class Chat:
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class TextGenerationPipeline(Pipeline):
     """
-    Language generation pipeline using any `ModelWithLMHead`. This pipeline predicts the words that will follow a
-    specified text prompt. When the underlying model is a conversational model, it can also accept one or more chats,
-    in which case the pipeline will operate in chat mode and will continue the chat(s) by adding its response(s).
-    Each chat takes the form of a list of dicts, where each dict contains "role" and "content" keys.
+    Language generation pipeline using any `ModelWithLMHead` or `ModelForCausalLM`. This pipeline predicts the words
+    that will follow a specified text prompt. When the underlying model is a conversational model, it can also accept
+    one or more chats, in which case the pipeline will operate in chat mode and will continue the chat(s) by adding
+    its response(s). Each chat takes the form of a list of dicts, where each dict contains "role" and "content" keys.
+
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+    - do_sample: True
+    - temperature: 0.7
 
     Examples:
 
@@ -94,6 +101,14 @@ class TextGenerationPipeline(Pipeline):
     the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous, with people, even a bishop,
     begging for his blessing. <eod> </s> <eos>
     """
+
+    _pipeline_calls_generate = True
+    # Make sure the docstring is updated when the default generation config is changed
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+        do_sample=True,  # free-form text generation often uses sampling
+        temperature=0.7,
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -303,7 +318,7 @@ class TextGenerationPipeline(Pipeline):
             "add_special_tokens": add_special_tokens,
             "truncation": truncation,
             "padding": padding,
-            "max_length": max_length,
+            "max_length": max_length,  # TODO: name clash -- this is broken, `max_length` is also a `generate` arg
         }
         tokenizer_kwargs = {key: value for key, value in tokenizer_kwargs.items() if value is not None}
 
@@ -386,7 +401,7 @@ class TextGenerationPipeline(Pipeline):
 
         if isinstance(output, ModelOutput):
             generated_sequence = output.sequences
-            other_outputs = {k: v for k, v in output.items() if k != "sequences"}
+            other_outputs = {k: v for k, v in output.items() if k not in {"sequences", "past_key_values"}}
             out_b = generated_sequence.shape[0]
 
             if self.framework == "pt":
@@ -418,7 +433,8 @@ class TextGenerationPipeline(Pipeline):
             "input_ids": input_ids,
             "prompt_text": prompt_text,
         }
-        model_outputs.update(other_outputs)
+        if other_outputs:
+            model_outputs.update({"additional_outputs": other_outputs})
         return model_outputs
 
     def postprocess(

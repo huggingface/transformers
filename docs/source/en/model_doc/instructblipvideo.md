@@ -58,6 +58,12 @@ The attributes can be obtained from model config, as `model.config.num_query_tok
 
 [[autodoc]] InstructBlipVideoProcessor
 
+
+## InstructBlipVideoVideoProcessor
+
+[[autodoc]] InstructBlipVideoVideoProcessor
+    - preprocess
+
 ## InstructBlipVideoImageProcessor
 
 [[autodoc]] InstructBlipVideoImageProcessor
@@ -71,6 +77,10 @@ The attributes can be obtained from model config, as `model.config.num_query_tok
 ## InstructBlipVideoQFormerModel
 
 [[autodoc]] InstructBlipVideoQFormerModel
+    - forward
+
+## InstructBlipVideoModel
+[[autodoc]] InstructBlipVideoModel
     - forward
 
 ## InstructBlipVideoForConditionalGeneration

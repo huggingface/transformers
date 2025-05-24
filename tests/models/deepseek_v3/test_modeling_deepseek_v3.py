@@ -300,10 +300,6 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
-    @unittest.skip("DeepseekV3's eager attn/sdpa attn outputs are expected to be different")
-    def test_sdpa_equivalence(self):
-        pass
-
     @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
     def test_beam_search_generate_dict_outputs_use_cache(self):
         pass

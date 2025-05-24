@@ -1,7 +1,6 @@
 import json
 
 import datasets
-import torch
 
 from tests.trainer.test_trainer import StoreLossCallback
 from transformers import (
@@ -15,17 +14,19 @@ from transformers import (
 )
 from transformers.testing_utils import (
     TestCasePlus,
+    backend_device_count,
     execute_subprocess_async,
     get_torch_dist_unique_port,
-    require_torch_multi_gpu,
+    require_torch_multi_accelerator,
+    torch_device,
 )
 
 
 class TestTrainerDistributedLoss(TestCasePlus):
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_trainer(self):
-        device_count = torch.cuda.device_count()
-        min_bs = 1
+        device_count = backend_device_count(torch_device)
+        min_bs = 2
         output_dir = self.get_auto_remove_tmp_dir()
         for gpu_num, enable, bs, name in (
             (1, True, min_bs * device_count, "base"),
@@ -49,9 +50,10 @@ class TestTrainerDistributedLoss(TestCasePlus):
         broken_diff = [abs(base_loss[i] - broken_loss[i]) for i in range(len(base_loss))]
         fixed_diff = [abs(base_loss[i] - fixed_loss[i]) for i in range(len(base_loss))]
         sum_base = sum(base_loss)
-        sum_broken = sum(broken_diff)
+        sum_broken = sum(broken_loss)
         relative_broken = abs(sum_base - sum_broken) / max(sum_base, sum_broken)
 
+        # the gap may be smaller for other models, but it still ok.
         self.assertGreater(max(broken_diff), 0.5)
         self.assertLess(max(fixed_diff), 0.005)
         self.assertLess(relative_broken, 0.1)
@@ -62,7 +64,7 @@ def run_distributed_training(training_args):
     model_name = "nickypro/tinyllama-15M"
     dataset_name = "wikitext"
     dataset_config = "wikitext-2-raw-v1"
-    dataset = datasets.load_dataset(dataset_name, dataset_config, split="train[:17]")
+    dataset = datasets.load_dataset(dataset_name, dataset_config, split="train[:100]")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     tokenizer.pad_token = tokenizer.eos_token
 

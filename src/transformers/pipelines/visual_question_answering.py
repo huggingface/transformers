@@ -1,5 +1,6 @@
 from typing import List, Optional, Union
 
+from ..generation import GenerationConfig
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging
 from .base import Pipeline, build_pipeline_init_args
 
@@ -21,6 +22,10 @@ class VisualQuestionAnsweringPipeline(Pipeline):
     """
     Visual Question Answering pipeline using a `AutoModelForVisualQuestionAnswering`. This pipeline is currently only
     available in PyTorch.
+
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
 
     Example:
 
@@ -52,6 +57,12 @@ class VisualQuestionAnsweringPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=visual-question-answering).
     """
 
+    _pipeline_calls_generate = True
+    # Make sure the docstring is updated when the default generation config is changed
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.check_model_type(MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES)
@@ -68,9 +79,9 @@ class VisualQuestionAnsweringPipeline(Pipeline):
             postprocess_params["top_k"] = top_k
 
         forward_params = {}
-        if self.assistant_model is not None:
+        if getattr(self, "assistant_model", None) is not None:
             forward_params["assistant_model"] = self.assistant_model
-        if self.assistant_tokenizer is not None:
+        if getattr(self, "assistant_tokenizer", None) is not None:
             forward_params["tokenizer"] = self.tokenizer
             forward_params["assistant_tokenizer"] = self.assistant_tokenizer
 

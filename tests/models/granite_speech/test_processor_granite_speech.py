@@ -23,8 +23,9 @@ from parameterized import parameterized
 from transformers import AutoTokenizer, GPT2TokenizerFast
 from transformers.testing_utils import (
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_torchaudio,
+    torch_device,
 )
 from transformers.utils import is_torchaudio_available
 
@@ -195,7 +196,7 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         assert num_calculated_features == [90, 171]
         assert sum(num_expected_features) == num_audio_tokens
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_device_override(self):
         """Ensure that we regardless of the processing device, the tensors
         produced are on the CPU.
@@ -214,7 +215,7 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
             text=f"{processor.audio_token} Can you transcribe this audio?",
             audio=wav,
             return_tensors="pt",
-            device="cuda",
+            device=torch_device,
         )
 
         assert inputs["input_features"].device.type == "cpu"

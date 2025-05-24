@@ -15,6 +15,7 @@ import argparse
 import gc
 import os
 import re
+from typing import Optional
 
 import torch
 from einops import rearrange
@@ -116,7 +117,7 @@ chat_template = (
 CONTEXT_LENGTH = 8192
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: dict = None, path: str = None):
+def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None, path: Optional[str] = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -303,7 +304,9 @@ def write_model(
     del model
 
 
-def write_tokenizer(save_dir: str, push_to_hub: bool = False, path: str = None, hub_dir: str = None):
+def write_tokenizer(
+    save_dir: str, push_to_hub: bool = False, path: Optional[str] = None, hub_dir: Optional[str] = None
+):
     if LM_TYPE_CORRESPONDENCE[path] == "qwen2":
         tokenizer = AutoTokenizer.from_pretrained(
             "Qwen/Qwen2.5-VL-7B-Instruct",
@@ -355,7 +358,7 @@ def write_tokenizer(save_dir: str, push_to_hub: bool = False, path: str = None, 
         tokenizer.push_to_hub(hub_dir, use_temp_dir=True)
 
 
-def write_image_processor(save_dir: str, push_to_hub: bool = False, hub_dir: str = None):
+def write_image_processor(save_dir: str, push_to_hub: bool = False, hub_dir: Optional[str] = None):
     image_processor = GotOcr2ImageProcessorFast(
         do_resize=True,
         size={"height": 448, "width": 448},

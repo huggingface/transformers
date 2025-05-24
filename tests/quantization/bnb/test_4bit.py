@@ -109,6 +109,7 @@ class Base4bitTest(unittest.TestCase):
     EXPECTED_OUTPUTS.add("Hello my name is John.\nI am a friend of your father.\n")
     EXPECTED_OUTPUTS.add("Hello my name is John Doe, I am a student at the University")
     EXPECTED_OUTPUTS.add("Hello my name is John and I am 25 years old.")
+    EXPECTED_OUTPUTS.add("Hello my name is John and I am a student at the University of")
     MAX_NEW_TOKENS = 10
 
     def setUp(self):

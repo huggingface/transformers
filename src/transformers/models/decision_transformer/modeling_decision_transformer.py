@@ -30,19 +30,14 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import (
     ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     logging,
-    replace_return_docstrings,
 )
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_decision_transformer import DecisionTransformerConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CHECKPOINT_FOR_DOC = "edbeeching/decision-transformer-gym-hopper-medium"
-_CONFIG_FOR_DOC = "DecisionTransformerConfig"
 
 
 # Copied from transformers.models.gpt2.modeling_gpt2.load_tf_weights_in_gpt2
@@ -449,12 +444,8 @@ class DecisionTransformerGPT2Block(nn.Module):
         return outputs
 
 
+@auto_docstring
 class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = DecisionTransformerConfig
     load_tf_weights = load_tf_weights_in_gpt2
     base_model_prefix = "transformer"
@@ -795,36 +786,11 @@ class DecisionTransformerPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-DECISION_TRANSFORMER_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`~DecisionTransformerConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-DECISION_TRANSFORMER_INPUTS_DOCSTRING = r"""
-    Args:
-        states (`torch.FloatTensor` of shape `(batch_size, episode_length, state_dim)`):
-            The states for each step in the trajectory
-        actions (`torch.FloatTensor` of shape `(batch_size, episode_length, act_dim)`):
-            The actions taken by the "expert" policy for the current state, these are masked for auto regressive
-            prediction
-        rewards (`torch.FloatTensor` of shape `(batch_size, episode_length, 1)`):
-            The rewards for each state, action
-        returns_to_go (`torch.FloatTensor` of shape `(batch_size, episode_length, 1)`):
-            The returns for each state in the trajectory
-        timesteps (`torch.LongTensor` of shape `(batch_size, episode_length)`):
-            The timestep for each step in the trajectory
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, episode_length)`):
-            Masking, used to mask the actions when performing autoregressive prediction
-"""
-
-
-@add_start_docstrings("The Decision Transformer Model", DECISION_TRANSFORMER_START_DOCSTRING)
+@auto_docstring(
+    custom_intro="""
+    The Decision Transformer Model
+    """
+)
 class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
     """
 
@@ -858,8 +824,7 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(DECISION_TRANSFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=DecisionTransformerOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         states: Optional[torch.FloatTensor] = None,
@@ -873,7 +838,17 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], DecisionTransformerOutput]:
         r"""
-        Returns:
+        states (`torch.FloatTensor` of shape `(batch_size, episode_length, state_dim)`):
+            The states for each step in the trajectory
+        actions (`torch.FloatTensor` of shape `(batch_size, episode_length, act_dim)`):
+            The actions taken by the "expert" policy for the current state, these are masked for auto regressive
+            prediction
+        rewards (`torch.FloatTensor` of shape `(batch_size, episode_length, 1)`):
+            The rewards for each state, action
+        returns_to_go (`torch.FloatTensor` of shape `(batch_size, episode_length, 1)`):
+            The returns for each state in the trajectory
+        timesteps (`torch.LongTensor` of shape `(batch_size, episode_length)`):
+            The timestep for each step in the trajectory
 
         Examples:
 

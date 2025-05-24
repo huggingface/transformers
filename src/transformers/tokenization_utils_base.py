@@ -27,7 +27,6 @@ from collections import UserDict
 from collections.abc import Mapping, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass
-from inspect import isfunction
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
@@ -50,7 +49,6 @@ from .utils import (
     copy_func,
     download_url,
     extract_commit_hash,
-    get_json_schema,
     is_flax_available,
     is_jax_tensor,
     is_mlx_available,
@@ -69,7 +67,7 @@ from .utils import (
     requires_backends,
     to_py_obj,
 )
-from .utils.chat_template_utils import _compile_jinja_template, _render_with_assistant_indices
+from .utils.chat_template_utils import render_jinja_template
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
 
@@ -1555,7 +1553,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Args:
             conversation (Union[List[Dict[str, str]], List[List[Dict[str, str]]]]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
-            tools (`List[Dict]`, *optional*):
+            tools (`List[Union[Dict, Callable]]`, *optional*):
                 A list of tools (callable functions) that will be accessible to the model. If the template does not
                 support function calling, this argument will have no effect. Each tool should be passed as a JSON Schema,
                 giving the name, description and argument types for the tool. See our
@@ -1633,14 +1631,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         chat_template = self.get_chat_template(chat_template, tools)
 
-        if return_assistant_tokens_mask and not re.search(r"\{\%-?\s*generation\s*-?\%\}", chat_template):
-            logger.warning_once(
-                "return_assistant_tokens_mask==True but chat template does not contain `{% generation %}` keyword."
-            )
-
-        # Compilation function uses a cache to avoid recompiling the same template
-        compiled_template = _compile_jinja_template(chat_template)
-
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages")
         ):
@@ -1658,87 +1648,24 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if return_assistant_tokens_mask:
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
 
-        # We accept either JSON schemas or functions for tools. If we get functions, we convert them to schemas
-        if tools is not None:
-            tool_schemas = []
-            for tool in tools:
-                if isinstance(tool, dict):
-                    tool_schemas.append(tool)
-                elif isfunction(tool):
-                    tool_schemas.append(get_json_schema(tool))
-                else:
-                    raise ValueError(
-                        "Tools should either be a JSON schema, or a callable function with type hints "
-                        "and a docstring suitable for auto-conversion to a schema."
-                    )
-        else:
-            tool_schemas = None
-
-        if documents is not None:
-            for document in documents:
-                if not isinstance(document, dict):
-                    raise TypeError("Documents should be a list of dicts with 'title' and 'text' keys!")
-
-        rendered = []
-        all_generation_indices = []
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
-        for chat in conversations:
-            if hasattr(chat, "messages"):
-                # Indicates it's a Conversation object
-                chat = chat.messages
-            if return_assistant_tokens_mask:
-                rendered_chat, generation_indices = _render_with_assistant_indices(
-                    compiled_template=compiled_template,
-                    messages=chat,
-                    tools=tool_schemas,
-                    documents=documents,
-                    add_generation_prompt=add_generation_prompt,
-                    **template_kwargs,
-                )
-                all_generation_indices.append(generation_indices)
-            else:
-                rendered_chat = compiled_template.render(
-                    messages=chat,
-                    tools=tool_schemas,
-                    documents=documents,
-                    add_generation_prompt=add_generation_prompt,
-                    **template_kwargs,
-                )
-            if continue_final_message:
-                final_message = chat[-1]["content"]
-                if isinstance(final_message, (list, tuple)):
-                    for content_block in reversed(final_message):
-                        if "text" in content_block:
-                            # Pick the last text block in the message (the first one we hit while iterating in reverse)
-                            final_message = content_block["text"]
-                            break
-                    else:
-                        raise ValueError(
-                            "continue_final_message is set but we could not find any text to continue"
-                            "in the final message!"
-                        )
-                if final_message.strip() not in rendered_chat:
-                    raise ValueError(
-                        "continue_final_message is set but the final message does not appear in the chat after "
-                        "applying the chat template! This can happen if the chat template deletes portions of "
-                        "the final message. Please verify the chat template and final message in your chat to "
-                        "ensure they are compatible."
-                    )
-                final_msg_loc = rendered_chat.rindex(final_message.strip())
-                if rendered_chat[final_msg_loc : final_msg_loc + len(final_message.lstrip())] == final_message:
-                    # The template preserves spacing or the message doesn't have trailing spacing, so things are simple
-                    rendered_chat = rendered_chat[: final_msg_loc + len(final_message.lstrip())]
-                else:
-                    # The message has trailing spacing that was trimmed, so we must be more cautious
-                    rendered_chat = rendered_chat[: final_msg_loc + len(final_message.strip())]
-            rendered.append(rendered_chat)
+        rendered_chat, generation_indices = render_jinja_template(
+            conversations=conversations,
+            tools=tools,
+            documents=documents,
+            chat_template=chat_template,
+            return_assistant_tokens_mask=return_assistant_tokens_mask,
+            continue_final_message=continue_final_message,
+            add_generation_prompt=add_generation_prompt,
+            **template_kwargs,
+        )
 
         if not is_batched:
-            rendered = rendered[0]
+            rendered_chat = rendered_chat[0]
 
         if tokenize:
             out = self(
-                rendered,
+                rendered_chat,
                 padding=padding,
                 truncation=truncation,
                 max_length=max_length,
@@ -1755,7 +1682,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         input_ids = [out["input_ids"]]
                     for i in range(len(input_ids)):
                         current_mask = [0] * len(input_ids[i])
-                        for assistant_start_char, assistant_end_char in all_generation_indices[i]:
+                        for assistant_start_char, assistant_end_char in generation_indices[i]:
                             start_token = out.char_to_token(i, assistant_start_char)
                             end_token = out.char_to_token(i, assistant_end_char - 1)
                             if start_token is None:
@@ -1777,7 +1704,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             else:
                 return out["input_ids"]
         else:
-            return rendered
+            return rendered_chat
 
     def get_chat_template(self, chat_template: Optional[str] = None, tools: Optional[List[Dict]] = None) -> str:
         """

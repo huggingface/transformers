@@ -29,13 +29,10 @@ from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     ImageInput,
-    VideoInput,
-    VideoMetadata,
     concatenate_list,
-    load_video,
-    make_batched_videos,
     make_flat_list_of_images,
 )
+from ...video_utils import VideoInput, VideoMetadata, load_video, make_batched_videos
 
 
 class InternVLImagesKwargs(ImagesKwargs, total=False):
@@ -53,9 +50,7 @@ class InternVLProcessorKwargs(ProcessingKwargs, total=False):
         "images_kwargs": {
             "crop_to_patches": True,
         },
-        "videos_kwargs": {
-            "crop_to_patches": False,
-        },
+        "videos_kwargs": {},
     }
 
 
@@ -69,6 +64,8 @@ class InternVLProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
             The tokenizer is a required input.
+        video_processor ([`AutoVideoProcessor`], *optional*):
+            The video processor is a required input.
         image_seq_length (`int`, *optional*, defaults to 256):
             The number of image token to use per image patch. it should be set so that:
             image_seq_length = (config.image_size // config.patch_size) ** 2 * (config.scale_factor**2)
@@ -76,18 +73,20 @@ class InternVLProcessor(ProcessorMixin):
             in a chat into a tokenizable string.
     """
 
-    attributes = ["image_processor", "tokenizer"]
+    attributes = ["image_processor", "tokenizer", "video_processor"]
     valid_kwargs = [
         "chat_template",
         "image_seq_length",
     ]
     image_processor_class = "AutoImageProcessor"
+    video_processor_class = "AutoVideoProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(
         self,
         image_processor=None,
         tokenizer=None,
+        video_processor=None,
         image_seq_length: int = 256,
         chat_template=None,
         **kwargs,
@@ -99,7 +98,7 @@ class InternVLProcessor(ProcessorMixin):
         self.video_token = tokenizer.video_token
         self.image_token_id = tokenizer.context_image_token_id
 
-        super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
+        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template, **kwargs)
 
     def _insert_media_placeholders(
         self,
@@ -237,10 +236,9 @@ class InternVLProcessor(ProcessorMixin):
             videos = make_batched_videos(videos)
             num_frames_per_video = [len(video) for video in videos]
             video_patch_indices = np.cumsum(num_frames_per_video)
-            output_kwargs["images_kwargs"]["crop_to_patches"] = False
-            video_inputs = self.image_processor(images=videos, **output_kwargs["videos_kwargs"])
-            video_num_patches = video_inputs.pop("num_patches")
-            video_pixel_values = video_inputs.pop("pixel_values")
+            video_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
+            video_num_patches = [1 for frames in num_frames_per_video for _ in range(frames)]
+            video_pixel_values = video_inputs.pop("pixel_values_videos").flatten(0, 1)
             video_num_patches_indices = np.cumsum(video_num_patches)
 
         if images is not None or videos is not None:
@@ -269,7 +267,7 @@ class InternVLProcessor(ProcessorMixin):
         return BatchFeature(data={**text_inputs, **image_videos_inputs}, tensor_type=return_tensors)
 
     def sample_indices_fn(
-        self, metadata: VideoMetadata, num_frames: int = None, initial_shift: Union[bool, float, int] = True
+        self, metadata: VideoMetadata, num_frames: Optional[int] = None, initial_shift: Union[bool, float, int] = True
     ):
         """
         The function to generate indices of frames to sample from a video.

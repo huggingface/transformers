@@ -33,14 +33,11 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import auto_docstring, logging
 from .configuration_layoutlm import LayoutLMConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "LayoutLMConfig"
-_CHECKPOINT_FOR_DOC = "microsoft/layoutlm-base-uncased"
 
 
 LayoutLMLayerNorm = nn.LayerNorm
@@ -610,12 +607,8 @@ class LayoutLMOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
+@auto_docstring
 class LayoutLMPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = LayoutLMConfig
     base_model_prefix = "layoutlm"
     supports_gradient_checkpointing = True
@@ -639,72 +632,7 @@ class LayoutLMPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-LAYOUTLM_START_DOCSTRING = r"""
-    The LayoutLM model was proposed in [LayoutLM: Pre-training of Text and Layout for Document Image
-    Understanding](https://arxiv.org/abs/1912.13318) by Yiheng Xu, Minghao Li, Lei Cui, Shaohan Huang, Furu Wei and
-    Ming Zhou.
-
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`LayoutLMConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-LAYOUTLM_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        bbox (`torch.LongTensor` of shape `({0}, 4)`, *optional*):
-            Bounding boxes of each input sequence tokens. Selected in the range `[0,
-            config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
-            format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
-            y1) represents the position of the lower right corner. See [Overview](#Overview) for normalization.
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`: `1` for
-            tokens that are NOT MASKED, `0` for MASKED tokens.
-
-            [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`: `0` corresponds to a *sentence A* token, `1` corresponds to a *sentence B* token
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`: `1`
-            indicates the head is **not masked**, `0` indicates the head is **masked**.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            If set to `True`, the attentions tensors of all attention layers are returned. See `attentions` under
-            returned tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            If set to `True`, the hidden states of all layers are returned. See `hidden_states` under returned tensors
-            for more detail.
-        return_dict (`bool`, *optional*):
-            If set to `True`, the model will return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare LayoutLM Model transformer outputting raw hidden-states without any specific head on top.",
-    LAYOUTLM_START_DOCSTRING,
-)
+@auto_docstring
 class LayoutLMModel(LayoutLMPreTrainedModel):
     def __init__(self, config):
         super(LayoutLMModel, self).__init__(config)
@@ -731,8 +659,7 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(LAYOUTLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=BaseModelOutputWithPoolingAndCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -749,7 +676,11 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
-        Returns:
+        bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
+            Bounding boxes of each input sequence tokens. Selected in the range `[0,
+            config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
+            format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
+            y1) represents the position of the lower right corner. See [Overview](#Overview) for normalization.
 
         Examples:
 
@@ -853,7 +784,7 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
         )
 
 
-@add_start_docstrings("""LayoutLM Model with a `language modeling` head on top.""", LAYOUTLM_START_DOCSTRING)
+@auto_docstring
 class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
@@ -876,8 +807,7 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
         self.cls.predictions.bias = new_embeddings.bias
 
-    @add_start_docstrings_to_model_forward(LAYOUTLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -895,12 +825,15 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MaskedLMOutput]:
         r"""
+        bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
+            Bounding boxes of each input sequence tokens. Selected in the range `[0,
+            config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
+            format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
+            y1) represents the position of the lower right corner. See [Overview](#Overview) for normalization.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-
-        Returns:
 
         Examples:
 
@@ -979,12 +912,11 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     LayoutLM Model with a sequence classification head on top (a linear layer on top of the pooled output) e.g. for
     document image classification tasks such as the [RVL-CDIP](https://www.cs.cmu.edu/~aharley/rvl-cdip/) dataset.
-    """,
-    LAYOUTLM_START_DOCSTRING,
+    """
 )
 class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
     def __init__(self, config):
@@ -1000,8 +932,7 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
     def get_input_embeddings(self):
         return self.layoutlm.embeddings.word_embeddings
 
-    @add_start_docstrings_to_model_forward(LAYOUTLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1017,12 +948,15 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SequenceClassifierOutput]:
         r"""
+        bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
+            Bounding boxes of each input sequence tokens. Selected in the range `[0,
+            config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
+            format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
+            y1) represents the position of the lower right corner. See [Overview](#Overview) for normalization.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
 
         Examples:
 
@@ -1115,13 +1049,12 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     LayoutLM Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
     sequence labeling (information extraction) tasks such as the [FUNSD](https://guillaumejaume.github.io/FUNSD/)
     dataset and the [SROIE](https://rrc.cvc.uab.es/?ch=13) dataset.
-    """,
-    LAYOUTLM_START_DOCSTRING,
+    """
 )
 class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
     def __init__(self, config):
@@ -1137,8 +1070,7 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
     def get_input_embeddings(self):
         return self.layoutlm.embeddings.word_embeddings
 
-    @add_start_docstrings_to_model_forward(LAYOUTLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=TokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1154,10 +1086,13 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
+        bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
+            Bounding boxes of each input sequence tokens. Selected in the range `[0,
+            config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
+            format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
+            y1) represents the position of the lower right corner. See [Overview](#Overview) for normalization.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-
-        Returns:
 
         Examples:
 
@@ -1233,16 +1168,13 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    LayoutLM Model with a span classification head on top for extractive question-answering tasks such as
-    [DocVQA](https://rrc.cvc.uab.es/?ch=17) (a linear layer on top of the final hidden-states output to compute `span
-    start logits` and `span end logits`).
-    """,
-    LAYOUTLM_START_DOCSTRING,
-)
+@auto_docstring
 class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
     def __init__(self, config, has_visual_segment_embedding=True):
+        r"""
+        has_visual_segment_embedding (`bool`, *optional*, defaults to `True`):
+            Whether or not to add visual segment embeddings.
+        """
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1255,7 +1187,7 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
     def get_input_embeddings(self):
         return self.layoutlm.embeddings.word_embeddings
 
-    @replace_return_docstrings(output_type=QuestionAnsweringModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1272,16 +1204,11 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, QuestionAnsweringModelOutput]:
         r"""
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-
-        Returns:
+        bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
+            Bounding boxes of each input sequence tokens. Selected in the range `[0,
+            config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
+            format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
+            y1) represents the position of the lower right corner. See [Overview](#Overview) for normalization.
 
         Example:
 

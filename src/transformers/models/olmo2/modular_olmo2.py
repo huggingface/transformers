@@ -165,11 +165,25 @@ class Olmo2Config(OlmoConfig):
         del self.clip_qkv
 
 
+# OLMo2 RMS norm is identical to Llama RMS norm except:
+# - Weight and hidden states are multiplied before converting back to the input dtype, rather than after.
 class Olmo2RMSNorm(LlamaRMSNorm):
-    pass
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return (self.weight * hidden_states).to(input_dtype)
 
 
 ALL_LAYERNORM_LAYERS.append(Olmo2RMSNorm)
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
 
 
 # Olmo2 attention is identical to OLMo attention except:
@@ -211,13 +225,7 @@ class Olmo2Attention(OlmoAttention):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
