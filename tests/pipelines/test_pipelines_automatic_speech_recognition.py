@@ -1213,6 +1213,12 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     @require_torchaudio
+    def test_simple_whisper_translation_dummy(self):
+        assert 1 == 2
+
+    @slow
+    @require_torch
+    @require_torchaudio
     def test_simple_whisper_translation(self):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",

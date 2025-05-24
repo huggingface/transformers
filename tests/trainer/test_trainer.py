@@ -1270,6 +1270,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.n_epochs = args.num_train_epochs
         self.batch_size = args.train_batch_size
 
+    def test_trainer_works_with_dict_dummy(self):
+        assert 1 == 2
+
     def test_trainer_works_with_dict(self):
         # Edge case because Apex with mode O2 will change our models to return dicts. This test checks it doesn't break
         # anything.

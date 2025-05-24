@@ -220,6 +220,7 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         super().test_multi_gpu_data_parallel_forward()
 
     def test_config(self):
+        assert 1 == 2
         self.config_tester.run_common_tests()
 
     @unittest.skip(reason="ViT does not use inputs_embeds")
@@ -236,6 +237,7 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
     def test_model(self):
+        assert 1 == 2
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 

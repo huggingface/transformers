@@ -133,6 +133,9 @@ class AwqTest(unittest.TestCase):
         backend_empty_cache(torch_device)
         gc.collect()
 
+    def test_foo(self):
+        assert 1 == 2
+
     def test_quantized_model_conversion(self):
         """
         Simple test that checks if the quantized model has been converted properly
