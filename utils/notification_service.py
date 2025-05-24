@@ -1218,8 +1218,8 @@ if __name__ == "__main__":
     )
     workflow_run_created_time = workflow_run["created_at"]
     workflow_id = workflow_run["workflow_id"]
-    workflow_id = "77490896"
-    workflow_id = "77490895"
+    # workflow_id = "77490896"
+    # workflow_id = "77490895"
 
     report_repo_folder = workflow_run_created_time.split("T")[0]
 
@@ -1381,7 +1381,7 @@ if __name__ == "__main__":
     prev_workflow_run_id = None
     other_workflow_run_ids = []
 
-    if False:
+    if True:
         prev_workflow_run_id = get_last_daily_ci_workflow_run_id(
             token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=workflow_id
         )
@@ -1390,7 +1390,7 @@ if __name__ == "__main__":
         if True or not is_nvidia_daily_ci_workflow:
             # The id of the workflow `.github/workflows/self-scheduled-caller.yml` (not of a workflow run of it).
             other_workflow_id = "90575235"
-            other_workflow_id = "77490895"
+            # other_workflow_id = "77490895"
             # We need to get the Nvidia's scheduled daily CI run that match the current run (i.e. run with the same commit SHA)
             other_workflow_run_id = get_last_daily_ci_workflow_run_id(
                 token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=other_workflow_id, commit_sha="711d78d104366c16dd99ef11084c27848f7a4133"
