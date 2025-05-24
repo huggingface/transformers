@@ -28,7 +28,14 @@ from ...feature_extraction_utils import FeatureExtractionMixin
 from ...image_processing_utils import ImageProcessingMixin
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import TOKENIZER_CONFIG_FILE
-from ...utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, cached_file, logging
+from ...utils import (
+    FEATURE_EXTRACTOR_NAME,
+    PROCESSOR_NAME,
+    VIDEO_PROCESSOR_NAME,
+    cached_file,
+    logging,
+)
+from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -104,6 +111,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("qwen2_audio", "Qwen2AudioProcessor"),
         ("qwen2_vl", "Qwen2VLProcessor"),
         ("sam", "SamProcessor"),
+        ("sam_hq", "SamHQProcessor"),
         ("seamless_m4t", "SeamlessM4TProcessor"),
         ("sew", "Wav2Vec2Processor"),
         ("sew-d", "Wav2Vec2Processor"),
@@ -294,14 +302,31 @@ class AutoProcessor:
                 if "AutoProcessor" in config_dict.get("auto_map", {}):
                     processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
 
-            # If not found, let's check whether the processor class is saved in a feature extractor config
-            if preprocessor_config_file is not None and processor_class is None:
-                config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(
-                    pretrained_model_name_or_path, **kwargs
+            # Saved as video processor
+            if preprocessor_config_file is None:
+                preprocessor_config_file = cached_file(
+                    pretrained_model_name_or_path, VIDEO_PROCESSOR_NAME, **cached_file_kwargs
                 )
-                processor_class = config_dict.get("processor_class", None)
-                if "AutoProcessor" in config_dict.get("auto_map", {}):
-                    processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
+                if preprocessor_config_file is not None:
+                    config_dict, _ = BaseVideoProcessor.get_video_processor_dict(
+                        pretrained_model_name_or_path, **kwargs
+                    )
+                    processor_class = config_dict.get("processor_class", None)
+                    if "AutoProcessor" in config_dict.get("auto_map", {}):
+                        processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
+
+            # Saved as feature extractor
+            if preprocessor_config_file is None:
+                preprocessor_config_file = cached_file(
+                    pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME, **cached_file_kwargs
+                )
+                if preprocessor_config_file is not None and processor_class is None:
+                    config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(
+                        pretrained_model_name_or_path, **kwargs
+                    )
+                    processor_class = config_dict.get("processor_class", None)
+                    if "AutoProcessor" in config_dict.get("auto_map", {}):
+                        processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
 
         if processor_class is None:
             # Next, let's check whether the processor class is saved in a tokenizer

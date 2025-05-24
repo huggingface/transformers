@@ -324,7 +324,7 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def test_past_key_values_format(self):
         """
-        Overwritting to pass the expected cache shapes (Zamba2 has cache shape = [batch_size, 0] for mamba layers)
+        Overwriting to pass the expected cache shapes (Zamba2 has cache shape = [batch_size, 0] for mamba layers)
         """
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
         batch_size, seq_length = inputs["input_ids"].shape
@@ -422,7 +422,8 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
 
