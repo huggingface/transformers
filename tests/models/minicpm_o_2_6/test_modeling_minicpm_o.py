@@ -474,5 +474,7 @@ class MiniCPM_o_2_6ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.T
 
 # Add more test classes if needed, e.g., for specific model parts or functionalities
 
-if __name__ == "__main__":
-    unittest.main()
+@require_torch
+class MiniCPM_o_2_6ModelTester(MiniCPM_o_2_6ModelTest):
+    # Override or add specific tests for MiniCPM_o_2_6ModelTest
+    pass
