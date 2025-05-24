@@ -327,7 +327,6 @@ We enable custom decoding methods through model repositories, assuming a specifi
 
 If a model repository holds a custom decoding method, the easiest way to try it out is to load the model and generate with it:
 
-<!-- TODO before merging: 1) better repo name (use a `generate-community` org?) 2) prettify the repo -->
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -430,7 +429,7 @@ This is the core of your decoding method. It *must* contain a method named `gene
 > [!WARNING]
 > `generate.py` must be placed in a folder named `custom_generate`, and not at the root level of the repository. The file paths for this feature are hardcoded.
 
-Under the hood, when the base [`~GenerationMixin.generate`] method is called with a `custom_generate` argument, it first checks its Python requirements (if any), then locates the custom `generate` method in `generate.py`, and finally calls the custom `generate`. All received arguments and `model` are forwarded to your custom `generate` method.
+Under the hood, when the base [`~GenerationMixin.generate`] method is called with a `custom_generate` argument, it first checks its Python requirements (if any), then locates the custom `generate` method in `generate.py`, and finally calls the custom `generate`. All received arguments and `model` are forwarded to your custom `generate` method, with the exception of the arguments used to trigger the custom generation (`trust_remote_code` and `custom_generate`).
 
 This means your `generate` can have a mix of original and custom arguments (as well as a different output type) as shown below.
 
