@@ -24,7 +24,7 @@ import torch
 from accelerate import init_empty_weights
 from huggingface_hub import snapshot_download
 
-from transformers import EoMTConfig, EoMTForUniversalSegmentation
+from transformers import EoMTConfig, EoMTForUniversalSegmentation, EoMTImageProcessor
 
 
 # fmt: off
@@ -215,11 +215,15 @@ def convert_model(
     # With 1e-5 the test_initialization fails hence set it directly in config.
     config.layerscale_value = 1e-5
 
-    # Save the config
+    processor = EoMTImageProcessor()
+
+    # Save the config and processor
     if output_dir:
         config.save_pretrained(output_dir)
+        processor.save_pretrained(output_dir)
     if output_hub_path:
         config.push_to_hub(output_hub_path)
+        processor.push_to_hub(output_hub_path)
 
     # Initialize model with empty weights
     print("Creating empty model...")

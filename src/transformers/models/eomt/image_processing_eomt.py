@@ -30,6 +30,8 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     get_image_size,
+    make_flat_list_of_images,
+    to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
 )
@@ -113,7 +115,7 @@ def compute_segments(
     height = mask_probs.shape[1] if target_size is None else target_size[0]
     width = mask_probs.shape[2] if target_size is None else target_size[1]
 
-    segmentation = torch.zeros((height, width), dtype=torch.long, device=mask_probs.device)
+    segmentation = torch.zeros((height, width), dtype=torch.long, device=mask_probs.device) - 1
     segments: List[Dict] = []
 
     # Compute per-pixel assignment based on weighted mask scores
@@ -142,7 +144,6 @@ def compute_segments(
             else:
                 stuff_memory_list[pred_class] = current_segment_id
 
-        # Fuck forgot to update seg id
         segmentation[final_mask] = current_segment_id
         segment_score = round(pred_scores[k].item(), 6)
         segments.append(
@@ -152,6 +153,7 @@ def compute_segments(
                 "score": segment_score,
             }
         )
+        current_segment_id += 1
     return segmentation, segments
 
 
@@ -242,10 +244,8 @@ class EoMTImageProcessor(BaseImageProcessor):
         # For semantic segmentation: scale up so that both sides are ≥ target size
         if segmentation_type == "semantic":
             scale_factor = max(target_h / orig_h, target_w / orig_w)
-        elif segmentation_type in {"instance", "panoptic"}:
-            scale_factor = min(target_h / orig_h, target_w / orig_w)
         else:
-            raise ValueError(f"Unknown segmentation type: {segmentation_type}")
+            scale_factor = min(target_h / orig_h, target_w / orig_w)
 
         output_h = round(orig_h * scale_factor)
         output_w = round(orig_w * scale_factor)
@@ -297,7 +297,8 @@ class EoMTImageProcessor(BaseImageProcessor):
 
     def _preprocessing_semantic_segmentation(self, image: ImageInput, image_index: int) -> Tuple[List, List]:
         """Slices an image into overlapping crops for semantic segmentation."""
-        crops, crop_origins = [], []
+
+        crops, crops_offset = [], []
 
         image_size = get_image_size(image=image)  # (H, W)
         crop_size = self.size["height"]  # or 'width', both are equal
@@ -317,9 +318,9 @@ class EoMTImageProcessor(BaseImageProcessor):
                 crop = image[:, :, start:end]
 
             crops.append(crop)
-            crop_origins.append([image_index, start, end])
+            crops_offset.append([image_index, start, end])
 
-        return crops, crop_origins
+        return crops, crops_offset
 
     def _pad(self, image):
         """Pads the image to the target size using zero padding."""
@@ -337,7 +338,7 @@ class EoMTImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_type: str,
+        segmentation_type: str = "semantic",
         mask_labels: Optional[ImageInput] = None,
         class_labels: Optional[Dict[int, int]] = None,
         do_resize: Optional[bool] = None,
@@ -398,6 +399,8 @@ class EoMTImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
 
+        images = make_flat_list_of_images(images)
+
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
@@ -420,6 +423,9 @@ class EoMTImageProcessor(BaseImageProcessor):
             resample=resample,
         )
 
+        # All transformations expect numpy arrays.
+        images = [to_numpy_array(image) for image in images]
+
         if do_resize:
             images = [
                 self.resize(
@@ -432,19 +438,16 @@ class EoMTImageProcessor(BaseImageProcessor):
                 for image in images
             ]
 
-        # crop_origins is only used for semantic segmentation.
-        processed_images, crop_origins = [], []
+        # crops_offset is only used for semantic segmentation.
+        processed_images, crops_offset = [], []
 
         if segmentation_type == "semantic":
-            all_crops, all_origins = [], []
             for idx, img in enumerate(images):
                 crops, origins = self._preprocessing_semantic_segmentation(img, idx)
-                all_crops.extend(crops)
-                all_origins.extend(origins)
-            processed_images = all_crops
-            crop_origins = all_origins
+                processed_images.extend(crops)
+                crops_offset.extend(origins)
         else:
-            processed_images = [self._pad_image(img) for img in images]
+            processed_images = [self._pad(img) for img in images]
 
         if do_rescale:
             images = [
@@ -453,29 +456,32 @@ class EoMTImageProcessor(BaseImageProcessor):
             ]
 
         if do_normalize:
-            image_mean = np.array(image_mean).reshape(1, -1, 1, 1)
-            image_std = np.array(image_std).reshape(1, -1, 1, 1)
-            images = (images - image_mean) / image_std
+            images = [
+                self.normalize(
+                    image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
+                )
+                for image in images
+            ]
+
+        output = {"pixel_values": images}
+
+        if segmentation_type == "semantic" and crops_offset:
+            output["crops_offset"] = crops_offset
 
         if mask_labels is not None:
             mask_labels = [self._pad(mask) for mask in mask_labels]
+            output["mask_labels"] = mask_labels
+            output["class_labels"] = class_labels
 
-        # Normalize not working properly fix later
-        # if do_normalize:
-        #     images = [self.normalize(image, mean=image_mean, std=image_std, input_data_format=ChannelDimension.FIRST) for image in crops_list]
-
-        output = {
-            "pixel_values": images,
-            "crop_origins": crop_origins,
-            "mask_labels": mask_labels,
-            "class_labels": class_labels,
-        }
         return BatchFeature(output, tensor_type=return_tensors)
 
     def _revert_preprocessing_semantic(
         self,
         segmentation_logits: torch.Tensor,
-        crop_origins: List[Tuple[int, int, int]],
+        crops_offset: List[Tuple[int, int, int]],
         original_image_sizes: List[Tuple[int, int]],
     ) -> List[torch.Tensor]:
         """
@@ -485,7 +491,7 @@ class EoMTImageProcessor(BaseImageProcessor):
             segmentation_logits (`torch.Tensor`):
                 A tensor of shape `(num_crops, num_classes, crop_height, crop_width)` representing predicted logits
                 for each image crop.
-            crop_origins (`List[Tuple[int, int, int]]`):
+            crops_offset (`List[Tuple[int, int, int]]`):
                 A list of tuples where each tuple contains:
                 - `image_index` (int): Index of the original image this crop belongs to.
                 - `start` (int): Start pixel index of the crop along the long dimension (height or width).
@@ -503,7 +509,7 @@ class EoMTImageProcessor(BaseImageProcessor):
             crop_counts.append(torch.zeros((num_classes, height, width), device=segmentation_logits.device))
 
         # Stitch crops back into full-sized logit maps
-        for crop_idx, (image_idx, crop_start, crop_end) in enumerate(crop_origins):
+        for crop_idx, (image_idx, crop_start, crop_end) in enumerate(crops_offset):
             if original_image_sizes[image_idx][0] > original_image_sizes[image_idx][1]:
                 aggregated_logits[image_idx][:, crop_start:crop_end, :] += segmentation_logits[crop_idx]
                 crop_counts[image_idx][:, crop_start:crop_end, :] += 1
@@ -522,7 +528,6 @@ class EoMTImageProcessor(BaseImageProcessor):
                 align_corners=False,
             )[0]
 
-            print("resized_logits shape(squeeze if required):", resized_logits.shape)
             reconstructed_logits.append(resized_logits)
 
         return reconstructed_logits
@@ -533,6 +538,7 @@ class EoMTImageProcessor(BaseImageProcessor):
         original_image_sizes: List[Tuple[int, int]],
     ) -> List[torch.Tensor]:
         """Restores panoptic segmentation logits to their original image resolutions."""
+
         resized_logits = []
 
         for idx, original_size in enumerate(original_image_sizes):
@@ -546,14 +552,14 @@ class EoMTImageProcessor(BaseImageProcessor):
 
     def postprocess_semantic_segmentation(
         self,
-        outputs: Tuple[np.ndarray, np.ndarray],
-        crop_origins: List[Tuple[int, int, int]],
+        outputs,
+        crops_offset: List[Tuple[int, int, int]],
         original_image_sizes: List[Tuple[int, int]],
     ) -> np.ndarray:
         """Post-processes model outputs into final semantic segmentation prediction."""
 
-        masks_queries_logits = torch.tensor(outputs[0])  # [batch_size, num_queries, height, width]
-        class_queries_logits = torch.tensor(outputs[1])  # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
+        class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
 
         size = (self.size["height"], self.size["width"])
         masks_queries_logits = torch.nn.functional.interpolate(
@@ -569,12 +575,12 @@ class EoMTImageProcessor(BaseImageProcessor):
         # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
         segmentation_logits = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
 
-        output_logits = self._revert_preprocessing_semantic(segmentation_logits, crop_origins, original_image_sizes)
+        output_logits = self._revert_preprocessing_semantic(segmentation_logits, crops_offset, original_image_sizes)
 
         preds = output_logits[0].argmax(0).cpu().numpy()
         return preds
 
-    def post_process_panoptic_segmentation(
+    def postprocess_panoptic_segmentation(
         self,
         outputs,
         original_image_sizes,
@@ -585,8 +591,8 @@ class EoMTImageProcessor(BaseImageProcessor):
     ):
         """Post-processes model outputs into final panoptic segmentation prediction."""
 
-        masks_queries_logits = torch.tensor(outputs[0])  # [batch_size, num_queries, height, width]
-        class_queries_logits = torch.tensor(outputs[1])  # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
+        class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
 
         batch_size = class_queries_logits.shape[0]
         num_labels = class_queries_logits.shape[-1] - 1
@@ -599,7 +605,6 @@ class EoMTImageProcessor(BaseImageProcessor):
         )
 
         mask_probs = self._revert_preprocessing_panoptic(masks_queries_logits, original_image_sizes)
-
         pred_scores, pred_labels = class_queries_logits.softmax(dim=-1).max(-1)
 
         results: List = []
@@ -628,6 +633,60 @@ class EoMTImageProcessor(BaseImageProcessor):
 
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
+
+    def postprocess_instance_segmentation(
+        self,
+        outputs,
+        original_image_sizes,
+        stuff_classes: List[int] = [0],
+        threshold: float = 0.8,
+        mask_threshold: float = 0.5,
+        overlap_mask_area_threshold: float = 0.8,
+    ):
+        """Post-processes model outputs into instance segmentation predictions."""
+
+        panoptic_results = self.post_process_panoptic_segmentation(
+            outputs=outputs,
+            original_image_sizes=original_image_sizes,
+            stuff_classes=stuff_classes,
+            threshold=threshold,
+            mask_threshold=mask_threshold,
+            overlap_mask_area_threshold=overlap_mask_area_threshold,
+        )
+
+        instance_results = []
+
+        for result in panoptic_results:
+            segmentation_map = result["segmentation"]
+            segments_info = result["segments_info"]
+
+            instance_segmentation = torch.zeros_like(segmentation_map, dtype=torch.int32) - 1
+            instance_segments = []
+
+            instance_id = 0
+            for segment in segments_info:
+                label_id = segment["label_id"]
+
+                if label_id in stuff_classes:
+                    continue
+
+                mask = segmentation_map == segment["id"]
+                if mask.sum() == 0:
+                    continue
+
+                instance_segmentation[mask] = instance_id
+                instance_segments.append(
+                    {
+                        "id": instance_id,
+                        "label_id": label_id,
+                        "score": segment["score"],
+                    }
+                )
+
+                instance_id += 1
+
+            instance_results.append({"segmentation": instance_segmentation, "segments_info": instance_segments})
+        return instance_results
 
 
 __all__ = ["EoMTImageProcessor"]
