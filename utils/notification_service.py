@@ -1381,7 +1381,7 @@ if __name__ == "__main__":
     prev_workflow_run_id = None
     other_workflow_run_ids = []
 
-    if True or is_scheduled_ci_run:
+    if False:
         prev_workflow_run_id = get_last_daily_ci_workflow_run_id(
             token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=workflow_id
         )
