@@ -374,7 +374,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         elif size.max_height and size.max_width:
             new_size = get_image_size_for_max_height_width(image.size()[-2:], size.max_height, size.max_width)
         elif size.height and size.width:
-            new_size = (size.height, size.width)
+            new_size = (size.heighft, size.width)
         else:
             raise ValueError(
                 "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
