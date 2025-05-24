@@ -32,4 +32,4 @@ jobs:
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
-        run: python3 -m utils/notification_service.py
+        run: python3 utils/notification_service.py
