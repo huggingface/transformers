@@ -11,6 +11,20 @@ logger = logging.get_logger(__name__)
 _use_top_left_mask = flash_attn_supports_top_left_mask()
 
 
+def check_flash_attention_inputs(*tensors):
+    """
+    Raise an error if any input tensor has a dimension of size 0.
+    FlashAttention does not support such inputs.
+    """
+    for i, t in enumerate(tensors):
+        if any(dim == 0 for dim in t.shape):
+            raise ValueError(
+                f"Tensor {i} has shape {t.shape} with a zero dimension.\n"
+                "FlashAttention does not support inputs with dim=0.\n"
+                "Please check your input shapes or use SDPA instead."
+            )
+
+
 def flash_attention_forward(
     module: torch.nn.Module,
     query: torch.Tensor,
@@ -31,6 +45,9 @@ def flash_attention_forward(
 
     # This is before the transpose
     seq_len = query.shape[2]
+
+    # Ensure no zero-dim tensor for inputs
+    check_flash_attention_inputs(query, key, value)
 
     # FA2 uses non-transposed inputs
     query = query.transpose(1, 2)
