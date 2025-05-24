@@ -25,8 +25,7 @@ import torch.nn.functional as F
 from ...generation import GenerationMixin
 from ...modeling_outputs import Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (  # noqa: F401
-    ModelOutput,
+from ...utils import (
     auto_docstring,
     logging,
     replace_return_docstrings,
@@ -312,16 +311,31 @@ class Florence2VisionDepthWiseConv2d(nn.Module):
 class Florence2VisionConvEmbed(nn.Module):
     """Image to Patch Embedding"""
 
-    def __init__(self, patch_size=7, in_chans=3, embed_dim=64, stride=4, padding=2, norm_layer=None, pre_norm=True):
+    def __init__(
+        self,
+        config: Florence2LanguageConfig,
+        stage_idx: int,
+        norm_layer: nn.Module = nn.LayerNorm,
+    ):
         super().__init__()
-        self.patch_size = patch_size
+        self.config = config
+        self.patch_size = config.patch_size[stage_idx]
+        self.in_chans = config.in_chans if stage_idx == 0 else config.dim_embed[stage_idx - 1]
+        self.dim_embed = config.dim_embed[stage_idx]
+        self.stride = config.patch_stride[stage_idx]
+        self.padding = config.patch_padding[stage_idx]
+        self.pre_norm = config.patch_prenorm[stage_idx]
 
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=stride, padding=padding)
+        self.proj = nn.Conv2d(
+            self.in_chans,
+            self.dim_embed,
+            kernel_size=self.patch_size,
+            stride=self.stride,
+            padding=self.padding,
+        )
 
-        dim_norm = in_chans if pre_norm else embed_dim
+        dim_norm = self.in_chans if self.pre_norm else self.dim_embed
         self.norm = norm_layer(dim_norm) if norm_layer else None
-
-        self.pre_norm = pre_norm
 
     def forward(self, x: torch.Tensor, size):
         H, W = size
@@ -347,14 +361,16 @@ class Florence2VisionChannelAttention(nn.Module):
         self.groups = groups
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         self.proj = nn.Linear(dim, dim)
+        head_dim = dim // groups
+        self.scale = head_dim**-0.5
 
     def forward(self, x: torch.Tensor, size):
         B, N, C = x.shape
 
         qkv = self.qkv(x).reshape(B, N, 3, self.groups, C // self.groups).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv[0], qkv[1], qkv[2]
+        q, k, v = qkv.unbind(0)
 
-        q = q * (float(N) ** -0.5)
+        q = q * self.scale
         attention = q.transpose(-1, -2) @ k
         attention = attention.softmax(dim=-1)
         x = (attention @ v.transpose(-1, -2)).transpose(-1, -2)
@@ -366,32 +382,44 @@ class Florence2VisionChannelAttention(nn.Module):
 class Florence2VisionChannelBlock(nn.Module):
     def __init__(
         self,
-        dim: int,
-        groups: int,
-        mlp_ratio: float = 4.0,
-        qkv_bias: bool = True,
-        drop_path_rate: float = 0.0,
+        config: Florence2LanguageConfig,
+        stage_idx: int,
+        channel_drop_path_rate: float,
         act_layer: nn.Module = nn.GELU,
         norm_layer: nn.Module = nn.LayerNorm,
-        conv_at_attn: bool = True,
-        conv_at_ffn: bool = True,
     ):
         super().__init__()
 
-        drop_path = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.config = config
+
+        drop_path = Florence2VisionDropPath(channel_drop_path_rate) if channel_drop_path_rate > 0.0 else nn.Identity()
 
         self.conv1 = (
-            Florence2VisionPreNorm(None, Florence2VisionDepthWiseConv2d(dim, 3, 1, 1)) if conv_at_attn else None
+            Florence2VisionPreNorm(None, Florence2VisionDepthWiseConv2d(config.dim_embed[stage_idx], 3, 1, 1))
+            if config.conv_at_attn
+            else None
         )
         self.channel_attn = Florence2VisionPreNorm(
-            norm_layer(dim), Florence2VisionChannelAttention(dim, groups=groups, qkv_bias=qkv_bias), drop_path
+            norm_layer(config.dim_embed[stage_idx]),
+            Florence2VisionChannelAttention(
+                config.dim_embed[stage_idx],
+                groups=config.num_groups[stage_idx],
+                qkv_bias=config.qkv_bias,
+            ),
+            drop_path,
         )
         self.conv2 = (
-            Florence2VisionPreNorm(None, Florence2VisionDepthWiseConv2d(dim, 3, 1, 1)) if conv_at_ffn else None
+            Florence2VisionPreNorm(None, Florence2VisionDepthWiseConv2d(config.dim_embed[stage_idx], 3, 1, 1))
+            if config.conv_at_ffn
+            else None
         )
         self.ffn = Florence2VisionPreNorm(
-            norm_layer(dim),
-            Florence2VisionMLP(in_features=dim, hidden_features=int(dim * mlp_ratio), act_layer=act_layer),
+            norm_layer(config.dim_embed[stage_idx]),
+            Florence2VisionMLP(
+                in_features=config.dim_embed[stage_idx],
+                hidden_features=int(config.dim_embed[stage_idx] * config.mlp_ratio),
+                act_layer=act_layer,
+            ),
             drop_path,
         )
 
@@ -424,8 +452,16 @@ def window_reverse(windows: torch.Tensor, batch_size: int, window_size: int, H: 
 
 
 class Florence2VisionWindowAttention(nn.Module):
-    def __init__(self, dim: int, num_heads: int, window_size: int, qkv_bias: bool = True):
+    def __init__(
+        self,
+        config: Florence2LanguageConfig,
+        dim: int,
+        num_heads: int,
+        window_size: int,
+        qkv_bias: bool = True,
+    ):
         super().__init__()
+        self.config = config
         self.dim = dim
         self.window_size = window_size
         self.num_heads = num_heads
@@ -440,7 +476,6 @@ class Florence2VisionWindowAttention(nn.Module):
     def forward(self, x: torch.Tensor, size):
         H, W = size
         B, L, C = x.shape
-        assert L == H * W, "input feature has wrong size"
 
         x = x.view(B, H, W, C)
 
@@ -453,18 +488,15 @@ class Florence2VisionWindowAttention(nn.Module):
         x = window_partition(x, self.window_size)
         x = x.view(-1, self.window_size * self.window_size, C)
 
-        # W-MSA/SW-MSA
-        # attn_windows = self.attn(x_windows)
-
         B_, N, C = x.shape
         qkv = self.qkv(x).reshape(B_, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv[0], qkv[1], qkv[2]
+        q, k, v = qkv.unbind(0)
 
         q = q * self.scale
         attn = q @ k.transpose(-2, -1)
         attn = self.softmax(attn)
-
-        x = (attn @ v).transpose(1, 2).reshape(B_, N, C)
+        x = attn @ v
+        x = x.transpose(1, 2).reshape(B_, N, C)
         x = self.proj(x)
 
         # merge windows
@@ -482,33 +514,47 @@ class Florence2VisionWindowAttention(nn.Module):
 class Florence2VisionSpatialBlock(nn.Module):
     def __init__(
         self,
-        dim: int,
-        num_heads: int,
-        window_size: int,
-        mlp_ratio: float = 4.0,
-        qkv_bias: bool = True,
-        drop_path_rate: float = 0.0,
-        act_layer: nn.Module = nn.GELU,
+        config: Florence2LanguageConfig,
+        stage_idx: int,
+        drop_path_rate: float,
         norm_layer: nn.Module = nn.LayerNorm,
-        conv_at_attn: bool = True,
-        conv_at_ffn: bool = True,
+        act_layer: nn.Module = nn.GELU,
     ):
         super().__init__()
 
         drop_path = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
         self.conv1 = (
-            Florence2VisionPreNorm(None, Florence2VisionDepthWiseConv2d(dim, 3, 1, 1)) if conv_at_attn else None
+            Florence2VisionPreNorm(None, Florence2VisionDepthWiseConv2d(config.dim_embed[stage_idx], 3, 1, 1))
+            if config.conv_at_attn
+            else None
         )
+
         self.window_attn = Florence2VisionPreNorm(
-            norm_layer(dim), Florence2VisionWindowAttention(dim, num_heads, window_size, qkv_bias=qkv_bias), drop_path
+            norm_layer(config.dim_embed[stage_idx]),
+            Florence2VisionWindowAttention(
+                config,
+                config.dim_embed[stage_idx],
+                config.num_heads[stage_idx],
+                config.window_size,
+                config.qkv_bias,
+            ),
+            drop_path,
         )
+
         self.conv2 = (
-            Florence2VisionPreNorm(None, Florence2VisionDepthWiseConv2d(dim, 3, 1, 1)) if conv_at_ffn else None
+            Florence2VisionPreNorm(None, Florence2VisionDepthWiseConv2d(config.dim_embed[stage_idx], 3, 1, 1))
+            if config.conv_at_ffn
+            else None
         )
+
         self.ffn = Florence2VisionPreNorm(
-            norm_layer(dim),
-            Florence2VisionMLP(in_features=dim, hidden_features=int(dim * mlp_ratio), act_layer=act_layer),
+            norm_layer(config.dim_embed[stage_idx]),
+            Florence2VisionMLP(
+                in_features=config.dim_embed[stage_idx],
+                hidden_features=int(config.dim_embed[stage_idx] * config.mlp_ratio),
+                act_layer=act_layer,
+            ),
             drop_path,
         )
 
@@ -526,36 +572,25 @@ class Florence2VisionSpatialBlock(nn.Module):
 class Florence2VisionBlock(nn.Module):
     def __init__(
         self,
-        embed_dim: int,
-        num_heads: int,
-        window_size: int,
+        config: Florence2LanguageConfig,
+        stage_idx: int,
         drop_path_rate: float,
         channel_drop_path_rate: float,
-        qkv_bias: bool,
-        mlp_ratio: float,
-        conv_at_attn: bool,
-        conv_at_ffn: bool,
-        num_groups: int,
+        norm_layer: nn.Module = nn.LayerNorm,
+        act_layer: nn.Module = nn.GELU,
     ):
         super().__init__()
         self.spatial_block = Florence2VisionSpatialBlock(
-            dim=embed_dim,
-            num_heads=num_heads,
-            window_size=window_size,
-            mlp_ratio=mlp_ratio,
-            qkv_bias=qkv_bias,
+            config=config,
+            stage_idx=stage_idx,
             drop_path_rate=drop_path_rate,
-            conv_at_attn=conv_at_attn,
-            conv_at_ffn=conv_at_ffn,
+            norm_layer=norm_layer,
+            act_layer=act_layer,
         )
         self.channel_block = Florence2VisionChannelBlock(
-            dim=embed_dim,
-            groups=num_groups,
-            qkv_bias=qkv_bias,
-            drop_path_rate=channel_drop_path_rate,
-            mlp_ratio=mlp_ratio,
-            conv_at_attn=conv_at_attn,
-            conv_at_ffn=conv_at_ffn,
+            config=config,
+            stage_idx=stage_idx,
+            channel_drop_path_rate=channel_drop_path_rate,
         )
 
     def forward(self, x: torch.Tensor, size):
@@ -609,35 +644,25 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
 
         convs = []
         blocks = []
-        for i in range(self.num_stages):
+        for stage_idx in range(self.num_stages):
             conv_embed = Florence2VisionConvEmbed(
-                patch_size=config.patch_size[i],
-                stride=config.patch_stride[i],
-                padding=config.patch_padding[i],
-                in_chans=config.in_chans if i == 0 else self.dim_embed[i - 1],
-                embed_dim=self.dim_embed[i],
+                config=config,
                 norm_layer=norm_layer,
-                pre_norm=config.patch_prenorm[i],
+                stage_idx=stage_idx,
             )
             convs.append(conv_embed)
 
             block = nn.ModuleList(
                 Florence2VisionBlock(
-                    embed_dim=self.dim_embed[i],
-                    num_heads=self.num_heads[i],
-                    window_size=config.window_size,
-                    drop_path_rate=dpr[depth_offset + j * 2],
-                    channel_drop_path_rate=dpr[depth_offset + j * 2 + 1],
-                    qkv_bias=config.qkv_bias,
-                    mlp_ratio=config.mlp_ratio,
-                    conv_at_attn=config.conv_at_attn,
-                    conv_at_ffn=config.conv_at_ffn,
-                    num_groups=self.num_groups[i],
+                    config=config,
+                    stage_idx=stage_idx,
+                    drop_path_rate=dpr[depth_offset + block_idx * 2],
+                    channel_drop_path_rate=dpr[depth_offset + block_idx * 2 + 1],
                 )
-                for j in range(config.depths[i])
+                for block_idx in range(config.depths[stage_idx])
             )
             blocks.append(block)
-            depth_offset += config.depths[i] * 2
+            depth_offset += config.depths[stage_idx] * 2
 
         self.convs = nn.ModuleList(convs)
         self.blocks = nn.ModuleList(blocks)
