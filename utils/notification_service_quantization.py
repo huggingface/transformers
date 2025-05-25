@@ -274,11 +274,13 @@ if __name__ == "__main__":
     with open(f"ci_results_{job_name}/quantization_results.json", "w", encoding="UTF-8") as fp:
         json.dump(quantization_results, fp, indent=4, ensure_ascii=False)
 
+    report_repo_id = os.getenv("REPORT_REPO_ID")
+
     # upload results to Hub dataset (only for the scheduled daily CI run on `main`)
     api.upload_file(
         path_or_fileobj=f"ci_results_{job_name}/quantization_results.json",
         path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/quantization_results.json",
-        repo_id="hf-internal-testing/transformers_daily_ci",
+        repo_id=report_repo_id,
         repo_type="dataset",
         token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
     )

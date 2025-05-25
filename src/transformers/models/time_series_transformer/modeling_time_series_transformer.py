@@ -636,7 +636,6 @@ class TimeSeriesTransformerPreTrainedModel(PreTrainedModel):
     # Current tests always assume certain inputs to be passed
     _supports_flash_attn_2 = False
     _supports_sdpa = False
-    # Compile issues
     _supports_flex_attn = False
 
     def _init_weights(self, module):
