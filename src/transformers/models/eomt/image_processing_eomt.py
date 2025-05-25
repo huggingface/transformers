@@ -606,14 +606,14 @@ class EoMTImageProcessor(BaseImageProcessor):
             mode="bilinear",
         )
 
-        mask_probs = self._reverse_image_preprocessing_panoptic(masks_queries_logits, original_image_sizes)
-        pred_scores, pred_labels = class_queries_logits.softmax(dim=-1).max(-1)
+        mask_probs_batch = self._reverse_image_preprocessing_panoptic(masks_queries_logits, original_image_sizes)
+        pred_scores_batch, pred_labels_batch = class_queries_logits.softmax(dim=-1).max(-1)
 
         results: List = []
 
         for i in range(batch_size):
             mask_probs, pred_scores, pred_labels = remove_low_and_no_objects(
-                mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
+                mask_probs_batch[i], pred_scores_batch[i], pred_labels_batch[i], threshold, num_labels
             )
 
             # No mask found

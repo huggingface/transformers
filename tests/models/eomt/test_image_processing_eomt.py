@@ -1,6 +1,7 @@
 import unittest
 
 import numpy as np
+import requests
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -15,6 +16,7 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import EoMTImageProcessor
+    from transformers.models.eomt.modeling_eomt import EoMTForUniversalSegmentationOutput
 
 
 class EoMTImageProcessingTester:
@@ -46,8 +48,8 @@ class EoMTImageProcessingTester:
         self.batch_size = 2
         self.num_queries = 3
         self.num_classes = 2
-        self.height = 3
-        self.width = 4
+        self.height = self.size["height"]
+        self.width = self.size["width"]
         self.num_labels = num_labels
 
     def prepare_image_processor_dict(self):
@@ -60,9 +62,12 @@ class EoMTImageProcessingTester:
             "num_labels": self.num_labels,
         }
 
-    def expected_output_image_shape(self, images):
-        height, width = self.get_expected_values(images, batched=True)
-        return self.num_channels, height, width
+    def prepare_fake_eomt_outputs(self, batch_size):
+        return EoMTForUniversalSegmentationOutput(
+            masks_queries_logits=torch.randn((batch_size, self.num_queries, self.height, self.width)),
+            class_queries_logits=torch.randn((batch_size, self.num_queries, self.num_classes + 1)),
+        )
+
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
@@ -84,6 +89,7 @@ class EoMTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.image_processor_tester = EoMTImageProcessingTester(self)
+        self.model_id = "tue-mps/coco_panoptic_eomt_large_640"
 
     @property
     def image_processor_dict(self):
@@ -161,3 +167,53 @@ class EoMTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
         expected_output_image_shape = (2, 3, 18, 18)
         self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+
+    def test_post_process_semantic_segmentation(self):
+        processor = self.image_processing_class(**self.image_processor_dict)
+        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+
+        inputs = processor(images=image, segmentation_type="semantic", return_tensors="pt")
+        crops_offset = inputs.pop("crops_offset")
+
+        original_sizes = [image.size[::-1]]
+
+        # For semantic segmentation, the BS of output is 2 coz, two crops are created.
+        outputs = self.image_processor_tester.prepare_fake_eomt_outputs(inputs['pixel_values'].shape[0])
+        segmentation = processor.post_process_semantic_segmentation(outputs, crops_offset, original_sizes)
+
+        self.assertEqual(segmentation.shape, (image.height, image.width))
+
+    def test_post_process_panoptic_segmentation(self):
+        processor = self.image_processing_class(**self.image_processor_dict)
+        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+
+        original_sizes = [image.size[::-1],image.size[::-1]]
+
+        # lets test for batched input of 2
+        outputs = self.image_processor_tester.prepare_fake_eomt_outputs(2)
+        segmentation = processor.post_process_panoptic_segmentation(outputs, original_sizes)
+
+        self.assertTrue(len(segmentation) == 2)
+        for el in segmentation:
+            self.assertTrue("segmentation" in el)
+            self.assertTrue("segments_info" in el)
+            self.assertEqual(type(el["segments_info"]), list)
+            self.assertEqual(el["segmentation"].shape, (image.height, image.width))
+
+    def test_post_process_instance_segmentation(self):
+        processor = self.image_processing_class(**self.image_processor_dict)
+        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+
+        original_sizes = [image.size[::-1],image.size[::-1]]
+
+        # lets test for batched input of 2
+        outputs = self.image_processor_tester.prepare_fake_eomt_outputs(2)
+        segmentation = processor.post_process_instance_segmentation(outputs, original_sizes)
+
+        self.assertTrue(len(segmentation) == 2)
+        for el in segmentation:
+            self.assertTrue("segmentation" in el)
+            self.assertTrue("segments_info" in el)
+            self.assertEqual(type(el["segments_info"]), list)
+            self.assertEqual(el["segmentation"].shape, (image.height, image.width))
+
