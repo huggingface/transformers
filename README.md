@@ -1,3 +1,5 @@
+[![Deploy static content to Pages](https://github.com/nodoubtz/2lit-formers/actions/workflows/static.yml/badge.svg)](https://github.com/nodoubtz/2lit-formers/actions/workflows/static.yml)
+
 # 2lit-formers
 
 [![Homepage](https://img.shields.io/badge/docs-website-blue)](https://nodoubtz.github.io/2lit-formers/)
