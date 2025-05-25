@@ -166,3 +166,30 @@ class RagTokenizerTest(TestCase):
         ]
         input_dict = tokenizer(input_strings)
         self.assertIsNotNone(input_dict)
+
+    @require_tokenizers
+    def test_patch_token_and_encode(self):
+        # Ensure patch_token_id and patch_token reflect the question encoder's special token
+        # Use a question encoder that supports patch token
+        from transformers.models.dpr.tokenization_dpr import DPRQuestionEncoderTokenizer
+        # Create a dummy tokenizer with a patch token
+        vocab = {"[UNK]":0, "[PATCH]":1, "hello":2}
+        tokenizer_path = os.path.join(self.tmpdirname, "dpr_patch_tokenizer")
+        os.makedirs(tokenizer_path, exist_ok=True)
+        vocab_file = os.path.join(tokenizer_path, DPR_VOCAB_FILES_NAMES["vocab_file"])
+        with open(vocab_file, "w", encoding="utf-8") as writer:
+            writer.write(json.dumps(vocab))
+        # Load the DPR tokenizer and manually set patch_token
+        dpr_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(tokenizer_path)
+        dpr_tokenizer.patch_token = "[PATCH]"
+        dpr_tokenizer.patch_token_id = dpr_tokenizer.convert_tokens_to_ids("[PATCH]")
+        # Use a simple generator tokenizer
+        from transformers import BartTokenizer
+        bart_tokenizer = BartTokenizer.from_pretrained(os.path.join(self.tmpdirname, "bart_tokenizer"))
+        rag_tokenizer = RagTokenizer(question_encoder=dpr_tokenizer, generator=bart_tokenizer)
+        self.assertEqual(rag_tokenizer.patch_token, "[PATCH]")
+        self.assertEqual(rag_tokenizer.patch_token_id, dpr_tokenizer.patch_token_id)
+        # Test encode method delegates to question_encoder
+        encoded = rag_tokenizer.encode("hello patch")
+        # Expect [hello_id, patch_id]
+        self.assertEqual(encoded, [2, dpr_tokenizer.patch_token_id])
