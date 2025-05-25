@@ -1,3 +1,5 @@
+[![Secret Leaks](https://github.com/nodoubtz/2lit-formers/actions/workflows/trufflehog.yml/badge.svg?branch=Nodoubtz)](https://github.com/nodoubtz/2lit-formers/actions/workflows/trufflehog.yml)
+
 [![Deploy static content to Pages](https://github.com/nodoubtz/2lit-formers/actions/workflows/static.yml/badge.svg)](https://github.com/nodoubtz/2lit-formers/actions/workflows/static.yml)
 
 # 2lit-formers
