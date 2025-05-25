@@ -27,9 +27,149 @@ The abstract from the paper is the following:
 This model was contributed by [Yaswanth Gali](https://huggingface.co/yaswanthgali).
 The original code can be found [here](https://github.com/tue-mps/eomt).
 
-## Usage tips
+## Usage Examples
 
 - Use the Hugging Face implementation of EoMT for inference with pre-trained models.
+
+### Semantic Segmentation
+
+```python
+from transformers import EoMTImageProcessor, EoMTForUniversalSegmentation
+import numpy as np
+import torch
+from PIL import Image
+import requests
+import matplotlib.pyplot as plt
+
+
+model_id = ""
+processor = EoMTImageProcessor.from_pretrained(model_id)
+model = EoMTForUniversalSegmentation.from_pretrained(model_id)
+
+image = Image.open(
+    requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
+)
+
+# Preprocess the image for semantic segmentation by setting `segmentation_type` arg
+inputs = processor(
+    images=image,
+    segmentation_type="semantic",
+    return_tensors="pt",
+)
+
+# Remove crop offsets from inputs — used later for post-processing.
+crops_offset = inputs.pop("crops_offset")
+
+with torch.inference_mode():
+    outputs = model(**inputs)
+
+# Prepare the original image size in the format (height, width)
+original_image_sizes = [(image.height, image.width)]
+
+# Post-process the model outputs to get final segmentation prediction
+preds = processor.post_process_semantic_segmentation(
+    outputs,
+    crops_offset=crops_offset,
+    original_image_sizes=original_image_sizes,
+)
+
+# Visualize the segmentation mask
+plt.imshow(preds[0])
+plt.axis("off")
+plt.title("Semantic Segmentation")
+plt.show()
+```
+
+### Instance Segmentation
+
+```python
+from transformers import EoMTImageProcessor, EoMTForUniversalSegmentation
+import numpy as np
+import torch
+from PIL import Image
+import requests
+import matplotlib.pyplot as plt
+
+
+model_id = ""
+processor = EoMTImageProcessor.from_pretrained(model_id)
+model = EoMTForUniversalSegmentation.from_pretrained(model_id)
+
+image = Image.open(
+    requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
+)
+
+# Preprocess the image for semantic segmentation by setting `segmentation_type` arg
+inputs = processor(
+    images=image,
+    segmentation_type="instance",
+    return_tensors="pt",
+)
+
+with torch.inference_mode():
+    outputs = model(**inputs)
+
+# Prepare the original image size in the format (height, width)
+original_image_sizes = [(image.height, image.width)]
+
+# Post-process the model outputs to get final segmentation prediction
+preds = processor.post_process_semantic_segmentation(
+    outputs,
+    original_image_sizes=original_image_sizes,
+    stuff_classes = [0,45] # Pass the list of stuff classes to exclude from mask.
+)
+
+# Visualize the segmentation mask
+plt.imshow(preds[0]["segmentation"])
+plt.axis("off")
+plt.title("Instance Segmentation")
+plt.show()
+```
+
+### Panoptic Segmentation
+
+```python
+from transformers import EoMTImageProcessor, EoMTForUniversalSegmentation
+import numpy as np
+import torch
+from PIL import Image
+import requests
+import matplotlib.pyplot as plt
+
+
+model_id = ""
+processor = EoMTImageProcessor.from_pretrained(model_id)
+model = EoMTForUniversalSegmentation.from_pretrained(model_id)
+
+image = Image.open(
+    requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
+)
+
+# Preprocess the image for panoptic segmentation by setting `segmentation_type` arg
+inputs = processor(
+    images=image,
+    segmentation_type="panoptic",
+    return_tensors="pt",
+)
+
+with torch.inference_mode():
+    outputs = model(**inputs)
+
+# Prepare the original image size in the format (height, width)
+original_image_sizes = [(image.height, image.width)]
+
+# Post-process the model outputs to get final segmentation prediction
+preds = processor.post_process_panoptic_segmentation(
+    outputs,
+    original_image_sizes=original_image_sizes,
+)
+
+# Visualize the panoptic segmentation mask
+plt.imshow(preds[0]["segmentation"])
+plt.axis("off")
+plt.title("Panoptic Segmentation")
+plt.show()
+```
 
 ## EoMTImageProcessor
 
