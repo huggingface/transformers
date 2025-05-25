@@ -29,6 +29,7 @@ ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
 logger = logging.get_logger(__name__)
 
 is_torch_greater_or_equal_than_2_6 = is_torch_greater_or_equal("2.6", accept_dev=True)
+is_torch_greater_or_equal_than_2_5 = is_torch_greater_or_equal("2.5", accept_dev=True)
 is_torch_greater_or_equal_than_2_4 = is_torch_greater_or_equal("2.4", accept_dev=True)
 is_torch_greater_or_equal_than_2_3 = is_torch_greater_or_equal("2.3", accept_dev=True)
 is_torch_greater_or_equal_than_2_2 = is_torch_greater_or_equal("2.2", accept_dev=True)
@@ -297,7 +298,10 @@ def id_tensor_storage(tensor: torch.Tensor) -> tuple[torch.device, int, int]:
     non-overlapping lifetimes may have the same id.
     """
     if is_torch_greater_or_equal_than_2_0:
-        from torch.distributed.tensor import DTensor
+        if is_torch_greater_or_equal_than_2_5:
+            from torch.distributed.tensor import DTensor
+        else:
+            from torch.distributed._tensor import DTensor
 
         if isinstance(tensor, DTensor):
             local_tensor = tensor.to_local()
