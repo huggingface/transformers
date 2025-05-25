@@ -45,11 +45,9 @@ class EoMTConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings and encoder.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
         image_size (`int`, *optional*, defaults to 640):
             The size (resolution) of each input image.
@@ -115,7 +113,6 @@ class EoMTConfig(PretrainedConfig):
         mlp_ratio=4,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-6,
         image_size=640,
@@ -147,7 +144,6 @@ class EoMTConfig(PretrainedConfig):
         self.mlp_ratio = mlp_ratio
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.image_size = image_size

@@ -226,7 +226,7 @@ def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Ten
     return loss
 
 
-# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerHungarianMatcher -> EoMTHungarianMatcher
+# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerHungarianMatcher with Mask2Former->EoMT
 class EoMTHungarianMatcher(nn.Module):
     """This class computes an assignment between the labels and the predictions of the network.
 
@@ -820,7 +820,6 @@ class EoMTLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        # Later use Modular as its a common pattern.
         normalized_hidden_states = self.norm1(hidden_states)
         self_attention_outputs = self.attention(
             normalized_hidden_states,
@@ -829,7 +828,7 @@ class EoMTLayer(nn.Module):
         )
         attention_output = self_attention_outputs[0]
         attention_output = self.layer_scale1(attention_output)
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        outputs = self_attention_outputs[1:]
 
         hidden_states = self.drop_path(attention_output) + hidden_states
 
