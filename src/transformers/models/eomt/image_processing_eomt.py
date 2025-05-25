@@ -210,6 +210,9 @@ class EoMTImageProcessor(BaseImageProcessor):
     ):
         super().__init__(**kwargs)
 
+        size = size if size is not None else {"height": 640, "width": 640}
+        size = get_size_dict(size, default_to_square=True)
+
         self.do_resize = do_resize
         self.size = size
         self.resample = resample

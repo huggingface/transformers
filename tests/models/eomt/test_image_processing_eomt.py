@@ -107,7 +107,6 @@ class EoMTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        print(image_processor)
         self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
@@ -180,7 +179,7 @@ class EoMTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         outputs = self.image_processor_tester.prepare_fake_eomt_outputs(inputs["pixel_values"].shape[0])
         segmentation = processor.post_process_semantic_segmentation(outputs, crops_offset, original_sizes)
 
-        self.assertEqual(segmentation.shape, (image.height, image.width))
+        self.assertEqual(segmentation[0].shape, (image.height, image.width))
 
     def test_post_process_panoptic_segmentation(self):
         processor = self.image_processing_class(**self.image_processor_dict)
