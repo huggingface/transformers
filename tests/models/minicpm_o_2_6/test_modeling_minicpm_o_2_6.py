@@ -15,117 +15,132 @@
 """ Testing suite for the PyTorch MiniCPM-o-2.6 model. """
 
 import unittest
-import os # Added import os
-from io import BytesIO
-from urllib.request import urlopen
-
-import librosa
-import requests
-
+import os
 import math
-import numpy as np
-from moviepy.editor import VideoFileClip
 import tempfile
+import numpy as np
+import librosa
 import soundfile as sf
+from moviepy.editor import VideoFileClip
+from PIL import Image
+import requests
+from io import BytesIO
 
 from transformers import (
-    MiniCPM_o_2_6Config,
-    MiniCPM_o_2_6Model,
-    MiniCPM_o_2_6ForConditionalGeneration,
-    AutoProcessor,
     AutoModel,
-    AutoTokenizer, # Added AutoTokenizer
+    AutoTokenizer,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
-    require_torch, 
-    slow, 
+    require_torch,
+    slow,
     torch_device,
     require_vision,
     require_soundfile,
     require_sentencepiece,
     require_tokenizers,
-    require_flash_attn
 )
 
 if is_torch_available():
     import torch
-
-if is_torch_available():
-    from PIL import Image
 
 @require_torch
 class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
     """Test for MiniCPM_o_2_6Model."""
 
     def setUp(self):
-        # Initialize model and tokenizer as in omni_chat.py
+        """initial test environment"""
+        self.assets_dir = os.path.join(os.path.dirname(__file__), "assets")
+        os.makedirs(self.assets_dir, exist_ok=True)
+
+        self.video_path = os.path.join(self.assets_dir, "Skiing.mp4")
+        self.ref_audio_path = os.path.join(self.assets_dir, "demo.wav")
+        
+        if not os.path.exists(self.video_path):
+            video_url = "https://huggingface.co/openbmb/MiniCPM-o-2_6/resolve/main/assets/Skiing.mp4"
+            response = requests.get(video_url, stream=True)
+            response.raise_for_status()
+            with open(self.video_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+
+        if not os.path.exists(self.ref_audio_path):
+            audio_url = "https://huggingface.co/openbmb/MiniCPM-o-2_6/resolve/main/assets/demo.wav"
+            response = requests.get(audio_url, stream=True)
+            response.raise_for_status()
+            with open(self.ref_audio_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+
         self.model = AutoModel.from_pretrained(
-            "OpenBMB/MiniCPM-o-2.6",
+            "openbmb/MiniCPM-o-2_6",
             trust_remote_code=True,
-            attn_implementation='sdpa',  # sdpa or flash_attention_2
+            attn_implementation='sdpa',
             torch_dtype=torch.bfloat16,
             init_vision=True,
             init_audio=True,
             init_tts=True
         )
         self.model = self.model.eval().to(torch_device)
-        self.tokenizer = AutoTokenizer.from_pretrained('OpenBMB/MiniCPM-o-2.6', trust_remote_code=True)
-        self.model.init_tts() # Initialize TTS
+        self.tokenizer = AutoTokenizer.from_pretrained('openbmb/MiniCPM-o-2_6', trust_remote_code=True)
+        self.model.init_tts()
 
-        # Placeholder for assets - in a real test, manage these properly
-        # For now, assuming they exist relative to where the test is run or are handled externally
-        self.video_path = "assets/Skiing.mp4" # May need adjustment for test environment
-        self.ref_audio_path = "assets/demo.wav" # May need adjustment for test environment
+    def tearDown(self):
+        """clean up test environment"""
+        if os.path.exists(self.video_path):
+            os.remove(self.video_path)
+        if os.path.exists(self.ref_audio_path):
+            os.remove(self.ref_audio_path)
+        if os.path.exists(self.assets_dir):
+            os.rmdir(self.assets_dir)
 
     @slow
     def test_minicpm_o_2_6_model_base(self):
-        """Test for base MiniCPM_o_2_6Model loading and a simple check."""
-        # This is a simplified version of the original test_minicpm_o_2_6_model
-        # to ensure the base model still loads if needed for other tests.
-        # Or, it can be removed if all tests use the AutoModel setup.
-        base_model = MiniCPM_o_2_6Model.from_pretrained("OpenBMB/MiniCPM-o-2.6")
+        """test base model loading"""
+        base_model = AutoModel.from_pretrained("openbmb/MiniCPM-o-2_6")
         self.assertIsNotNone(base_model)
 
     def _get_video_chunk_content(self, video_path, flatten=True):
+        """process video content, extract frames and audio"""
         video = VideoFileClip(video_path)
-        # print('video_duration:', video.duration) # Avoid print in tests, use assertions or logging
         
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as temp_audio_file:
-            temp_audio_file_path = temp_audio_file.name
-            video.audio.write_audiofile(temp_audio_file_path, codec="pcm_s16le", fps=16000, logger=None) # Suppress moviepy logger
-            audio_np, sr = librosa.load(temp_audio_file_path, sr=16000, mono=True)
-        num_units = math.ceil(video.duration)
+            video.audio.write_audiofile(
+                temp_audio_file.name,
+                codec="pcm_s16le",
+                fps=16000,
+                logger=None
+            )
+            audio_np, sr = librosa.load(temp_audio_file.name, sr=16000, mono=True)
         
-        contents= []
+        num_units = math.ceil(video.duration)
+        contents = []
+        
         for i in range(num_units):
-            frame = video.get_frame(i+1) # moviepy frames are 1-indexed for get_frame
-            image = Image.fromarray((frame).astype(np.uint8))
+            frame = video.get_frame(i+1)
+            image = Image.fromarray(frame.astype(np.uint8))
             audio_segment = audio_np[sr*i:sr*(i+1)]
+            
             if flatten:
                 contents.extend(["<unit>", image, audio_segment])
             else:
                 contents.append(["<unit>", image, audio_segment])
-        video.close() # Ensure video file is closed
+                
+        video.close()
         return contents
 
     @slow
     @require_vision
-    @require_soundfile # For librosa and sf
+    @require_soundfile
     @require_sentencepiece
     @require_tokenizers
-    # @require_flash_attn # if flash_attention_2 is used and required
     def test_omni_chat(self):
-        """Test for omni chat functionality based on omni_chat.py."""
-        # For tests, ensure asset paths are correct or use mocks/small test files
-        # For now, using paths from setUp
         try:
             ref_audio, _ = librosa.load(self.ref_audio_path, sr=16000, mono=True)
             sys_msg = self.model.get_sys_prompt(ref_audio=ref_audio, mode='omni', language='en')
             
             contents = self._get_video_chunk_content(self.video_path)
-            msg = {"role":"user", "content": contents}
+            msg = {"role": "user", "content": contents}
             msgs = [sys_msg, msg]
 
             output_audio_path = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
@@ -135,7 +150,7 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
                 tokenizer=self.tokenizer,
                 sampling=True,
                 temperature=0.5,
-                max_new_tokens=128, # Reduced for faster testing
+                max_new_tokens=128,
                 omni_input=True,
                 use_tts_template=True,
                 generate_audio=True,
@@ -144,14 +159,193 @@ class MiniCPM_o_2_6ModelIngestionTest(unittest.TestCase):
                 use_image_id=False,
                 return_dict=True
             )
-            self.assertIsNotNone(res, "Chat response should not be None")
+
+            self.assertIsNotNone(res, "Chat response should not be empty")
             self.assertIn("text", res, "Chat response should contain text")
             self.assertTrue(len(res["text"]) > 0, "Chat response text should not be empty")
-            if res.get("audio_path"): # audio_path might not always be in res if generate_audio=False or error
-                 self.assertTrue(sf.info(output_audio_path).frames > 0, "Generated audio file should not be empty")
+            
+            if res.get("audio_path"):
+                self.assertTrue(sf.info(output_audio_path).frames > 0, "Generated audio file should not be empty")
+                
         except FileNotFoundError:
-            self.skipTest(f"Asset file not found (e.g., {self.video_path} or {self.ref_audio_path}). Skipping omni_chat test.")
+            self.skipTest(f"资源文件未找到: {self.video_path} 或 {self.ref_audio_path}")
         finally:
             if 'output_audio_path' in locals() and os.path.exists(output_audio_path):
                 os.remove(output_audio_path)
+
+    @slow
+    @require_vision
+    @require_soundfile
+    @require_sentencepiece
+    @require_tokenizers
+    def test_streaming_inference(self):
+        try:
+            self.model.reset_session()
+            
+            ref_audio, _ = librosa.load(self.ref_audio_path, sr=16000, mono=True)
+            sys_msg = self.model.get_sys_prompt(ref_audio=ref_audio, mode='omni', language='en')
+            
+            contents = self._get_video_chunk_content(self.video_path, flatten=False)
+            session_id = 'test_session'
+            generate_audio = True
+
+            res = self.model.streaming_prefill(
+                session_id=session_id,
+                msgs=[sys_msg],
+                tokenizer=self.tokenizer
+            )
+            self.assertIsNotNone(res, "System prompt prefilling should not return empty")
+
+            for content in contents:
+                msgs = [{"role": "user", "content": content}]
+                res = self.model.streaming_prefill(
+                    session_id=session_id,
+                    msgs=msgs,
+                    tokenizer=self.tokenizer
+                )
+                self.assertIsNotNone(res, "Content prefilling should not return empty")
+
+            res = self.model.streaming_generate(
+                session_id=session_id,
+                tokenizer=self.tokenizer,
+                temperature=0.5,
+                generate_audio=generate_audio
+            )
+
+            audios = []
+            text = ""
+            output_audio_path = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
+
+            if generate_audio:
+                for r in res:
+                    audio_wav = r.audio_wav
+                    sampling_rate = r.sampling_rate
+                    txt = r.text
+
+                    audios.append(audio_wav)
+                    text += txt
+
+                res_audio = np.concatenate(audios)
+                sf.write(output_audio_path, res_audio, samplerate=sampling_rate)
+                
+                self.assertTrue(len(text) > 0, "Generated text should not be empty")
+                self.assertTrue(sf.info(output_audio_path).frames > 0, "Generated audio file should not be empty")
+            else:
+                for r in res:
+                    text += r['text']
+                self.assertTrue(len(text) > 0, "Generated text should not be empty")
+
+        except FileNotFoundError:
+            self.skipTest(f"Resource file not found: {self.video_path} or {self.ref_audio_path}")
+        finally:
+            if 'output_audio_path' in locals() and os.path.exists(output_audio_path):
+                os.remove(output_audio_path)
+
+    @slow
+    @require_soundfile
+    @require_sentencepiece
+    @require_tokenizers
+    def test_audio_mimick(self):
+        try:
+            self.model.init_tts()
+            self.model.tts.float()
+
+            mimick_prompt = "Please repeat each user's speech, including voice style and speech content."
+            
+            audio_urls = [
+                'https://huggingface.co/openbmb/MiniCPM-o-2_6/resolve/main/assets/input_examples/Trump_WEF_2018_10s.mp3',
+                'https://huggingface.co/openbmb/MiniCPM-o-2_6/resolve/main/assets/input_examples/cxk_original.wav',
+                'https://huggingface.co/openbmb/MiniCPM-o-2_6/resolve/main/assets/input_examples/fast-pace.wav',
+                'https://huggingface.co/openbmb/MiniCPM-o-2_6/resolve/main/assets/input_examples/chi-english-1.wav',
+                'https://huggingface.co/openbmb/MiniCPM-o-2_6/resolve/main/assets/input_examples/exciting-emotion.wav'
+            ]
+
+            for audio_url in audio_urls:
+                try:
+                    
+                    response = requests.get(audio_url, stream=True)
+                    response.raise_for_status()
+                    
+                    with tempfile.NamedTemporaryFile(suffix=os.path.splitext(audio_url)[1], delete=False) as temp_file:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            temp_file.write(chunk)
+                        temp_file_path = temp_file.name
+
+                    audio_input, _ = librosa.load(temp_file_path, sr=16000, mono=True)
+                    
+                    msgs = [{'role': 'user', 'content': [mimick_prompt, audio_input]}]
+                    
+                    output_audio_path = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
+                    
+                    res = self.model.chat(
+                        msgs=msgs,
+                        tokenizer=self.tokenizer,
+                        sampling=True,
+                        max_new_tokens=128,
+                        use_tts_template=True,
+                        temperature=0.3,
+                        generate_audio=True,
+                        output_audio_path=output_audio_path
+                    )
+
+                    self.assertIsNotNone(res, "Mimic response should not be empty")
+                    self.assertTrue(os.path.exists(output_audio_path), "Output audio file should exist")
+                    self.assertTrue(sf.info(output_audio_path).frames > 0, "Generated audio file should not be empty")
+
+                except requests.exceptions.RequestException as e:
+                    self.skipTest(f"Failed to download audio file: {str(e)}")
+                except Exception as e:
+                    self.fail(f"Failed to process audio file: {str(e)}")
+                finally:
+                    if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
+                        os.remove(temp_file_path)
+                    if 'output_audio_path' in locals() and os.path.exists(output_audio_path):
+                        os.remove(output_audio_path)
+
+        except Exception as e:
+            self.fail(f"Audio mimick test failed: {str(e)}")
+
+    @slow
+    @require_vision
+    @require_sentencepiece
+    @require_tokenizers
+    def test_single_image_inference(self):
+        try:
+            image_url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+            response = requests.get(image_url, stream=True)
+            response.raise_for_status()
+            
+            image = Image.open(BytesIO(response.content)).convert('RGB')
+            question = 'What is in the image?'
+            
+            msgs = [{'role': 'user', 'content': [image, question]}]
+        
+            res = self.model.chat(
+                image=None,
+                msgs=msgs,
+                tokenizer=self.tokenizer
+            )
+            
+            self.assertIsNotNone(res, "Normal inference response should not be empty")
+            self.assertTrue(len(res) > 0, "Normal inference response text should not be empty")
+            
+            res = self.model.chat(
+                msgs=msgs,
+                tokenizer=self.tokenizer,
+                sampling=True,
+                stream=True
+            )
+            
+            generated_text = ""
+            for new_text in res:
+                generated_text += new_text
+                self.assertIsNotNone(new_text, "Each part of streaming reasoning should not be empty")
+            
+            self.assertTrue(len(generated_text) > 0, "Text should not be empty")
+            
+        except requests.exceptions.RequestException as e:
+            self.skipTest(f"Failed to download image: {str(e)}")
+        except Exception as e:
+            self.fail(f"Single image inference test failed: {str(e)}")
+        
         

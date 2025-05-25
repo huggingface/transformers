@@ -73,13 +73,13 @@ class MiniCPM_o_2_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         shutil.rmtree(self.tmpdirname, ignore_errors=True)
 
     def prepare_image_inputs(self):
-        """准备测试用的图像输入"""
+        """Preparing the image input for testing"""
         image_url = "https://www.ilankelman.org/stopsigns/australia.jpg"
         image = Image.open(requests.get(image_url, stream=True).raw)
         return image
 
     def prepare_audio_inputs(self):
-        """准备测试用的音频输入"""
+        """Preparing the audio input for testing"""
         audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"
         try:
             audio, _ = librosa.load(audio_url, sr=16000)
@@ -89,7 +89,7 @@ class MiniCPM_o_2_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return np.random.rand(160000) * 2 - 1  # 模拟1秒的音频
 
     def test_save_load_pretrained_default(self):
-        """测试保存和加载预训练模型"""
+        """Test saving and loading pretrained models"""
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
@@ -107,7 +107,7 @@ class MiniCPM_o_2_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
 
     def test_image_processor(self):
-        """测试图像处理功能"""
+        """Testing image processing functions"""
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
@@ -125,7 +125,7 @@ class MiniCPM_o_2_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_processor(self):
-        """测试整体处理功能"""
+        """Testing overall processing functions"""
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
@@ -135,7 +135,7 @@ class MiniCPM_o_2_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             image_processor=image_processor,
         )
 
-        input_str = "测试文本"
+        input_str = "Test text"
         image_input = self.prepare_image_inputs()
         audio_input = self.prepare_audio_inputs()
         inputs = processor(text=input_str, images=image_input, audios=audio_input)
@@ -157,16 +157,16 @@ class MiniCPM_o_2_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ],
         )
 
-        # 测试没有输入时的情况
+        # no input  
         with pytest.raises(ValueError):
             processor()
 
-        # 测试没有文本输入时的情况
+        # no text input
         with pytest.raises(ValueError):
             processor(images=image_input)
 
     def test_model_input_names(self):
-        """测试模型输入名称"""
+        """Testing model input names"""
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
@@ -176,7 +176,7 @@ class MiniCPM_o_2_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             image_processor=image_processor,
         )
 
-        input_str = "测试文本"
+        input_str = "Test text"
         image_input = self.prepare_image_inputs()
         audio_input = self.prepare_audio_inputs()
 
@@ -184,20 +184,20 @@ class MiniCPM_o_2_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(sorted(inputs.keys()), sorted(processor.model_input_names))
 
     def test_apply_chat_template(self):
-        """测试聊天模板应用"""
+        """Testing chat template application"""
         processor = self.get_processor()
         if processor.chat_template is None:
-            self.skipTest("处理器没有聊天模板")
+            self.skipTest("Processor does not have a chat template")
 
         messages = [
             [
                 {
                     "role": "user",
-                    "content": "你好，请描述这张图片。",
+                    "content": "Please describe this image.",
                 },
                 {
                     "role": "assistant",
-                    "content": "这是一张图片。",
+                    "content": "This is an image.",
                 },
             ]
         ]
@@ -212,11 +212,11 @@ class MiniCPM_o_2_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertListEqual(expected_output, formatted_prompt_tokenized)
 
     def test_audio_processing(self):
-        """测试音频处理功能"""
+        """Testing audio processing functions"""
         processor = self.get_processor()
         audio_input = self.prepare_audio_inputs()
         
-        # 测试音频特征提取
+        # test audio feature extraction
         audio_features = processor.feature_extractor(
             audio_input,
             sampling_rate=16000,
@@ -228,9 +228,9 @@ class MiniCPM_o_2_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIn("input_features", audio_features)
         self.assertIn("attention_mask", audio_features)
         
-        # 测试音频与文本的组合处理
+        # test audio and text combination processing
         inputs = processor(
-            text="描述这段音频",
+            text="Describe this audio",
             audios=audio_input,
             return_tensors="pt",
         )
@@ -240,50 +240,50 @@ class MiniCPM_o_2_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIn("audio_bounds", inputs)
 
     def test_number_to_text_converter(self):
-        """测试数字到文本的转换功能"""
+        """Testing number to text conversion functions"""
         processor = self.get_processor()
         converter = processor.NumberToTextConverter()
         
-        # 测试中文数字转换
+        # test chinese number conversion
         chinese_text = converter.replace_numbers_with_text("我有2个苹果", language="chinese")
         self.assertEqual(chinese_text, "我有两个苹果")
         
-        # 测试英文数字转换
+        # test english number conversion
         english_text = converter.replace_numbers_with_text("I have 23 books", language="english")
         self.assertEqual(english_text, "I have two three books")
         
-        # 测试自动语言检测
+        # test automatic language detection
         mixed_text = converter.replace_numbers_with_text("我有3个苹果和4个梨")
         self.assertIn("三", mixed_text)
         self.assertIn("四", mixed_text)
 
     def test_voice_checker(self):
-        """测试语音检查功能"""
+        """Testing voice checking functions"""
         processor = self.get_processor()
         checker = processor.VoiceChecker()
         
-        # 测试静音检测
-        silent_audio = np.zeros(16000)  # 1秒的静音
-        mel_spec = np.random.rand(100, 100)  # 模拟梅尔频谱图
+        # test silent detection
+        silent_audio = np.zeros(16000)  # 1 second of silence
+        mel_spec = np.random.rand(100, 100)  # simulate mel spectrogram
         is_bad = checker.is_bad(silent_audio, mel_spec)
         self.assertTrue(is_bad)
         
-        # 测试正常音频
-        normal_audio = np.random.rand(16000) * 2 - 1  # 1秒的正常音频
+        # test normal audio
+        normal_audio = np.random.rand(16000) * 2 - 1  # 1 second of normal audio
         is_bad = checker.is_bad(normal_audio, mel_spec)
         self.assertFalse(is_bad)
         
-        # 测试重置功能
+        # test reset function
         checker.reset()
         self.assertIsNone(checker.previous_mel)
         self.assertEqual(checker.consecutive_zeros, 0)
         self.assertEqual(checker.consecutive_low_distance, 0)
 
     def test_image_processor_basic(self):
-        """测试图像处理器的基本功能"""
+        """Testing basic image processor functions"""
         image_processor = self.get_image_processor()
         
-        # 测试图像预处理
+        # test image preprocessing
         image = self.prepare_image_inputs()
         processed = image_processor.preprocess(image)
         
@@ -291,44 +291,44 @@ class MiniCPM_o_2_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIn("image_sizes", processed)
         self.assertIn("tgt_sizes", processed)
         
-        # 测试图像切片功能
+        # test image slicing function
         sliced_images = image_processor.get_sliced_images(image)
         self.assertIsInstance(sliced_images, list)
         self.assertTrue(len(sliced_images) > 0)
         
-        # 测试图像占位符生成
+        # test image placeholder generation
         placeholder = image_processor.get_slice_image_placeholder(image.size)
         self.assertIsInstance(placeholder, str)
         self.assertTrue(len(placeholder) > 0)
 
     def test_image_processor_edge_cases(self):
-        """测试图像处理器的边界情况"""
+        """Testing image processor edge cases"""
         image_processor = self.get_image_processor()
         
-        # 测试空图像列表
+        # test empty image list
         with self.assertRaises(ValueError):
             image_processor.preprocess([])
             
-        # 测试无效图像
+        # test invalid image
         invalid_image = np.zeros((100, 100))
         with self.assertRaises(ValueError):
             image_processor.preprocess(invalid_image)
             
-        # 测试超大图像
+        # test large image
         large_image = Image.new('RGB', (2000, 2000))
         processed = image_processor.preprocess(large_image)
         self.assertIn("pixel_values", processed)
 
     def test_chat_tts_processor(self):
-        """测试ChatTTS处理器功能"""
+        """Testing ChatTTS processor functions"""
         processor = self.get_processor()
         tts_processor = processor.ChatTTSProcessor(processor.tokenizer)
         
-        # 准备测试数据
-        text_list = ["测试文本1", "测试文本2"]
+        # prepare test data
+        text_list = ["Test text 1", "Test text 2"]
         audio_list = [np.random.rand(16000) for _ in range(2)]
         
-        # 测试处理功能
+        # test processing function
         outputs = tts_processor(text_list, audio_list)
         
         self.assertIn("tts_input_ids_varlen", outputs)
@@ -337,30 +337,30 @@ class MiniCPM_o_2_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(outputs["tts_input_features_varlen"]), len(audio_list))
 
     def test_mel_spectrogram_features(self):
-        """测试梅尔频谱图特征提取功能"""
+        """Testing mel spectrogram feature extraction functions"""
         processor = self.get_processor()
         mel_processor = processor.MelSpectrogramFeatures()
         
-        # 准备测试音频
-        audio = torch.randn(1, 16000)  # 1秒的音频
+        # prepare test audio
+        audio = torch.randn(1, 16000)  # 1 second of audio
         
-        # 测试特征提取
+        # test feature extraction
         features = mel_processor(audio)
         
         self.assertIsInstance(features, torch.Tensor)
-        self.assertEqual(features.dim(), 2)  # 应该是2维张量
-        self.assertEqual(features.shape[0], 100)  # 梅尔滤波器数量
+        self.assertEqual(features.dim(), 2)  # should be 2D tensor
+        self.assertEqual(features.shape[0], 100)  # mel filter number
 
     def test_batch_processing(self):
-        """测试批处理功能"""
+        """Testing batch processing functions"""
         processor = self.get_processor()
         
-        # 准备批处理数据
-        texts = ["文本1", "文本2", "文本3"]
+        # prepare batch processing data
+        texts = ["Text 1", "Text 2", "Text 3"]
         images = [self.prepare_image_inputs() for _ in range(3)]
         audios = [np.random.rand(16000) for _ in range(3)]
         
-        # 测试批处理
+        # test batch processing
         batch_outputs = processor(
             text=texts,
             images=images,
@@ -368,37 +368,37 @@ class MiniCPM_o_2_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_tensors="pt"
         )
         
-        # 验证输出
+        # verify outputs
         self.assertIn("input_ids", batch_outputs)
         self.assertIn("attention_mask", batch_outputs)
         self.assertIn("pixel_values", batch_outputs)
         self.assertIn("audio_features", batch_outputs)
         
-        # 验证批处理大小
+        # verify batch size
         self.assertEqual(batch_outputs["input_ids"].shape[0], len(texts))
         self.assertEqual(len(batch_outputs["pixel_values"]), len(images))
         self.assertEqual(len(batch_outputs["audio_features"]), len(audios))
 
     def test_error_handling(self):
-        """测试错误处理功能"""
+        """Testing error handling functions"""
         processor = self.get_processor()
         
-        # 测试无效输入
+        # test invalid input
         with self.assertRaises(ValueError):
             processor(text=None, images=None, audios=None)
             
-        # 测试不匹配的输入长度
+        # test mismatch input length
         with self.assertRaises(AssertionError):
             processor(
-                text=["文本1", "文本2"],
+                text=["Text 1", "Text 2"],
                 images=[self.prepare_image_inputs()],
                 audios=[np.random.rand(16000)]
             )
             
-        # 测试无效的音频采样率
+        # test invalid audio sampling rate
         with self.assertRaises(ValueError):
             processor(
-                text="测试文本",
+                text="Test text",
                 audios=np.random.rand(16000),
                 sampling_rate=0
             )
