@@ -20,9 +20,9 @@ from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     group_images_by_shape,
-    reorder_images,
+    reorder_images
 )
-from ...image_utils import PILImageResampling
+from ...image_utils import PILImageResampling, is_torch_tensor
 from ...utils import auto_docstring
 
 
@@ -50,7 +50,6 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         do_center_crop=True,
         crop_size=None,
         do_flip_channel_order=True,
-        input_data_format=None,
         do_convert_rgb=False,
         return_tensors=None,
         do_normalize=None,
@@ -109,9 +108,32 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
             processed_images = torch.stack(processed_images, dim=0)
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+    
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
+        logits = outputs.logits
 
-    def post_process_semantic_segmentation(self, *args, **kwargs):
-        raise NotImplementedError("This method is not implemented for MobileViTImageProcessorFast.")
+        # Resize logits and compute semantic segmentation maps
+        if target_sizes is not None:
+            if len(logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
 
+            if is_torch_tensor(target_sizes):
+                target_sizes = target_sizes.numpy()
+
+            semantic_segmentation = []
+
+            for idx in range(len(logits)):
+                resized_logits = torch.nn.functional.interpolate(
+                    logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                )
+                semantic_map = resized_logits[0].argmax(dim=0)
+                semantic_segmentation.append(semantic_map)
+        else:
+            semantic_segmentation = logits.argmax(dim=1)
+            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+
+        return semantic_segmentation
 
 __all__ = ["MobileViTImageProcessorFast"]
