@@ -1143,7 +1143,10 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         return x
 
     def _merge_input_ids_with_image_features(
-        self, image_features: torch.Tensor, inputs_embeds: Optional[torch.Tensor]
+        self,
+        image_features: torch.Tensor,
+        inputs_embeds: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
     ):
         batch_size, image_token_length = image_features.size()[:-1]
         device = image_features.device
@@ -1155,14 +1158,12 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             return image_features, image_attention_mask
 
         task_prefix_embeds = inputs_embeds
-        task_prefix_attention_mask = torch.ones(batch_size, task_prefix_embeds.size(1), device=device)
-
-        if len(task_prefix_attention_mask.shape) == 3:
-            task_prefix_attention_mask = task_prefix_attention_mask[:, 0]
+        if attention_mask is None:
+            attention_mask = torch.ones(batch_size, task_prefix_embeds.size(1), device=device)
 
         # concat [image embeds, task prefix embeds]
         inputs_embeds = torch.cat([image_features, task_prefix_embeds], dim=1)
-        attention_mask = torch.cat([image_attention_mask, task_prefix_attention_mask], dim=1)
+        attention_mask = torch.cat([image_attention_mask, attention_mask], dim=1)
 
         return inputs_embeds, attention_mask
 
@@ -1306,6 +1307,8 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
                 inputs_embeds, attention_mask = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds
                 )
+
+        kwargs["attention_mask"] = attention_mask
 
         return self.language_model.generate(input_ids=None, inputs_embeds=inputs_embeds, **kwargs)
 

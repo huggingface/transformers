@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Florence2 model."""
 
-import gc
 import unittest
 
 import requests
@@ -29,6 +28,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_torch,
     require_vision,
     slow,
@@ -300,116 +300,88 @@ class Florence2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         pass
 
 
+def prepare_img():
+    url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg?download=true"
+    image = Image.open(requests.get(url, stream=True).raw)
+    return image
+
+
+@require_vision
 @require_torch
+@slow
 class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("microsoft/Florence-2-base")
+        self.model_name = "microsoft/Florence-2-base"
+        self.model_name = "/Users/ducviet00/WORK/hf_models/Florence-2-base"
+        self.processor = AutoProcessor.from_pretrained(self.model_name)
 
-    def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
-
-    @slow
-    def test_small_model_integration_test(self):
-        model = Florence2ForConditionalGeneration.from_pretrained("microsoft/Florence-2-base")
-
-        prompt = "<CAPTION>"
-        image_file = (
-            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg"
-        )
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt")
-
-        EXPECTED_INPUT_IDS = torch.tensor([[0, 2264, 473, 5, 2274, 6190, 116, 2]])  # fmt: skip
-        self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
-
-        output = model.generate(**inputs, max_new_tokens=20)
-        EXPECTED_DECODED_TEXT = "A green car parked in front of a yellow building."  # fmt: skip
-
-        self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    def test_small_model_integration_test_florence_single(self):
-        model_id = "microsoft/Florence-2-base"
-
-        model = Florence2ForConditionalGeneration.from_pretrained("microsoft/Florence-2-base")
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        prompt = "<CAPTION>"
-        image_file = (
-            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg"
-        )
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = processor(images=raw_image, text=prompt, return_tensors="pt")
-
-        output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
-        EXPECTED_DECODED_TEXT = "A green car parked in front of a yellow building."  # fmt: skip
-
-        self.assertEqual(
-            processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    def test_small_model_integration_test_batch(self):
-        model = Florence2ForConditionalGeneration.from_pretrained("microsoft/Florence-2-base")
-        prompts = [
-            "<CAPTION>",
-            "<CAPTION>",
-        ]
-        image1 = Image.open(
+        self.image1 = Image.open(
             requests.get(
-                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg",
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg?download=true",
                 stream=True,
             ).raw
         )
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-
-        inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True)
-
-        output = model.generate(**inputs, max_new_tokens=20)
-
-        EXPECTED_DECODED_TEXT = ['A green car parked in front of a yellow building.', 'Two cats laying on a pink couch next to a remote control.']  # fmt: skip
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+        self.image2 = Image.open(
+            requests.get(
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg?download=true",
+                stream=True,
+            ).raw
         )
 
-    @slow
-    @require_torch
-    @require_vision
-    def test_batched_generation(self):
-        model = Florence2ForConditionalGeneration.from_pretrained("microsoft/Florence-2-base").to(torch_device)
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
 
-        processor = AutoProcessor.from_pretrained("microsoft/Florence-2-base")
+    def test_inference_base(self):
+        model = Florence2ForConditionalGeneration.from_pretrained(self.model_name, torch_dtype=torch.float16).to(
+            torch_device
+        )
 
-        prompt1 = "<CAPTION>"
-        prompt2 = "<CAPTION>"
-        prompt3 = "<CAPTION>"
-        url1 = "https://images.unsplash.com/photo-1552053831-71594a27632d?q=80&w=3062&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-        url2 = "https://images.unsplash.com/photo-1617258683320-61900b281ced?q=80&w=3087&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-        image1 = Image.open(requests.get(url1, stream=True).raw)
-        image2 = Image.open(requests.get(url2, stream=True).raw)
+        prompt = "<DETAILED_CAPTION>"
+        inputs = self.processor(images=self.image1, text=prompt, return_tensors="pt")
+        inputs.to(device=torch_device, dtype=torch.float16)
 
-        inputs = processor(
-            images=[image1, image2, image1, image2],
-            text=[prompt1, prompt1, prompt2, prompt3],
-            return_tensors="pt",
-            padding=True,
+        EXPECTED_INPUT_IDS = [[0, 47066, 21700, 11, 4617, 99, 16, 2343, 11, 5, 2274, 4, 2]]  # fmt: skip
+        self.assertTrue(inputs["input_ids"].tolist(), EXPECTED_INPUT_IDS)
+
+        predictions = model.generate(**inputs, max_new_tokens=100)
+
+        EXPECTED_PREDICTION_IDS = [[2, 0, 133, 2274, 924, 10, 912, 1203, 2828, 15, 5, 526, 9, 10, 2014, 11, 35910, 6, 188, 469, 412, 4, 20, 2014, 16, 9321, 19, 3413, 6, 3980, 6, 8, 19638, 6, 8, 89, 32, 82, 3051, 15, 5, 2767, 22609, 4, 20, 6360, 16, 7097, 11, 5, 3618, 4, 2]]  # fmt: skip
+        self.assertTrue(predictions.tolist(), EXPECTED_PREDICTION_IDS)
+
+        generated_text = self.processor.batch_decode(predictions, skip_special_tokens=True)[0]
+
+        EXPECTED_GENERATED_TEXT = "The image shows a stop sign sitting on the side of a street in Chinatown, New York City. The street is lined with buildings, trees, and statues, and there are people walking on the footpath. The sky is visible in the background."  # fmt: skip
+        self.assertEqual(generated_text, EXPECTED_GENERATED_TEXT)
+
+    def test_batch_inference_base(self):
+        model = Florence2ForConditionalGeneration.from_pretrained(
+            self.model_name, attn_implementation="eager", torch_dtype=torch.float16
         ).to(torch_device)
 
-        model = model.eval()
+        images = [self.image1, self.image2]
+        prompts = ["<CAPTION>", "<DETAILED_CAPTION>"]
+        inputs = self.processor(images=images, text=prompts, padding="longest", return_tensors="pt")
 
-        EXPECTED_OUTPUT = [
-            "A dog sitting on a patio holding a flower in its mouth.",
-            "A baby llama standing on top of a hill.",
-            "A dog sitting on a patio holding a flower in its mouth.",
-            "A baby llama standing on top of a hill.",
-        ]
+        EXPECTED_INPUT_IDS = [
+            [0,  2264,   473,  5, 2274, 6190, 116,    2,  1, 1,    1, 1, 1],
+            [0, 47066, 21700, 11, 4617,   99,  16, 2343, 11, 5, 2274, 4, 2],
+        ]  # fmt: skip
+        self.assertTrue(inputs["input_ids"].tolist(), EXPECTED_INPUT_IDS)
 
-        generate_ids = model.generate(**inputs, max_new_tokens=20)
-        outputs = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        self.assertEqual(outputs, EXPECTED_OUTPUT)
+        inputs.to(device=torch_device, dtype=torch.float16)
+        print(inputs)
+        predictions = model.generate(**inputs, max_new_tokens=100)
+
+        EXPECTED_PREDICTION_IDS = [
+            [2, 0, 250,  912, 1203, 2828,   15,     5,   526,    9, 10, 2014, 4,  2,    1,   1,  1,  1,    1,    1, 1,    1,  1,    1, 1,  1,   1,    1,    1, 1, 1],
+            [2, 0, 133, 2274,  924,   10, 2272, 10685, 41537, 9181, 11,  760, 9, 10, 5718, 745, 19, 80, 6219, 4259, 6, 7501, 30, 3980, 8, 10, 699, 2440, 6360, 4, 2]
+        ]  # fmt: skip
+        self.assertTrue(predictions.tolist(), EXPECTED_PREDICTION_IDS)
+
+        generated_texts = self.processor.batch_decode(predictions, skip_special_tokens=True)
+
+        EXPECTED_GENERATED_TEXTS = [
+            "A stop sign sitting on the side of a street.",
+            "The image shows a green Volkswagen Beetle parked in front of a yellow building with two brown doors, surrounded by trees and a clear blue sky.",
+        ]  # fmt: skip
+        self.assertEqual(generated_texts, EXPECTED_GENERATED_TEXTS)
