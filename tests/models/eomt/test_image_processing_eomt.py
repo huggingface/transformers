@@ -68,7 +68,6 @@ class EoMTImageProcessingTester:
             class_queries_logits=torch.randn((batch_size, self.num_queries, self.num_classes + 1)),
         )
 
-
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
             batch_size=self.batch_size,
@@ -178,7 +177,7 @@ class EoMTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         original_sizes = [image.size[::-1]]
 
         # For semantic segmentation, the BS of output is 2 coz, two crops are created.
-        outputs = self.image_processor_tester.prepare_fake_eomt_outputs(inputs['pixel_values'].shape[0])
+        outputs = self.image_processor_tester.prepare_fake_eomt_outputs(inputs["pixel_values"].shape[0])
         segmentation = processor.post_process_semantic_segmentation(outputs, crops_offset, original_sizes)
 
         self.assertEqual(segmentation.shape, (image.height, image.width))
@@ -187,7 +186,7 @@ class EoMTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         processor = self.image_processing_class(**self.image_processor_dict)
         image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
-        original_sizes = [image.size[::-1],image.size[::-1]]
+        original_sizes = [image.size[::-1], image.size[::-1]]
 
         # lets test for batched input of 2
         outputs = self.image_processor_tester.prepare_fake_eomt_outputs(2)
@@ -204,7 +203,7 @@ class EoMTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         processor = self.image_processing_class(**self.image_processor_dict)
         image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
-        original_sizes = [image.size[::-1],image.size[::-1]]
+        original_sizes = [image.size[::-1], image.size[::-1]]
 
         # lets test for batched input of 2
         outputs = self.image_processor_tester.prepare_fake_eomt_outputs(2)
@@ -216,4 +215,3 @@ class EoMTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue("segments_info" in el)
             self.assertEqual(type(el["segments_info"]), list)
             self.assertEqual(el["segmentation"].shape, (image.height, image.width))
-
