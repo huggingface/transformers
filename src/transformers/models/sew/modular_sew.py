@@ -15,56 +15,48 @@
 """PyTorch SEW model."""
 
 import math
+import warnings
 from typing import Optional, Tuple, Union
 
 import torch
+import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-)
-from ..bart.modeling_bart import BartAttention, BartFlashAttention2, BartSdpaAttention
-from ..hubert.modeling_hubert import HubertPreTrainedModel
+from ...modeling_outputs import BaseModelOutput
+from ...modeling_utils import PreTrainedModel
+from ...utils import auto_docstring
 from ..wav2vec2.modeling_wav2vec2 import (
+    Wav2Vec2Attention,
     Wav2Vec2EncoderLayer,
     Wav2Vec2FeatureEncoder,
+    Wav2Vec2FeedForward,
     Wav2Vec2ForCTC,
     Wav2Vec2ForSequenceClassification,
-    Wav2Vec2Model,
+    Wav2Vec2GroupNormConvLayer,
+    Wav2Vec2LayerNormConvLayer,
+    Wav2Vec2NoLayerNormConvLayer,
     Wav2Vec2SamePadLayer,
+    _compute_mask_indices,
 )
 from .configuration_sew import SEWConfig
 
 
-logger = logging.get_logger(__name__)
-
-
 _HIDDEN_STATES_START_POSITION = 1
 
-# General docstring
-_CONFIG_FOR_DOC = "SEWConfig"
 
-# Base docstring
-_CHECKPOINT_FOR_DOC = "asapp/sew-tiny-100k-ft-ls100h"
-_EXPECTED_OUTPUT_SHAPE = [1, 292, 512]
+class SEWNoLayerNormConvLayer(Wav2Vec2NoLayerNormConvLayer):
+    pass
 
-# CTC docstring
-_CTC_EXPECTED_OUTPUT = (
-    "'MISTER QUILTER IS THE APPOSTILE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPOLLE'"
-)
-_CTC_EXPECTED_LOSS = 0.42
 
-# Audio class docstring
-_SEQ_CLASS_CHECKPOINT = "anton-l/sew-mid-100k-ft-keyword-spotting"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
-_SEQ_CLASS_EXPECTED_LOSS = 9.52
+class SEWLayerNormConvLayer(Wav2Vec2LayerNormConvLayer):
+    pass
+
+
+class SEWGroupNormConvLayer(Wav2Vec2GroupNormConvLayer):
+    pass
 
 
 class SEWPositionalConvEmbedding(nn.Module):
@@ -140,15 +132,22 @@ class SEWFeatureEncoder(Wav2Vec2FeatureEncoder):
     pass
 
 
-class SEWAttention(BartAttention):
+class SEWFeatureExtractor(SEWFeatureEncoder):
+    def __init__(self, config):
+        super().__init__(config)
+        warnings.warn(
+            f"The class `{self.__class__.__name__}` has been depreciated "
+            "and will be removed in Transformers v5. "
+            f"Use `{self.__class__.__bases__[0].__name__}` instead.",
+            FutureWarning,
+        )
+
+
+class SEWAttention(Wav2Vec2Attention):
     pass
 
 
-class SEWFlashAttention2(BartFlashAttention2):
-    pass
-
-
-class SEWSdpaAttention(BartSdpaAttention):
+class SEWFeedForward(Wav2Vec2FeedForward):
     pass
 
 
@@ -167,7 +166,6 @@ class SEWEncoder(nn.Module):
         self.layers = nn.ModuleList([SEWEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.upsample = SEWUpsampling(config)
         self.gradient_checkpointing = False
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     def forward(
         self,
@@ -182,7 +180,7 @@ class SEWEncoder(nn.Module):
 
         if attention_mask is not None:
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-            if self._use_flash_attention_2:
+            if self.config._attn_implementation == "flash_attention_2":
                 # make sure padded tokens output 0
                 hidden_states[~expand_attention_mask] = 0.0
                 # 2d mask is passed through the layers
@@ -267,18 +265,15 @@ class SEWEncoder(nn.Module):
         )
 
 
-class SEWPreTrainedModel(HubertPreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
+@auto_docstring
+class SEWPreTrainedModel(PreTrainedModel):
     config_class = SEWConfig
     base_model_prefix = "sew"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_flex_attn = False  # needs a proper look into the mask creation
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -312,60 +307,38 @@ class SEWPreTrainedModel(HubertPreTrainedModel):
         if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
 
+    def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
+        """
+        Computes the output length of the convolutional layers
+        """
 
-SEW_START_DOCSTRING = r"""
-    SEW was proposed in [Performance-Efficiency Trade-offs in Unsupervised Pre-training for Speech
-    Recognition](https://arxiv.org/abs/2109.06870) by Felix Wu, Kwangyoun Kim, Jing Pan, Kyu Han, Kilian Q. Weinberger,
-    Yoav Artzi.
+        def _conv_out_length(input_length, kernel_size, stride):
+            # 1D convolutional layer output length formula taken
+            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
 
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving etc.).
+        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
+            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
 
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
+        return input_lengths
 
-    Parameters:
-        config ([`SEWConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
+    def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
+        output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+        batch_size = attention_mask.shape[0]
 
-
-SEW_INPUTS_DOCSTRING = r"""
-    Args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
-        attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-            1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
+        attention_mask = torch.zeros(
+            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
+        )
+        # these two operations makes sure that all values before the output lengths idxs are attended to
+        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
+        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
+        return attention_mask
 
 
-@add_start_docstrings(
-    "The bare SEW Model transformer outputting raw hidden-states without any specific head on top.",
-    SEW_START_DOCSTRING,
-)
-class SEWModel(Wav2Vec2Model, nn.Module):
+@auto_docstring
+class SEWModel(SEWPreTrainedModel):
     def __init__(self, config: SEWConfig):
-        nn.Module.__init__(config)
+        super().__init__(config)
         self.config = config
         self.feature_extractor = SEWFeatureEncoder(config)
         self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
@@ -383,20 +356,54 @@ class SEWModel(Wav2Vec2Model, nn.Module):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def freeze_feature_extractor(self):
-        raise AttributeError("Not needed for SEW")
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
+    def _mask_hidden_states(
+        self,
+        hidden_states: torch.FloatTensor,
+        mask_time_indices: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+    ):
+        """
+        Masks extracted features along time axis and/or along feature axis according to
+        [SpecAugment](https://arxiv.org/abs/1904.08779).
+        """
 
-    def freeze_feature_encoder(self):
-        raise AttributeError("Not needed for SEW")
+        # `config.apply_spec_augment` can set masking to False
+        if not getattr(self.config, "apply_spec_augment", True):
+            return hidden_states
 
-    @add_start_docstrings_to_model_forward(SEW_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+        # generate indices & apply SpecAugment along time axis
+        batch_size, sequence_length, hidden_size = hidden_states.size()
+
+        if mask_time_indices is not None:
+            # apply SpecAugment along time axis with given mask_time_indices
+            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+        elif self.config.mask_time_prob > 0 and self.training:
+            mask_time_indices = _compute_mask_indices(
+                (batch_size, sequence_length),
+                mask_prob=self.config.mask_time_prob,
+                mask_length=self.config.mask_time_length,
+                attention_mask=attention_mask,
+                min_masks=self.config.mask_time_min_masks,
+            )
+            mask_time_indices = torch.tensor(mask_time_indices, device=hidden_states.device, dtype=torch.bool)
+            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+
+        if self.config.mask_feature_prob > 0 and self.training:
+            # generate indices & apply SpecAugment along feature axis
+            mask_feature_indices = _compute_mask_indices(
+                (batch_size, hidden_size),
+                mask_prob=self.config.mask_feature_prob,
+                mask_length=self.config.mask_feature_length,
+                min_masks=self.config.mask_feature_min_masks,
+            )
+            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)
+            mask_feature_indices = mask_feature_indices[:, None].expand(-1, sequence_length, -1)
+            hidden_states[mask_feature_indices] = 0
+
+        return hidden_states
+
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -406,6 +413,11 @@ class SEWModel(Wav2Vec2Model, nn.Module):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
+        r"""
+        mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
+            masked extracted features in *config.proj_codevector_dim* space.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -446,46 +458,12 @@ class SEWModel(Wav2Vec2Model, nn.Module):
         )
 
 
-@add_start_docstrings(
-    """SEW Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
-    SEW_START_DOCSTRING,
-)
 class SEWForCTC(Wav2Vec2ForCTC):
     pass
 
-    @add_start_docstrings_to_model_forward(SEW_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_CTC_EXPECTED_OUTPUT,
-        expected_loss=_CTC_EXPECTED_LOSS,
-    )
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
 
-
-@add_start_docstrings(
-    """
-    SEW Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like SUPERB
-    Keyword Spotting.
-    """,
-    SEW_START_DOCSTRING,
-)
 class SEWForSequenceClassification(Wav2Vec2ForSequenceClassification):
     pass
-
-    @add_start_docstrings_to_model_forward(SEW_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_SEQ_CLASS_CHECKPOINT,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
-    )
-    def forward(self, **super_kwargs):
-        super().forward(**super_kwargs)
 
 
 __all__ = ["SEWForCTC", "SEWForSequenceClassification", "SEWModel", "SEWPreTrainedModel"]

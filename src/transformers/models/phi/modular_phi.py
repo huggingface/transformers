@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 
 from ...cache_utils import Cache, DynamicCache
+from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -20,6 +21,7 @@ from ..llama.modeling_llama import (
     LlamaForTokenClassification,
     LlamaModel,
     LlamaPreTrainedModel,
+    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,  # copied from Llama
 )
@@ -94,13 +96,7 @@ class PhiAttention(LlamaAttention):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -170,8 +166,24 @@ class PhiDecoderLayer(nn.Module):
         return outputs
 
 
-class PhiPreTrainedModel(LlamaPreTrainedModel):
+class PhiRotaryEmbedding(LlamaRotaryEmbedding):
     pass
+
+
+class PhiPreTrainedModel(LlamaPreTrainedModel):
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
 
 
 class PhiModel(LlamaModel):
@@ -227,8 +239,12 @@ class PhiModel(LlamaModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+        causal_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
         )
 
         inputs_embeds = self.embed_dropout(inputs_embeds)  # diff with Llama

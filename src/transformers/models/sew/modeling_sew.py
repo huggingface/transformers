@@ -21,7 +21,7 @@
 
 import math
 import warnings
-from typing import Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -31,29 +31,87 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
-from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
-from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-)
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import auto_docstring, logging
 from .configuration_sew import SEWConfig
-
-
-if is_flash_attn_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
 
-# Base docstring
-_CHECKPOINT_FOR_DOC = "asapp/sew-tiny-100k-ft-ls100h"
 
-# General docstring
-_CONFIG_FOR_DOC = "SEWConfig"
+class SEWNoLayerNormConvLayer(nn.Module):
+    def __init__(self, config, layer_id=0):
+        super().__init__()
+        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
+        self.out_conv_dim = config.conv_dim[layer_id]
+
+        self.conv = nn.Conv1d(
+            self.in_conv_dim,
+            self.out_conv_dim,
+            kernel_size=config.conv_kernel[layer_id],
+            stride=config.conv_stride[layer_id],
+            bias=config.conv_bias,
+        )
+        self.activation = ACT2FN[config.feat_extract_activation]
+
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
+
+
+class SEWLayerNormConvLayer(nn.Module):
+    def __init__(self, config, layer_id=0):
+        super().__init__()
+        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
+        self.out_conv_dim = config.conv_dim[layer_id]
+
+        self.conv = nn.Conv1d(
+            self.in_conv_dim,
+            self.out_conv_dim,
+            kernel_size=config.conv_kernel[layer_id],
+            stride=config.conv_stride[layer_id],
+            bias=config.conv_bias,
+        )
+        self.layer_norm = nn.LayerNorm(self.out_conv_dim, elementwise_affine=True)
+        self.activation = ACT2FN[config.feat_extract_activation]
+
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+
+        hidden_states = hidden_states.transpose(-2, -1)
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = hidden_states.transpose(-2, -1)
+
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
+
+
+class SEWGroupNormConvLayer(nn.Module):
+    def __init__(self, config, layer_id=0):
+        super().__init__()
+        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
+        self.out_conv_dim = config.conv_dim[layer_id]
+
+        self.conv = nn.Conv1d(
+            self.in_conv_dim,
+            self.out_conv_dim,
+            kernel_size=config.conv_kernel[layer_id],
+            stride=config.conv_stride[layer_id],
+            bias=config.conv_bias,
+        )
+        self.activation = ACT2FN[config.feat_extract_activation]
+
+        self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
+
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
 
 
 class SEWPositionalConvEmbedding(nn.Module):
@@ -132,78 +190,6 @@ class SEWUpsampling(nn.Module):
         return hidden_states
 
 
-class SEWNoLayerNormConvLayer(nn.Module):
-    def __init__(self, config, layer_id=0):
-        super().__init__()
-        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
-        self.out_conv_dim = config.conv_dim[layer_id]
-
-        self.conv = nn.Conv1d(
-            self.in_conv_dim,
-            self.out_conv_dim,
-            kernel_size=config.conv_kernel[layer_id],
-            stride=config.conv_stride[layer_id],
-            bias=config.conv_bias,
-        )
-        self.activation = ACT2FN[config.feat_extract_activation]
-
-    def forward(self, hidden_states):
-        hidden_states = self.conv(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        return hidden_states
-
-
-class SEWLayerNormConvLayer(nn.Module):
-    def __init__(self, config, layer_id=0):
-        super().__init__()
-        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
-        self.out_conv_dim = config.conv_dim[layer_id]
-
-        self.conv = nn.Conv1d(
-            self.in_conv_dim,
-            self.out_conv_dim,
-            kernel_size=config.conv_kernel[layer_id],
-            stride=config.conv_stride[layer_id],
-            bias=config.conv_bias,
-        )
-        self.layer_norm = nn.LayerNorm(self.out_conv_dim, elementwise_affine=True)
-        self.activation = ACT2FN[config.feat_extract_activation]
-
-    def forward(self, hidden_states):
-        hidden_states = self.conv(hidden_states)
-
-        hidden_states = hidden_states.transpose(-2, -1)
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = hidden_states.transpose(-2, -1)
-
-        hidden_states = self.activation(hidden_states)
-        return hidden_states
-
-
-class SEWGroupNormConvLayer(nn.Module):
-    def __init__(self, config, layer_id=0):
-        super().__init__()
-        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
-        self.out_conv_dim = config.conv_dim[layer_id]
-
-        self.conv = nn.Conv1d(
-            self.in_conv_dim,
-            self.out_conv_dim,
-            kernel_size=config.conv_kernel[layer_id],
-            stride=config.conv_stride[layer_id],
-            bias=config.conv_bias,
-        )
-        self.activation = ACT2FN[config.feat_extract_activation]
-
-        self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
-
-    def forward(self, hidden_states):
-        hidden_states = self.conv(hidden_states)
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        return hidden_states
-
-
 class SEWFeatureEncoder(nn.Module):
     """Construct the features from raw audio waveform"""
 
@@ -248,6 +234,36 @@ class SEWFeatureEncoder(nn.Module):
         return hidden_states
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: Optional[float] = None,
+    dropout: float = 0.0,
+    head_mask: Optional[torch.Tensor] = None,
+    **kwargs,
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+
+    if head_mask is not None:
+        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
+
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class SEWAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -282,9 +298,6 @@ class SEWAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -293,6 +306,9 @@ class SEWAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        # TODO: we need a refactor so that the different attention modules can get their specific kwargs
+        # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -300,10 +316,16 @@ class SEWAttention(nn.Module):
         # for the decoder
         is_cross_attention = key_value_states is not None
 
-        bsz, tgt_len, _ = hidden_states.size()
+        # determine input shapes
+        bsz, tgt_len = hidden_states.shape[:-1]
+        src_len = key_value_states.shape[1] if is_cross_attention else tgt_len
+
+        q_input_shape = (bsz, tgt_len, -1, self.head_dim)
+        kv_input_shape = (bsz, src_len, -1, self.head_dim)
 
         # get query proj
-        query_states = self.q_proj(hidden_states) * self.scaling
+        query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
+
         # get key, value proj
         # `past_key_value[0].shape[2] == key_value_states.shape[1]`
         # is checking that the `sequence_length` of the `past_key_value` is the same as
@@ -318,18 +340,18 @@ class SEWAttention(nn.Module):
             value_states = past_key_value[1]
         elif is_cross_attention:
             # cross_attentions
-            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
+            key_states = self.k_proj(key_value_states).view(*kv_input_shape).transpose(1, 2)
+            value_states = self.v_proj(key_value_states).view(*kv_input_shape).transpose(1, 2)
         elif past_key_value is not None:
             # reuse k, v, self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            key_states = self.k_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
+            value_states = self.v_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
         else:
             # self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            key_states = self.k_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
+            value_states = self.v_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
 
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
@@ -341,301 +363,27 @@ class SEWAttention(nn.Module):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.reshape(*proj_shape)
-        value_states = value_states.reshape(*proj_shape)
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if layer_head_mask is not None:
-            if layer_head_mask.size() != (self.num_heads,):
-                raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
-                    f" {layer_head_mask.size()}"
-                )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to be reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
-        else:
-            attn_weights_reshaped = None
-
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.bmm(attn_probs, value_states)
-
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz * self.num_heads, tgt_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-
-        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned across GPUs when using tensor-parallelism.
-        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
-
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights_reshaped, past_key_value
-
-
-class SEWFlashAttention2(SEWAttention):
-    """
-    SEW flash attention module. This module inherits from `SEWAttention` as the weights of the module stays
-    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
-    flash attention and deal with padding tokens in case the input contains any of them.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
-
-    def _reshape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        # SEWFlashAttention2 attention does not support output_attentions
-        if output_attentions:
-            raise ValueError("SEWFlashAttention2 attention does not support output_attentions")
-
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
-
-        bsz, q_len, _ = hidden_states.size()
-
-        # get query proj
-        query_states = self._reshape(self.q_proj(hidden_states), -1, bsz)
-        # get key, value proj
-        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
-        # is checking that the `sequence_length` of the `past_key_value` is the same as
-        # the provided `key_value_states` to support prefix tuning
-        if (
-            is_cross_attention
-            and past_key_value is not None
-            and past_key_value[0].shape[2] == key_value_states.shape[1]
-        ):
-            # reuse k,v, cross_attentions
-            key_states = past_key_value[0].transpose(1, 2)
-            value_states = past_key_value[1].transpose(1, 2)
-        elif is_cross_attention:
-            # cross_attentions
-            key_states = self._reshape(self.k_proj(key_value_states), -1, bsz)
-            value_states = self._reshape(self.v_proj(key_value_states), -1, bsz)
-        elif past_key_value is not None:
-            # reuse k, v, self_attention
-            key_states = self._reshape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._reshape(self.v_proj(hidden_states), -1, bsz)
-            key_states = torch.cat([past_key_value[0].transpose(1, 2), key_states], dim=1)
-            value_states = torch.cat([past_key_value[1].transpose(1, 2), value_states], dim=1)
-        else:
-            # self_attention
-            key_states = self._reshape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._reshape(self.v_proj(hidden_states), -1, bsz)
-
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_states.transpose(1, 2), value_states.transpose(1, 2))
-
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            kv_seq_len += past_key_value[0].shape[-2]
-
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in the correct dtype just to be sure everything works as expected.
-        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32. (LlamaRMSNorm handles it correctly)
-
-        input_dtype = query_states.dtype
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
-            # Handle the case where the model is quantized
-            elif hasattr(self.config, "_pre_quantization_dtype"):
-                target_dtype = self.config._pre_quantization_dtype
-            else:
-                target_dtype = self.q_proj.weight.dtype
-
-            logger.warning_once(
-                f"The input hidden states seems to be silently casted in float32, this might be related to"
-                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                f" {target_dtype}."
-            )
-
-            query_states = query_states.to(target_dtype)
-            key_states = key_states.to(target_dtype)
-            value_states = value_states.to(target_dtype)
-
-        attn_output = _flash_attention_forward(
+        attn_output, attn_weights = attention_interface(
+            self,
             query_states,
             key_states,
             value_states,
             attention_mask,
-            q_len,
-            dropout=self.dropout if self.training else 0.0,
-            is_causal=self.is_causal,
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            output_attentions=output_attentions,
+            head_mask=layer_head_mask,
+            **kwargs,
         )
 
-        attn_output = attn_output.reshape(bsz, q_len, -1)
+        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
 
         return attn_output, attn_weights, past_key_value
-
-
-class SEWSdpaAttention(SEWAttention):
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        """Input shape: Batch x Time x Channel"""
-        if output_attentions or layer_head_mask is not None:
-            # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once this is implemented.
-            logger.warning_once(
-                "SEWModel is using SEWSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` or `layer_head_mask` not None. Falling back to the manual attention"
-                ' implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(
-                hidden_states,
-                key_value_states=key_value_states,
-                past_key_value=past_key_value,
-                attention_mask=attention_mask,
-                layer_head_mask=layer_head_mask,
-                output_attentions=output_attentions,
-            )
-
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
-
-        bsz, tgt_len, _ = hidden_states.size()
-
-        # get query proj
-        query_states = self.q_proj(hidden_states)
-        # get key, value proj
-        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
-        # is checking that the `sequence_length` of the `past_key_value` is the same as
-        # the provided `key_value_states` to support prefix tuning
-        if (
-            is_cross_attention
-            and past_key_value is not None
-            and past_key_value[0].shape[2] == key_value_states.shape[1]
-        ):
-            # reuse k,v, cross_attentions
-            key_states = past_key_value[0]
-            value_states = past_key_value[1]
-        elif is_cross_attention:
-            # cross_attentions
-            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
-        elif past_key_value is not None:
-            # reuse k, v, self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
-        else:
-            # self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_states, value_states)
-
-        query_states = self._shape(query_states, tgt_len, bsz)
-
-        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
-        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case tgt_len == 1.
-        is_causal = True if self.is_causal and attention_mask is None and tgt_len > 1 else False
-
-        # NOTE: SDPA with memory-efficient backend is currently (torch==2.1.2) bugged when using non-contiguous inputs and a custom attn_mask,
-        # but we are fine here as `_shape` do call `.contiguous()`. Reference: https://github.com/pytorch/pytorch/issues/112577
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=attention_mask,
-            dropout_p=self.dropout if self.training else 0.0,
-            is_causal=is_causal,
-        )
-
-        if attn_output.size() != (bsz, self.num_heads, tgt_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.transpose(1, 2)
-
-        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned across GPUs when using tensor-parallelism.
-        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
-
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, None, past_key_value
 
 
 class SEWFeedForward(nn.Module):
@@ -662,21 +410,15 @@ class SEWFeedForward(nn.Module):
         return hidden_states
 
 
-SEW_ATTENTION_CLASSES = {
-    "eager": SEWAttention,
-    "sdpa": SEWSdpaAttention,
-    "flash_attention_2": SEWFlashAttention2,
-}
-
-
 class SEWEncoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = SEW_ATTENTION_CLASSES[config._attn_implementation](
+        self.attention = SEWAttention(
             embed_dim=config.hidden_size,
             num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=False,
+            config=config,
         )
 
         self.dropout = nn.Dropout(config.hidden_dropout)
@@ -715,7 +457,6 @@ class SEWEncoder(nn.Module):
         self.layers = nn.ModuleList([SEWEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.upsample = SEWUpsampling(config)
         self.gradient_checkpointing = False
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     def forward(
         self,
@@ -730,7 +471,7 @@ class SEWEncoder(nn.Module):
 
         if attention_mask is not None:
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-            if self._use_flash_attention_2:
+            if self.config._attn_implementation == "flash_attention_2":
                 # make sure padded tokens output 0
                 hidden_states[~expand_attention_mask] = 0.0
                 # 2d mask is passed through the layers
@@ -815,18 +556,15 @@ class SEWEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class SEWPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = SEWConfig
     base_model_prefix = "sew"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_flex_attn = False  # needs a proper look into the mask creation
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1007,59 +745,7 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-_EXPECTED_OUTPUT_SHAPE = [1, 292, 512]
-
-
-SEW_START_DOCSTRING = r"""
-    SEW was proposed in [Performance-Efficiency Trade-offs in Unsupervised Pre-training for Speech
-    Recognition](https://arxiv.org/abs/2109.06870) by Felix Wu, Kwangyoun Kim, Jing Pan, Kyu Han, Kilian Q. Weinberger,
-    Yoav Artzi.
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving etc.).
-
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`SEWConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-SEW_INPUTS_DOCSTRING = r"""
-    Args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
-        attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-            1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare SEW Model transformer outputting raw hidden-states without any specific head on top.",
-    SEW_START_DOCSTRING,
-)
+@auto_docstring
 class SEWModel(SEWPreTrainedModel):
     def __init__(self, config: SEWConfig):
         super().__init__(config)
@@ -1080,6 +766,7 @@ class SEWModel(SEWPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_hidden_states(
         self,
         hidden_states: torch.FloatTensor,
@@ -1126,14 +813,7 @@ class SEWModel(SEWPreTrainedModel):
 
         return hidden_states
 
-    @add_start_docstrings_to_model_forward(SEW_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1143,6 +823,11 @@ class SEWModel(SEWPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
+        r"""
+        mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
+            masked extracted features in *config.proj_codevector_dim* space.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1185,19 +870,20 @@ class SEWModel(SEWPreTrainedModel):
 
 _HIDDEN_STATES_START_POSITION = 1
 
-# CTC docstring
-_CTC_EXPECTED_OUTPUT = (
-    "'MISTER QUILTER IS THE APPOSTILE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPOLLE'"
-)
-_CTC_EXPECTED_LOSS = 0.42
 
-
-@add_start_docstrings(
-    """SEW Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
-    SEW_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    SEW Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
+    """
 )
 class SEWForCTC(SEWPreTrainedModel):
     def __init__(self, config, target_lang: Optional[str] = None):
+        r"""
+        target_lang (`str`, *optional*):
+            Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
+            adapter.<lang>.bin. Only relevant when using an instance of [`SEWForCTC`] with adapters. Uses 'eng' by
+            default.
+        """
         super().__init__(config)
 
         self.sew = SEWModel(config)
@@ -1268,14 +954,7 @@ class SEWForCTC(SEWPreTrainedModel):
         for param in self.sew.parameters():
             param.requires_grad = False
 
-    @add_start_docstrings_to_model_forward(SEW_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_CTC_EXPECTED_OUTPUT,
-        expected_loss=_CTC_EXPECTED_LOSS,
-    )
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1347,18 +1026,11 @@ class SEWForCTC(SEWPreTrainedModel):
         )
 
 
-# Audio class docstring
-_SEQ_CLASS_CHECKPOINT = "anton-l/sew-mid-100k-ft-keyword-spotting"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
-_SEQ_CLASS_EXPECTED_LOSS = 9.52
-
-
-@add_start_docstrings(
+@auto_docstring(
+    custom_intro="""
+    SEW Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like
+    SUPERB Keyword Spotting.
     """
-    SEW Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like SUPERB
-    Keyword Spotting.
-    """,
-    SEW_START_DOCSTRING,
 )
 class SEWForSequenceClassification(SEWPreTrainedModel):
     def __init__(self, config):
@@ -1405,15 +1077,7 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
         for param in self.sew.parameters():
             param.requires_grad = False
 
-    @add_start_docstrings_to_model_forward(SEW_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_SEQ_CLASS_CHECKPOINT,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
-    )
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1424,6 +1088,11 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, SequenceClassifierOutput]:
         r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`SEWProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If

@@ -53,7 +53,7 @@ class LlavaProcessor(ProcessorMixin):
             Patch size from the vision tower.
         vision_feature_select_strategy (`str`, *optional*):
             The feature selection strategy used to select the vision feature from the vision backbone.
-            Shoudl be same as in model's config
+            Should be same as in model's config
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
         image_token (`str`, *optional*, defaults to `"<image>"`):
@@ -173,8 +173,10 @@ class LlavaProcessor(ProcessorMixin):
                 sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
                 prompt_strings.append(sample)
 
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

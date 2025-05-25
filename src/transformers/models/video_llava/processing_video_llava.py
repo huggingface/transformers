@@ -40,13 +40,15 @@ class VideoLlavaProcessor(ProcessorMixin):
     Args:
         image_processor ([`VideoLlavaImageProcessor`], *optional*):
             The image processor is a required input.
+        video_processor ([`VideoLlavaVideoProcessor`], *optional*):
+            The video processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
         patch_size (`int`, *optional*, defaults to 14):
             Patch size from the vision tower.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
-            Shoudl be same as in model's config
+            Should be same as in model's config
         image_token (`str`, *optional*, defaults to `"<image>"`):
             Special token used to denote image location.
         video_token (`str`, *optional*, defaults to `"<video>"`):
@@ -58,7 +60,7 @@ class VideoLlavaProcessor(ProcessorMixin):
             extra tokens appended, no need to set this arg.
     """
 
-    attributes = ["image_processor", "tokenizer"]
+    attributes = ["image_processor", "video_processor", "tokenizer"]
     valid_kwargs = [
         "chat_template",
         "patch_size",
@@ -68,11 +70,13 @@ class VideoLlavaProcessor(ProcessorMixin):
         "num_additional_image_tokens",
     ]
     image_processor_class = "VideoLlavaImageProcessor"
+    video_processor_class = "AutoVideoProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(
         self,
         image_processor=None,
+        video_processor=None,
         tokenizer=None,
         patch_size=14,
         vision_feature_select_strategy="default",
@@ -87,7 +91,9 @@ class VideoLlavaProcessor(ProcessorMixin):
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
         self.video_token = tokenizer.video_token if hasattr(tokenizer, "video_token") else video_token
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
+        super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
@@ -148,61 +154,55 @@ class VideoLlavaProcessor(ProcessorMixin):
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **pixel_values_videos** -- Pixel values to be fed to a model. Returned when `videos` is not `None`.
         """
-        data = {}
-        if images is not None or videos is not None:
-            encoded_images = self.image_processor(images=images, videos=videos, return_tensors=return_tensors)
-            data.update(encoded_images)
 
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
-        prompt_strings = text
+        data = {}
+        if images is not None:
+            encoded_images = self.image_processor(images=images, return_tensors=return_tensors)
+            data.update(encoded_images)
 
-        if encoded_images is not None:
-            if "pixel_values_images" in encoded_images.keys():
-                height, width = get_image_size(to_numpy_array(encoded_images.get("pixel_values_images")[0]))
-                num_frames = 1
-
-            if "pixel_values_videos" in encoded_images.keys():
-                one_video = encoded_images.get("pixel_values_videos")[0]
-                if isinstance(encoded_images.get("pixel_values_videos")[0], (list, tuple)):
-                    one_video = np.array(one_video)
-                else:
-                    one_video = to_numpy_array(one_video)
-                height, width = get_image_size(one_video[0])
-                num_frames = one_video.shape[0]  # frame dim is always after batch dim
-
-            num_image_tokens = (height // self.patch_size) * (
-                width // self.patch_size
-            ) + self.num_additional_image_tokens
-            num_video_tokens = num_image_tokens * num_frames
-
-            num_image_tokens = (height // self.patch_size) * (
-                width // self.patch_size
-            ) + self.num_additional_image_tokens
-            num_video_tokens = num_image_tokens * num_frames
+            height, width = get_image_size(to_numpy_array(encoded_images.get("pixel_values_images")[0]))
+            num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
+            num_image_tokens += self.num_additional_image_tokens
             if self.vision_feature_select_strategy == "default":
                 num_image_tokens -= 1
+            text = [sample.replace(self.image_token, self.image_token * num_image_tokens) for sample in text]
 
-            prompt_strings = []
-            for sample in text:
-                sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
-                sample = sample.replace(self.video_token, self.video_token * num_video_tokens)
-                prompt_strings.append(sample)
+        if videos is not None:
+            encoded_videos = self.video_processor(videos=videos, return_tensors=return_tensors)
+            data.update(encoded_videos)
+
+            one_video = encoded_videos.get("pixel_values_videos")[0]
+            if isinstance(encoded_videos.get("pixel_values_videos")[0], (list, tuple)):
+                one_video = np.array(one_video)
+            else:
+                one_video = to_numpy_array(one_video)
+            height, width = get_image_size(one_video[0])
+            num_frames = one_video.shape[0]  # frame dim is always after batch dim
+
+            num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
+            num_image_tokens += self.num_additional_image_tokens
+            num_video_tokens = num_image_tokens * num_frames
+            text = [sample.replace(self.video_token, self.video_token * num_video_tokens) for sample in text]
 
         text_inputs = self.tokenizer(
-            prompt_strings,
-            return_tensors=return_tensors,
+            text,
+            return_tensors=None,
             padding=padding,
             truncation=truncation,
             max_length=max_length,
         )
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
+
         data.update(text_inputs)
 
-        return BatchFeature(data=data)
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

@@ -18,12 +18,7 @@ from ...modeling_outputs import (
     XVectorOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-)
+from ...utils import auto_docstring, logging
 from ..seamless_m4t.modeling_seamless_m4t import _compute_new_attention_mask
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2FeedForward,
@@ -46,18 +41,6 @@ logger = logging.get_logger(__name__)
 
 _HIDDEN_STATES_START_POSITION = 2
 
-# General docstring
-_CONFIG_FOR_DOC = "Wav2Vec2BertConfig"
-
-# Base docstring
-_BASE_CHECKPOINT_FOR_DOC = "facebook/w2v-bert-2.0"
-_PRETRAINED_CHECKPOINT_FOR_DOC = "hf-audio/wav2vec2-bert-CV16-en"
-_EXPECTED_OUTPUT_SHAPE = [1, 146, 1024]
-
-# CTC docstring
-_CTC_EXPECTED_OUTPUT = "'mr quilter is the apostle of the middle classes and we are glad to welcome his gospel'"
-_CTC_EXPECTED_LOSS = 17.04
-
 
 class Wav2Vec2BertRotaryPositionalEmbedding(Wav2Vec2ConformerRotaryPositionalEmbedding, nn.Module):
     def __init__(self, config):
@@ -79,7 +62,9 @@ class Wav2Vec2BertRelPositionalEmbedding(Wav2Vec2ConformerRelPositionalEmbedding
 class Wav2Vec2BertFeatureProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.layer_norm = nn.LayerNorm(config.feature_projection_input_dim, eps=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(
+            config.feature_projection_input_dim, eps=config.layer_norm_eps
+        )
         self.projection = nn.Linear(config.feature_projection_input_dim, config.hidden_size)
         self.dropout = nn.Dropout(config.feat_proj_dropout)
 
@@ -111,7 +96,9 @@ class Wav2Vec2BertConvolutionModule(nn.Module):
     def __init__(self, config):
         super().__init__()
         if (config.conv_depthwise_kernel_size - 1) % 2 == 1:
-            raise ValueError("`config.conv_depthwise_kernel_size` should be a odd number for 'SAME' padding")
+            raise ValueError(
+                "`config.conv_depthwise_kernel_size` should be a odd number for 'SAME' padding"
+            )
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pointwise_conv1 = nn.Conv1d(
             config.hidden_size,
@@ -162,7 +149,9 @@ class Wav2Vec2BertConvolutionModule(nn.Module):
         hidden_states = self.glu(hidden_states)
 
         # Pad the sequence entirely on the left because of causal convolution.
-        hidden_states = torch.nn.functional.pad(hidden_states, (self.depthwise_conv.kernel_size[0] - 1, 0))
+        hidden_states = torch.nn.functional.pad(
+            hidden_states, (self.depthwise_conv.kernel_size[0] - 1, 0)
+        )
 
         # 1D Depthwise Conv
         hidden_states = self.depthwise_conv(hidden_states)
@@ -188,7 +177,9 @@ class Wav2Vec2BertSelfAttention(Wav2Vec2ConformerSelfAttention, nn.Module):
 
         self.head_size = hidden_size // config.num_attention_heads
         self.num_heads = config.num_attention_heads
-        self.position_embeddings_type = config.position_embeddings_type if not is_adapter_attention else None
+        self.position_embeddings_type = (
+            config.position_embeddings_type if not is_adapter_attention else None
+        )
 
         self.linear_q = nn.Linear(hidden_size, hidden_size)
         self.linear_k = nn.Linear(hidden_size, hidden_size)
@@ -208,7 +199,9 @@ class Wav2Vec2BertSelfAttention(Wav2Vec2ConformerSelfAttention, nn.Module):
         if self.position_embeddings_type == "relative_key":
             self.left_max_position_embeddings = config.left_max_position_embeddings
             self.right_max_position_embeddings = config.right_max_position_embeddings
-            num_positions = self.left_max_position_embeddings + self.right_max_position_embeddings + 1
+            num_positions = (
+                self.left_max_position_embeddings + self.right_max_position_embeddings + 1
+            )
             self.distance_embedding = nn.Embedding(num_positions, self.head_size)
 
     def forward(
@@ -230,7 +223,9 @@ class Wav2Vec2BertSelfAttention(Wav2Vec2ConformerSelfAttention, nn.Module):
                 raise ValueError(
                     "`relative_position_embeddings` has to be defined when `self.position_embeddings_type == 'rotary'"
                 )
-            query_key_states = self._apply_rotary_embedding(query_key_states, relative_position_embeddings)
+            query_key_states = self._apply_rotary_embedding(
+                query_key_states, relative_position_embeddings
+            )
 
         # project query_key_states and value_states
         query = self.linear_q(query_key_states).view(batch_size, -1, self.num_heads, self.head_size)
@@ -259,15 +254,25 @@ class Wav2Vec2BertSelfAttention(Wav2Vec2ConformerSelfAttention, nn.Module):
         if self.position_embeddings_type == "relative_key":
             query_length, key_length = query.shape[2], key.shape[2]
 
-            position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(key_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
+            position_ids_l = torch.arange(
+                query_length, dtype=torch.long, device=hidden_states.device
+            ).view(-1, 1)
+            position_ids_r = torch.arange(
+                key_length, dtype=torch.long, device=hidden_states.device
+            ).view(1, -1)
             distance = position_ids_r - position_ids_l
-            distance = torch.clamp(distance, -self.left_max_position_embeddings, self.right_max_position_embeddings)
+            distance = torch.clamp(
+                distance, -self.left_max_position_embeddings, self.right_max_position_embeddings
+            )
 
-            positional_embedding = self.distance_embedding(distance + self.left_max_position_embeddings)
+            positional_embedding = self.distance_embedding(
+                distance + self.left_max_position_embeddings
+            )
             positional_embedding = positional_embedding.to(dtype=query.dtype)  # fp16 compatibility
 
-            relative_position_attn_weights = torch.einsum("bhld,lrd->bhlr", query, positional_embedding)
+            relative_position_attn_weights = torch.einsum(
+                "bhld,lrd->bhlr", query, positional_embedding
+            )
             scores = scores + (relative_position_attn_weights / math.sqrt(self.head_size))
 
         # apply attention_mask if necessary
@@ -282,7 +287,9 @@ class Wav2Vec2BertSelfAttention(Wav2Vec2ConformerSelfAttention, nn.Module):
         hidden_states = torch.matmul(probs, value)
 
         # => (batch, time1, hidden_size)
-        hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, self.num_heads * self.head_size)
+        hidden_states = hidden_states.transpose(1, 2).reshape(
+            batch_size, -1, self.num_heads * self.head_size
+        )
         hidden_states = self.linear_out(hidden_states)
 
         return hidden_states, probs
@@ -369,7 +376,9 @@ class Wav2Vec2BertEncoder(nn.Module):
             self.embed_positions = None
 
         self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layers = nn.ModuleList([Wav2Vec2BertEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [Wav2Vec2BertEncoderLayer(config) for _ in range(config.num_hidden_layers)]
+        )
         self.gradient_checkpointing = False
 
     def forward(
@@ -411,7 +420,9 @@ class Wav2Vec2BertEncoder(nn.Module):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = torch.rand([])
 
-            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
+            skip_the_layer = (
+                True if self.training and (dropout_probability < self.config.layerdrop) else False
+            )
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
@@ -443,7 +454,9 @@ class Wav2Vec2BertEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None
+            )
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -457,10 +470,14 @@ class Wav2Vec2BertAdapter(nn.Module):
         # feature dim might need to be down-projected
         if config.output_hidden_size != config.hidden_size:
             self.proj = nn.Linear(config.hidden_size, config.output_hidden_size)
-            self.proj_layer_norm = nn.LayerNorm(config.output_hidden_size, eps=config.layer_norm_eps)
+            self.proj_layer_norm = nn.LayerNorm(
+                config.output_hidden_size, eps=config.layer_norm_eps
+            )
         else:
             self.proj = self.proj_layer_norm = None
-        self.layers = nn.ModuleList(Wav2Vec2BertAdapterLayer(config) for _ in range(config.num_adapter_layers))
+        self.layers = nn.ModuleList(
+            Wav2Vec2BertAdapterLayer(config) for _ in range(config.num_adapter_layers)
+        )
         self.layerdrop = config.layerdrop
 
         self.kernel_size = config.adapter_kernel_size
@@ -481,14 +498,20 @@ class Wav2Vec2BertAdapter(nn.Module):
 
         sub_sampled_lengths = None
         if attention_mask is not None:
-            sub_sampled_lengths = (attention_mask.size(1) - (1 - attention_mask.int()).sum(1)).to(hidden_states.device)
+            sub_sampled_lengths = (attention_mask.size(1) - (1 - attention_mask.int()).sum(1)).to(
+                hidden_states.device
+            )
 
         for layer in self.layers:
             layerdrop_prob = torch.rand([])
-            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(sub_sampled_lengths)
+            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(
+                sub_sampled_lengths
+            )
             if not self.training or (layerdrop_prob > self.layerdrop):
                 hidden_states = layer(
-                    hidden_states, attention_mask=attention_mask, sub_sampled_lengths=sub_sampled_lengths
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    sub_sampled_lengths=sub_sampled_lengths,
                 )
 
         return hidden_states
@@ -558,7 +581,9 @@ class Wav2Vec2BertAdapterLayer(nn.Module):
         hidden_states = hidden_states.transpose(1, 2)
 
         if attention_mask is not None:
-            attention_mask = _compute_new_attention_mask(hidden_states=hidden_states, seq_lens=sub_sampled_lengths)
+            attention_mask = _compute_new_attention_mask(
+                hidden_states=hidden_states, seq_lens=sub_sampled_lengths
+            )
             attention_mask = _prepare_4d_attention_mask(
                 attention_mask,
                 hidden_states.dtype,
@@ -566,7 +591,7 @@ class Wav2Vec2BertAdapterLayer(nn.Module):
 
         # The rest of the computation is identical to a vanilla Transformer
         # encoder layer.
-        hidden_states, attn_weigths = self.self_attn(
+        hidden_states, attn_weights = self.self_attn(
             hidden_states,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
@@ -582,12 +607,8 @@ class Wav2Vec2BertAdapterLayer(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = Wav2Vec2BertConfig
     base_model_prefix = "wav2vec2_bert"
     main_input_name = "input_features"
@@ -623,7 +644,11 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
                 module.masked_spec_embed.data.uniform_()
         elif isinstance(
             module,
-            (Wav2Vec2BertForSequenceClassification, Wav2Vec2BertForAudioFrameClassification, Wav2Vec2BertForXVector),
+            (
+                Wav2Vec2BertForSequenceClassification,
+                Wav2Vec2BertForAudioFrameClassification,
+                Wav2Vec2BertForXVector,
+            ),
         ):
             if hasattr(module, "layer_weights"):
                 module.layer_weights.data.fill_(1.0 / (self.config.num_hidden_layers + 1))
@@ -643,13 +668,19 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
         def _conv_out_length(input_length, kernel_size, stride, padding):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch.div(input_length + 2 * padding - kernel_size, stride, rounding_mode="floor") + 1
+            return (
+                torch.div(input_length + 2 * padding - kernel_size, stride, rounding_mode="floor")
+                + 1
+            )
 
         if add_adapter:
             padding = self.config.adapter_kernel_size // 2
             for _ in range(self.config.num_adapter_layers):
                 input_lengths = _conv_out_length(
-                    input_lengths, self.config.adapter_kernel_size, self.config.adapter_stride, padding
+                    input_lengths,
+                    self.config.adapter_kernel_size,
+                    self.config.adapter_stride,
+                    padding,
                 )
 
         return input_lengths
@@ -661,55 +692,32 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
         # on inference mode.
         non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
 
-        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths, add_adapter=add_adapter)
+        output_lengths = self._get_feat_extract_output_lengths(
+            non_padded_lengths, add_adapter=add_adapter
+        )
         output_lengths = output_lengths.to(torch.long)
 
         batch_size = attention_mask.shape[0]
 
         attention_mask = torch.zeros(
-            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
+            (batch_size, feature_vector_length),
+            dtype=attention_mask.dtype,
+            device=attention_mask.device,
         )
         # these two operations makes sure that all values before the output lengths idxs are attended to
-        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
+        attention_mask[
+            (
+                torch.arange(attention_mask.shape[0], device=attention_mask.device),
+                output_lengths - 1,
+            )
+        ] = 1
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
-
-
-WAV2VEC2_BERT_START_DOCSTRING = None
-
-WAV2VEC2_BERT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_features`, the [`AutoProcessor`] should be used for padding and
-            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2BertProcessor.__call__`] for details.
-        attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-            1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
 
 
 Wav2Vec2BertBaseModelOutput = Wav2Vec2BaseModelOutput
 
 
-@add_start_docstrings(
-    "The bare Wav2Vec2Bert Model transformer outputting raw hidden-states without any specific head on top.",
-    WAV2VEC2_BERT_START_DOCSTRING,
-)
 class Wav2Vec2BertModel(Wav2Vec2Model, Wav2Vec2BertPreTrainedModel):
     def __init__(self, config: Wav2Vec2BertConfig):
         Wav2Vec2BertPreTrainedModel.__init__(config)
@@ -737,14 +745,6 @@ class Wav2Vec2BertModel(Wav2Vec2Model, Wav2Vec2BertPreTrainedModel):
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for Wav2Vec2Bert")
 
-    @add_start_docstrings_to_model_forward(WAV2VEC2_BERT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_PRETRAINED_CHECKPOINT_FOR_DOC,
-        output_type=Wav2Vec2BertBaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
     def forward(
         self,
         input_features: Optional[torch.Tensor],
@@ -754,9 +754,23 @@ class Wav2Vec2BertModel(Wav2Vec2Model, Wav2Vec2BertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Wav2Vec2BertBaseModelOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        r"""
+        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_features`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2BertProcessor.__call__`] for details.
+        mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
+            masked extracted features in *config.proj_codevector_dim* space.
+        """
+        output_attentions = (
+            output_attentions if output_attentions is not None else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -793,25 +807,19 @@ class Wav2Vec2BertModel(Wav2Vec2Model, Wav2Vec2BertPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """Wav2Vec2Bert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
-    WAV2VEC2_BERT_START_DOCSTRING,
-)
 class Wav2Vec2BertForCTC(Wav2Vec2ConformerForCTC):
     def __init__(self, config, target_lang: Optional[str] = None):
+        r"""
+        target_lang (`str`, *optional*):
+            Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
+            adapter.<lang>.bin. Only relevant when using an instance of [`UniSpeechSatForCTC`] with adapters. Uses 'eng' by
+            default.
+        """
         super().__init__(config)
 
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for Wav2Vec2Bert")
 
-    @add_start_docstrings_to_model_forward(WAV2VEC2_BERT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_PRETRAINED_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_CTC_EXPECTED_OUTPUT,
-        expected_loss=_CTC_EXPECTED_LOSS,
-    )
     def forward(
         self,
         input_features: Optional[torch.Tensor],
@@ -822,6 +830,11 @@ class Wav2Vec2BertForCTC(Wav2Vec2ConformerForCTC):
         labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, CausalLMOutput]:
         r"""
+        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_features`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2BertProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
             Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
             the sequence length of the output logits. Indices are selected in `[-100, 0, ..., config.vocab_size - 1]`.
@@ -852,9 +865,13 @@ class Wav2Vec2BertForCTC(Wav2Vec2ConformerForCTC):
             attention_mask = (
                 attention_mask
                 if attention_mask is not None
-                else torch.ones(input_features.shape[:2], device=input_features.device, dtype=torch.long)
+                else torch.ones(
+                    input_features.shape[:2], device=input_features.device, dtype=torch.long
+                )
             )
-            input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum([-1])).to(torch.long)
+            input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum([-1])).to(
+                torch.long
+            )
 
             # assuming that padded tokens are filled with -100
             # when not being attended to
@@ -863,7 +880,9 @@ class Wav2Vec2BertForCTC(Wav2Vec2ConformerForCTC):
             flattened_targets = labels.masked_select(labels_mask)
 
             # ctc_loss doesn't support fp16
-            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
+            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(
+                0, 1
+            )
 
             with torch.backends.cudnn.flags(enabled=False):
                 loss = nn.functional.ctc_loss(
@@ -881,17 +900,13 @@ class Wav2Vec2BertForCTC(Wav2Vec2ConformerForCTC):
             return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
-@add_start_docstrings(
-    """
-    Wav2Vec2Bert Model with a sequence classification head on top (a linear layer over the pooled output) for
-    tasks like SUPERB Keyword Spotting.
-    """,
-    WAV2VEC2_BERT_START_DOCSTRING,
-)
 class Wav2Vec2BertForSequenceClassification(Wav2Vec2ForSequenceClassification):
     def __init__(self, config):
         super().__init__(config)
@@ -910,14 +925,6 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2ForSequenceClassification):
         for param in self.wav2vec2_bert.parameters():
             param.requires_grad = False
 
-    @add_start_docstrings_to_model_forward(WAV2VEC2_BERT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_BASE_CHECKPOINT_FOR_DOC,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-    )
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.forward with Wav2Vec2->Wav2Vec2Bert,wav2vec2->wav2vec2_bert,WAV_2_VEC_2->WAV2VEC2_BERT, input_values->input_features
     def forward(
         self,
         input_features: Optional[torch.Tensor],
@@ -928,6 +935,11 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2ForSequenceClassification):
         labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, SequenceClassifierOutput]:
         r"""
+        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_features`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2BertProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -957,7 +969,9 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2ForSequenceClassification):
         if attention_mask is None:
             pooled_output = hidden_states.mean(dim=1)
         else:
-            padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
+            padding_mask = self._get_feature_vector_attention_mask(
+                hidden_states.shape[1], attention_mask
+            )
             expand_padding_mask = padding_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states[~expand_padding_mask] = 0.0
             pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
@@ -981,12 +995,6 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2ForSequenceClassification):
         )
 
 
-@add_start_docstrings(
-    """
-    Wav2Vec2Bert Model with a frame classification head on top for tasks like Speaker Diarization.
-    """,
-    WAV2VEC2_BERT_START_DOCSTRING,
-)
 class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2ConformerForAudioFrameClassification):
     def __init__(self, config):
         super().__init__(config)
@@ -994,14 +1002,6 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2ConformerForAudioFrameClas
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for Wav2Vec2Bert")
 
-    @add_start_docstrings_to_model_forward(WAV2VEC2_BERT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_BASE_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-    )
-    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForAudioFrameClassification.forward with wav2vec2_conformer->wav2vec2_bert, input_values->input_features
     def forward(
         self,
         input_features: Optional[torch.Tensor],
@@ -1012,6 +1012,11 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2ConformerForAudioFrameClas
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
+        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_features`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2ConformerProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -1042,7 +1047,10 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2ConformerForAudioFrameClas
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), torch.argmax(labels.view(-1, self.num_labels), axis=1))
+            loss = loss_fct(
+                logits.view(-1, self.num_labels),
+                torch.argmax(labels.view(-1, self.num_labels), axis=1),
+            )
 
         if not return_dict:
             output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
@@ -1056,12 +1064,6 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2ConformerForAudioFrameClas
         )
 
 
-@add_start_docstrings(
-    """
-    Wav2Vec2Bert Model with an XVector feature extraction head on top for tasks like Speaker Verification.
-    """,
-    WAV2VEC2_BERT_START_DOCSTRING,
-)
 class Wav2Vec2BertForXVector(Wav2Vec2ConformerForXVector):
     def __init__(self, config):
         super().__init__(config)
@@ -1069,14 +1071,6 @@ class Wav2Vec2BertForXVector(Wav2Vec2ConformerForXVector):
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for Wav2Vec2Bert")
 
-    @add_start_docstrings_to_model_forward(WAV2VEC2_BERT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_BASE_CHECKPOINT_FOR_DOC,
-        output_type=XVectorOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-    )
-    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForXVector.forward with wav2vec2_conformer->wav2vec2_bert, input_values->input_features
     def forward(
         self,
         input_features: Optional[torch.Tensor],
@@ -1087,6 +1081,11 @@ class Wav2Vec2BertForXVector(Wav2Vec2ConformerForXVector):
         labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, XVectorOutput]:
         r"""
+        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_features`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2ConformerProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -1122,7 +1121,9 @@ class Wav2Vec2BertForXVector(Wav2Vec2ConformerForXVector):
             mean_features = hidden_states.mean(dim=1)
             std_features = hidden_states.std(dim=1)
         else:
-            feat_extract_output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(dim=1))
+            feat_extract_output_lengths = self._get_feat_extract_output_lengths(
+                attention_mask.sum(dim=1)
+            )
             tdnn_output_lengths = self._get_tdnn_output_lengths(feat_extract_output_lengths)
             mean_features = []
             std_features = []

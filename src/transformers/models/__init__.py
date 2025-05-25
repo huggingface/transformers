@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from .bigbird_pegasus import *
     from .biogpt import *
     from .bit import *
+    from .bitnet import *
     from .blenderbot import *
     from .blenderbot_small import *
     from .blip import *
@@ -67,8 +68,10 @@ if TYPE_CHECKING:
     from .convnextv2 import *
     from .cpm import *
     from .cpmant import *
+    from .csm import *
     from .ctrl import *
     from .cvt import *
+    from .d_fine import *
     from .dab_detr import *
     from .dac import *
     from .data2vec import *
@@ -100,6 +103,7 @@ if TYPE_CHECKING:
     from .ernie import *
     from .esm import *
     from .falcon import *
+    from .falcon_h1 import *
     from .falcon_mamba import *
     from .fastspeech2_conformer import *
     from .flaubert import *
@@ -127,11 +131,13 @@ if TYPE_CHECKING:
     from .granite import *
     from .granite_speech import *
     from .granitemoe import *
+    from .granitemoehybrid import *
     from .granitemoeshared import *
     from .grounding_dino import *
     from .groupvit import *
     from .helium import *
     from .herbert import *
+    from .hgnet_v2 import *
     from .hiera import *
     from .hubert import *
     from .ibert import *
@@ -143,7 +149,9 @@ if TYPE_CHECKING:
     from .informer import *
     from .instructblip import *
     from .instructblipvideo import *
+    from .internvl import *
     from .jamba import *
+    from .janus import *
     from .jetmoe import *
     from .kosmos2 import *
     from .layoutlm import *
@@ -179,6 +187,7 @@ if TYPE_CHECKING:
     from .mistral import *
     from .mistral3 import *
     from .mixtral import *
+    from .mlcd import *
     from .mllama import *
     from .mluke import *
     from .mobilebert import *
@@ -250,6 +259,7 @@ if TYPE_CHECKING:
     from .rt_detr_v2 import *
     from .rwkv import *
     from .sam import *
+    from .sam_hq import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
     from .segformer import *
@@ -278,6 +288,7 @@ if TYPE_CHECKING:
     from .tapas import *
     from .textnet import *
     from .time_series_transformer import *
+    from .timesfm import *
     from .timesformer import *
     from .timm_backbone import *
     from .timm_wrapper import *

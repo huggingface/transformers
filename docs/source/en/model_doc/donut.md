@@ -208,6 +208,11 @@ print(answer)
 [[autodoc]] DonutImageProcessor
     - preprocess
 
+## DonutImageProcessorFast
+
+[[autodoc]] DonutImageProcessorFast
+    - preprocess
+
 ## DonutFeatureExtractor
 
 [[autodoc]] DonutFeatureExtractor

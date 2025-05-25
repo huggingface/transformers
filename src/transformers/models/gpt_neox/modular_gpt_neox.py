@@ -7,6 +7,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -17,29 +18,11 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import (
-    LossKwargs,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    can_return_tuple,
-    logging,
-    replace_return_docstrings,
-)
-from ..llama.modeling_llama import (
-    LlamaModel,
-    LlamaPreTrainedModel,
-    LlamaRotaryEmbedding,
-    rotate_half,
-)
+from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
+from ..llama.modeling_llama import LlamaModel, LlamaPreTrainedModel, LlamaRotaryEmbedding, rotate_half
 
 
 logger = logging.get_logger(__name__)
-
-
-_CHECKPOINT_FOR_DOC = "trl-internal-testing/tiny-random-GPTNeoXForCausalLM"
-_REAL_CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neox-20b"
-_CONFIG_FOR_DOC = "GPTNeoXConfig"
 
 
 class GPTNeoXMLP(nn.Module):
@@ -170,28 +153,9 @@ class GPTNeoXAttention(nn.Module):
             }
             key_states, value_states = layer_past.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        # Checking for fallbacks in case an unsupported feature is requested
-        attention_type = self.config._attn_implementation
-        if (output_attentions or head_mask is not None) and self.config._attn_implementation in [
-            "sdpa",
-            "flash_attention_2",
-        ]:
-            logger.warning_once(
-                f"Setting `attention_type` to `eager` because `{attention_type}` does not support"
-                f" `output_attentions=True` or `head_mask`."
-            )
-            attention_type = "eager"
-
-        elif self.training and self.attention_dropout > 0 and self.config._attn_implementation == "flex_attention":
-            logger.warning_once(
-                f"Setting `attention_type` to `eager` because `dropout` is not supported in `{attention_type}`."
-            )
-            attention_type = "eager"
-
         attention_interface: Callable = eager_attention_forward
-        attention_interface = (
-            ALL_ATTENTION_FUNCTIONS[attention_type] if attention_type != "eager" else attention_interface
-        )
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         # Compute attention
         attn_output, attn_weights = attention_interface(
@@ -322,14 +286,6 @@ class GPTNeoXModel(LlamaModel, nn.Module):
     def set_input_embeddings(self, value):
         self.embed_in = value
 
-    @can_return_tuple
-    @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPast,
-        config_class=_CONFIG_FOR_DOC,
-    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -375,8 +331,12 @@ class GPTNeoXModel(LlamaModel, nn.Module):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+        causal_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
         )
 
         # Prepare head mask if needed
@@ -449,8 +409,10 @@ class GPTNeoXModel(LlamaModel, nn.Module):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
-@add_start_docstrings(
-    """GPTNeoX Model with a `language modeling` head on top for CLM fine-tuning.""", GPT_NEOX_START_DOCSTRING
+@auto_docstring(
+    custom_intro="""
+    GPTNeoX Model with a `language modeling` head on top for CLM fine-tuning.
+    """
 )
 class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["embed_out.weight"]
@@ -473,8 +435,7 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
         self.embed_out = new_embeddings
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -496,11 +457,6 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-
-        Returns:
 
         Example:
 
@@ -551,8 +507,8 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     The GPTNeoX Model transformer with a sequence classification head on top (linear layer).
 
     [`GPTNeoXForSequenceClassification`] uses the last token in order to do the classification, as other causal models
@@ -563,8 +519,7 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
     no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
     padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
     each row of the batch).
-    """,
-    GPT_NEOX_START_DOCSTRING,
+    """
 )
 class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
     def __init__(self, config):
@@ -577,12 +532,7 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SequenceClassifierOutputWithPast,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -662,13 +612,7 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint="LarsJonasson/pythia-410m-deduped-sft-swedish",
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_loss=0.25,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -718,13 +662,7 @@ class GPTNeoXForTokenClassification(GPTNeoXPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    The GPT-NeoX Model transformer with a span classification head on top for extractive question-answering tasks like
-    SQuAD (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    GPT_NEOX_START_DOCSTRING,
-)
+@auto_docstring
 class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -736,13 +674,7 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(GPT_NEOX_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=QuestionAnsweringModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
-    )
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -756,17 +688,6 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> QuestionAnsweringModelOutput:
-        r"""
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        """
-
         outputs: BaseModelOutputWithPast = self.gpt_neox(
             input_ids,
             attention_mask=attention_mask,

@@ -69,7 +69,7 @@ def load_original_state_dict(model_id):
                 for key in f.keys():
                     original_state_dict[key] = f.get_tensor(key)
 
-    # tied wieghts so lm.head is not saved. Let's clone to load state dict
+    # tied weights so lm.head is not saved. Let's clone to load state dict
     if "lm_head.weight" not in original_state_dict:
         original_state_dict["lm_head.weight"] = original_state_dict["model.embed_tokens.weight"].clone()
 

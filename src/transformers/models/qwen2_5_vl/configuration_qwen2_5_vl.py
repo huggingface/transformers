@@ -46,6 +46,7 @@ class Qwen2_5_VLVisionConfig(PretrainedConfig):
         window_size=112,
         out_hidden_size=3584,
         fullatt_block_indexes=[7, 15, 23, 31],
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -63,18 +64,18 @@ class Qwen2_5_VLVisionConfig(PretrainedConfig):
         self.window_size = window_size
         self.fullatt_block_indexes = fullatt_block_indexes
         self.out_hidden_size = out_hidden_size
+        self.initializer_range = initializer_range
 
 
-class Qwen2_5_VLConfig(PretrainedConfig):
+class Qwen2_5_VLTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Qwen2_5_VLModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`Qwen2_5_VLTextModel`]. It is used to instantiate a
     Qwen2-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
     Qwen2-VL-7B-Instruct [Qwen/Qwen2-VL-7B-Instruct](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-
 
     Args:
         vocab_size (`int`, *optional*, defaults to 152064):
@@ -118,8 +119,6 @@ class Qwen2_5_VLConfig(PretrainedConfig):
             The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        vision_config (`Dict`, *optional*):
-            The config for the visual encoder initialization.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -157,22 +156,26 @@ class Qwen2_5_VLConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        image_token_id (`int`, *optional*):
+            Token index used as placeholder for image embeddings.
+        video_token_id (`int`, *optional*):
+            Token index used as placeholder for video embeddings.
 
     ```python
-    >>> from transformers import Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLConfig
+    >>> from transformers import Qwen2_5_VLTextModel, Qwen2_5_VLConfig
 
     >>> # Initializing a Qwen2_5_VL style configuration
     >>> configuration = Qwen2_5_VLConfig()
 
     >>> # Initializing a model from the Qwen2-VL-7B style configuration
-    >>> model = Qwen2_5_VLForConditionalGeneration(configuration)
+    >>> model = Qwen2_5_VLTextModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "qwen2_5_vl"
-    sub_configs = {"vision_config": Qwen2_5_VLVisionConfig}
+    model_type = "qwen2_5_vl_text"
+    base_config_key = "text_config"
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `Qwen2_5_VL`
     base_model_tp_plan = {
@@ -209,15 +212,11 @@ class Qwen2_5_VLConfig(PretrainedConfig):
         sliding_window=4096,
         max_window_layers=80,
         attention_dropout=0.0,
-        vision_config=None,
         rope_scaling=None,
+        image_token_id=None,
+        video_token_id=None,
         **kwargs,
     ):
-        if isinstance(vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -251,8 +250,73 @@ class Qwen2_5_VLConfig(PretrainedConfig):
                 self.rope_scaling["type"] = "default"
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self, ignore_keys={"mrope_section"})
+        self.image_token_id = image_token_id
+        self.video_token_id = video_token_id
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
-__all__ = ["Qwen2_5_VLConfig"]
+class Qwen2_5_VLConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Qwen2_5_VLModel`]. It is used to instantiate a
+    Qwen2-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of
+    Qwen2-VL-7B-Instruct [Qwen/Qwen2-VL-7B-Instruct](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct).
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+
+    Args:
+        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `Qwen2_5_VLTextConfig`):
+            The config object or dictionary of the text backbone.
+        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Qwen2_5_VLVisionConfig`):
+            The config object or dictionary of the vision backbone.
+        image_token_id (`int`, *optional*, defaults to 151655):
+            The image token index to encode the image prompt.
+        video_token_id (`int`, *optional*, defaults to 151656):
+            The video token index to encode the image prompt.
+
+    ```python
+    >>> from transformers import Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLConfig
+
+    >>> # Initializing a Qwen2_5_VL style configuration
+    >>> configuration = Qwen2_5_VLConfig()
+
+    >>> # Initializing a model from the Qwen2-VL-7B style configuration
+    >>> model = Qwen2_5_VLForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "qwen2_5_vl"
+    sub_configs = {"vision_config": Qwen2_5_VLVisionConfig, "text_config": Qwen2_5_VLTextConfig}
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    def __init__(
+        self,
+        text_config=None,
+        vision_config=None,
+        image_token_id=151655,
+        video_token_id=151656,
+        **kwargs,
+    ):
+        if isinstance(vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**vision_config)
+        elif vision_config is None:
+            self.vision_config = self.sub_configs["vision_config"]()
+
+        if isinstance(text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**text_config)
+        elif text_config is None:
+            # For BC use all kwargs to init `TextConfig`
+            self.text_config = self.sub_configs["text_config"](**kwargs)
+
+        self.image_token_id = image_token_id
+        self.video_token_id = video_token_id
+
+        super().__init__(**kwargs)
+
+
+__all__ = ["Qwen2_5_VLConfig", "Qwen2_5_VLTextConfig"]

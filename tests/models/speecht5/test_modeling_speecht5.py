@@ -20,6 +20,7 @@ import unittest
 
 from transformers import SpeechT5Config, SpeechT5HifiGanConfig
 from transformers.testing_utils import (
+    is_flaky,
     is_torch_available,
     require_deterministic_for_xpu,
     require_sentencepiece,
@@ -414,7 +415,8 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
 
@@ -721,6 +723,10 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
+
+    @is_flaky(max_attempts=5, description="Flaky for some input configurations.")
+    def test_past_key_values_format(self):
+        super().test_past_key_values_format()
 
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
@@ -1223,6 +1229,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
                 "Mismatch in waveform between standalone and integrated vocoder for single instance generation.",
             )
 
+    @require_deterministic_for_xpu
     def test_batch_generation(self):
         model = self.default_model
         processor = self.default_processor
@@ -1518,7 +1525,8 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
 

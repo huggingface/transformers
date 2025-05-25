@@ -246,6 +246,10 @@ class EncoderDecoderMixin:
         pixel_values=None,
         **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
@@ -480,6 +484,10 @@ class DeiT2RobertaModelTest(EncoderDecoderMixin, unittest.TestCase):
         pixel_values=None,
         **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
@@ -670,6 +678,10 @@ class Swin2BartModelTest(EncoderDecoderMixin, unittest.TestCase):
         pixel_values=None,
         **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
@@ -807,6 +819,10 @@ class LayoutLMv32TrOCR(EncoderDecoderMixin, unittest.TestCase):
         labels=None,
         **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
@@ -929,6 +945,10 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         labels=None,
         **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
@@ -1047,6 +1067,10 @@ class Donut2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
         labels=None,
         **kwargs,
     ):
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
+        decoder_config._attn_implementation = "eager"
+
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
