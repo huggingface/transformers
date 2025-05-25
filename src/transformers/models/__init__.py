@@ -172,6 +172,7 @@ if TYPE_CHECKING:
     from .luke import *
     from .lxmert import *
     from .m2m_100 import *
+    from .magma import *
     from .mamba import *
     from .mamba2 import *
     from .marian import *
