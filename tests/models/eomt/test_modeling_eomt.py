@@ -220,7 +220,7 @@ class EoMTForUniversalSegmentationTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config)
             model.to(torch_device)
             model.eval()
-            # make random mask reproducible
+
             torch.manual_seed(2)
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
@@ -232,7 +232,7 @@ class EoMTForUniversalSegmentationTest(ModelTesterMixin, unittest.TestCase):
                 model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(tmpdirname)
                 model.to(torch_device)
-                # make random mask reproducible
+
                 torch.manual_seed(2)
                 with torch.no_grad():
                     after_outputs = model(**self._prepare_for_class(inputs_dict, model_class))

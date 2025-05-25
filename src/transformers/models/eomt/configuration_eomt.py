@@ -22,6 +22,89 @@ logger = logging.get_logger(__name__)
 
 
 class EoMTConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`EoMTModel`]. It is used to instantiate an EoMT model
+    according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the EoMT
+    [tue-mps/coco_panoptic_eomt_large_640](https://huggingface.co/tue-mps/coco_panoptic_eomt_large_640)
+    architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 1024):
+            Dimensionality of the hidden representations.
+        num_hidden_layers (`int`, *optional*, defaults to 24):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads in each attention layer.
+        mlp_ratio (`int`, *optional*, defaults to 4):
+            Ratio of the MLP hidden dimensionality to the hidden size.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings and encoder.
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+            The epsilon used by the layer normalization layers.
+        image_size (`int`, *optional*, defaults to 640):
+            The size (resolution) of each input image.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
+        qkv_bias (`bool`, *optional*, defaults to `True`):
+            Whether or not a learnable bias should be added to the queries, keys and values.
+        layerscale_value (`float`, *optional*, defaults to 1.0):
+            Initial value for the LayerScale parameter.
+        drop_path_rate (`float`, *optional*, defaults to 0.0):
+            The stochastic depth rate (drop path) used during training.
+        num_upscale_blocks (`int`, *optional*, defaults to 2):
+            Number of upsampling blocks used in the decoder or segmentation head.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout probability applied after attention projection.
+        projection_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout probability applied after linear projections.
+        num_blocks (`int`, *optional*, defaults to 4):
+            Number of feature blocks or stages in the architecture.
+        no_object_weight (`float`, *optional*, defaults to 0.1):
+            Loss weight for the 'no object' class in panoptic/instance segmentation.
+        class_weight (`float`, *optional*, defaults to 2.0):
+            Loss weight for classification targets.
+        mask_weight (`float`, *optional*, defaults to 5.0):
+            Loss weight for mask prediction.
+        dice_weight (`float`, *optional*, defaults to 5.0):
+            Loss weight for the dice loss component.
+        train_num_points (`int`, *optional*, defaults to 12544):
+            Number of points to sample for mask loss computation during training.
+        oversample_ratio (`float`, *optional*, defaults to 3.0):
+            Oversampling ratio used in point sampling for mask training.
+        importance_sample_ratio (`float`, *optional*, defaults to 0.75):
+            Ratio of points to sample based on importance during training.
+        num_queries (`int`, *optional*, defaults to 200):
+            Number of object queries in the Transformer.
+        num_register_tokens (`int`, *optional*, defaults to 4):
+            Number of learnable register tokens added to the transformer input.
+
+    Example:
+
+    ```python
+    >>> from transformers import EoMTConfig, EoMTForUniversalSegmentation
+
+    >>> # Initialize configuration
+    >>> config = EoMTConfig()
+
+    >>> # Initialize model
+    >>> model = EoMTForUniversalSegmentation(config)
+
+    >>> # Access config
+    >>> config = model.config
+    ```"""
+
     model_type = "eomt"
 
     def __init__(

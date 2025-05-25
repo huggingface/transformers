@@ -478,7 +478,7 @@ class EoMTImageProcessor(BaseImageProcessor):
 
         return BatchFeature(output, tensor_type=return_tensors)
 
-    def _revert_preprocessing_semantic(
+    def _reverse_image_preprocessing_semantic(
         self,
         segmentation_logits: torch.Tensor,
         crops_offset: List[Tuple[int, int, int]],
@@ -532,7 +532,7 @@ class EoMTImageProcessor(BaseImageProcessor):
 
         return reconstructed_logits
 
-    def _revert_preprocessing_panoptic(
+    def _reverse_image_preprocessing_panoptic(
         self,
         segmentation_logits: torch.Tensor,
         original_image_sizes: List[Tuple[int, int]],
@@ -550,7 +550,7 @@ class EoMTImageProcessor(BaseImageProcessor):
             resized_logits.append(upsampled_logits)
         return resized_logits
 
-    def postprocess_semantic_segmentation(
+    def post_process_semantic_segmentation(
         self,
         outputs,
         crops_offset: List[Tuple[int, int, int]],
@@ -575,12 +575,14 @@ class EoMTImageProcessor(BaseImageProcessor):
         # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
         segmentation_logits = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
 
-        output_logits = self._revert_preprocessing_semantic(segmentation_logits, crops_offset, original_image_sizes)
+        output_logits = self._reverse_image_preprocessing_semantic(
+            segmentation_logits, crops_offset, original_image_sizes
+        )
 
         preds = output_logits[0].argmax(0).cpu().numpy()
         return preds
 
-    def postprocess_panoptic_segmentation(
+    def post_process_panoptic_segmentation(
         self,
         outputs,
         original_image_sizes,
@@ -604,7 +606,7 @@ class EoMTImageProcessor(BaseImageProcessor):
             mode="bilinear",
         )
 
-        mask_probs = self._revert_preprocessing_panoptic(masks_queries_logits, original_image_sizes)
+        mask_probs = self._reverse_image_preprocessing_panoptic(masks_queries_logits, original_image_sizes)
         pred_scores, pred_labels = class_queries_logits.softmax(dim=-1).max(-1)
 
         results: List = []
@@ -634,7 +636,7 @@ class EoMTImageProcessor(BaseImageProcessor):
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
 
-    def postprocess_instance_segmentation(
+    def post_process_instance_segmentation(
         self,
         outputs,
         original_image_sizes,

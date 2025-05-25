@@ -226,7 +226,8 @@ def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Ten
     return loss
 
 
-class Mask2FormerHungarianMatcher(nn.Module):
+# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerHungarianMatcher -> EoMTHungarianMatcher
+class EoMTHungarianMatcher(nn.Module):
     """This class computes an assignment between the labels and the predictions of the network.
 
     For efficiency reasons, the labels don't include the no_object. Because of this, in general, there are more
@@ -332,7 +333,8 @@ class Mask2FormerHungarianMatcher(nn.Module):
         return matched_indices
 
 
-class Mask2FormerLoss(nn.Module):
+# Modified from transformers.models.mask2former.modeling_mask2former.Mask2FormerLoss with Mask2Former->EoMT
+class EoMTLoss(nn.Module):
     def __init__(self, config: EoMTConfig, weight_dict: Dict[str, float]):
         """
         The Mask2Former Loss. The loss is computed very similar to DETR. The process happens in two steps: 1) we
@@ -361,7 +363,7 @@ class Mask2FormerLoss(nn.Module):
         self.oversample_ratio = config.oversample_ratio
         self.importance_sample_ratio = config.importance_sample_ratio
 
-        self.matcher = Mask2FormerHungarianMatcher(
+        self.matcher = EoMTHungarianMatcher(
             cost_class=2.0,
             cost_dice=config.dice_weight,
             cost_mask=config.mask_weight,
@@ -970,7 +972,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
             "loss_dice": config.dice_weight,
         }
 
-        self.criterion = Mask2FormerLoss(config=config, weight_dict=self.weight_dict)
+        self.criterion = EoMTLoss(config=config, weight_dict=self.weight_dict)
 
         self.register_buffer("attn_mask_probs", torch.ones(config.num_blocks))
 
