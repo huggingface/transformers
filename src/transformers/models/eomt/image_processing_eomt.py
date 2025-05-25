@@ -572,14 +572,13 @@ class EoMTImageProcessor(BaseImageProcessor):
         masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
         masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
 
-        # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
         segmentation_logits = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
 
         output_logits = self._reverse_image_preprocessing_semantic(
             segmentation_logits, crops_offset, original_image_sizes
         )
 
-        preds = output_logits[0].argmax(0).cpu().numpy()
+        preds = [logit.detach().cpu().argmax(dim=0).numpy() for logit in output_logits]
         return preds
 
     def post_process_panoptic_segmentation(
