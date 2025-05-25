@@ -1006,19 +1006,11 @@ class EoMTPreTrainedModel(PreTrainedModel):
             if hasattr(module, "lambda1"):
                 module.lambda1.data.fill_(self.config.layerscale_value)
         elif isinstance(module, EoMTEmbeddings):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.position_embeddings.dtype)
-
             module.cls_token.data = nn.init.trunc_normal_(
                 module.cls_token.data.to(torch.float32),
                 mean=0.0,
                 std=self.config.initializer_range,
             ).to(module.cls_token.dtype)
-
-            module.mask_token.data.zero_()
             module.register_tokens.data.zero_()
 
 
