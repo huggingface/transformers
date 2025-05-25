@@ -27,28 +27,36 @@ The abstract from the paper is the following:
 This model was contributed by [Yaswanth Gali](https://huggingface.co/yaswanthgali).
 The original code can be found [here](https://github.com/tue-mps/eomt).
 
+## Architecture Info
+
+The `EoMT` model uses a DINOv2-pretrained Vision Transformer with **register tokens** as its backbone. EoMT simplifies the segmentation pipeline by relying solely on the encoder, eliminating the need for task-specific decoders commonly used in prior approaches.
+
+Architecturally, EoMT introduces a small set of **learned queries** and a lightweight **mask prediction module**. These queries are injected into the final encoder blocks, enabling **joint attention** between image patches and object queries. During training, **masked attention** is applied to constrain each query to focus on its corresponding region—effectively mimicking cross-attention. This constraint is gradually phased out via a **mask annealing strategy**, allowing for **efficient, decoder-free inference** without compromising segmentation performance.
+
+The model supports semantic, instance, and panoptic segmentation using a unified architecture and task-specific post-processing.
+
 ## Usage Examples
 
-- Use the Hugging Face implementation of EoMT for inference with pre-trained models.
+Use the Hugging Face implementation of EoMT for inference with pre-trained models.
 
 ### Semantic Segmentation
 
+The EoMT model performs semantic segmentation using sliding-window inference. The input image is resized such that the shorter side matches the target input size, then it is split into overlapping crops. Each crop is then passed through the model. After inference, the predicted logits from each crop are stitched back together and rescaled to the original image size to get the final segmentation mask.
+
 ```python
-from transformers import EoMTImageProcessor, EoMTForUniversalSegmentation
-import numpy as np
+import matplotlib.pyplot as plt
+import requests
 import torch
 from PIL import Image
-import requests
-import matplotlib.pyplot as plt
+
+from transformers import EoMTForUniversalSegmentation, EoMTImageProcessor
 
 
-model_id = ""
+model_id = "yaswanthgali/ade20k_semantic_eomt_large_512-hf"
 processor = EoMTImageProcessor.from_pretrained(model_id)
 model = EoMTForUniversalSegmentation.from_pretrained(model_id)
 
-image = Image.open(
-    requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-)
+image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
 # Preprocess the image for semantic segmentation by setting `segmentation_type` arg
 inputs = processor(
@@ -78,26 +86,27 @@ plt.imshow(preds[0])
 plt.axis("off")
 plt.title("Semantic Segmentation")
 plt.show()
+
 ```
 
 ### Instance Segmentation
 
+The EoMT model performs instance segmentation using padded inference. The input image is resized so that the longer side matches the target input size, and the shorter side is zero-padded to form a square. The image is then normalized and passed through the model. The postporcessing is similar to panoptic segmentation except the stuff classes are removed (.e.g only thing class are kept).
+
 ```python
-from transformers import EoMTImageProcessor, EoMTForUniversalSegmentation
-import numpy as np
+import matplotlib.pyplot as plt
+import requests
 import torch
 from PIL import Image
-import requests
-import matplotlib.pyplot as plt
+
+from transformers import EoMTForUniversalSegmentation, EoMTImageProcessor
 
 
-model_id = ""
+model_id = "yaswanthgali/coco_instance_eomt_large_640-hf"
 processor = EoMTImageProcessor.from_pretrained(model_id)
 model = EoMTForUniversalSegmentation.from_pretrained(model_id)
 
-image = Image.open(
-    requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-)
+image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
 # Preprocess the image for semantic segmentation by setting `segmentation_type` arg
 inputs = processor(
@@ -113,10 +122,10 @@ with torch.inference_mode():
 original_image_sizes = [(image.height, image.width)]
 
 # Post-process the model outputs to get final segmentation prediction
-preds = processor.post_process_semantic_segmentation(
+preds = processor.post_process_instance_segmentation(
     outputs,
     original_image_sizes=original_image_sizes,
-    stuff_classes = [0,45] # Pass the list of stuff classes to exclude from mask.
+    stuff_classes=[0, 45],  # Pass the list of stuff classes to exclude from mask.
 )
 
 # Visualize the segmentation mask
@@ -128,22 +137,22 @@ plt.show()
 
 ### Panoptic Segmentation
 
+The EoMT model performs panoptic segmentation using the same padded inference strategy as in instance segmentation. After padding and normalization, the model predicts both thing (instances) and stuff (amorphous regions) classes. The resulting mask and class logits are combined through post-processing (adapted from Mask2Former) to produce a unified panoptic segmentation map, along with segment metadata like segment id, class labels and confidence scores.
+
 ```python
-from transformers import EoMTImageProcessor, EoMTForUniversalSegmentation
-import numpy as np
+import matplotlib.pyplot as plt
+import requests
 import torch
 from PIL import Image
-import requests
-import matplotlib.pyplot as plt
+
+from transformers import EoMTForUniversalSegmentation, EoMTImageProcessor
 
 
-model_id = ""
+model_id = "yaswanthgali/coco_panoptic_eomt_large_640-hf"
 processor = EoMTImageProcessor.from_pretrained(model_id)
 model = EoMTForUniversalSegmentation.from_pretrained(model_id)
 
-image = Image.open(
-    requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-)
+image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
 # Preprocess the image for panoptic segmentation by setting `segmentation_type` arg
 inputs = processor(
