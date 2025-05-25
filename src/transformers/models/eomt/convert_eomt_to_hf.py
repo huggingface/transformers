@@ -216,6 +216,7 @@ def convert_model(
     config.layerscale_value = 1e-5
 
     processor = EoMTImageProcessor()
+    processor.size = {"height": config.image_size, "width": config.image_size}
 
     # Save the config and processor
     if output_dir:

@@ -198,7 +198,7 @@ class EoMTImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = 640,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
@@ -209,8 +209,6 @@ class EoMTImageProcessor(BaseImageProcessor):
         **kwargs,
     ):
         super().__init__(**kwargs)
-
-        size = get_size_dict(size, default_to_square=True)
 
         self.do_resize = do_resize
         self.size = size
