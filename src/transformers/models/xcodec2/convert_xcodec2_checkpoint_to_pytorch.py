@@ -49,13 +49,9 @@ def _grab_best_device(use_gpu=True):
     return torch.device(device)
 
 
-def _convert_model(
-    state_dict,
-    hf_model,
-    device
-):
+def _convert_model(state_dict, hf_model, device):
     tensors = {}
-   
+
     for k in state_dict.keys():
         # replace beta with bias and handle special cases
         if "generator.backbone.transformers" in k:

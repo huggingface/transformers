@@ -1,10 +1,10 @@
 import math
 import random
 from contextlib import nullcontext
+from dataclasses import dataclass
 from functools import partial, wraps
 from math import ceil
 from typing import List, Optional, Tuple, Union
-from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -17,7 +17,7 @@ from torch.nn import Module, Parameter
 
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
-from ...utils import is_torch_flex_attn_available, logging, ModelOutput
+from ...utils import ModelOutput, is_torch_flex_attn_available, logging
 from ..auto import AutoModel
 from ..auto.feature_extraction_auto import AutoFeatureExtractor
 from ..llama.modeling_llama import (
@@ -27,6 +27,7 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
 )
 from .configuration_xcodec2 import XCodec2Config
+
 
 @dataclass
 class XCodec2Output(ModelOutput):
@@ -40,6 +41,7 @@ class XCodec2Output(ModelOutput):
 
     audio_codes: Optional[torch.LongTensor] = None
     audio_values: Optional[torch.FloatTensor] = None
+
 
 @dataclass
 class XCodec2EncoderOutput(ModelOutput):
@@ -1306,7 +1308,7 @@ class CodecDecoderVocos(nn.Module):
 
         def _apply_weight_norm(m):
             if isinstance(m, nn.Conv1d) or isinstance(m, nn.ConvTranspose1d):
-                torch.nn.utils.weight_norm(m)
+                weight_norm(m)
 
         self.apply(_apply_weight_norm)
 
@@ -1382,6 +1384,7 @@ class SemanticEncoder(nn.Module):
         x = self.final_conv(x)  # (Batch, Code_dim, Length)
         return x
 
+
 class XCodec2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
@@ -1437,7 +1440,7 @@ class XCodec2Model(XCodec2PreTrainedModel):
         self.post_init()
 
     def forward(
-        self, 
+        self,
         input_values: torch.Tensor,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], XCodec2Output]:
@@ -1500,7 +1503,7 @@ class XCodec2Model(XCodec2PreTrainedModel):
         )
 
     def encode(
-        self, 
+        self,
         input_values,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], XCodec2EncoderOutput]:
@@ -1517,8 +1520,8 @@ class XCodec2Model(XCodec2PreTrainedModel):
             input_values.squeeze(1).numpy(),
             sampling_rate=self.feature_extractor.sampling_rate,
             return_tensors="pt",
-        ).input_features # [batch, frames, feat_dim]
-    
+        ).input_features  # [batch, frames, feat_dim]
+
         # 2) Semantic layer
         semantic_output = self.semantic_model(input_features)
         semantic_hidden_16 = semantic_output.hidden_states[16]  # Take the 16th layer
@@ -1553,7 +1556,7 @@ class XCodec2Model(XCodec2PreTrainedModel):
         )
 
     def decode(
-        self, 
+        self,
         vq_code,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], XCodec2DecoderOutput]:
@@ -1566,12 +1569,13 @@ class XCodec2Model(XCodec2PreTrainedModel):
 
         # 8) Finally decode into waveform
         recon_audio = self.generator(vq_post_emb.transpose(1, 2), vq=False)[0]  # [batch, time]
-        
+
         if not return_dict:
             return recon_audio
-        
+
         return XCodec2DecoderOutput(
             audio_values=recon_audio,
         )
+
 
 __all__ = ["XCodec2Model", "XCodec2PreTrainedModel"]
