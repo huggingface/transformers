@@ -27,6 +27,8 @@ from .utils.import_utils import is_torch_flex_attn_available, is_torch_greater_o
 if is_torch_flex_attn_available():
     from torch._dynamo._trace_wrapped_higher_order_op import TransformGetItemToIndex
     from torch.nn.attention.flex_attention import BlockMask, create_block_mask
+else:
+    BlockMask = None
 
 
 _is_torch_greater_or_equal_than_2_5 = is_torch_greater_or_equal("2.5", accept_dev=True)
@@ -582,11 +584,11 @@ ALL_MASK_ATTENTION_FUNCTIONS: AttentionMaskInterface = AttentionMaskInterface()
 def _preprocess_mask_arguments(
     config: PretrainedConfig,
     input_embeds: torch.Tensor,
-    attention_mask: Optional[Union[torch.Tensor, BlockMask]],
+    attention_mask: Optional[Union[torch.Tensor, "BlockMask"]],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
     layer_idx: Optional[int],
-) -> tuple[bool, Optional[Union[torch.Tensor, BlockMask]], int, int]:
+) -> tuple[bool, Optional[Union[torch.Tensor, "BlockMask"]], int, int]:
     """
     Perform some common pre-processing of the mask arguments we get from the modeling code. Mostly determine the
     key-value length and offsets, and if we should early exit or not.
