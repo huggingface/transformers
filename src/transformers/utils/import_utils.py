@@ -414,6 +414,8 @@ def is_torch_flex_attn_available():
         return False
     elif _torch_version == "N/A":
         return False
+    elif is_torch_npu_available():
+        return False
 
     # TODO check if some bugs cause push backs on the exact version
     # NOTE: We require torch>=2.5.0 as it is the first release

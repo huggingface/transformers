@@ -582,11 +582,11 @@ ALL_MASK_ATTENTION_FUNCTIONS: AttentionMaskInterface = AttentionMaskInterface()
 def _preprocess_mask_arguments(
     config: PretrainedConfig,
     input_embeds: torch.Tensor,
-    attention_mask: Optional[Union[torch.Tensor, BlockMask]],
+    attention_mask: Optional[Union[torch.Tensor, "BlockMask"]],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
     layer_idx: Optional[int],
-) -> tuple[bool, Optional[Union[torch.Tensor, BlockMask]], int, int]:
+) -> tuple[bool, Optional[Union[torch.Tensor, "BlockMask"]], int, int]:
     """
     Perform some common pre-processing of the mask arguments we get from the modeling code. Mostly determine the
     key-value length and offsets, and if we should early exit or not.
