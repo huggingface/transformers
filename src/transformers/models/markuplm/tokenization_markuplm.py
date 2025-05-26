@@ -495,7 +495,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
         text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
-        xpaths: Union[List[List[int]], List[List[List[int]]]] = None,
+        xpaths: Optional[Union[List[List[int]], List[List[List[int]]]]] = None,
         node_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
