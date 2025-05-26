@@ -39,13 +39,16 @@ import os
 import subprocess
 
 result = subprocess.run(
-    ["python3", "-m", "pytest", "-v", f"{target_test}"],
+    ["python3", "-m", "pytest", "-v", "-rfEp", f"{target_test}"],
     capture_output = True,
     text=True,
 )
 print(result.stdout)
 
-if len(result.stderr) > 0:
+if f"PASSED {target_test}" in result.stdout:
+    print("test passed")
+    exit(0)
+elif len(result.stderr) > 0:
     if "ERROR: file or directory not found: " in result.stderr:
         print("test file or directory not found in this commit")
         exit(0)

@@ -95,7 +95,7 @@ transcription[0]
 
 ## Notes
 
-- Whisper relies on [`~GenerationMixin.generate`] for inference.
+- Whisper relies a custom [`generate`] for inference, make sure to check the docs below.
 - The [`WhisperProcessor`] can be used for preparing audio and decoding predicted ids back into text.
 
 ## WhisperConfig

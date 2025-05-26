@@ -171,10 +171,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         self.use_default_system_prompt = use_default_system_prompt
         self.vocab_file = vocab_file
 
-    @property
-    def can_save_slow_tokenizer(self) -> bool:
-        return os.path.isfile(self.vocab_file) if self.vocab_file else False
-
     def update_post_processor(self):
         """
         Updates the underlying post processor with the current `bos_token` and `eos_token`.

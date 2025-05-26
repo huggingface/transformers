@@ -9,6 +9,18 @@ on:
       start_sha:
         required: true
         type: string
+      job:
+        required: true
+        type: string
+      slack_report_channel:
+        required: true
+        type: string
+      ci_event:
+        required: true
+        type: string
+      report_repo_id:
+        required: true
+        type: string
 
 
 env:
@@ -26,7 +38,7 @@ env:
 
 
 jobs:
-  run_models_gpu:
+  check_new_failures:
     name: " "
     runs-on:
       group: aws-g4dn-4xlarge-cache
@@ -36,17 +48,17 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: ci_results_run_models_gpu
-          path: /transformers/ci_results_run_models_gpu
+          name: ci_results_${{ inputs.job }}
+          path: /transformers/ci_results_${{ inputs.job }}
 
       - name: Check file
         working-directory: /transformers
         run: |
-          if [ -f ci_results_run_models_gpu/new_model_failures.json ]; then
-            echo "`ci_results_run_models_gpu/new_model_failures.json` exists, continue ..."
+          if [ -f ci_results_${{ inputs.job }}/new_failures.json ]; then
+            echo "`ci_results_${{ inputs.job }}/new_failures.json` exists, continue ..."
             echo "process=true" >> $GITHUB_ENV
           else
-            echo "`ci_results_run_models_gpu/new_model_failures.json` doesn't exist, abort."
+            echo "`ci_results_${{ inputs.job }}/new_failures.json` doesn't exist, abort."
             echo "process=false" >> $GITHUB_ENV
           fi
 
@@ -112,14 +124,14 @@ jobs:
       - name: Check failed tests
         working-directory: /transformers
         if: ${{ env.process == 'true' }}
-        run: python3 utils/check_bad_commit.py --start_commit ${{ inputs.start_sha }} --end_commit ${{ env.END_SHA }} --file ci_results_run_models_gpu/new_model_failures.json --output_file new_model_failures_with_bad_commit.json
+        run: python3 utils/check_bad_commit.py --start_commit ${{ inputs.start_sha }} --end_commit ${{ env.END_SHA }} --file ci_results_${{ inputs.job }}/new_failures.json --output_file new_failures_with_bad_commit.json
 
       - name: Show results
         working-directory: /transformers
         if: ${{ env.process == 'true' }}
         run: |
-          ls -l new_model_failures_with_bad_commit.json
-          cat new_model_failures_with_bad_commit.json
+          ls -l new_failures_with_bad_commit.json
+          cat new_failures_with_bad_commit.json
 
       - name: Checkout back
         working-directory: /transformers
@@ -134,6 +146,8 @@ jobs:
         env:
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+          JOB_NAME: ${{ inputs.job }}
+          REPORT_REPO_ID: ${{ inputs.report_repo_id }}
         run: |
           python3 utils/process_bad_commit_report.py
 
@@ -144,6 +158,8 @@ jobs:
         env:
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+          JOB_NAME: ${{ inputs.job }}
+          REPORT_REPO_ID: ${{ inputs.report_repo_id }}
         run: |
           {
             echo 'REPORT_TEXT<<EOF'
@@ -151,17 +167,31 @@ jobs:
             echo EOF
           } >> "$GITHUB_ENV"
 
+      - name: Prepare Slack report title
+        working-directory: /transformers
+        if: ${{ env.process == 'true' }}
+        run: |
+          pip install slack_sdk
+          echo "title=$(python3 -c 'import sys; sys.path.append("utils"); from utils.notification_service import job_to_test_map; ci_event = "${{ inputs.ci_event }}"; job = "${{ inputs.job }}"; test_name = job_to_test_map[job]; title = f"New failed tests of {ci_event}" + ":" + f" {test_name}"; print(title)')" >> $GITHUB_ENV
+
       - name: Send processed report
         if: ${{ env.process == 'true' && !endsWith(env.REPORT_TEXT, '{}') }}
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
         with:
           # Slack channel id, channel name, or user id to post message.
           # See also: https://api.slack.com/methods/chat.postMessage#channels
-          channel-id: '#transformers-ci-feedback-tests'
+          channel-id: '#${{ inputs.slack_report_channel }}'
           # For posting a rich message using Block Kit
           payload: |
             {
               "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "${{ env.title }}"
+                  }
+                },
                 {
                   "type": "section",
                   "text": {

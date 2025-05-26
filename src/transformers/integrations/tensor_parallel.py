@@ -16,15 +16,15 @@ from __future__ import annotations
 import operator
 import os
 import re
-from collections.abc import MutableMapping
 from functools import partial, reduce
-from typing import Callable, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.distributed as dist
 from torch import nn
 
 from ..utils import is_torch_greater_or_equal, logging
+from ..utils.generic import GeneralInterface
 
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
@@ -52,6 +52,7 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
 
     # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
     device_type = torch._C._get_accelerator().type
+    current_device = getattr(torch, device_type)
     if not torch.distributed.is_initialized():
         try:
             rank = int(os.environ["RANK"])
@@ -73,6 +74,9 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
                 "We tried to initialize torch.distributed for you, but it failed. Make "
                 "sure you init torch distributed in your script to use `tp_plan='auto'`."
             ) from e
+
+    if device_type != "cpu":
+        current_device.set_device(int(os.environ["LOCAL_RANK"]))
     index = current_device.current_device() if device_type != "cpu" else None
     tp_device = torch.device(device_type, index)
 
@@ -720,20 +724,11 @@ class SequenceParallel(TensorParallelLayer):
         return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
 
 
-class ParallelInterface(MutableMapping):
-    """
-    Dict-like object keeping track of allowed attention functions. You can easily add a new attention function
-    with a call to `register()`. If a model needs to locally overwrite an existing attention function, say `sdpa`,
-    it needs to declare a new instance of this class inside the `modeling_<model>.py`, and declare it on that instance.
-    """
-
+class ParallelInterface(GeneralInterface):
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
-    # a new instance is created (in order to locally override a given function)
-
-    def __init__(self):
-        self._local_mapping = {}
-
-        ParallelInterface._global_mapping = {
+    # a new instance is created (in order to locally override a given entry)
+    _global_mapping = (
+        {
             "colwise": ColwiseParallel(),
             "rowwise": RowwiseParallel(),
             "colwise_rep": ColwiseParallel(output_layouts=Replicate()),
@@ -746,41 +741,12 @@ class ParallelInterface(MutableMapping):
             "sequence_parallel": SequenceParallel(),
             "replicate": ReplicateParallel(),
         }
-
-    def __getitem__(self, key):
-        # First check if instance has a local override
-        if key in self._local_mapping:
-            return self._local_mapping[key]
-        return self._global_mapping[key]
-
-    def __setitem__(self, key, value):
-        # Allow local update of the default functions without impacting other instances
-        self._local_mapping.update({key: value})
-
-    def __delitem__(self, key):
-        del self._local_mapping[key]
-
-    def __iter__(self):
-        # Ensure we use all keys, with the overwritten ones on top
-        return iter({**self._global_mapping, **self._local_mapping})
-
-    def __len__(self):
-        return len(self._global_mapping.keys() | self._local_mapping.keys())
-
-    @classmethod
-    def register(cls, key: str, value: Callable):
-        cls._global_mapping.update({key: value})
-
-    def valid_keys(self) -> List[str]:
-        return list(self.keys())
+        if is_torch_greater_or_equal("2.5") and _torch_distributed_available
+        else {}
+    )
 
 
-# Global AttentionInterface shared by all models which do not need to overwrite any of the existing ones
-
-if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
-    ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
-else:
-    ALL_PARALLEL_STYLES = None
+ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
 def convert_local_tensor_to_dtensor(

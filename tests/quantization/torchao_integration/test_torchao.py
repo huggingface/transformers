@@ -21,10 +21,13 @@ from packaging import version
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
 from transformers.testing_utils import (
+    backend_empty_cache,
+    get_device_properties,
     require_torch_gpu,
     require_torch_multi_gpu,
     require_torchao,
     require_torchao_version_greater_or_equal,
+    torch_device,
 )
 from transformers.utils import is_torch_available, is_torchao_available
 
@@ -131,7 +134,7 @@ class TorchAoTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_int4wo_quant(self):
@@ -260,7 +263,7 @@ class TorchAoTest(unittest.TestCase):
 
 @require_torch_gpu
 class TorchAoGPUTest(TorchAoTest):
-    device = "cuda"
+    device = torch_device
     quant_scheme_kwargs = {"group_size": 32}
 
     def test_int4wo_offload(self):
@@ -397,7 +400,7 @@ class TorchAoSerializationTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_original_model_expected_output(self):
@@ -452,33 +455,33 @@ class TorchAoSerializationW8CPUTest(TorchAoSerializationTest):
 @require_torch_gpu
 class TorchAoSerializationGPTTest(TorchAoSerializationTest):
     quant_scheme, quant_scheme_kwargs = "int4_weight_only", {"group_size": 32}
-    device = "cuda:0"
+    device = f"{torch_device}:0"
 
 
 @require_torch_gpu
 class TorchAoSerializationW8A8GPUTest(TorchAoSerializationTest):
     quant_scheme, quant_scheme_kwargs = "int8_dynamic_activation_int8_weight", {}
     EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
-    device = "cuda:0"
+    device = f"{torch_device}:0"
 
 
 @require_torch_gpu
 class TorchAoSerializationW8GPUTest(TorchAoSerializationTest):
     quant_scheme, quant_scheme_kwargs = "int8_weight_only", {}
     EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
-    device = "cuda:0"
+    device = f"{torch_device}:0"
 
 
 @require_torch_gpu
 @require_torchao_version_greater_or_equal("0.10.0")
 class TorchAoSerializationFP8GPUTest(TorchAoSerializationTest):
     EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
-    device = "cuda:0"
+    device = f"{torch_device}:0"
 
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
-        if not torch.cuda.is_available() or torch.cuda.get_device_capability()[0] < 9:
+        if not (get_device_properties()[0] == "cuda" and get_device_properties()[1] >= 9):
             raise unittest.SkipTest("CUDA compute capability 9.0 or higher required for FP8 tests")
 
         from torchao.quantization import Float8WeightOnlyConfig
@@ -493,12 +496,12 @@ class TorchAoSerializationFP8GPUTest(TorchAoSerializationTest):
 @require_torchao_version_greater_or_equal("0.10.0")
 class TorchAoSerializationA8W4Test(TorchAoSerializationTest):
     EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
-    device = "cuda:0"
+    device = f"{torch_device}:0"
 
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
-        if not torch.cuda.is_available() or torch.cuda.get_device_capability()[0] < 9:
+        if not (get_device_properties()[0] == "cuda" and get_device_properties()[1] >= 9):
             raise unittest.SkipTest("CUDA compute capability 9.0 or higher required for FP8 tests")
 
         from torchao.quantization import Int8DynamicActivationInt4WeightConfig
