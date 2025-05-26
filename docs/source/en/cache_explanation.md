@@ -52,7 +52,9 @@ $$
 K_{\text{cache}} \leftarrow \text{concat}(K_{\text{past}}, k_t), \quad V_{\text{cache}} \leftarrow \text{concat}(V_{\text{past}}, v_t)
 $$
 
-### How Caching Improves Efficiency
+Attention is calculated independently in each layer of the model, and caching is done on a per-layer basis.
+
+Refer to the table below to compare how caching improves efficiency.
 
 Without caching:
 - At each step \\( t \\), recompute all \\( K_{1:t} \\) and \\( V_{1:t} \\).
