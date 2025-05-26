@@ -26,6 +26,7 @@ from typing import Optional
 
 import yaml
 
+from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig, TextIteratorStreamer
 from transformers.utils import is_rich_available, is_torch_available
 
 from . import BaseTransformersCLICommand
