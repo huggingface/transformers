@@ -31,7 +31,6 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_vision_available, logging
-from .image_processing_pixtral import get_resize_output_image_size
 
 
 if is_vision_available():
