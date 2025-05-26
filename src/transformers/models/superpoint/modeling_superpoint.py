@@ -27,17 +27,12 @@ from transformers.models.superpoint.configuration_superpoint import SuperPointCo
 
 from ...utils import (
     ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     logging,
 )
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "SuperPointConfig"
-
-_CHECKPOINT_FOR_DOC = "magic-leap-community/superpoint"
 
 
 def remove_keypoints_from_borders(
@@ -323,12 +318,8 @@ class SuperPointDescriptorDecoder(nn.Module):
         return descriptors
 
 
+@auto_docstring
 class SuperPointPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = SuperPointConfig
     base_model_prefix = "superpoint"
     main_input_name = "pixel_values"
@@ -363,33 +354,10 @@ class SuperPointPreTrainedModel(PreTrainedModel):
         return pixel_values[:, 0, :, :][:, None, :, :]
 
 
-SUPERPOINT_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`SuperPointConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+@auto_docstring(
+    custom_intro="""
+    SuperPoint model outputting keypoints and descriptors.
     """
-
-SUPERPOINT_INPUTS_DOCSTRING = r"""
-Args:
-    pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-        Pixel values. Pixel values can be obtained using [`SuperPointImageProcessor`]. See
-        [`SuperPointImageProcessor.__call__`] for details.
-    output_hidden_states (`bool`, *optional*):
-        Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for more
-        detail.
-    return_dict (`bool`, *optional*):
-        Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-    """
-
-
-@add_start_docstrings(
-    "SuperPoint model outputting keypoints and descriptors.",
-    SUPERPOINT_START_DOCSTRING,
 )
 class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
     """
@@ -412,7 +380,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
 
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(SUPERPOINT_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -420,7 +388,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SuperPointKeypointDescriptionOutput]:
-        """
+        r"""
         Examples:
 
         ```python
