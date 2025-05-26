@@ -71,8 +71,8 @@ class BaseVideoProcessorTester(unittest.TestCase):
 
         # Test a list of videos is converted to a list of 1 video
         video = get_random_video(16, 32)
-        video = [PIL.Image.fromarray(frame) for frame in video]
-        videos_list = make_batched_videos(video)
+        pil_video = [PIL.Image.fromarray(frame) for frame in video]
+        videos_list = make_batched_videos(pil_video)
         self.assertIsInstance(videos_list, list)
         self.assertIsInstance(videos_list[0], np.ndarray)
         self.assertEqual(videos_list[0].shape, (8, 16, 32, 3))
@@ -80,8 +80,8 @@ class BaseVideoProcessorTester(unittest.TestCase):
 
         # Test a nested list of videos is not modified
         video = get_random_video(16, 32)
-        video = [PIL.Image.fromarray(frame) for frame in video]
-        videos = [video, video]
+        pil_video = [PIL.Image.fromarray(frame) for frame in video]
+        videos = [pil_video, pil_video]
         videos_list = make_batched_videos(videos)
         self.assertIsInstance(videos_list, list)
         self.assertIsInstance(videos_list[0], np.ndarray)

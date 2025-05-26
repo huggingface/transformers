@@ -50,7 +50,7 @@ This model was contributed by [patrickvonplaten](https://huggingface.co/patrickv
 - Hubert is a speech model that accepts a float array corresponding to the raw waveform of the speech signal.
 - Hubert model was fine-tuned using connectionist temporal classification (CTC) so the model output has to be decoded
   using [`Wav2Vec2CTCTokenizer`].
-
+- The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`  
 
 ## Using Flash Attention 2
 
