@@ -2497,6 +2497,7 @@ else:
         [
             "Gemma3ForCausalLM",
             "Gemma3ForConditionalGeneration",
+            "Gemma3ForSequenceClassification",
             "Gemma3PreTrainedModel",
             "Gemma3TextModel",
         ]
@@ -7621,6 +7622,7 @@ if TYPE_CHECKING:
             Gemma3ForConditionalGeneration,
             Gemma3PreTrainedModel,
             Gemma3TextModel,
+            Gemma3ForSequenceClassification,
         )
         from .models.git import (
             GitForCausalLM,

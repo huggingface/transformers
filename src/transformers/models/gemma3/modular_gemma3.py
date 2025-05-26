@@ -46,6 +46,7 @@ from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
     Gemma2ForCausalLM,
+    Gemma2ForSequenceClassification,
     Gemma2MLP,
     Gemma2Model,
     Gemma2PreTrainedModel,
@@ -724,6 +725,14 @@ class Gemma3ForCausalLM(Gemma2ForCausalLM):
         super().__init__(config)
         self.model = Gemma3TextModel(config)
 
+class Gemma3ForSequenceClassification(Gemma2ForSequenceClassification):
+    config_class = Gemma3TextConfig
+    base_model_prefix = "language_model"
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = Gemma3TextModel(config)
+        self.post_init()
 
 class Gemma3MultiModalProjector(nn.Module):
     def __init__(self, config: Gemma3Config):
@@ -1078,5 +1087,6 @@ __all__ = [
     "Gemma3PreTrainedModel",  # noqa: F822
     "Gemma3TextModel",
     "Gemma3ForCausalLM",
+    "Gemma3ForSequenceClassification",
     "Gemma3ForConditionalGeneration",
 ]

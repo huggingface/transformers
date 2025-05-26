@@ -1036,6 +1036,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("funnel", "FunnelForSequenceClassification"),
         ("gemma", "GemmaForSequenceClassification"),
         ("gemma2", "Gemma2ForSequenceClassification"),
+        ("gemma3_text", "Gemma3ForSequenceClassification"),
         ("glm", "GlmForSequenceClassification"),
         ("glm4", "Glm4ForSequenceClassification"),
         ("gpt-sw3", "GPT2ForSequenceClassification"),
