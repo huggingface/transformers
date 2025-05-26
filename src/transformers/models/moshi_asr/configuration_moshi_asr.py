@@ -121,10 +121,7 @@ class MoshiAsrConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs
+            pad_token_id=pad_token_id, bos_token_id=bos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
         )
 
         if codec_config is None:

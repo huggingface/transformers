@@ -31,7 +31,6 @@ from ..moshi.modeling_moshi import MoshiModel
 
 
 if is_torch_flex_attn_available():
-
     pass
 
 
@@ -56,10 +55,13 @@ class MoshiAsrEmbeddings(nn.Module):
         self.register_buffer("audio_tokens_offsets", audio_tokens_offsets, persistent=False)
 
     def forward(self, input_ids):
-        input_ids = torch.where(input_ids == self.embed_tokens.padding_idx, input_ids, input_ids + self.audio_tokens_offsets)
+        input_ids = torch.where(
+            input_ids == self.embed_tokens.padding_idx, input_ids, input_ids + self.audio_tokens_offsets
+        )
         inputs_embeds = self.embed_tokens(input_ids)
         inputs_embeds = inputs_embeds.sum(dim=2)
         return inputs_embeds
+
 
 class MoshiAsrModel(MoshiModel):
     def __init__(self, config):
@@ -78,93 +80,104 @@ class MoshiAsrForConditionalGeneration(LlamaForCausalLM, GenerationMixin):
         bos_token_id: Optional[torch.Tensor] = None,
         model_kwargs: Optional[Dict[str, torch.Tensor]] = None,
     ) -> Tuple[torch.Tensor, Optional[str], Dict[str, torch.Tensor]]:
-        inputs, input_name, model_kwargs = GenerationMixin._prepare_model_inputs(
+        inputs, input_name, model_kwargs = super()._prepare_model_inputs(
             inputs=inputs,
             bos_token_id=bos_token_id,
             model_kwargs=model_kwargs,
         )
 
-        audio_window_size = model_kwargs.get("audio_window_size", None)
-        if audio_window_size is None:
-            audio_window_size = int(model_kwargs["input_values"].shape[-1] / self.config.frame_size)
+        if "input_values" in model_kwargs:  # TODO: better handling of edge case here
+            audio_window_size = model_kwargs.get("audio_window_size", None)
+            if audio_window_size is None:
+                audio_window_size = int(model_kwargs["input_values"].shape[-1] / self.config.frame_size)
+                model_kwargs["audio_window_size"] = audio_window_size
 
-        batch_size = inputs.shape[0]
-        device = inputs.device
+            batch_size = inputs.shape[0]
+            device = inputs.device
 
-        # initialize audio tokens
-        model_kwargs["audio_tokens"] = torch.zeros(
-            (batch_size, audio_window_size, self.config.num_codebooks),
-            device=device,
-            dtype=torch.long,
-        )
-
-        ones_audio_tokens = torch.ones(
-            (batch_size, 1, self.config.num_codebooks),
-            device=device,
-            dtype=torch.long,
-        )
-        model_kwargs["bos_audio_tokens"] = ones_audio_tokens * self.config.audio_bos_token_id
-        model_kwargs["pad_audio_tokens"] = ones_audio_tokens * self.config.audio_pad_token_id
-
-        model_kwargs["current_window"] = torch.tensor([0, audio_window_size], device=device, dtype=torch.long)
+            # initialize audio tokens
+            model_kwargs["audio_tokens"] = torch.zeros(
+                (batch_size, audio_window_size, self.config.num_codebooks),
+                device=device,
+                dtype=torch.long,
+            )
+            model_kwargs["current_window"] = (
+                torch.tensor([0, audio_window_size], device=device, dtype=torch.long)
+                .expand(batch_size, -1)
+                .contiguous()
+            )
 
         return inputs, input_name, model_kwargs
 
     def prepare_inputs_for_generation(
         self,
         *args,
-        cache_position: Optional[torch.LongTensor] = None,
         audio_tokens: Optional[torch.LongTensor] = None,
         input_values: Optional[torch.FloatTensor] = None,
         padding_mask: Optional[torch.Tensor] = None,
         audio_window_size: Optional[int] = None,
-        bos_audio_tokens: Optional[torch.LongTensor] = None,
-        pad_audio_tokens: Optional[torch.LongTensor] = None,
         current_window: Optional[Tuple[int, int]] = None,
         **kwargs,
     ):
-        model_inputs = GenerationMixin.prepare_inputs_for_generation(*args, cache_position=cache_position, **kwargs)
+        model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
-        if cache_position == 0:
-            current_audio_tokens = bos_audio_tokens
-        else:
-            audio_position = cache_position - self.config.delay_in_tokens
-            start, end = current_window  # closed interval
-            if audio_position < 0:
-                current_audio_tokens = pad_audio_tokens
-            else:
-                if audio_position >= end:
-                    current_input_values = input_values[..., start * self.config.frame_size: (start + audio_window_size) * self.config.frame_size]
-                    # TODO: batched: used padding_mask
-                    new_audio_tokens = self.codec_model.encode(current_input_values).audio_codes
-                    audio_tokens.copy_(new_audio_tokens.transpose(1, 2))
-                    start = end.clone()
-                    end = end + audio_window_size
-                    current_window.copy_(torch.tensor([start, end], device=current_window.device))
+        if input_values is not None:
+            cache_position = model_inputs["cache_position"]
 
-                current_audio_tokens = audio_tokens[:, audio_position - start, :]
+            audio_positions = cache_position - self.config.delay_in_tokens
+            start, end = current_window[0]  # closed interval
+            if audio_positions[-1] >= end:
+                # we need to encode the new audio tokens
+                with torch.no_grad():
+                    input_values_start_idx = start * self.config.frame_size
+                    input_values_end_idx = (start + audio_window_size) * self.config.frame_size
+                    current_input_values = input_values[..., input_values_start_idx:input_values_end_idx]
+                    new_audio_tokens = self.codec_model.encode(current_input_values).audio_codes.transpose(1, 2)
 
-        input_ids = model_inputs["input_ids"]
-        model_inputs["input_ids"] = torch.cat(
-            [input_ids.unsqueeze(2), current_audio_tokens],
-            dim=2,
-        )
+                audio_tokens.copy_(new_audio_tokens)
+
+                start = end.clone()
+                end = end + audio_window_size
+                current_window.copy_(
+                    torch.tensor([start, end], device=current_window.device).expand(current_window.shape[0], -1)
+                )
+
+            current_audio_tokens_idxs = (audio_positions - start).clamp(min=0)
+            current_audio_tokens = audio_tokens[:, current_audio_tokens_idxs, :]
+
+            current_audio_tokens[:, cache_position == 0, :] = self.config.audio_bos_token_id
+            current_audio_tokens[:, audio_positions < 0, :] = self.config.audio_pad_token_id
+
+            input_ids = model_inputs.pop("input_ids")
+            input_ids = torch.cat(
+                [input_ids.unsqueeze(2), current_audio_tokens],
+                dim=2,
+            )
+            model_inputs["input_ids"] = input_ids
+
+        input_ids = model_inputs.pop("input_ids")
+        model_inputs["inputs_embeds"] = self.model.embed_tokens(input_ids)
 
         return model_inputs
 
     def generate(self, *args, audio_window_size: Optional[int] = None, **kwargs):
         # TODO: clean
-        input_values = kwargs["input_values"]
-        max_new_tokens = int(input_values.shape[-1] / 1920)
+        padding_mask = kwargs.get("padding_mask")
+        max_new_tokens = kwargs.pop("max_new_tokens", None)
+        kwargs["audio_window_size"] = audio_window_size
 
+        if padding_mask is not None:
+            audio_tokens_mask = self.codec_model.get_audio_codes_mask(padding_mask)
+
+            # TODO: @eustlb, we way padded sequences should be handled from generate would be with max_new_tokens
+            # batch idx specific parameters to that the stopping_criteria handles it
+            max_new_tokens = audio_tokens_mask.sum(dim=-1).max()
         # TODO: handle when max_new_tokens is in kwargs
         # TODO: cache_implementation = sliding_window should be in default generation_config
 
         return GenerationMixin.generate(
             *args,
             max_new_tokens=max_new_tokens,
-            cache_implementation="sliding_window",
-            audio_window_size=audio_window_size,
             **kwargs,
         )
 

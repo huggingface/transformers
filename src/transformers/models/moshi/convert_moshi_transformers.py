@@ -180,8 +180,8 @@ def _convert_model(
     #     "depth_decoder.decoder.model.embed_tokens.weight"
     # )
 
-    extra_keys = set(state_dict.keys()) - set(hf_model.state_dict().keys())
-    missing_keys = set(hf_model.state_dict().keys()) - set(state_dict.keys())
+    # extra_keys = set(state_dict.keys()) - set(hf_model.state_dict().keys())
+    # missing_keys = set(hf_model.state_dict().keys()) - set(state_dict.keys())
     # if len(extra_keys) != 0:
     #     raise ValueError(f"extra keys found: {extra_keys}")
     # if len(missing_keys) != 0:
