@@ -1205,8 +1205,8 @@ class MoshiAsrForConditionalGeneration(MoshiAsrPreTrainedModel, GenerationMixin)
             )
             model_inputs["input_ids"] = input_ids
 
-        input_ids = model_inputs.pop("input_ids")
-        model_inputs["inputs_embeds"] = self.model.embed_tokens(input_ids)
+        # input_ids = model_inputs.pop("input_ids")
+        # model_inputs["inputs_embeds"] = self.model.embed_tokens(input_ids)
 
         return model_inputs
 
