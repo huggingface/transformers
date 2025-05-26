@@ -409,11 +409,11 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
                 image_feature = image_feature[0]
                 if image_newline is not None:
                     image_feature = torch.cat((image_feature, image_newline[None].to(image_feature)), dim=0)
+                image_feature = image_feature.flatten(0, 1)
             new_image_features.append(image_feature)
             feature_lens.append(image_feature.size(0))
-        image_features = [image_feature.flatten(0, 1) for image_feature in new_image_features]
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features[0].device)
-        return image_features, feature_lens
+        return new_image_features, feature_lens
 
     def get_image_features(
         self,

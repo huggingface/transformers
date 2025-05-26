@@ -695,8 +695,6 @@ class Idefics3Model(Idefics3PreTrainedModel):
         special_image_token_mask = input_ids == self.image_token_id
         #  Fixes RuntimeError: a leaf Variable that requires grad is being used in an in-place operation.
         new_inputs_embeds = inputs_embeds.clone()
-        # flatten bacth dim in case it's passed as `(bs, num_images, hidden_dim)`
-        image_hidden_states = image_hidden_states.view(-1, image_hidden_states.shape[-1])
         # cast to the dtype of the input_embeds to support quantized models
         image_hidden_states = image_hidden_states.to(inputs_embeds.device, inputs_embeds.dtype)
         new_inputs_embeds[special_image_token_mask] = image_hidden_states
@@ -744,7 +742,6 @@ class Idefics3Model(Idefics3PreTrainedModel):
 
         # Modality projection & resampling
         image_hidden_states = self.connector(image_hidden_states.last_hidden_state)
-        image_hidden_states = image_hidden_states.view(batch_size, -1, image_hidden_states.shape[-1])
         return image_hidden_states
 
     @can_return_tuple
