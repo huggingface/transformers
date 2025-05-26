@@ -147,7 +147,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
+            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
@@ -168,7 +168,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
+            "Hi today I have a question about the new 2019 1000rr. I",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
@@ -191,7 +191,7 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Khichdi",
+            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
