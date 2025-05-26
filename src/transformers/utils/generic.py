@@ -935,7 +935,7 @@ def can_return_tuple(func):
         output = func(self, *args, **kwargs)
         if not return_dict:
             if not hasattr(self, "_caller_obj"):
-                import inspect
+
                 frame = inspect.stack()  # 3 because we're interested in the caller (not the function itself)
                 self._caller_obj = frame[3][0].f_locals.get('self', None)
 
