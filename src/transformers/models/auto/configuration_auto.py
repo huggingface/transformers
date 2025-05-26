@@ -15,6 +15,7 @@
 """Auto Config class."""
 
 import importlib
+import os
 import re
 import warnings
 from collections import OrderedDict
