@@ -609,7 +609,7 @@ class FuyuProcessor(ProcessorMixin):
             input modalities, along with other useful data.
         """
 
-        multimodal_data = {}
+        vision_data = {}
         if image_sizes is not None:
             size = kwargs.get("size", None) or self.image_processor.size
             padded_height, padded_width = size["height"], size["width"]
@@ -632,8 +632,8 @@ class FuyuProcessor(ProcessorMixin):
                     variable_sized=True,
                 )
                 num_image_tokens.append(model_image_input["image_input_ids"][0][0].shape[-1])
-            multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
-        return MultiModalData(**multimodal_data)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+        return MultiModalData(**vision_data)
 
     def post_process_box_coordinates(self, outputs, target_sizes=None):
         """

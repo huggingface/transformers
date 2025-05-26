@@ -338,12 +338,12 @@ class PaliGemmaProcessor(ProcessorMixin):
             to a list containing the number of placeholder tokens required. If the model doesn't accept
             a certain modality or no input sizes are provided, the dict value is set to an empty list.
         """
-        multimodal_data = {}
+        vision_data = {}
         if image_sizes is not None:
             num_image_tokens = [self.image_seq_length] * len(image_sizes)
             num_image_patches = [1] * len(image_sizes)
-            multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
-        return MultiModalData(**multimodal_data)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+        return MultiModalData(**vision_data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):

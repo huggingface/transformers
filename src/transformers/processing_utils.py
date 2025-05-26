@@ -463,6 +463,16 @@ class AllKwargsForChatTemplate(
 
 @dataclass
 class MultiModalData:
+    """
+    Dataclass that holds extra useful data for processing
+    multimodal data. Processors currently cannot return keys,
+    unless it is used in model's forward. Thus we have helper
+    methods that calculate and return useful data from processing
+    input multimodals (images/videos).
+    Note that this dataclass is aimed to be used only in vLLM
+    and we might change its API in the future.
+    """
+
     num_image_tokens: list[int] = None
     num_video_tokens: list[int] = None
     num_audio_tokens: list[int] = None

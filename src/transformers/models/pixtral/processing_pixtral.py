@@ -251,7 +251,7 @@ class PixtralProcessor(ProcessorMixin):
             `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
             input modalities, along with other useful data.
         """
-        multimodal_data = {}
+        vision_data = {}
         if image_sizes is not None:
             images_kwargs = PixtralProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
@@ -272,9 +272,9 @@ class PixtralProcessor(ProcessorMixin):
                 num_image_tokens.append((num_width_tokens + 1) * num_height_tokens)
 
             num_image_patches = [1] * len(image_sizes)
-            multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
-        return MultiModalData(**multimodal_data)
+        return MultiModalData(**vision_data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

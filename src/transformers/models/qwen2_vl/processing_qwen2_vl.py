@@ -200,7 +200,7 @@ class Qwen2VLProcessor(ProcessorMixin):
             input modalities, along with other useful data.
         """
 
-        multimodal_data = {}
+        vision_data = {}
         if image_sizes is not None:
             images_kwargs = Qwen2VLProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
@@ -211,7 +211,7 @@ class Qwen2VLProcessor(ProcessorMixin):
                 for image_size in image_sizes
             ]
             num_image_tokens = [(num_patches // merge_size**2) for num_patches in num_image_patches]
-            multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
             videos_kwargs = Qwen2VLProcessorKwargs._defaults.get("videos_kwargs", {})
@@ -221,9 +221,9 @@ class Qwen2VLProcessor(ProcessorMixin):
                 for video_size in video_sizes
             ]
             num_video_tokens = [(num_patches // merge_size**2) for num_patches in num_video_patches]
-            multimodal_data["num_video_tokens"] = num_video_tokens
+            vision_data["num_video_tokens"] = num_video_tokens
 
-        return MultiModalData(**multimodal_data)
+        return MultiModalData(**vision_data)
 
     def batch_decode(self, *args, **kwargs):
         """

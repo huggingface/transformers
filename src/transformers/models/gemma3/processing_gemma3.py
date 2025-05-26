@@ -164,15 +164,15 @@ class Gemma3Processor(ProcessorMixin):
             input modalities, along with other useful data.
         """
 
-        multimodal_data = {}
+        vision_data = {}
         if image_sizes is not None:
             # NOTE: no image cropping supported yet
             num_image_tokens = [self.image_seq_length] * len(image_sizes)
             num_image_patches = [1] * len(image_sizes)
 
-            multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
-        return MultiModalData(**multimodal_data)
+        return MultiModalData(**vision_data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):

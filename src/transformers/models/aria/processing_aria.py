@@ -161,7 +161,7 @@ class AriaProcessor(ProcessorMixin):
             input modalities, along with other useful data.
         """
 
-        multimodal_data = {}
+        vision_data = {}
         if image_sizes is not None:
             images_kwargs = AriaProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
@@ -172,9 +172,9 @@ class AriaProcessor(ProcessorMixin):
                 for image_size in image_sizes
             ]
             num_image_tokens = [self.size_conversion[max_size] * num_patches for num_patches in num_image_patches]
-            multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
-        return MultiModalData(**multimodal_data)
+        return MultiModalData(**vision_data)
 
     def batch_decode(self, *args, **kwargs):
         """

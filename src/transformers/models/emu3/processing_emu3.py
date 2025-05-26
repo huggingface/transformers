@@ -208,7 +208,7 @@ class Emu3Processor(ProcessorMixin):
             input modalities, along with other useful data.
         """
 
-        multimodal_data = {}
+        vision_data = {}
         if image_sizes is not None:
             num_image_tokens = []
             for height, width in image_sizes:
@@ -225,9 +225,9 @@ class Emu3Processor(ProcessorMixin):
                 num_image_tokens.append(image_seq_length)
 
             num_image_patches = [1] * len(image_sizes)
-            multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
-        return MultiModalData(**multimodal_data)
+        return MultiModalData(**vision_data)
 
     def calculate_generate_size(self, ratio, image_area, spatial_factor):
         width, height = map(int, ratio.split(":"))

@@ -386,7 +386,7 @@ class Idefics3Processor(ProcessorMixin):
             input modalities, along with other useful data.
         """
 
-        multimodal_data = {}
+        vision_data = {}
         if image_sizes is not None:
             images_kwargs = Idefics3ProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
@@ -405,9 +405,9 @@ class Idefics3Processor(ProcessorMixin):
                 row_length = col_length * num_cols + 1
                 num_image_tokens.append(base_image_length + (row_length * num_rows))
 
-            multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
-        return MultiModalData(**multimodal_data)
+        return MultiModalData(**vision_data)
 
     def batch_decode(self, *args, **kwargs):
         """

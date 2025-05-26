@@ -250,7 +250,7 @@ class LlavaNextProcessor(ProcessorMixin):
             to a list containing the number of placeholder tokens required. If the model doesn't accept
             a certain modality or no input sizes are provided, the dict value is set to an empty list.
         """
-        multimodal_data = {}
+        vision_data = {}
         if image_sizes is not None:
             images_kwargs = LlavaNextProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
@@ -273,11 +273,9 @@ class LlavaNextProcessor(ProcessorMixin):
                 if self.vision_feature_select_strategy == "default":
                     num_image_tokens -= 1
                 batch_num_image_tokens.append(num_image_tokens)
-            multimodal_data.update(
-                {"num_image_tokens": batch_num_image_tokens, "num_image_patches": num_image_patches}
-            )
+            vision_data.update({"num_image_tokens": batch_num_image_tokens, "num_image_patches": num_image_patches})
 
-        return MultiModalData(**multimodal_data)
+        return MultiModalData(**vision_data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

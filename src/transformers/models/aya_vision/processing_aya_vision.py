@@ -254,7 +254,7 @@ class AyaVisionProcessor(ProcessorMixin):
             input modalities, along with other useful data.
         """
 
-        multimodal_data = {}
+        vision_data = {}
         if image_sizes is not None:
             images_kwargs = AyaVisionProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
@@ -269,9 +269,9 @@ class AyaVisionProcessor(ProcessorMixin):
                 token_per_patch + 3 + sum(token_per_patch + 1 for _ in range(1, num_patches))
                 for num_patches in num_image_patches
             ]  # Add +3 and +1 for BOI/EOI and image tile tokens
-            multimodal_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
-        return MultiModalData(**multimodal_data)
+        return MultiModalData(**vision_data)
 
     def batch_decode(self, *args, **kwargs):
         """
