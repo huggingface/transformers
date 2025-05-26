@@ -21,31 +21,36 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-# Zoedepth
+# ZoeDepth
 
-[Zoedepth](https://huggingface.co/papers/2302.12288) is a metric (also called absolute) depth estimation model to generate depth maps directly from images. It gives absolute metric depth in real-world metres, instead of relative depth. ZoeDepth is pre-trained on 12 datasets using relative depth and fine-tuned on two domains (NYU and KITTI) using metric depth. A lightweight head is used with a novel bin adjustment design called metric bins module for each domain. During inference, each input image is automatically routed to the appropriate head using a latent classifier.
+[ZoeDepth](https://huggingface.co/papers/2302.12288) is a depth estimation model that combines the generalization performance of relative depth estimation (how far objects are from each other) and metric depth estimation (precise depth measurement on metric scale) from a single image. It is pre-trained on 12 datasets using relative depth and 2 datasets (NYU Depth v2 and KITTI) for metric accuracy. A lightweight head with a metric bin module for each domain is used, and during inference, it automatically selects the appropriate head for each input image with a latent classifier.
 
-You can find all the original Zoedepth checkpoints under the [Zoedepth](https://huggingface.co/Intel?search=zoedepth) collection.
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/zoedepth_architecture_bis.png"
+alt="drawing" width="600"/>
 
-The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
+You can find all the original ZoeDepth checkpoints under the [Intel](https://huggingface.co/Intel?search=zoedepth) organization.
+
+The example below demonstrates how to estimate depth with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
 ```py
+import requests
 import torch
 from transformers import pipeline
 from PIL import Image
-import requests
 
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
-pipe = pipeline(
+pipeline = pipeline(
     task="depth-estimation",
     model="Intel/zoedepth-nyu-kitti",
+    torch_dtype=torch.float16,
     device=0
 )
-results = pipe(image)
-depth = result['depth']
+results = pipeline(image)
+results["depth"]
 ```
 
 </hfoption>
@@ -62,9 +67,9 @@ image_processor = AutoImageProcessor.from_pretrained(
 )
 model = AutoModelForDepthEstimation.from_pretrained(
     "Intel/zoedepth-nyu-kitti",
-    device_map=0
+    device_map="auto"
 )
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 inputs = image_processor(image, return_tensors="pt").to("cuda")
 
@@ -72,7 +77,7 @@ with torch.no_grad():
   outputs = model(inputs)
 
 # interpolate to original size and visualize the prediction
-## ZoeDepth dynamically pads the input image. Thus we pass the original image size as argument
+## ZoeDepth dynamically pads the input image, so pass the original image size as argument
 ## to `post_process_depth_estimation` to remove the padding and resize to original dimensions.
 post_processed_output = image_processor.post_process_depth_estimation(
     outputs,
@@ -82,7 +87,7 @@ post_processed_output = image_processor.post_process_depth_estimation(
 predicted_depth = post_processed_output[0]["predicted_depth"]
 depth = (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
 depth = depth.detach().cpu().numpy() * 255
-depth = Image.fromarray(depth.astype("uint8"))
+Image.fromarray(depth.astype("uint8"))
 ```
 
 </hfoption>
@@ -90,7 +95,7 @@ depth = Image.fromarray(depth.astype("uint8"))
 
 ## Notes
 
-- In the [original implementation](https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L131) ZoeDepth model performs inference on both the original and flipped images and averages out the results. The ```post_process_depth_estimation``` function can handle this for us by passing the flipped outputs to the optional ```outputs_flipped``` argument:
+- In the [original implementation](https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L131) ZoeDepth performs inference on both the original and flipped images and averages the results. The `post_process_depth_estimation` function handles this by passing the flipped outputs to the optional `outputs_flipped` argument as shown below.
    ```py
     with torch.no_grad():
         outputs = model(pixel_values)
@@ -101,8 +106,9 @@ depth = Image.fromarray(depth.astype("uint8"))
             outputs_flipped=outputs_flipped,
         )
    ```
-- A demo notebook regarding inference with ZoeDepth models can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/ZoeDepth).
-
+   
+## Resources
+- Refer to this [notebook](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/ZoeDepth) for an inference example.
 
 ## ZoeDepthConfig
 
