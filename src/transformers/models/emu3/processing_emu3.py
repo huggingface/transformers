@@ -22,7 +22,11 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from .image_processing_emu3 import smart_resize
+from ...utils import is_vision_available
+
+
+if is_vision_available():
+    from .image_processing_emu3 import smart_resize
 
 
 class Emu3TextKwargs(TextKwargs, total=False):
