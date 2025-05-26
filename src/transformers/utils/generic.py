@@ -31,6 +31,7 @@ from typing import Any, Callable, ContextManager, Optional, TypedDict
 import numpy as np
 from packaging import version
 
+from ..modeling_layers import GradientCheckpointingLayer
 from .import_utils import (
     get_torch_version,
     is_flax_available,
@@ -966,6 +967,27 @@ def check_model_inputs(func):
         kwargs["output_hidden_states"] = kwargs.get("output_hidden_states", self.config.output_hidden_states)
         kwargs["use_cache"] = kwargs.get("use_cache", self.config.use_cache)
 
+        hooks = []
+        collected_attentions = []
+        collected_hidden_states = []
+        output_attentions = kwargs["output_attention"]
+        output_hidden_states = kwargs["output_hidden_states"]
+        if output_attentions or output_hidden_states:
+            # GradientCheckpointingLayer is the one we extrct the hidden states from
+            # it is also the one that returns hidden_states, self_attn_weights
+            def hook_fn(module, inp, out):
+                if output_hidden_states:
+                    collected_hidden_states.append(out[0])
+                if output_attentions and len(out) > 1:
+                    collected_attentions.append(out[1])
+
+            for layer in self.named_modules():
+                if isinstance(layer, GradientCheckpointingLayer):
+                    # Register the hook only for layers that are instances of GradientCheckpointingLayer
+                    # This is to avoid registering hooks on all layers, which can be expensive
+                    # and unnecessary.
+                    hooks.append(layer.register_forward_hook(hook_fn))
+
         # Extract inputs
         input_ids = kwargs.get("input_ids", None)
         inputs_embeds = kwargs.get("inputs_embeds", None)
@@ -988,10 +1010,20 @@ def check_model_inputs(func):
             raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         return_dict = kwargs.get("return_dict", self.config.use_return_dic)
-        output = func(self, *args, **kwargs)
+        outputs = func(self, *args, **kwargs)
+
+        for h in hooks:
+            h.remove()
+
+        if output_hidden_states:
+            collected_hidden_states.append(outputs.last_hidden_state)
+            outputs.hidden_states = tuple(collected_hidden_states)
+        if output_attentions:
+            outputs.attentions = tuple(collected_attentions)
+
         if return_dict:
-            output = output.to_tuple()
-        return output
+            outputs = output.to_tuple()
+        return outputs
 
     return wrapper
 
