@@ -1,6 +1,10 @@
 from typing import List, Union
 
-import torch
+from ...utils.import_utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
 
 
 class MambaCache:
