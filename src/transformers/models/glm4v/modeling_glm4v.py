@@ -478,6 +478,9 @@ class Glm4vVisionTransformerPretrainedModel(Glm4vPreTrainedModel):
 
     def __init__(self, config, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
+        self.spatial_merge_size = config.spatial_merge_size
+        self.patch_size = config.patch_size
+
         self.embeddings = Glm4vVisionEmbeddings(config)
         self.patch_embed = Glm4vVisionPatchEmbed(
             patch_size=config.patch_size,
@@ -1092,6 +1095,25 @@ class Glm4vDecoderLayer(nn.Module):
         return outputs
 
 
+class Qwen2RMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        Qwen2RMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
 
 @dataclass
 class Glm4vModelOutputWithPast(ModelOutput):
@@ -1132,7 +1154,7 @@ class Glm4vModelOutputWithPast(ModelOutput):
 @auto_docstring
 class Glm4vModel(Glm4vPreTrainedModel):
     base_model_prefix = ""
-    _checkpoint_conversion_mapping = {"^model": "language_model"}
+    _checkpoint_conversion_mapping = None
     config_class = Glm4vConfig
     _no_split_modules = ["Glm4vDecoderLayer", "Glm4vVisionBlock"]
 
@@ -1905,10 +1927,7 @@ class Glm4vCausalLMOutputWithPast(ModelOutput):
 
 
 class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {
-        "^visual": "model.visual",
-        r"^model(?!\.(language_model|visual))": "model.language_model",
-    }
+    _checkpoint_conversion_mapping = None
     _tied_weights_keys = ["lm_head.weight"]
     config_class = Glm4vConfig
 

@@ -512,6 +512,9 @@ class Glm4vVisionTransformerPretrainedModel(Glm4vPreTrainedModel):
 
     def __init__(self, config, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
+        self.spatial_merge_size = config.spatial_merge_size
+        self.patch_size = config.patch_size
+
         self.embeddings = Glm4vVisionEmbeddings(config)
         self.patch_embed = Glm4vVisionPatchEmbed(
             patch_size=config.patch_size,
@@ -539,6 +542,8 @@ class Glm4vVisionTransformerPretrainedModel(Glm4vPreTrainedModel):
             stride=config.spatial_merge_size,
         )
         self.post_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.gradient_checkpointing = False
 
     def rot_pos_emb(self, grid_thw):
         pos_ids = []
@@ -701,6 +706,7 @@ class Glm4vDecoderLayer(Qwen2_5_VLDecoderLayer):
 
 class Glm4vModel(Qwen2_5_VLModel):
     config_class = Glm4vConfig
+    _checkpoint_conversion_mapping = None
 
     def __init__(self, config):
         super().__init__(config)
@@ -714,6 +720,7 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
 
 
 class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
+    _checkpoint_conversion_mapping = None
     config_class = Glm4vConfig
 
     def get_rope_index(
@@ -881,6 +888,7 @@ class Glm4vProcessorKwargs(Qwen2_5_VLProcessorKwargs):
 
 class Glm4vImageProcessor(Qwen2VLImageProcessor):
     pass
+
 
 class Glm4vVideoProcessor(Qwen2VLVideoProcessor):
     pass

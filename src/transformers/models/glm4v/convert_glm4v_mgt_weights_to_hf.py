@@ -161,7 +161,7 @@ def save_sharded_model(state_dict, output_path, max_shard_size_gb=5, num_layers=
         layered_dict[layer_key] = {}
 
         for key, value in state_dict.items():
-            if f"model.layers.{layer_idx}." in key:
+            if f"model.language_model.layers.{layer_idx}." in key:
                 layered_dict[layer_key][key] = value
 
     for layer_idx in range(vision_num_layers):
@@ -169,13 +169,13 @@ def save_sharded_model(state_dict, output_path, max_shard_size_gb=5, num_layers=
         layered_dict[layer_key] = {}
 
         for key, value in state_dict.items():
-            if f"visual.blocks.{layer_idx}." in key:
+            if f"model.visual.blocks.{layer_idx}." in key:
                 layered_dict[layer_key][key] = value
 
     layered_dict["others"] = {}
     for key, value in state_dict.items():
         if not any(f"model.language_model.layers.{i}." in key for i in range(num_layers)) and not any(
-            f"visual.blocks.{i}." in key for i in range(vision_num_layers)
+            f"model.visual.blocks.{i}." in key for i in range(vision_num_layers)
         ):
             layered_dict["others"][key] = value
 
@@ -312,16 +312,16 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         while f"decoder.layers.{layer_i}.self_attention.linear_qkv.layer_norm_weight" in mgt_encoder_tp_0:
             complete_state_dict.update(
                 {
-                    f"model.layers.{layer_i}.input_layernorm.weight": mgt_encoder_tp_0[
+                    f"model.language_model.layers.{layer_i}.input_layernorm.weight": mgt_encoder_tp_0[
                         f"decoder.layers.{layer_i}.self_attention.linear_qkv.layer_norm_weight"
                     ],
-                    f"model.layers.{layer_i}.post_attention_layernorm.weight": mgt_encoder_tp_0[
+                    f"model.language_model.layers.{layer_i}.post_attention_layernorm.weight": mgt_encoder_tp_0[
                         f"decoder.layers.{layer_i}.mlp.linear_fc1.layer_norm_weight"
                     ],
-                    f"model.layers.{layer_i}.post_self_attn_layernorm.weight": mgt_encoder_tp_0[
+                    f"model.language_model.layers.{layer_i}.post_self_attn_layernorm.weight": mgt_encoder_tp_0[
                         f"decoder.layers.{layer_i}.post_self_attn_layernorm.weight"
                     ],
-                    f"model.layers.{layer_i}.post_mlp_layernorm.weight": mgt_encoder_tp_0[
+                    f"model.language_model.layers.{layer_i}.post_mlp_layernorm.weight": mgt_encoder_tp_0[
                         f"decoder.layers.{layer_i}.post_mlp_layernorm.weight"
                     ],
                 }
@@ -344,9 +344,9 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
                 ),
             )
 
-            complete_state_dict[f"model.layers.{layer_i}.self_attn.q_proj.weight"] = q.clone()
-            complete_state_dict[f"model.layers.{layer_i}.self_attn.k_proj.weight"] = k.clone()
-            complete_state_dict[f"model.layers.{layer_i}.self_attn.v_proj.weight"] = v.clone()
+            complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.q_proj.weight"] = q.clone()
+            complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.k_proj.weight"] = k.clone()
+            complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.v_proj.weight"] = v.clone()
 
             if f"decoder.layers.{layer_i}.self_attention.linear_qkv.bias" in mgt_encoder_tp_0:
                 q_bias, k_bias, v_bias = merge_tensors(
@@ -365,9 +365,9 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
                         interleaved_qkv,
                     ),
                 )
-                complete_state_dict[f"model.layers.{layer_i}.self_attn.q_proj.bias"] = q_bias.clone()
-                complete_state_dict[f"model.layers.{layer_i}.self_attn.k_proj.bias"] = k_bias.clone()
-                complete_state_dict[f"model.layers.{layer_i}.self_attn.v_proj.bias"] = v_bias.clone()
+                complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.q_proj.bias"] = q_bias.clone()
+                complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.k_proj.bias"] = k_bias.clone()
+                complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.v_proj.bias"] = v_bias.clone()
 
             o_proj = merge_tensors(
                 tp_sd=mgt_sd[pp],
@@ -377,10 +377,10 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
                 current_tp=0,
                 slice_dim=1,
             )
-            complete_state_dict[f"model.layers.{layer_i}.self_attn.o_proj.weight"] = o_proj.clone()
+            complete_state_dict[f"model.language_model.layers.{layer_i}.self_attn.o_proj.weight"] = o_proj.clone()
 
             # MLP - Use gate_up_proj
-            complete_state_dict[f"model.layers.{layer_i}.mlp.gate_up_proj.weight"] = merge_tensors(
+            complete_state_dict[f"model.language_model.layers.{layer_i}.mlp.gate_up_proj.weight"] = merge_tensors(
                 tp_sd=mgt_sd[pp],
                 keys=keys + [f"decoder.layers.{layer_i}.mlp.linear_fc1.weight"],
                 original_tp=original_tp,
@@ -388,7 +388,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
                 current_tp=0,
                 merge_fn=merge_glu,
             ).clone()
-            complete_state_dict[f"model.layers.{layer_i}.mlp.down_proj.weight"] = merge_tensors(
+            complete_state_dict[f"model.language_model.layers.{layer_i}.mlp.down_proj.weight"] = merge_tensors(
                 tp_sd=mgt_sd[pp],
                 keys=keys + [f"decoder.layers.{layer_i}.mlp.linear_fc2.weight"],
                 original_tp=original_tp,
@@ -407,7 +407,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         current_tp=0,
         slice_dim=0,
     )
-    complete_state_dict[f"model.embed_tokens.weight"] = embed_tokens.clone()
+    complete_state_dict[f"model.language_model.embed_tokens.weight"] = embed_tokens.clone()
     lm_head = merge_tensors(
         tp_sd=mgt_sd[-1],
         keys=["model", "output_layer.weight"],
@@ -417,15 +417,15 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         slice_dim=0,
     )
     complete_state_dict[f"lm_head.weight"] = lm_head.clone()
-    complete_state_dict[f"model.norm.weight"] = mgt_sd[-1][rank]["model"]["decoder.final_layernorm.weight"].clone()
+    complete_state_dict[f"model.language_model.norm.weight"] = mgt_sd[-1][rank]["model"]["decoder.final_layernorm.weight"].clone()
     mgt_encoder_tp_0 = dict_access_multi(mgt_sd[0][0], keys)
 
     # VLM
     for layer_i in range(vision_num_layers):
-        complete_state_dict[f"visual.blocks.{layer_i}.norm1.weight"] = mgt_encoder_tp_0[
+        complete_state_dict[f"model.visual.blocks.{layer_i}.norm1.weight"] = mgt_encoder_tp_0[
             f"vision_model.transformer.layers.{layer_i}.input_layernorm.weight"
         ]
-        complete_state_dict[f"visual.blocks.{layer_i}.norm2.weight"] = mgt_encoder_tp_0[
+        complete_state_dict[f"model.visual.blocks.{layer_i}.norm2.weight"] = mgt_encoder_tp_0[
             f"vision_model.transformer.layers.{layer_i}.pre_mlp_layernorm.weight"
         ]
 
@@ -436,7 +436,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
             target_tp=target_tp,
             merge_fn=merge_qkv_vit,
         )
-        complete_state_dict[f"visual.blocks.{layer_i}.attn.qkv.weight"] = qkv_weight.clone()
+        complete_state_dict[f"model.visual.blocks.{layer_i}.attn.qkv.weight"] = qkv_weight.clone()
 
         proj_weight = merge_tensors_vit(
             tp_sd=mgt_sd[0],
@@ -445,7 +445,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
             target_tp=target_tp,
             slice_dim=1,
         )
-        complete_state_dict[f"visual.blocks.{layer_i}.attn.proj.weight"] = proj_weight.clone()
+        complete_state_dict[f"model.visual.blocks.{layer_i}.attn.proj.weight"] = proj_weight.clone()
 
         gate_proj_weight, up_proj_weight = merge_tensors_vit(
             tp_sd=mgt_sd[0],
@@ -454,8 +454,8 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
             target_tp=target_tp,
             merge_fn=lambda sd_list, original_tp: merge_glu_vit(sd_list, original_tp),
         )
-        complete_state_dict[f"visual.blocks.{layer_i}.mlp.gate_proj.weight"] = gate_proj_weight.clone()
-        complete_state_dict[f"visual.blocks.{layer_i}.mlp.up_proj.weight"] = up_proj_weight.clone()
+        complete_state_dict[f"model.visual.blocks.{layer_i}.mlp.gate_proj.weight"] = gate_proj_weight.clone()
+        complete_state_dict[f"model.visual.blocks.{layer_i}.mlp.up_proj.weight"] = up_proj_weight.clone()
 
         down_proj_weight = merge_tensors_vit(
             tp_sd=mgt_sd[0],
@@ -464,12 +464,12 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
             target_tp=target_tp,
             slice_dim=1,
         )
-        complete_state_dict[f"visual.blocks.{layer_i}.mlp.down_proj.weight"] = down_proj_weight.clone()
+        complete_state_dict[f"model.visual.blocks.{layer_i}.mlp.down_proj.weight"] = down_proj_weight.clone()
 
-    complete_state_dict["visual.downsample.weight"] = (
+    complete_state_dict["model.visual.downsample.weight"] = (
         mgt_sd[0][0]["model"]["vision_model.downsample.weight"].clone().contiguous()
     )
-    complete_state_dict["visual.downsample.bias"] = (
+    complete_state_dict["model.visual.downsample.bias"] = (
         mgt_sd[0][0]["model"]["vision_model.downsample.bias"].clone().contiguous()
     )
 
@@ -497,35 +497,35 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         slice_dim=0,
     )
 
-    complete_state_dict["visual.merger.gate_proj.weight"] = gate_proj.clone().contiguous()
-    complete_state_dict["visual.merger.up_proj.weight"] = up_proj.clone().contiguous()
-    complete_state_dict["visual.merger.down_proj.weight"] = down_proj.clone().contiguous()
-    complete_state_dict["visual.merger.proj.weight"] = proj.clone().contiguous()
+    complete_state_dict["model.visual.merger.gate_proj.weight"] = gate_proj.clone().contiguous()
+    complete_state_dict["model.visual.merger.up_proj.weight"] = up_proj.clone().contiguous()
+    complete_state_dict["model.visual.merger.down_proj.weight"] = down_proj.clone().contiguous()
+    complete_state_dict["model.visual.merger.proj.weight"] = proj.clone().contiguous()
 
-    complete_state_dict["visual.merger.post_projection_norm.weight"] = (
+    complete_state_dict["model.visual.merger.post_projection_norm.weight"] = (
         mgt_sd[0][0]["model"]["vision_projection.encoder.layer_norm.weight"].clone().contiguous()
     )
-    complete_state_dict["visual.merger.post_projection_norm.bias"] = (
+    complete_state_dict["model.visual.merger.post_projection_norm.bias"] = (
         mgt_sd[0][0]["model"]["vision_projection.encoder.layer_norm.bias"].clone().contiguous()
     )
-    complete_state_dict["visual.embeddings.position_embedding.weight"] = (
+    complete_state_dict["model.visual.embeddings.position_embedding.weight"] = (
         mgt_sd[0][0]["model"]["vision_model.position_embeddings.weight"].clone().contiguous()
     )
-    complete_state_dict["visual.patch_embed.proj.weight"] = (
+    complete_state_dict["model.visual.patch_embed.proj.weight"] = (
         mgt_sd[0][0]["model"]["vision_model.conv3d.weight"].clone().contiguous()
     )
-    complete_state_dict["visual.patch_embed.proj.bias"] = (
+    complete_state_dict["model.visual.patch_embed.proj.bias"] = (
         mgt_sd[0][0]["model"]["vision_model.conv3d.bias"].clone().contiguous()
     )
 
     # Check for additional vision model norm layers mentioned in the expected output
     if "vision_model.post_conv_layernorm.weight" in mgt_encoder_tp_0:
-        complete_state_dict["visual.post_conv_layernorm.weight"] = (
+        complete_state_dict["model.visual.post_conv_layernorm.weight"] = (
             mgt_sd[0][0]["model"]["vision_model.post_conv_layernorm.weight"].clone().contiguous()
         )
 
     if "vision_model.post_layernorm.weight" in mgt_encoder_tp_0:
-        complete_state_dict["visual.post_layernorm.weight"] = (
+        complete_state_dict["model.visual.post_layernorm.weight"] = (
             mgt_sd[0][0]["model"]["vision_model.post_layernorm.weight"].clone().contiguous()
         )
 
