@@ -1235,7 +1235,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
                 # (batch_size, num_image_tokens, hidden_size)
                 image_features = self._encode_image(pixel_values)
                 inputs_embeds, attention_mask = self._merge_input_ids_with_image_features(
-                    image_features, inputs_embeds
+                    image_features, inputs_embeds, attention_mask
                 )
 
         if attention_mask is not None:
@@ -1295,6 +1295,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         input_ids: torch.Tensor,
         inputs_embeds: Optional[torch.Tensor] = None,
         pixel_values: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ):
         if inputs_embeds is None:
@@ -1305,12 +1306,10 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
             if pixel_values is not None:
                 image_features = self._encode_image(pixel_values)
                 inputs_embeds, attention_mask = self._merge_input_ids_with_image_features(
-                    image_features, inputs_embeds
+                    image_features, inputs_embeds, attention_mask
                 )
 
-        kwargs["attention_mask"] = attention_mask
-
-        return self.language_model.generate(input_ids=None, inputs_embeds=inputs_embeds, **kwargs)
+        return self.language_model.generate(input_ids=None, inputs_embeds=inputs_embeds, attention_mask=attention_mask, **kwargs)
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self.language_model.shift_tokens_right(labels)
