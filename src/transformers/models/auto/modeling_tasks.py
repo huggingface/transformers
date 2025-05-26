@@ -8,7 +8,7 @@ from transformers.modeling_outputs import (
     TokenClassifierOutput,
     BaseModelOutputWithPast,
 )
-from transformers import auto_docstring, can_return_tuple, Cache  # Replace with real imports
+from transformers import auto_docstring, can_return_tuple, Cache, PreTrainedModel
 
 @auto_docstring(
     custom_intro="""
@@ -20,7 +20,7 @@ from transformers import auto_docstring, can_return_tuple, Cache  # Replace with
     Otherwise, it defaults to the last token in each sequence.
     """
 )
-class GenericForSequenceClassification(nn.Module):
+class GenericForSequenceClassification(PreTrainedModel):
     def __init__(self, config):
         super().__init__()
         self.num_labels = config.num_labels
@@ -96,7 +96,7 @@ class GenericForSequenceClassification(nn.Module):
 
 
 @auto_docstring
-class GenericForQuestionAnswering(nn.Module):
+class GenericForQuestionAnswering(PreTrainedModel):
     def __init__(self, config):
         super().__init__()
         self.transformer = AutoModel._from_config(config)
@@ -160,7 +160,7 @@ class GenericForQuestionAnswering(nn.Module):
 
 
 @auto_docstring
-class GenericForTokenClassification(nn.Module):
+class GenericForTokenClassification(PreTrainedModel):
     def __init__(self, config):
         super().__init__()
         self.num_labels = config.num_labels
