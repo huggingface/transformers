@@ -484,24 +484,27 @@ class FalconH1ModelIntegrationTest(unittest.TestCase):
         """
         An integration test for Falcon-H1.
         """
-        EXPECTED_TEXT = (
-            "Tell me about the french revolution.\n"
-            "The French Revolution (1789–1799) was a period of radical social and political upheaval in France that "
-            "fundamentally transformed the nation and had profound effects on the rest of Europe and the world. Here are the key aspects of the revolution:\n\n"
-            "### **Causes**\n"
-            "1. **Economic Crisis**: France was in severe financial trouble due to costly wars (particularly the American Revolution), extravagant spending by the monarchy, and inefficient taxation.\n"
-            "2. **Social Inequality**: The rigid class system (the Ancien Régime) divided society into the privileged nobility and clergy (First Estate) and the common people (Third Estate), who bore the brunt of taxation and had few rights.\n"
-            "3. **Enlightenment Ideas**: Philosophers like Rousseau, Voltaire, and Montesquieu inspired ideas of liberty, equality, and popular sovereignty.\n"
-            "4. **Settlement of 1789**: The Estates-General convened to address the financial crisis, leading to the Third Estate's assertion of its rights and the eventual formation of the National Assembly.\n\n"
-            "### **Key Events**\n"
-            "1. **Opening of the Revolution (1789)**:\n"
-            "- **Storming of the Bastille**: Symbolic of the fall of royal tyranny.\n"
-            "- **Declaration of the Rights of Man and of the Citizen**: Proclaimed universal rights to liberty, property, and security.\n"
-            "- **Creation of the National Assembly**: The Third Estate declared itself the representative body of France.\n\n"
-            "2. **Radical Phase (1792–1794)**:\n"
-            "- **Reign of Terror**: Led by Maximilien Robespierre, the Committee of Public Safety enforced radical egalitarianism through the guillotine, executing thousands of perceived enemies of the revolution (monarchists, clergy, aristocrats, and counter-revolutionaries).\n"
-            "- **Execution of Louis XVI**: The king was guillotined in June 1793, symbolizing the end of the monarchy.\n"
-        )
+        EXPECTED_TEXT = """
+            user
+            Tell me about the french revolution.
+            assistant
+            The French Revolution (1789–1799) was a period of radical social and political upheaval in France that fundamentally transformed the nation and had profound effects on the rest of Europe and the world. Here are the key aspects of the revolution:
+
+            ### **Causes**
+            1. **Economic Crisis**: France was in severe financial trouble due to costly wars (particularly the American Revolution), extravagant spending by the monarchy, and inefficient taxation.
+            2. **Social Inequality**: The rigid class system (the Ancien Régime) divided society into the privileged nobility and clergy (First Estate) and the commoners (Third Estate), who bore the brunt of taxation and had few rights.
+            3. **Enlightenment Ideas**: Philosophers like Voltaire, Rousseau, and Montesquieu inspired ideas of liberty, equality, and popular sovereignty.
+            4. **Settlement of 1789**: The Estates-General convened to address the financial crisis, leading to the Third Estate's assertion of its rights and the eventual abolition of the feudal system.
+
+            ### **Key Events**
+            1. **Storming of the Bastille (July 14, 1789)**: A symbol of royal tyranny, the Bastille fortress was stormed by revolutionaries, sparking widespread rebellion.
+            2. **Declaration of the Rights of Man and of the Citizen (August 1789)**: A foundational document proclaiming liberty, equality, and fraternity.
+            3. **National Assembly and King’s Trial (1791–1792)**: King Louis XVI and his ministers were tried and executed (King Louis was guillotined, Marie Antoinette was banished), marking the end of the monarchy.
+            4. **Rise of the Jacobins and Reign of Terror (1793–1794)**: Radical leaders like Maximilien Robespierre sought to purge France of counter-revolutionaries, leading to mass executions and widespread fear.
+            5. **Thermidorian Reaction
+        """
+        # Remove the first char (`\n`) and the consecutive whitespaces caused by the formatting.
+        EXPECTED_TEXT = EXPECTED_TEXT.strip().replace(" " * 12, "")
 
         model_id = "tiiuae/Falcon-H1-1.5B-Deep-Instruct"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
