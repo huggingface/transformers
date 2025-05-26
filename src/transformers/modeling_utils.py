@@ -3657,7 +3657,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                         elif depth == 0 and char not in ["^", "$"]:
                             replacement_str.append(char)
 
-                    replacement_str = ''.join(replacement_str)
+                    replacement_str = "".join(replacement_str)
                     key, n_replace = re.subn(pattern, replacement_str, key)
                     # Early exit of the loop
                     if n_replace > 0:
