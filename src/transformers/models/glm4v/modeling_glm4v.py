@@ -509,6 +509,8 @@ class Glm4vVisionTransformerPretrainedModel(Glm4vPreTrainedModel):
         )
         self.post_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+        self.gradient_checkpointing = False
+
     def rot_pos_emb(self, grid_thw):
         pos_ids = []
         for t, h, w in grid_thw:
