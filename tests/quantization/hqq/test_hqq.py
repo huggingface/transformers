@@ -17,6 +17,7 @@ import unittest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, HqqConfig
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_accelerate,
     require_hqq,
     require_torch_gpu,
@@ -50,7 +51,7 @@ class HQQLLMRunner:
 
 
 def cleanup():
-    torch.cuda.empty_cache()
+    backend_empty_cache(torch_device)
     gc.collect()
 
 
@@ -187,7 +188,7 @@ class HQQTestBias(unittest.TestCase):
             hqq_runner.model.save_pretrained(tmpdirname)
 
             del hqq_runner.model
-            torch.cuda.empty_cache()
+            backend_empty_cache(torch_device)
 
             model_loaded = AutoModelForCausalLM.from_pretrained(
                 tmpdirname, torch_dtype=torch.float16, device_map=torch_device
@@ -228,7 +229,7 @@ class HQQSerializationTest(unittest.TestCase):
 
         # Remove old model
         del hqq_runner.model
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
         # Load and check if the logits match
         model_loaded = AutoModelForCausalLM.from_pretrained(
