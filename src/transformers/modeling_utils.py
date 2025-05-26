@@ -4554,8 +4554,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             user_agent=user_agent,
             revision=revision,
             commit_hash=commit_hash,
-            transformers_explicit_filename=transformers_explicit_filename,
             is_remote_code=cls._auto_class is not None,
+            transformers_explicit_filename=transformers_explicit_filename,
         )
 
         is_sharded = sharded_metadata is not None
