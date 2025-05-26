@@ -981,6 +981,7 @@ def check_model_inputs(func):
         collected_attentions = []
         collected_hidden_states = []
         if output_attentions or output_hidden_states:
+
             def output_hidden_and_attention(module, inp, out):
                 if output_hidden_states:
                     collected_hidden_states.append(out[0])
@@ -991,7 +992,6 @@ def check_model_inputs(func):
                 if isinstance(layer, GradientCheckpointingLayer):
                     hooks.append(layer.register_forward_hook(output_hidden_and_attention))
 
-
         if input_ids ^ inputs_embeds:
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds.")
 
@@ -1001,7 +1001,6 @@ def check_model_inputs(func):
 
         if past_key_values is not None and not isinstance(past_key_values, "Cache"):
             raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
-
 
         outputs = func(self, *args, **kwargs)
         if output_attentions or output_hidden_states:
