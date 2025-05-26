@@ -969,15 +969,19 @@ def check_model_inputs(func):
         kwargs["output_hidden_states"] = kwargs.get("output_hidden_states", self.config.output_hidden_states)
         kwargs["use_cache"] = kwargs.get("use_cache", self.config.use_cache)
 
+        output_attentions = kwargs["output_attention"]
+        output_hidden_states = kwargs["output_hidden_states"]
+        input_ids = kwargs.get("input_ids", None)
+        inputs_embeds = kwargs.get("inputs_embeds", None)
+        use_cache = kwargs["use_cache"]
+        past_key_values = kwargs.get("past_key_values", None)
+        return_dict = kwargs.get("return_dict", self.config.use_return_dict)
+
         hooks = []
         collected_attentions = []
         collected_hidden_states = []
-        output_attentions = kwargs["output_attention"]
-        output_hidden_states = kwargs["output_hidden_states"]
         if output_attentions or output_hidden_states:
-            # GradientCheckpointingLayer is the one we extrct the hidden states from
-            # it is also the one that returns hidden_states, self_attn_weights
-            def hook_fn(module, inp, out):
+            def output_hidden_and_attention(module, inp, out):
                 if output_hidden_states:
                     collected_hidden_states.append(out[0])
                 if output_attentions and len(out) > 1:
@@ -985,31 +989,20 @@ def check_model_inputs(func):
 
             for layer in self.named_modules():
                 if isinstance(layer, GradientCheckpointingLayer):
-                    # Register the hook only for layers that are instances of GradientCheckpointingLayer
-                    # This is to avoid registering hooks on all layers, which can be expensive
-                    # and unnecessary.
-                    hooks.append(layer.register_forward_hook(hook_fn))
+                    hooks.append(layer.register_forward_hook(output_hidden_and_attention))
 
-        # Extract inputs
-        input_ids = kwargs.get("input_ids", None)
-        inputs_embeds = kwargs.get("inputs_embeds", None)
-        use_cache = kwargs["use_cache"]
-        past_key_values = kwargs.get("past_key_values", None)
 
-        # Input validation
-        if (input_ids is None) == (inputs_embeds is None):
+        if input_ids ^ inputs_embeds:
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds.")
 
-        # Gradient checkpointing warning
         if getattr(self, "gradient_checkpointing", False) and getattr(self, "training", False) and use_cache:
             logger.warning("`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.")
             kwargs["use_cache"] = False  # update it directly in kwargs
 
-        # Past key values type check
         if past_key_values is not None and not isinstance(past_key_values, "Cache"):
             raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
-        return_dict = kwargs.get("return_dict", self.config.use_return_dic)
+
         outputs = func(self, *args, **kwargs)
         if output_attentions or output_hidden_states:
             for h in hooks:
@@ -1020,7 +1013,6 @@ def check_model_inputs(func):
             outputs.hidden_states = tuple(collected_hidden_states)
         if output_attentions:
             outputs.attentions = tuple(collected_attentions)
-
         if return_dict:
             outputs = outputs.to_tuple()
         return outputs
