@@ -62,6 +62,20 @@ class PaliGemmaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertEqual(len(inputs["input_ids"][0]), 112)
 
+    @require_torch
+    def test_call_with_suffix(self):
+        input_str = "lower newer"
+        suffix = "upper older longer string"
+        image_input = self.prepare_image_inputs()
+        processor = self.get_processor()
+        inputs = processor(text=input_str, images=image_input, suffix=suffix)
+        self.assertTrue("labels" in inputs)
+        self.assertEqual(len(inputs["labels"][0]), len(inputs["input_ids"][0]))
+
+        inputs = processor(text=input_str, images=image_input, suffix=suffix, return_tensors="pt")
+        self.assertTrue("labels" in inputs)
+        self.assertEqual(len(inputs["labels"][0]), len(inputs["input_ids"][0]))
+
     def test_text_with_image_tokens(self):
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
