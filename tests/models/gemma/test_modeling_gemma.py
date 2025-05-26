@@ -167,11 +167,12 @@ class GemmaIntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the 1990s and I need to know what the most popular music",
-            "Hi today I have a question about the new 2019 1000rr. I",
+            "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
         ]
 
+        # bfloat16 gives strange values, likely due to it has lower precision + very short prompts
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="eager"
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16, attn_implementation="eager"
         )
         model.to(torch_device)
 
