@@ -42,7 +42,26 @@ class WhisperRegressionTest(unittest.TestCase):
             bos_token_id=1,
             eos_token_id=2,
             decoder_start_token_id=3,
+            begin_suppress_tokens=[4, 2],  # Use valid token IDs within vocab_size
         )
+
+    def _create_test_config(self, **kwargs):
+        """Helper method to create test config with valid token IDs."""
+        config_kwargs = {
+            "vocab_size": self.config.vocab_size,
+            "d_model": self.config.d_model,
+            "encoder_layers": self.config.encoder_layers,
+            "decoder_layers": self.config.decoder_layers,
+            "encoder_attention_heads": self.config.encoder_attention_heads,
+            "decoder_attention_heads": self.config.decoder_attention_heads,
+            "pad_token_id": self.config.pad_token_id,
+            "bos_token_id": self.config.bos_token_id,
+            "eos_token_id": self.config.eos_token_id,
+            "decoder_start_token_id": self.config.decoder_start_token_id,
+            "begin_suppress_tokens": self.config.begin_suppress_tokens,
+        }
+        config_kwargs.update(kwargs)
+        return WhisperConfig(**config_kwargs)
 
     def test_legacy_logprob_calculation_default(self):
         """Test that legacy logprob calculation is the default for backward compatibility."""
@@ -60,27 +79,11 @@ class WhisperRegressionTest(unittest.TestCase):
     def test_logprob_calculation_difference(self):
         """Test that legacy and new logprob calculations produce different results."""
         # Test legacy mode
-        config_legacy = WhisperConfig(
-            vocab_size=self.config.vocab_size,
-            d_model=self.config.d_model,
-            encoder_layers=self.config.encoder_layers,
-            decoder_layers=self.config.decoder_layers,
-            encoder_attention_heads=self.config.encoder_attention_heads,
-            decoder_attention_heads=self.config.decoder_attention_heads,
-            use_legacy_logprob_calculation=True
-        )
+        config_legacy = self._create_test_config(use_legacy_logprob_calculation=True)
         model_legacy = WhisperForConditionalGeneration(config_legacy)
 
         # Test new mode
-        config_new = WhisperConfig(
-            vocab_size=self.config.vocab_size,
-            d_model=self.config.d_model,
-            encoder_layers=self.config.encoder_layers,
-            decoder_layers=self.config.decoder_layers,
-            encoder_attention_heads=self.config.encoder_attention_heads,
-            decoder_attention_heads=self.config.decoder_attention_heads,
-            use_legacy_logprob_calculation=False
-        )
+        config_new = self._create_test_config(use_legacy_logprob_calculation=False)
         model_new = WhisperForConditionalGeneration(config_new)
 
         # Create dummy scores and tokens for testing
@@ -107,15 +110,7 @@ class WhisperRegressionTest(unittest.TestCase):
 
     def test_generation_deterministic_legacy_mode(self):
         """Test that generation is deterministic in legacy mode."""
-        config = WhisperConfig(
-            vocab_size=self.config.vocab_size,
-            d_model=self.config.d_model,
-            encoder_layers=self.config.encoder_layers,
-            decoder_layers=self.config.decoder_layers,
-            encoder_attention_heads=self.config.encoder_attention_heads,
-            decoder_attention_heads=self.config.decoder_attention_heads,
-            use_legacy_logprob_calculation=True
-        )
+        config = self._create_test_config(use_legacy_logprob_calculation=True)
         model = WhisperForConditionalGeneration(config)
         model.eval()
 
@@ -137,15 +132,7 @@ class WhisperRegressionTest(unittest.TestCase):
 
     def test_generation_deterministic_new_mode(self):
         """Test that generation is deterministic in new mode."""
-        config = WhisperConfig(
-            vocab_size=self.config.vocab_size,
-            d_model=self.config.d_model,
-            encoder_layers=self.config.encoder_layers,
-            decoder_layers=self.config.decoder_layers,
-            encoder_attention_heads=self.config.encoder_attention_heads,
-            decoder_attention_heads=self.config.decoder_attention_heads,
-            use_legacy_logprob_calculation=False
-        )
+        config = self._create_test_config(use_legacy_logprob_calculation=False)
         model = WhisperForConditionalGeneration(config)
         model.eval()
 
@@ -168,26 +155,10 @@ class WhisperRegressionTest(unittest.TestCase):
     def test_logprob_calculation_with_temperature_fallback(self):
         """Test that logprob calculation affects temperature fallback decisions."""
         # Create models with different logprob calculation modes
-        config_legacy = WhisperConfig(
-            vocab_size=self.config.vocab_size,
-            d_model=self.config.d_model,
-            encoder_layers=self.config.encoder_layers,
-            decoder_layers=self.config.decoder_layers,
-            encoder_attention_heads=self.config.encoder_attention_heads,
-            decoder_attention_heads=self.config.decoder_attention_heads,
-            use_legacy_logprob_calculation=True
-        )
+        config_legacy = self._create_test_config(use_legacy_logprob_calculation=True)
         model_legacy = WhisperForConditionalGeneration(config_legacy)
 
-        config_new = WhisperConfig(
-            vocab_size=self.config.vocab_size,
-            d_model=self.config.d_model,
-            encoder_layers=self.config.encoder_layers,
-            decoder_layers=self.config.decoder_layers,
-            encoder_attention_heads=self.config.encoder_attention_heads,
-            decoder_attention_heads=self.config.decoder_attention_heads,
-            use_legacy_logprob_calculation=False
-        )
+        config_new = self._create_test_config(use_legacy_logprob_calculation=False)
         model_new = WhisperForConditionalGeneration(config_new)
 
         # Copy weights to ensure same model behavior except for logprob calculation
@@ -210,17 +181,13 @@ class WhisperRegressionTest(unittest.TestCase):
                 max_new_tokens=5,
                 do_sample=False,
                 logprob_threshold=-10.0,  # Very permissive threshold
-                temperature=0.5
+                temperature=0.5,
             )
 
         torch.manual_seed(42)
         with torch.no_grad():
             output_new = model_new.generate(
-                input_features,
-                max_new_tokens=5,
-                do_sample=False,
-                logprob_threshold=-10.0,
-                temperature=0.5
+                input_features, max_new_tokens=5, do_sample=False, logprob_threshold=-10.0, temperature=0.5
             )
 
         # Both should produce outputs (no assertion on equality since they might differ)
@@ -236,15 +203,7 @@ class WhisperRegressionTest(unittest.TestCase):
         # lead to different results in inference, particularly for long-form
         # transcription with timestamps
 
-        config = WhisperConfig(
-            vocab_size=self.config.vocab_size,
-            d_model=self.config.d_model,
-            encoder_layers=self.config.encoder_layers,
-            decoder_layers=self.config.decoder_layers,
-            encoder_attention_heads=self.config.encoder_attention_heads,
-            decoder_attention_heads=self.config.decoder_attention_heads,
-            use_legacy_logprob_calculation=True  # Simulate older version behavior
-        )
+        config = self._create_test_config(use_legacy_logprob_calculation=True)  # Simulate older version behavior
         model = WhisperForConditionalGeneration(config)
         model.eval()
 
@@ -255,19 +214,11 @@ class WhisperRegressionTest(unittest.TestCase):
 
         # Test short-form without timestamps
         with torch.no_grad():
-            short_result = model.generate(
-                input_features,
-                max_new_tokens=10,
-                return_timestamps=False
-            )
+            short_result = model.generate(input_features, max_new_tokens=10, return_timestamps=False)
 
         # Test short-form with timestamps
         with torch.no_grad():
-            short_result_ts = model.generate(
-                input_features,
-                max_new_tokens=10,
-                return_timestamps=True
-            )
+            short_result_ts = model.generate(input_features, max_new_tokens=10, return_timestamps=True)
 
         # Verify outputs are generated
         self.assertIsNotNone(short_result)
@@ -275,4 +226,4 @@ class WhisperRegressionTest(unittest.TestCase):
         self.assertEqual(short_result.shape[0], batch_size)
 
         # Test that the fix doesn't break existing functionality
-        self.assertGreater(short_result.shape[1], 0)  # Should generate some tokens 
+        self.assertGreater(short_result.shape[1], 0)  # Should generate some tokens
