@@ -648,13 +648,12 @@ class GenerationConfig(PushToHubMixin):
         # 2.1. detect sampling-only parameterization when not in sampling mode
         if self.do_sample is False:
             greedy_wrong_parameter_msg = (
-                "`do_sample` is set to `False`, which means greedily decode. "
-                "However, `temperature` is set to `0.0` -- but `temperature` is only "
-                "used in sample-based generation modes. "
-                "If you want to greedily decode, don't specify a `temperature`. "
-                "If you want to sample, set `do_sample=True`. "
-                "This was detected when initializing the generation config instance, "
-                "which means the corresponding file may hold incorrect parameterization and should be fixed."
+                "`do_sample` is set to `False`,"
+                " which means don't perform sampling-based generation. "
+                "However, the sampling-based generation parameter `temperature` is set to `0.0` "
+                "-- but `temperature` is only relevant for sample-based generation modes. "
+                "If you want to don't want to sample, don't specify a `temperature`. "
+                "If you want to sample, set `do_sample=True`."
             )
             if self.temperature is not None and self.temperature != 1.0:
                 minor_issues["temperature"] = greedy_wrong_parameter_msg.format(
