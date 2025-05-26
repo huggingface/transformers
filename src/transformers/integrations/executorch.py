@@ -20,11 +20,13 @@ from ..generation.configuration_utils import GenerationConfig
 from ..masking_utils import (
     ALL_MASK_ATTENTION_FUNCTIONS,
     _ignore_causal_mask_sdpa,
-    _is_torch_greater_or_equal_than_2_5,
     prepare_padding_mask,
 )
 from ..modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ..pytorch_utils import is_torch_greater_or_equal, is_torch_greater_or_equal_than_2_3
+
+
+_is_torch_greater_or_equal_than_2_5 = is_torch_greater_or_equal("2.5")
 
 
 class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
