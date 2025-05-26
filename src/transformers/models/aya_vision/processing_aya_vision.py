@@ -133,10 +133,8 @@ class AyaVisionProcessor(ProcessorMixin):
         self.tile_token = tile_token
         self.tile_global_token = tile_global_token
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.img_patch_token)
-        self.image_ids = [
-            tokenizer.convert_tokens_to_ids(tok)
-            for tok in [img_patch_token, tile_token, tile_global_token, start_of_img_token, end_of_img_token]
-        ]
+        self.image_ids =
+            tokenizer.convert_tokens_to_ids([img_patch_token, tile_token, tile_global_token, start_of_img_token, end_of_img_token)
 
     def _prompt_split_image(self, num_patches):
         """
