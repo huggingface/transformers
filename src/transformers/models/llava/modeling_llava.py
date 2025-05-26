@@ -240,6 +240,8 @@ class LlavaModel(LlavaPreTrainedModel):
                 for height, width in kwargs["image_sizes"]
             ]
             image_features = torch.split(image_features.squeeze(0), split_sizes)
+        else:
+            image_features = list(image_features)
         return image_features
 
     @can_return_tuple
