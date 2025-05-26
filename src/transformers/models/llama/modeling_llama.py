@@ -20,7 +20,6 @@
 from typing import Callable, Optional, Tuple, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -30,13 +29,17 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast,CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ..auto.modeling_tasks import GenericForQuestionAnswering, GenericForSequenceClassificationa, GenericForTokenClassification
 from ...processing_utils import Unpack
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
+from ..auto.modeling_tasks import (
+    GenericForQuestionAnswering,
+    GenericForSequenceClassificationa,
+    GenericForTokenClassification,
+)
 from .configuration_llama import LlamaConfig
 
 
@@ -327,7 +330,6 @@ class LlamaPreTrainedModel(PreTrainedModel):
     # _supports_attention_backend = True
 
 
-
 @auto_docstring
 class LlamaModel(LlamaPreTrainedModel):
     def __init__(self, config: LlamaConfig):
@@ -539,9 +541,8 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        return CausalLMOutputWithPast(
-            loss=loss, logits=logits, **outputs
-        )
+        return CausalLMOutputWithPast(loss=loss, logits=logits, **outputs)
+
 
 class LlamaForSequenceClassification(GenericForSequenceClassificationa):
     def __init__(self, config: LlamaConfig):
@@ -549,18 +550,23 @@ class LlamaForSequenceClassification(GenericForSequenceClassificationa):
         logger.warning_once(
             "LlamaForSequenceClassification is deprecated and will be removed in v4.56. Use LlamaForSequenceClassification instead."
         )
+
+
 class LlamaForTokenClassification(GenericForTokenClassification):
     def __init__(self, config: LlamaConfig):
         super().__init__(config)
         logger.warning_once(
             "LlamaForTokenClassification is deprecated and will be removed in v4.56. Use LlamaForTokenClassification instead."
         )
+
+
 class LlamaForQuestionAnswering(GenericForQuestionAnswering):
     def __init__(self, config: LlamaConfig):
         super().__init__(config)
         logger.warning_once(
             "LlamaForQuestionAnswering is deprecated and will be removed in v4.56. Use LlamaForQuestionAnswering instead."
         )
+
 
 __all__ = [
     "LlamaForCausalLM",

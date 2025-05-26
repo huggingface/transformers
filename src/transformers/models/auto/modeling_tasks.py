@@ -1,14 +1,16 @@
-from transformers import AutoModel
 import torch
 from torch import nn
-from typing import Optional
+
+from transformers import AutoModel
 from transformers.modeling_outputs import (
-    SequenceClassifierOutputWithPast,
     QuestionAnsweringModelOutput,
+    SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
-    BaseModelOutputWithPast,
 )
-from transformers import auto_docstring, can_return_tuple, Cache, PreTrainedModel
+
+from ...modeling_utils import PreTrainedModel
+from ...utils import auto_docstring, can_return_tuple
+
 
 @auto_docstring(
     custom_intro="""
@@ -53,7 +55,6 @@ class GenericForSequenceClassification(PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
     ) -> SequenceClassifierOutputWithPast:
-
         transformer_outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -129,7 +130,6 @@ class GenericForQuestionAnswering(PreTrainedModel):
         output_hidden_states=None,
         **kwargs,
     ) -> QuestionAnsweringModelOutput:
-
         outputs = self.transformer(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -195,7 +195,6 @@ class GenericForTokenClassification(PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
     ) -> TokenClassifierOutput:
-
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,

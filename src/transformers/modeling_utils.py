@@ -2634,7 +2634,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             if hasattr(module, "weight") and module.weight is not None:
                 module.weight.data.fill_(1.0)
 
-
     def _initialize_weights(self, module):
         """
         Initialize the weights if they are not already initialized.
