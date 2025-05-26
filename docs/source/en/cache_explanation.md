@@ -46,7 +46,7 @@ $$
 \text{Attention}(q_t, [\underbrace{k_1, k_2, \dots, k_{t-1}}_{\text{cached}}, k_{t}], [\underbrace{v_1, v_2, \dots, v_{t-1}}_{\text{cached}}, v_{t}])
 $$
 
-At inference time, we only need the last token's query to compute the representation \\( x_t \\) that will predict the next token \\( t+1 \\). At each step, we **store** the new key and value vectors in the cache and **append** them to the past keys and values:
+At inference time, you only need the last token's query to compute the representation \\( x_t \\) that predicts the next token \\( t+1 \\). At each step, the new key and value vectors are **stored** in the cache and **appended** to the past keys and values.
 
 $$
 K_{\text{cache}} \leftarrow \text{concat}(K_{\text{past}}, k_t), \quad V_{\text{cache}} \leftarrow \text{concat}(V_{\text{past}}, v_t)
