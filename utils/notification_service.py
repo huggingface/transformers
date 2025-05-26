@@ -228,9 +228,6 @@ class Message:
 
     @property
     def failures(self) -> Dict:
-
-        label = test_to_result_name[job_to_test_map[job_name]]
-
         return {
             "type": "section",
             "text": {
@@ -370,15 +367,17 @@ class Message:
         }
 
         for k, v in self.model_results.items():
+            # The keys in `model_results` may contain things like `models_vit` or `quantization_autoawq`
+            # Remove the prefix to make the report cleaner.
             k = k.replace("models_", "").replace("quantization_", "")
-
             if k in NON_MODEL_TEST_MODULES:
                 continue
 
             if sum(per_model_sum(v).values()):
                 dict_failed = dict(v["failed"])
 
-                if job_name != "run_quantization_torch_gpu":
+                # Model job has a special form for reporting
+                if job_name == "run_models_gpu":
 
                     pytorch_specific_failures = dict_failed.pop("PyTorch")
                     tensorflow_specific_failures = dict_failed.pop("TensorFlow")
@@ -392,9 +391,10 @@ class Message:
 
                 else:
 
-                    quantization_specific_failures = dict_failed.pop("Quantization")
+                    test_name = job_to_test_map[job_name]
+                    specific_failures = dict_failed.pop(test_name)
                     failures[k] = {
-                        "Quantization": quantization_specific_failures,
+                        test_name: specific_failures,
                     }
 
         model_reports = []
@@ -416,7 +416,8 @@ class Message:
 
         for key, value in failures.items():
 
-            if job_name != "run_quantization_torch_gpu":
+            # Model job has a special form for reporting
+            if job_name == "run_models_gpu":
 
                 device_report_values = [
                     value["PyTorch"]["single"],
@@ -428,24 +429,27 @@ class Message:
 
             else:
 
+                test_name = job_to_test_map[job_name]
                 device_report_values = [
-                    value["Quantization"]["single"],
-                    value["Quantization"]["multi"],
+                    value[test_name]["single"],
+                    value[test_name]["multi"],
                 ]
 
             if sum(device_report_values):
-                rjust_width = 9 if job_name != "run_quantization_torch_gpu" else 6
+                # This is related to `model_header` below
+                rjust_width = 9 if job_name == "run_models_gpu" else 6
                 device_report = " | ".join([str(x).rjust(rjust_width) for x in device_report_values]) + " | "
                 report = f"{device_report}{key}"
 
                 model_reports.append(report)
 
         # (Possibly truncated) reports for the current workflow run - to be sent to Slack channels
-        if job_name != "run_quantization_torch_gpu":
+        if job_name == "run_models_gpu":
             model_header = "Single PT |  Multi PT | Single TF |  Multi TF |     Other | Category\n"
         else:
             model_header = "Single |  Multi | Category\n"
 
+        # Used when calling `prepare_reports` below to prepare the `title` argument
         label = test_to_result_name[job_to_test_map[job_name]]
 
         sorted_model_reports = sorted(model_reports, key=lambda s: s.split("| ")[-1])
