@@ -14,18 +14,26 @@
 # limitations under the License.
 """Fast Image processor class for MobileViT."""
 
-import torch
 from typing import Optional
+
+import torch
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
+    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
-    DefaultFastImageProcessorKwargs,
+)
+from ...image_utils import (
+    ChannelDimension,
+    PILImageResampling,
+    is_torch_tensor,
+    make_list_of_images,
+    pil_torch_interpolation_mapping,
+    validate_kwargs,
 )
 from ...processing_utils import Unpack
-from ...image_utils import PILImageResampling, is_torch_tensor, make_list_of_images, pil_torch_interpolation_mapping, ChannelDimension, validate_kwargs
 from ...utils import auto_docstring
 
 
@@ -125,7 +133,7 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         self,
         segmentation_maps,
         **kwargs,
-    ):  
+    ):
         """Preprocesses segmentation maps."""
         processed_segmentation_maps = []
         for segmentation_map in segmentation_maps:
@@ -152,7 +160,7 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images,
-        segmentation_maps = None,
+        segmentation_maps=None,
         **kwargs: Unpack[MobileVitFastImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -235,5 +243,6 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
         return semantic_segmentation
+
 
 __all__ = ["MobileViTImageProcessorFast"]
