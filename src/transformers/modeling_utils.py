@@ -4555,7 +4555,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             revision=revision,
             commit_hash=commit_hash,
             transformers_explicit_filename=transformers_explicit_filename,
-            is_remote_code=cls.__module__.startswith("transformers_modules"),  # This might be fragile?
+            is_remote_code=cls._auto_class is not None,
         )
 
         is_sharded = sharded_metadata is not None
