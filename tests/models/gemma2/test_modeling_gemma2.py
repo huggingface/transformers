@@ -176,15 +176,6 @@ class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 class Gemma2IntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
-
-    @classmethod
-    def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     @tooslow
     @require_read_token
