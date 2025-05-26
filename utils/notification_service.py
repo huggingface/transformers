@@ -288,6 +288,10 @@ class Message:
 
     @property
     def category_failures(self) -> Dict:
+        if job_name != "run_models_gpu":
+            category_failures_report = ""
+            return {"type": "section", "text": {"type": "mrkdwn", "text": category_failures_report}}
+
         model_failures = [v["failed"] for v in self.model_results.values()]
 
         category_failures = {}
@@ -559,7 +563,10 @@ class Message:
             blocks.append(self.failures)
 
         if self.n_model_failures > 0:
-            blocks.append(self.category_failures)
+            block = self.category_failures
+            if block["text"]["text"]:
+                blocks.append(block)
+
             for block in self.model_failures:
                 if block["text"]["text"]:
                     blocks.append(block)
@@ -657,7 +664,7 @@ class Message:
                         "text": {
                             "type": "mrkdwn",
                             # TODO: We should NOT assume it's always Nvidia CI, but it's the case at this moment.
-                            "text": f"*There are {nb_new_failed_tests} failed tests unique to {'AMD' if not is_amd_daily_ci_workflow else 'AMD'}*\n\n(compared to Nvidia CI: <https://github.com/huggingface/transformers/actions/runs/{prev_workflow_run_id}|{prev_workflow_run_id}>)",
+                            "text": f"*There are {nb_new_failed_tests} failed tests unique to {'this run' if not is_amd_daily_ci_workflow else 'AMD'}*\n\n(compared to Nvidia CI: <https://github.com/huggingface/transformers/actions/runs/{prev_workflow_run_id}|{prev_workflow_run_id}>)",
                         },
                         "accessory": {
                             "type": "button",
