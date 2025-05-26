@@ -1011,9 +1011,9 @@ def check_model_inputs(func):
 
         return_dict = kwargs.get("return_dict", self.config.use_return_dic)
         outputs = func(self, *args, **kwargs)
-
-        for h in hooks:
-            h.remove()
+        if output_attentions or output_hidden_states:
+            for h in hooks:
+                h.remove()
 
         if output_hidden_states:
             collected_hidden_states.append(outputs.last_hidden_state)
