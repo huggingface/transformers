@@ -968,7 +968,7 @@ def check_model_inputs(func):
         kwargs["output_attention"] = kwargs.get("output_attention", self.config.output_attentions)
         kwargs["output_hidden_states"] = kwargs.get("output_hidden_states", self.config.output_hidden_states)
         kwargs["use_cache"] = kwargs.get("use_cache", self.config.use_cache)
-
+        kwargs["return_dict"] = True
         output_attentions = kwargs["output_attention"]
         output_hidden_states = kwargs["output_hidden_states"]
         input_ids = kwargs.get("input_ids", None)
@@ -992,14 +992,14 @@ def check_model_inputs(func):
                 if isinstance(layer, GradientCheckpointingLayer):
                     hooks.append(layer.register_forward_hook(output_hidden_and_attention))
 
-        if input_ids ^ inputs_embeds:
+        if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds.")
 
         if getattr(self, "gradient_checkpointing", False) and getattr(self, "training", False) and use_cache:
             logger.warning("`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.")
             kwargs["use_cache"] = False  # update it directly in kwargs
 
-        if past_key_values is not None and not isinstance(past_key_values, "Cache"):
+        if past_key_values is not None and not "Cache" in past_key_values.__class__.__name__:
             raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         outputs = func(self, *args, **kwargs)
