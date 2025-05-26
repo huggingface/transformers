@@ -1011,9 +1011,8 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
             image_grid_thw = image_inputs["image_grid_thw"]
 
         if videos is not None:
-            # pop unexpected keys here for passing kwargs validation
+            # pop fps in advance for passing kwargs validation
             fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
-            output_kwargs["videos_kwargs"].pop("return_tensors", None)
 
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
