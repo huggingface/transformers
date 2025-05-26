@@ -56,29 +56,23 @@ Attention is calculated independently in each layer of the model, and caching is
 
 Refer to the table below to compare how caching improves efficiency.
 
-Without caching:
-- At each step \\( t \\), recompute all \\( K_{1:t} \\) and \\( V_{1:t} \\).
-- Attention cost per step is **quadratic** with sequence length.
+| without caching | with caching |  |  |  |
+|---|---|---|---|---|
+| for each step, recompute all previous `K` and `V`  | for each step, only compute current `K` and `V` |  |  |  |
+| attention cost per step is **quadratic** with sequence length | attention cost per step is **linear** with sequence length (memory grows linearly, but compute/token remains low) |  |  |  |
 
-With caching:
-- At each step, only compute \\( k_t, v_t \\).
-- Attention cost per step is **linear** with sequence length.
-- Memory grows linearly with sequence length, but compute per token remains low.
-
-> [!WARNING]
-> Attention happens independently in each layer of the model. Caching is done on a per-layer basis.
 
 
 ## Cache class
 
-Thus, the basic interface of a KV cache takes a key and value tensor for the current token and returns the updated `K` and `V` tensors.
+A basic KV cache interface takes a key and value tensor for the current token and returns the updated `K` and `V` tensors. This is internally managed by a model's `forward` method.
 
 ```py
 new_K, new_V = cache.update(k_t, v_t, layer_idx)
 attn_output = attn_layer_idx_fn(q_t, new_K, new_V)
 ```
 
-This is managed internally by the model's `forward` method. When you use Transformers' [`Cache`] class, the self-attention module performs several critical steps to integrate past and present information.
+When you use Transformers' [`Cache`] class, the self-attention module performs several critical steps to integrate past and present information.
 
 1. The attention module concatenates current kv pairs with past kv pairs stored in the cache. This creates attentions weights with the shape `(new_tokens_length, past_kv_length + new_tokens_length)`. The current and past kv pairs are essentially combined to compute the attention scores, ensuring a model is aware of previous context and the current input.
 
@@ -86,27 +80,26 @@ This is managed internally by the model's `forward` method. When you use Transfo
 
 3. It is also important to be aware of the `cache_position`. This is important if you want to reuse a prefilled [`Cache`] with the `forward` method because you have to pass a valid `cache_position` value. This indicates the input positions in a sequence. `cache_position` is unaffected by padding, and it always adds one more position for each token. For example, if a kv cache contains 10 tokens - regardless of pad tokens - the cache position for the next token should be `torch.tensor([10])`.
 
-## Data Storage Implementation
+## Cache storage implementation
 
-The actual storage of key-value pairs varies between cache implementations. Let's look at the most basic implementation, `DynamicCache`:
+The actual storage of key-value pairs varies between cache implementations. As an example, consider the [`DynamicCache`].
 
-### DynamicCache Implementation
 
-In `DynamicCache`, the key-value pairs are stored as two lists of tensors:
-- `key_cache`: A list of tensors, one for each layer
-- `value_cache`: A list of tensors, one for each layer
+In [`DynamicCache`], the key-value pairs are stored as two lists of tensors. Each tensor in the lists have the shape `[batch_size, num_heads, seq_len, head_dim]`.
+- `key_cache`: A list of tensors, one for each layer.
+- `value_cache`: A list of tensors, one for each layer.
 
-Each tensor in these lists has the shape `[batch_size, num_heads, seq_len, head_dim]`. When new tokens are processed:
+When new tokens are processed:
 
-1. For each layer, the new key and value states are concatenated with the existing cache:
+1. For each layer, the new key and value states are concatenated with the existing cache.
 ```py
 self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
 self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
 ```
 
-2. The cache grows dynamically as more tokens are processed, with the sequence length dimension (`seq_len`) increasing with each new token.
+2. The cache grows dynamically as more tokens are processed. The sequence length dimension (`seq_len`) increases with each new token.
 
-3. The cache maintains a count of seen tokens through `self._seen_tokens`, which is updated when the first layer processes a new token.
+3. The cache maintains a count of seen tokens through `self._seen_tokens`. This is updated when the first layer processes a new token.
 
 The example below demonstrates how to create a generation loop with [`DynamicCache`]. As discussed, the attention mask is a concatenation of past and current token values and `1` is added to the cache position for the next token.
 
@@ -145,10 +138,10 @@ print(tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0])
 
 Before the [`Cache`] class, the cache used to be stored as a tuple of tuples of tensors. This format is dynamic because it grows as text is generated, similar to [`DynamicCache`].
 
-The legacy format is essentially the same data structure but organized differently:
-- It's a tuple of tuples, where each inner tuple contains the key and value tensors for a layer
-- The tensors have the same shape `[batch_size, num_heads, seq_len, head_dim]`
-- The format is less flexible and doesn't support advanced features like quantization or offloading
+The legacy format is essentially the same data structure but organized differently.
+- It's a tuple of tuples, where each inner tuple contains the key and value tensors for a layer.
+- The tensors have the same shape `[batch_size, num_heads, seq_len, head_dim]`.
+- The format is less flexible and doesn't support features like quantization or offloading.
 
 If your project depends on this legacy format, you can convert between [`DynamicCache`] and a tuple of tuples as shown below with the [`~DynamicCache.from_legacy_cache`] and [`DynamicCache.to_legacy_cache`] functions. This is helpful if you have custom logic for manipulating a cache in a specific format.
 
