@@ -926,6 +926,8 @@ def can_return_tuple(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
+
+        
         is_requested_to_return_tuple = kwargs.pop("return_dict", True) is False
         is_configured_to_return_tuple = self.config.use_return_dict is False if hasattr(self, "config") else False
 
@@ -952,6 +954,46 @@ def can_return_tuple(func):
 
     return wrapper
 
+def check_model_inputs(func):
+    """
+    Decorator to check if the model inputs are valid before calling the function.
+    It raises a ValueError if the inputs are not valid.
+    """
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        kwargs["output_attention"] = kwargs.get("output_attention",self.config.output_attentions)
+        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states", self.config.output_hidden_states)
+        kwargs["use_cache"] = kwargs.get("use_cache", self.config.use_cache)
+
+        # Extract inputs
+        input_ids = kwargs.get("input_ids", None)
+        inputs_embeds = kwargs.get("inputs_embeds", None)
+        use_cache = kwargs["use_cache"]
+        past_key_values = kwargs.get("past_key_values", None)
+
+        # Input validation
+        if (input_ids is None) == (inputs_embeds is None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds.")
+
+        # Gradient checkpointing warning
+        if getattr(self, "gradient_checkpointing", False) and getattr(self, "training", False) and use_cache:
+            logger.warning(
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
+            )
+            kwargs["use_cache"] = False  # update it directly in kwargs
+
+        # Past key values type check
+        if past_key_values is not None and not isinstance(past_key_values, Cache):
+            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
+
+        return_dict = kwargs.get("return_dict", self.config.use_return_dic)
+        output = func(self, *args, **kwargs)
+        if return_dict:
+            output = output.to_tuple()
+        return output
+
+    return wrapper
 
 class GeneralInterface(MutableMapping):
     """
