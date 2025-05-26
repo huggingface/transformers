@@ -181,7 +181,8 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
         input_tensor=None,
         is_training: Optional[bool] = None,
     ):
-        if self.config.text_config._attn_implementation == "flash_attention_2":
+        # Avoid accessing _attn_implementation during torch compilation to prevent graph breaks
+        if not is_torchdynamo_compiling() and self.config.text_config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
