@@ -2658,7 +2658,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             def smart_apply(self, fn):
                 for module in self.children():
                     # We found a sub-model: recursively dispatch its own init function now!
-                    if hasattr(module, "_init_weights"):
+                    if isinstance(module, PreTrainedModel):
                         module.smart_apply(module._initialize_weights)
                     else:
                         module.smart_apply(fn)
