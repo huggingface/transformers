@@ -934,10 +934,12 @@ def can_return_tuple(func):
         kwargs["return_dict"] = False  # always set return_dict to True for the function call
         output = func(self, *args, **kwargs)
         if not return_dict:
-            import inspect
-            frame = inspect.stack()  # 3 because we're interested in the caller (not the function itself)
-            caller_obj = frame[3][0].f_locals.get('self', None)
-            if caller_obj.__class__ == self.__class__:
+            if not hasattr(self, "_caller_obj"):
+                import inspect
+                frame = inspect.stack()  # 3 because we're interested in the caller (not the function itself)
+                self._caller_obj = frame[3][0].f_locals.get('self', None)
+
+            if self._caller_obj.__class__ == self.__class__:
                 outputs = outputs.to_tuple()
         return output
 
