@@ -278,6 +278,7 @@ class WhisperConfig(PretrainedConfig):
         self.mask_feature_min_masks = mask_feature_min_masks
 
         self.median_filter_width = median_filter_width
+        self.use_legacy_logprob_calculation = use_legacy_logprob_calculation
 
         super().__init__(
             pad_token_id=pad_token_id,

@@ -33,11 +33,15 @@ class WhisperRegressionTest(unittest.TestCase):
             d_model=64,
             encoder_layers=1,
             decoder_layers=1,
-            encoder_attention_heads=2,
-            decoder_attention_heads=2,
+            encoder_attention_heads=4,  # 64 is divisible by 4
+            decoder_attention_heads=4,  # 64 is divisible by 4
             encoder_ffn_dim=128,
             decoder_ffn_dim=128,
             num_mel_bins=80,
+            pad_token_id=0,
+            bos_token_id=1,
+            eos_token_id=2,
+            decoder_start_token_id=3,
         )
 
     def test_legacy_logprob_calculation_default(self):
@@ -56,13 +60,27 @@ class WhisperRegressionTest(unittest.TestCase):
     def test_logprob_calculation_difference(self):
         """Test that legacy and new logprob calculations produce different results."""
         # Test legacy mode
-        config_legacy = self.config.copy()
-        config_legacy.use_legacy_logprob_calculation = True
+        config_legacy = WhisperConfig(
+            vocab_size=self.config.vocab_size,
+            d_model=self.config.d_model,
+            encoder_layers=self.config.encoder_layers,
+            decoder_layers=self.config.decoder_layers,
+            encoder_attention_heads=self.config.encoder_attention_heads,
+            decoder_attention_heads=self.config.decoder_attention_heads,
+            use_legacy_logprob_calculation=True
+        )
         model_legacy = WhisperForConditionalGeneration(config_legacy)
 
         # Test new mode
-        config_new = self.config.copy()
-        config_new.use_legacy_logprob_calculation = False
+        config_new = WhisperConfig(
+            vocab_size=self.config.vocab_size,
+            d_model=self.config.d_model,
+            encoder_layers=self.config.encoder_layers,
+            decoder_layers=self.config.decoder_layers,
+            encoder_attention_heads=self.config.encoder_attention_heads,
+            decoder_attention_heads=self.config.decoder_attention_heads,
+            use_legacy_logprob_calculation=False
+        )
         model_new = WhisperForConditionalGeneration(config_new)
 
         # Create dummy scores and tokens for testing
@@ -89,8 +107,15 @@ class WhisperRegressionTest(unittest.TestCase):
 
     def test_generation_deterministic_legacy_mode(self):
         """Test that generation is deterministic in legacy mode."""
-        config = self.config.copy()
-        config.use_legacy_logprob_calculation = True
+        config = WhisperConfig(
+            vocab_size=self.config.vocab_size,
+            d_model=self.config.d_model,
+            encoder_layers=self.config.encoder_layers,
+            decoder_layers=self.config.decoder_layers,
+            encoder_attention_heads=self.config.encoder_attention_heads,
+            decoder_attention_heads=self.config.decoder_attention_heads,
+            use_legacy_logprob_calculation=True
+        )
         model = WhisperForConditionalGeneration(config)
         model.eval()
 
@@ -112,8 +137,15 @@ class WhisperRegressionTest(unittest.TestCase):
 
     def test_generation_deterministic_new_mode(self):
         """Test that generation is deterministic in new mode."""
-        config = self.config.copy()
-        config.use_legacy_logprob_calculation = False
+        config = WhisperConfig(
+            vocab_size=self.config.vocab_size,
+            d_model=self.config.d_model,
+            encoder_layers=self.config.encoder_layers,
+            decoder_layers=self.config.decoder_layers,
+            encoder_attention_heads=self.config.encoder_attention_heads,
+            decoder_attention_heads=self.config.decoder_attention_heads,
+            use_legacy_logprob_calculation=False
+        )
         model = WhisperForConditionalGeneration(config)
         model.eval()
 
@@ -136,12 +168,26 @@ class WhisperRegressionTest(unittest.TestCase):
     def test_logprob_calculation_with_temperature_fallback(self):
         """Test that logprob calculation affects temperature fallback decisions."""
         # Create models with different logprob calculation modes
-        config_legacy = self.config.copy()
-        config_legacy.use_legacy_logprob_calculation = True
+        config_legacy = WhisperConfig(
+            vocab_size=self.config.vocab_size,
+            d_model=self.config.d_model,
+            encoder_layers=self.config.encoder_layers,
+            decoder_layers=self.config.decoder_layers,
+            encoder_attention_heads=self.config.encoder_attention_heads,
+            decoder_attention_heads=self.config.decoder_attention_heads,
+            use_legacy_logprob_calculation=True
+        )
         model_legacy = WhisperForConditionalGeneration(config_legacy)
 
-        config_new = self.config.copy()
-        config_new.use_legacy_logprob_calculation = False
+        config_new = WhisperConfig(
+            vocab_size=self.config.vocab_size,
+            d_model=self.config.d_model,
+            encoder_layers=self.config.encoder_layers,
+            decoder_layers=self.config.decoder_layers,
+            encoder_attention_heads=self.config.encoder_attention_heads,
+            decoder_attention_heads=self.config.decoder_attention_heads,
+            use_legacy_logprob_calculation=False
+        )
         model_new = WhisperForConditionalGeneration(config_new)
 
         # Copy weights to ensure same model behavior except for logprob calculation
@@ -190,8 +236,15 @@ class WhisperRegressionTest(unittest.TestCase):
         # lead to different results in inference, particularly for long-form
         # transcription with timestamps
 
-        config = self.config.copy()
-        config.use_legacy_logprob_calculation = True  # Simulate older version behavior
+        config = WhisperConfig(
+            vocab_size=self.config.vocab_size,
+            d_model=self.config.d_model,
+            encoder_layers=self.config.encoder_layers,
+            decoder_layers=self.config.decoder_layers,
+            encoder_attention_heads=self.config.encoder_attention_heads,
+            decoder_attention_heads=self.config.decoder_attention_heads,
+            use_legacy_logprob_calculation=True  # Simulate older version behavior
+        )
         model = WhisperForConditionalGeneration(config)
         model.eval()
 
