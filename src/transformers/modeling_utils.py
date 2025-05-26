@@ -324,7 +324,8 @@ def get_torch_context_manager_or_global_device():
     is not "cpu". This is used to infer the correct device to load the model on, in case `device_map` is not provided.
     """
     device_in_context = torch.tensor([]).device
-    default_device = torch.get_default_device()
+    # `get_default_device` was only introduced in torch>=2.3 - use cpu otherwise to align the behavior
+    default_device = torch.get_default_device() if is_torch_greater_or_equal("2.3") else torch.device("cpu")
     # This case means no context manager was used -> we still check if the default that was potentially set is not cpu
     if device_in_context == default_device:
         if default_device != torch.device("cpu"):
@@ -1004,6 +1005,7 @@ def _get_resolved_checkpoint_files(
     user_agent: dict,
     revision: str,
     commit_hash: Optional[str],
+    is_remote_code: bool,  # Because we can't determine this inside this function, we need it to be passed in
     transformers_explicit_filename: Optional[str] = None,
 ) -> Tuple[Optional[List[str]], Optional[Dict]]:
     """Get all the checkpoint filenames based on `pretrained_model_name_or_path`, and optional metadata if the
@@ -1200,7 +1202,10 @@ def _get_resolved_checkpoint_files(
                                 "_commit_hash": commit_hash,
                                 **has_file_kwargs,
                             }
-                            if not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs):
+                            if (
+                                not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs)
+                                and not is_remote_code
+                            ):
                                 Thread(
                                     target=auto_conversion,
                                     args=(pretrained_model_name_or_path,),
@@ -2078,7 +2083,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             if plan := getattr(module, "_tp_plan", None):
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
 
-        if self._tp_plan is not None and is_torch_greater_or_equal("2.3"):
+        if self._tp_plan is not None and is_torch_greater_or_equal("2.5"):
             for _, v in self._tp_plan.items():
                 if v not in ALL_PARALLEL_STYLES:
                     raise ValueError(
@@ -2657,7 +2662,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             def smart_apply(self, fn):
                 for module in self.children():
                     # We found a sub-model: recursively dispatch its own init function now!
-                    if hasattr(module, "_init_weights"):
+                    if isinstance(module, PreTrainedModel):
                         module.smart_apply(module._initialize_weights)
                     else:
                         module.smart_apply(fn)
@@ -4549,6 +4554,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             user_agent=user_agent,
             revision=revision,
             commit_hash=commit_hash,
+            is_remote_code=cls._auto_class is not None,
             transformers_explicit_filename=transformers_explicit_filename,
         )
 
@@ -5320,11 +5326,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         Register this class with a given auto class. This should only be used for custom models as the ones in the
         library are already mapped with an auto class.
 
-        <Tip warning={true}>
 
-        This API is experimental and may have some slight breaking changes in the next releases.
-
-        </Tip>
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"AutoModel"`):
