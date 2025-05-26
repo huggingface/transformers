@@ -3224,7 +3224,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # For more than 1 GPUs, since the randomness is introduced in the model and with DataParallel (which is used
         # in this test for more than 2 GPUs), the calls to the torch RNG will happen in a random order (sometimes
         # GPU 0 will call first and sometimes GPU 1).
-        random_torch = not torch.cuda.is_available() or torch.cuda.device_count() <= 1
+        random_torch = not torch.cuda.is_available() or backend_device_count(torch_device) <= 1
 
         if torch.cuda.is_available():
             torch.backends.cudnn.deterministic = True
