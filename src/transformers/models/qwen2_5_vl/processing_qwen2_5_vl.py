@@ -143,8 +143,6 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-
         image_inputs = videos_inputs = {}
         if images is not None:
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
@@ -152,6 +150,7 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
 
         if videos is not None:
             fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
+            output_kwargs["videos_kwargs"].pop("return_tensors", None)
 
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
@@ -190,6 +189,7 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.video_token)
 
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
