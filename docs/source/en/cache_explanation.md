@@ -28,7 +28,9 @@ A key-value (KV) cache eliminates this inefficiency by storing kv pairs derived 
 > [!WARNING]
 > Caching should only be used for **inference**. It may cause unexpected errors if it's enabled during training.
 
-### Attention Matrices
+To better understand how and why caching works, let's take a closer look at the structure of the attention matrices.
+
+## Attention matrices
 
 The **scaled dot-product attention** is calculated as shown below for a batch of size `b`, number of attention heads `h`, sequence length so far `T`, and dimension per attention head `d_head`.
 
