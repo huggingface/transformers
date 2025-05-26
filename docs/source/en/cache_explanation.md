@@ -30,7 +30,7 @@ A key-value (KV) cache eliminates this inefficiency by storing kv pairs derived 
 
 ### Attention Matrices
 
-For a batch of size `b`, number of attention heads `h`, sequence length so far `T`, and dimension per attention head `d_head`, the standard **scaled dot-product attention** is computed as:
+The **scaled dot-product attention** is calculated as shown below for a batch of size `b`, number of attention heads `h`, sequence length so far `T`, and dimension per attention head `d_head`.
 
 $$
 \text{Attention}(Q, K, V) = \text{softmax}\left( \frac{Q K^\top}{\sqrt{d_{\text{head}}}} \times \text{mask} \right) V
