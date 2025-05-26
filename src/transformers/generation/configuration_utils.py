@@ -650,9 +650,9 @@ class GenerationConfig(PushToHubMixin):
             greedy_wrong_parameter_msg = (
                 "`do_sample` is set to `False`,"
                 " which means don't perform sampling-based generation. "
-                "However, the sampling-based generation parameter `temperature` is set to `0.0` "
-                "-- but `temperature` is only relevant for sample-based generation modes. "
-                "If you want to don't want to sample, don't specify a `temperature`. "
+                "However, the sampling-based generation parameter `{flag_name}` is set to `{flag_value}` "
+                "-- but `{flag_name}` is only relevant for sample-based generation modes. "
+                "If you want to don't want to sample, don't specify a `{flag_name}`. "
                 "If you want to sample, set `do_sample=True`."
             )
             if self.temperature is not None and self.temperature != 1.0:
