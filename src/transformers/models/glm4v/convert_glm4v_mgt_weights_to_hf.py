@@ -174,7 +174,7 @@ def save_sharded_model(state_dict, output_path, max_shard_size_gb=5, num_layers=
 
     layered_dict["others"] = {}
     for key, value in state_dict.items():
-        if not any(f"model.layers.{i}." in key for i in range(num_layers)) and not any(
+        if not any(f"model.language_model.layers.{i}." in key for i in range(num_layers)) and not any(
             f"visual.blocks.{i}." in key for i in range(vision_num_layers)
         ):
             layered_dict["others"][key] = value

@@ -17,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dataclasses import dataclass
+
 from typing import List, Optional, Union, Tuple
 
 import itertools
@@ -32,7 +32,6 @@ from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLForConditionalGeneration,
     Qwen2_5_VisionPatchEmbed,
     Qwen2_5_VLModel,
-    Qwen2_5_VLPreTrainedModel,
     Qwen2_5_VLVisionAttention,
     Qwen2_5_VisionRotaryEmbedding,
     Qwen2_5_VLVisionSdpaAttention,
@@ -40,8 +39,9 @@ from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLMLP,
     Qwen2_5_VLDecoderLayer,
     Qwen2_5_VLVisionBlock,
+    Qwen2_5_VLTextModel,
+    Qwen2_5_VLPreTrainedModel,
 )
-from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel
 from transformers.models.qwen2_5_vl.processing_qwen2_5_vl import (
     Qwen2_5_VLImagesKwargs,
     Qwen2_5_VLProcessor,
@@ -50,6 +50,8 @@ from transformers.models.qwen2_5_vl.processing_qwen2_5_vl import (
 )
 from transformers.models.glm4.modeling_glm4 import Glm4RMSNorm, Glm4MLP, rotate_half
 
+from transformers.models.qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
+from transformers.models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -500,14 +502,11 @@ class Glm4vPreTrainedModel(Qwen2_5_VLPreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
         elif isinstance(module, Glm4vRMSNorm):
             module.weight.data.fill_(1.0)
 
 
-class Glm4vVisionTransformerPretrainedModel(Qwen2VisionTransformerPretrainedModel):
+class Glm4vVisionTransformerPretrainedModel(Glm4vPreTrainedModel):
     config_class = Glm4vVisionConfig
     _no_split_modules = ["Glm4vVisionBlock"]
 
@@ -701,8 +700,14 @@ class Glm4vDecoderLayer(Qwen2_5_VLDecoderLayer):
 
 
 class Glm4vModel(Qwen2_5_VLModel):
-    config_class = Glm4vTextConfig
+    config_class = Glm4vConfig
 
+    def __init__(self, config):
+        super().__init__(config)
+        self.visual = Glm4vVisionTransformerPretrainedModel._from_config(config.vision_config)
+
+
+class Glm4vTextModel(Qwen2_5_VLTextModel):
     def __init__(self, config: Glm4vTextConfig):
         super().__init__(config)
         self.norm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -710,11 +715,6 @@ class Glm4vModel(Qwen2_5_VLModel):
 
 class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
     config_class = Glm4vConfig
-    _no_split_modules = ["Glm4vDecoderLayer", "Glm4vVisionBlock"]
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.visual = Glm4vVisionTransformerPretrainedModel._from_config(config.vision_config)
 
     def get_rope_index(
         self,
@@ -879,6 +879,13 @@ class Glm4vProcessorKwargs(Qwen2_5_VLProcessorKwargs):
     }
 
 
+class Glm4vImageProcessor(Qwen2VLImageProcessor):
+    pass
+
+class Glm4vVideoProcessor(Qwen2VLVideoProcessor):
+    pass
+
+
 class Glm4vProcessor(Qwen2_5_VLProcessor):
     r"""
     Constructs a GLM-4V processor which wraps a GLM-4V image processor and a GLM-4 tokenizer into a single processor.
@@ -901,7 +908,6 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
         self.image_token = "<|image|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
-
 
     def __call__(
         self,
@@ -1017,4 +1023,5 @@ __all__ = [
     "Glm4vModel",
     "Glm4vPreTrainedModel",
     "Glm4vProcessor",
+    "Glm4vTextModel",  # noqa: F822
 ]
