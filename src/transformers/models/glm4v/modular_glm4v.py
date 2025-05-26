@@ -889,18 +889,19 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
             The image processor is a required input.
         tokenizer ([`PreTrainedTokenizerFast`], *optional*):
             The tokenizer is a required input.
+        video_processor ([`Glm4vVideoProcessor`], *optional*):
+            The video processor is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """
 
-    image_processor_class = "AutoImageProcessor"
     tokenizer_class = ("PreTrainedTokenizer", "PreTrainedTokenizerFast")
 
-    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
-
+    def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
+        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
         self.image_token = "<|image|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
+
 
     def __call__(
         self,

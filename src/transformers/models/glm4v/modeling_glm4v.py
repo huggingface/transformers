@@ -1844,12 +1844,12 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
                 image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
 
                 # FIXME：暂时屏蔽 Vision Encoder影响，transformers的 vision encoder也不对
-                if image_embeds.shape[0] == 1250:
-                    print("original with:\n", image_embeds)
-                    from safetensors.torch import load_file
-                    image_embed_dict = load_file("/mnt/image_embed.safetensors")
-                    image_embeds = image_embed_dict["image_embeds"].to(inputs_embeds.device)
-                    print("load with:\n",image_embeds)
+                # if image_embeds.shape[0] == 1250:
+                #     print("original with:\n", image_embeds)
+                    # from safetensors.torch import load_file
+                    # image_embed_dict = load_file("/mnt/image_embed.safetensors")
+                    # image_embeds = image_embed_dict["image_embeds"].to(inputs_embeds.device)
+                    # print("load with:\n",image_embeds)
 
                 n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
                 n_image_features = image_embeds.shape[0]
