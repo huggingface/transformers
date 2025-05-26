@@ -930,7 +930,7 @@ def can_return_tuple(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        is_requested_to_return_tuple = kwargs.pop("return_dict", True) is False
+        is_requested_to_return_tuple = kwargs.get("return_dict", True) is False
         is_configured_to_return_tuple = self.config.use_return_dict is False if hasattr(self, "config") else False
 
         # The following allows to convert output to tuple ONLY on top level forward call,
@@ -965,18 +965,21 @@ def check_model_inputs(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        kwargs["output_attention"] = kwargs.get("output_attention", self.config.output_attentions)
-        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states", self.config.output_hidden_states)
-        kwargs["use_cache"] = kwargs.get("use_cache", self.config.use_cache)
+        print(kwargs)
+        output_attentions = kwargs.get("output_attentions", self.config.output_attentions)
+        output_hidden_states = kwargs.get("output_hidden_states", self.config.output_hidden_states)
+        use_cache = kwargs.get("use_cache", self.config.use_cache)
+        return_dict = kwargs.get("return_dict", self.config.use_return_dict)
+
+        kwargs["output_attentions"] = output_attentions
+        kwargs["output_hidden_states"] = output_hidden_states
+        kwargs["use_cache"] = use_cache
         kwargs["return_dict"] = True
-        output_attentions = kwargs["output_attention"]
-        output_hidden_states = kwargs["output_hidden_states"]
+
         input_ids = kwargs.get("input_ids", None)
         inputs_embeds = kwargs.get("inputs_embeds", None)
         use_cache = kwargs["use_cache"]
         past_key_values = kwargs.get("past_key_values", None)
-        return_dict = kwargs.get("return_dict", self.config.use_return_dict)
-
         hooks = []
         collected_attentions = []
         collected_hidden_states = []
@@ -985,11 +988,11 @@ def check_model_inputs(func):
             def output_hidden_and_attention(module, inp, out):
                 if output_hidden_states:
                     collected_hidden_states.append(out[0])
-                if output_attentions and len(out) > 1:
+                if output_attentions:
                     collected_attentions.append(out[1])
 
-            for layer in self.named_modules():
-                if isinstance(layer, GradientCheckpointingLayer):
+            for _, layer in self.named_modules():
+                if isinstance(layer, GradientCheckpointingLayer):  # TODO a bit slow to iterate over all layers no?
                     hooks.append(layer.register_forward_hook(output_hidden_and_attention))
 
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -999,7 +1002,7 @@ def check_model_inputs(func):
             logger.warning("`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.")
             kwargs["use_cache"] = False  # update it directly in kwargs
 
-        if past_key_values is not None and not "Cache" in past_key_values.__class__.__name__:
+        if past_key_values is not None and "Cache" not in past_key_values.__class__.__name__:
             raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         outputs = func(self, *args, **kwargs)
@@ -1012,7 +1015,7 @@ def check_model_inputs(func):
             outputs.hidden_states = tuple(collected_hidden_states)
         if output_attentions:
             outputs.attentions = tuple(collected_attentions)
-        if return_dict:
+        if not return_dict:
             outputs = outputs.to_tuple()
         return outputs
 
