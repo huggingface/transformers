@@ -13,7 +13,6 @@
 # limitations under the License.
 
 
-import copy
 import json
 import os
 import platform
@@ -48,8 +47,6 @@ if is_torch_available():
         AutoTokenizer,
         BitsAndBytesConfig,
         GenerationConfig,
-        PreTrainedModel,
-        PreTrainedTokenizer,
         TextIteratorStreamer,
     )
 
@@ -249,9 +246,7 @@ class ChatArguments:
     repetition_penalty: float = field(default=1.0, metadata={"help": "Repetition penalty."})
     eos_tokens: Optional[str] = field(
         default=None,
-        metadata={
-            "help": "EOS tokens (text format) to stop the generation. If multiple they should be comma separated."
-        },
+        metadata={"help": "EOS tokens to stop the generation. If multiple they should be comma separated."},
     )
     eos_token_ids: Optional[str] = field(
         default=None,
@@ -469,15 +464,16 @@ class ChatCommand(BaseTransformersCLICommand):
         return processed_generate_flags
 
     def get_generation_parameterization(
-        self, args: ChatArguments, tokenizer: AutoTokenizer, model: PreTrainedModel
+        self, args: ChatArguments, tokenizer: AutoTokenizer
     ) -> tuple[GenerationConfig, dict]:
         """
         Returns a GenerationConfig object holding the generation parameters for the CLI command.
         """
-        # No generation config arg provided -> use default generation config, apply CLI defaults
+        # No generation config arg provided -> use base generation config, apply CLI defaults
         if args.generation_config is None:
-            # We start off from the checkpoint's generation config
-            generation_config = copy.deepcopy(model.generation_config)
+            generation_config = GenerationConfig()
+            # Apply deprecated CLI args on top of the default generation config
+            pad_token_id, eos_token_ids = self.parse_eos_tokens(tokenizer, args.eos_tokens, args.eos_token_ids)
             # Apply deprecated CLI args on top of the default generation config
             pad_token_id, eos_token_ids = self.parse_eos_tokens(
                 tokenizer, generation_config, args.eos_tokens, args.eos_token_ids
@@ -512,16 +508,13 @@ class ChatCommand(BaseTransformersCLICommand):
 
     @staticmethod
     def parse_eos_tokens(
-        tokenizer: PreTrainedTokenizer,
-        generation_config: GenerationConfig,
-        eos_tokens: Optional[str],
-        eos_token_ids: Optional[str],
+        tokenizer: AutoTokenizer, eos_tokens: Optional[str], eos_token_ids: Optional[str]
     ) -> tuple[int, list[int]]:
         """Retrieves the pad token ID and all possible EOS token IDs."""
-        if generation_config.pad_token_id is None:
-            pad_token_id = generation_config.eos_token_id
+        if tokenizer.pad_token_id is None:
+            pad_token_id = tokenizer.eos_token_id
         else:
-            pad_token_id = generation_config.pad_token_id
+            pad_token_id = tokenizer.pad_token_id
 
         all_eos_token_ids = []
 
@@ -532,7 +525,7 @@ class ChatCommand(BaseTransformersCLICommand):
             all_eos_token_ids.extend([int(token_id) for token_id in eos_token_ids.split(",")])
 
         if len(all_eos_token_ids) == 0:
-            all_eos_token_ids.append(generation_config.eos_token_id)
+            all_eos_token_ids.append(tokenizer.eos_token_id)
 
         return pad_token_id, all_eos_token_ids
 
@@ -687,7 +680,7 @@ class ChatCommand(BaseTransformersCLICommand):
 
         model, tokenizer = self.load_model_and_tokenizer(args)
         generation_streamer = TextIteratorStreamer(tokenizer, skip_special_tokens=True, skip_prompt=True)
-        generation_config, model_kwargs = self.get_generation_parameterization(args, tokenizer, model)
+        generation_config, model_kwargs = self.get_generation_parameterization(args, tokenizer)
 
         interface = RichInterface(model_name=args.model_name_or_path_positional, user_name=user)
         interface.clear()
