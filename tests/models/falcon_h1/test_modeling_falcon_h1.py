@@ -483,35 +483,26 @@ class FalconH1ModelIntegrationTest(unittest.TestCase):
         """
         An integration test for Falcon-H1.
         """
-        EXPECTED_TEXT = (
-            "user\n"
-            "Tell me about the french revolution.\n"
-            "assistant\n"
-            "The French Revolution (1789–1799) was a period of profound social upheaval and radical political change in France "
-            "that fundamentally transformed the nation and had far-reaching effects on the rest of Europe and the world. "
-            "Here are the key aspects of the revolution:\n\n"
-            "### **Causes**\n"
-            "1. **Economic Crisis**: France was in severe financial trouble due to costly wars (particularly the American Revolution), "
-            "extravagant spending by the monarchy, and an inefficient tax system.\n"
-            "2. **Social Inequality**: The privileged classes (the nobility and clergy) enjoyed immense wealth and power, "
-            "while the majority of the population (the Third Estate, comprising commoners) faced poverty and lack of representation.\n"
-            "3. **Enlightenment Ideas**: Philosophers like Voltaire, Rousseau, and Montesquieu inspired ideas of liberty, equality, "
-            "and popular sovereignty, which fueled revolutionary fervor.\n"
-            "4. **Political Instability**: The absolute monarchy under King Louis XVI was seen as corrupt and out of touch with "
-            "the needs of the people.\n\n"
-            "### **Key Events**\n"
-            "1. **Estates-General (1789)**: The Third Estate broke away and formed the National Assembly, forcing King Louis XVI "
-            "to convene the Estates-General, an old legislative body, to address the financial crisis.\n"
-            "2. **Storming of the Bastille (July 14, 1789)**: A symbol of royal tyranny, the Bastille fortress was stormed by "
-            "revolutionaries, sparking widespread rebellion.\n"
-            "3. **Declaration of the Rights of Man and of the Citizen (August 1789)**: This foundational document proclaimed liberty, "
-            "equality, and fraternity.\n"
-            "4. **Abolition of Feudalism (November 1789)**: The National Assembly abolished feudal privileges, redistributing church "
-            "lands to the people.\n"
-            "5. **Tennis Court Oath (May 5, 1789)**: The National Assembly, meeting on an open tennis court, pledged to continue "
-            "meeting until a constitution was established.\n"
-            "6. **Reign of Terror"
-        )
+        EXPECTED_TEXT = """
+            user
+            Tell me about the french revolution.
+            assistant
+            The French Revolution (1789–1799) was a period of radical social and political upheaval in France that fundamentally transformed the nation and had profound effects on the rest of Europe and the world. Here are the key aspects of the revolution:
+
+            ### **Causes**
+            1. **Economic Crisis**: France was in severe financial trouble due to costly wars (particularly the American Revolution), extravagant spending by the monarchy, and inefficient taxation.
+            2. **Social Inequality**: The rigid class system (the Ancien Régime) divided society into the privileged nobility and clergy (First Estate) and the commoners (Third Estate), who bore the brunt of taxation and had few rights.
+            3. **Enlightenment Ideas**: Philosophers like Voltaire, Rousseau, and Montesquieu inspired ideas of liberty, equality, and popular sovereignty.
+            4. **Settlement of 1789**: The Estates-General convened to address the financial crisis, leading to the Third Estate's assertion of its rights and the eventual abolition of the feudal system.
+            ### **Key Events**
+            1. **Storming of the Bastille (July 14, 1789)**: A symbol of royal tyranny, the Bastille fortress was stormed by revolutionaries, sparking widespread rebellion.
+            2. **Declaration of the Rights of Man and of the Citizen (August 1789)**: A foundational document proclaiming liberty, equality, and fraternity.
+            3. **National Assembly and King’s Trial (1791–1792)**: King Louis XVI and his ministers were tried and executed (King Louis was guillotined, Marie Antoinette was banished), marking the end of the monarchy.
+            4. **Rise of the Jacobins and Reign of Terror (1793–1794)**: Radical leaders like Maximilien Robespierre sought to purge France of counter-revolutionaries, leading to mass executions and widespread fear.
+            5. **Thermidorian Reaction
+        """
+        # Remove the first char (`\n`) and the consecutive whitespaces caused by the formatting.
+        EXPECTED_TEXT = EXPECTED_TEXT.strip().replace(" " * 12, "")
 
         model_id = "tiiuae/Falcon-H1-1.5B-Deep-Instruct"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
