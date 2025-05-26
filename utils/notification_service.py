@@ -31,8 +31,7 @@ from slack_sdk import WebClient
 
 
 # A map associating the job names (specified by `inputs.job` in a workflow file) with the keys of
-# `additional_files`. This is used to remove some entries in `additional_files` that are not concerned by a
-# specific job. See below.
+# `additional_files`.
 job_to_test_map = {
     "run_models_gpu": "Models",
     "run_trainer_and_fsdp_gpu": "Trainer & FSDP",
@@ -41,6 +40,17 @@ job_to_test_map = {
     "run_examples_gpu": "Examples directory",
     "run_torch_cuda_extensions_gpu": "DeepSpeed",
     "run_quantization_torch_gpu": "Quantization",
+}
+
+# The values are used as the file names where to save the corresponding CI job results.
+test_to_result_name = {
+    "Models": "model",
+    "Trainer & FSDP": "trainer_and_fsdp",
+    "PyTorch pipelines": "torch_pipeline",
+    "TensorFlow pipelines": "tf_pipeline",
+    "Examples directory": "example",
+    "DeepSpeed": "deepspeed",
+    "Quantization": "quantization",
 }
 
 NON_MODEL_TEST_MODULES = [
@@ -1358,16 +1368,7 @@ if __name__ == "__main__":
             if "workflow_run" in event_payload:
                 is_scheduled_ci_run = event_payload["workflow_run"]["event"] == "schedule"
 
-    # The values are used as the file names where to save the corresponding CI job results.
-    test_to_result_name = {
-        "Models": "model",
-        "Trainer & FSDP": "trainer_and_fsdp",
-        "PyTorch pipelines": "torch_pipeline",
-        "TensorFlow pipelines": "tf_pipeline",
-        "Examples directory": "example",
-        "DeepSpeed": "deepspeed",
-        "Quantization": "quantization",
-    }
+
 
     test_name_and_result_pairs = []
     if len(matrix_job_results) > 0:
