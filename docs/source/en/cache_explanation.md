@@ -15,7 +15,6 @@ rendered properly in your Markdown viewer.
 -->
 
 # Caching
-## Intro
 Imagine you're having a conversation with someone, and instead of remembering what they previously said, they have to start from scratch every time you respond. This would be slow and inefficient, right?
 
 You can extend this analogy to transformer models. Autoregressive model generation can be slow because it makes a prediction one token at a time. Each new prediction is dependent on all the previous context.
