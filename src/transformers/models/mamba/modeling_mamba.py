@@ -32,8 +32,9 @@ from ...utils import (
     logging,
 )
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available, is_mambapy_available
-from .configuration_mamba import MambaConfig
 from .cache_mamba import MambaCache
+from .configuration_mamba import MambaConfig
+
 
 logger = logging.get_logger(__name__)
 

@@ -26,9 +26,9 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
-from ..mamba.cache_mamba import MambaCache
 from ...utils import ModelOutput, auto_docstring, logging
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_ssm_available, is_mambapy_available
+from ..mamba.cache_mamba import MambaCache
 from .configuration_falcon_mamba import FalconMambaConfig
 
 

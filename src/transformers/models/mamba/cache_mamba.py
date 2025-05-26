@@ -1,7 +1,6 @@
-import torch
-
-
 from typing import List, Union
+
+import torch
 
 
 class MambaCache:
@@ -102,5 +101,6 @@ class MambaCache:
             # In-place ops prevent breaking the static address
             self.conv_states[layer_idx].zero_()
             self.ssm_states[layer_idx].zero_()
+
 
 __all__ = ["MambaCache"]
