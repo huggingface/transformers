@@ -171,6 +171,11 @@ class WhisperConfig(PretrainedConfig):
         median_filter_width (`int`, *optional*, defaults to 7):
             Width of the median filter used to smoothen to cross-attention outputs when computing token timestamps.
             Should be an odd number.
+        use_legacy_logprob_calculation (`bool`, *optional*, defaults to `True`):
+            Whether to use the legacy average log probability calculation for backward compatibility. When `True`,
+            uses the original formula `sum_logprobs / (length + 1)`. When `False`, uses the newer formula
+            `sum_logprobs / length`. This affects confidence scoring and temperature fallback decisions in generation.
+            Set to `False` to use the behavior from transformers >= 4.52.0.
 
     Example:
 
@@ -234,6 +239,7 @@ class WhisperConfig(PretrainedConfig):
         mask_feature_length=10,
         mask_feature_min_masks=0,
         median_filter_width=7,
+        use_legacy_logprob_calculation=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
