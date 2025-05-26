@@ -124,7 +124,11 @@ class Cache:
     Base, abstract class for all caches. The actual data structure is specific to each subclass.
     """
 
+    # Used to flag the cache class as compilable, i.e. with `torch.compile` support.
     is_compileable = False
+    # Additional inputs required by the cache's `update` method. Custom cache classes may want e.g. to have access to
+    # the query values. The values set here are for backward compatibility with before this attribute was added (v4.53)
+    extra_update_inputs = ("sin", "cos", "cache_position", "partial_rotation_size")
 
     def __init__(self):
         super().__init__()
@@ -469,6 +473,8 @@ class DynamicCache(Cache):
         DynamicCache()
         ```
     """
+
+    extra_update_inputs = ()
 
     def __init__(self, _distributed_cache_data: Optional[Iterable] = None) -> None:
         super().__init__()
@@ -1302,6 +1308,7 @@ class StaticCache(Cache):
     """
 
     is_compileable = True
+    extra_update_inputs = ("cache_position",)
 
     def __init__(
         self,
