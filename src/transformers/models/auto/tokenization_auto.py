@@ -53,8 +53,7 @@ else:
 
 logger = logging.get_logger(__name__)
 
-# Explicit rather than infered generics to significantly improves completion suggestion performance when
-# the transformers package is used with Microsoft's Pylance language server.
+# Explicit rather than inferred generics to significantly improves completion suggestion performance for language servers.
 TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
     [
         (
