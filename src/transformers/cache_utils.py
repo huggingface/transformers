@@ -14,6 +14,8 @@ from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_6
 from .configuration_utils import PretrainedConfig
 from .utils import is_hqq_available, is_optimum_quanto_available, is_torch_greater_or_equal, logging
 
+# For backwards compatibility
+from .models.mamba.cache_mamba import MambaCache
 
 if is_hqq_available():
     from hqq.core.quantize import Quantizer as HQQQuantizer
@@ -2513,15 +2515,3 @@ class OffloadedStaticCache(StaticCache):
 
         self._device_key_cache[layer_idx & 1].copy_(self.key_cache[layer_idx], non_blocking=True)
         self._device_value_cache[layer_idx & 1].copy_(self.value_cache[layer_idx], non_blocking=True)
-
-
-def __getattr__(name):
-    if name == "MambaCache":
-        raise ImportError(
-            "MambaCache has been moved from `cache_utils` to `models.mamba`. "
-            "Please update your imports to:\n"
-            "  from transformers import MambaCache\n"
-            "or\n"
-            "  from transformers.models.mamba import MambaCache"
-        )
-    raise AttributeError(f"module {__name__} has no attribute {name}")

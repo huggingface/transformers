@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_mamba import *
     from .modeling_mamba import *
+    from .cache_mamba import *
 else:
     import sys
 
