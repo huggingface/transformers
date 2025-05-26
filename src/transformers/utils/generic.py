@@ -32,6 +32,7 @@ import numpy as np
 from packaging import version
 
 from ..modeling_layers import GradientCheckpointingLayer
+from ..utils import logging
 from .import_utils import (
     get_torch_version,
     is_flax_available,
@@ -41,6 +42,8 @@ from .import_utils import (
     is_torch_fx_proxy,
 )
 
+
+logger = logging.get_logger(__name__)
 
 if is_torch_available():
     # required for @can_return_tuple decorator to work with torchdynamo
@@ -927,8 +930,6 @@ def can_return_tuple(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-
-        
         is_requested_to_return_tuple = kwargs.pop("return_dict", True) is False
         is_configured_to_return_tuple = self.config.use_return_dict is False if hasattr(self, "config") else False
 
@@ -955,6 +956,7 @@ def can_return_tuple(func):
 
     return wrapper
 
+
 def check_model_inputs(func):
     """
     Decorator to check if the model inputs are valid before calling the function.
@@ -963,7 +965,7 @@ def check_model_inputs(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        kwargs["output_attention"] = kwargs.get("output_attention",self.config.output_attentions)
+        kwargs["output_attention"] = kwargs.get("output_attention", self.config.output_attentions)
         kwargs["output_hidden_states"] = kwargs.get("output_hidden_states", self.config.output_hidden_states)
         kwargs["use_cache"] = kwargs.get("use_cache", self.config.use_cache)
 
@@ -1000,13 +1002,11 @@ def check_model_inputs(func):
 
         # Gradient checkpointing warning
         if getattr(self, "gradient_checkpointing", False) and getattr(self, "training", False) and use_cache:
-            logger.warning(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
+            logger.warning("`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.")
             kwargs["use_cache"] = False  # update it directly in kwargs
 
         # Past key values type check
-        if past_key_values is not None and not isinstance(past_key_values, Cache):
+        if past_key_values is not None and not isinstance(past_key_values, "Cache"):
             raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         return_dict = kwargs.get("return_dict", self.config.use_return_dic)
@@ -1022,10 +1022,11 @@ def check_model_inputs(func):
             outputs.attentions = tuple(collected_attentions)
 
         if return_dict:
-            outputs = output.to_tuple()
+            outputs = outputs.to_tuple()
         return outputs
 
     return wrapper
+
 
 class GeneralInterface(MutableMapping):
     """

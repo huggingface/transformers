@@ -41,7 +41,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging, check_model_inputs
+from ...utils import auto_docstring, can_return_tuple, check_model_inputs, logging
 from .configuration_llama import LlamaConfig
 
 
@@ -419,7 +419,8 @@ class LlamaModel(LlamaPreTrainedModel):
 
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states, past_key_values=past_key_values,
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
         )
 
 
@@ -471,7 +472,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
