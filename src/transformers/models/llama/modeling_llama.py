@@ -242,7 +242,7 @@ class LlamaAttention(nn.Module):
         if past_key_value is not None:
             cache_specific_update_inputs = past_key_value.extra_update_inputs
             cache_kwargs = {key: locals().get(key, None) for key in cache_specific_update_inputs}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, **cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
 

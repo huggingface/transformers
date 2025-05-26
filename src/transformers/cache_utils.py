@@ -13,6 +13,7 @@ from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_6
 
 from .configuration_utils import PretrainedConfig
 from .utils import is_hqq_available, is_optimum_quanto_available, is_torch_greater_or_equal, logging
+from .utils.deprecation import deprecate_kwarg
 
 
 if is_hqq_available():
@@ -518,6 +519,7 @@ class DynamicCache(Cache):
         """
         return len(self.key_cache)
 
+    @deprecate_kwarg("cache_kwargs", version="4.55.0")
     def update(
         self,
         key_states: torch.Tensor,
@@ -1352,12 +1354,14 @@ class StaticCache(Cache):
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
 
+    @deprecate_kwarg("cache_kwargs", version="4.55.0", additional_message="Use `cache_position` instead.")
     def update(
         self,
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
         cache_kwargs: Optional[Dict[str, Any]] = None,
+        cache_position: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
@@ -1371,14 +1375,15 @@ class StaticCache(Cache):
             layer_idx (`int`):
                 The index of the layer to cache the states for.
             cache_kwargs (`Dict[str, Any]`, `optional`):
-                Additional arguments for the cache subclass. The `StaticCache` needs the `cache_position` input
-                to know how where to write in the cache.
+                Deprecated, use `cache_position` instead.
+            cache_position (`torch.Tensor`, `optional`):
+                The position in the cache to write the new key and value states.
 
         Return:
             A tuple containing the updated key and value states.
         """
-        if cache_kwargs is None:
-            cache_kwargs = {}
+        if cache_kwargs is not None:
+            cache_position = cache_kwargs.get("cache_position")
 
         key_states = key_states.to(self.key_cache[layer_idx].dtype)
         value_states = value_states.to(self.value_cache[layer_idx].dtype)
@@ -1387,7 +1392,7 @@ class StaticCache(Cache):
             self.value_cache[layer_idx],
             key_states,
             value_states,
-            cache_kwargs.get("cache_position"),
+            cache_position,
         )
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
