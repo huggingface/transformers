@@ -604,9 +604,10 @@ class FalconH1Mixer(nn.Module):
     ):
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+        # Add Multipliers
         hidden_states = hidden_states * self.ssm_in_multiplier
         projected_states = self.in_proj(hidden_states)
-        projected_states = projected_states * self.mup_vector
+        projected_states = projected_states * self.mup_vector  # ADD Mup Multipliers
         d_to_remove = 2 * self.intermediate_size + 2 * self.n_groups * self.ssm_state_size + self.num_heads
 
         # Set up dimensions for reshapes later
@@ -800,10 +801,13 @@ class FalconH1Mixer(nn.Module):
 
         # 1. Gated MLP's linear projection
         input_states = apply_mask_to_padding_states(input_states, attention_mask)
+        # Add Multipliers
+        input_states = input_states * self.ssm_in_multiplier
         projected_states = self.in_proj(input_states)
-        gate, hidden_states_B_C, dt = projected_states.split(
-                [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
-        )
+        projected_states = projected_states * self.mup_vector  # ADD Mup Multipliers
+        gate, hidden_states_B_C, dt = projected_states.split([
+                self.intermediate_size, self.conv_dim, self.num_heads
+            ], dim=-1)
 
         use_precomputed_states = (
             cache_params is not None
@@ -914,8 +918,8 @@ class FalconH1Mixer(nn.Module):
             hidden_states = hidden_states.reshape(batch_size, seq_len, -1, self.head_dim).float()
             B = B.reshape(batch_size, seq_len, -1, self.ssm_state_size).float()
             C = C.reshape(batch_size, seq_len, -1, self.ssm_state_size).float()
-            B = B.repeat(1, 1, self.num_heads // self.n_groups, 1)
-            C = C.repeat(1, 1, self.num_heads // self.n_groups, 1)
+            B = B.repeat_interleave(self.num_heads // self.n_groups, dim=2, output_size=self.num_heads)
+            C = C.repeat_interleave(self.num_heads // self.n_groups, dim=2, output_size=self.num_heads)
             pad_size = (self.chunk_size - seq_len % self.chunk_size) % self.chunk_size
 
             D_residual = self.D[..., None] * pad_tensor_by_size(hidden_states, pad_size)
