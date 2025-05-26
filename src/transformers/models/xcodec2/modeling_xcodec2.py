@@ -7,9 +7,10 @@
 import math
 import random
 from contextlib import nullcontext
+from dataclasses import dataclass
 from functools import partial, wraps
 from math import ceil
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -25,13 +26,49 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import logging
+from ...utils import ModelOutput, logging
 from ..auto import AutoModel
 from ..auto.feature_extraction_auto import AutoFeatureExtractor
 from .configuration_xcodec2 import XCodec2Config
 
 
 logger = logging.get_logger(__name__)
+
+
+@dataclass
+class XCodec2Output(ModelOutput):
+    """
+    Args:
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
+            Discret code embeddings computed using `model.encode`.
+        audio_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*)
+            Decoded audio values, obtained using the decoder part of Mimi.
+    """
+
+    audio_codes: Optional[torch.LongTensor] = None
+    audio_values: Optional[torch.FloatTensor] = None
+
+
+@dataclass
+class XCodec2EncoderOutput(ModelOutput):
+    """
+    Args:
+        audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
+            Discret code embeddings computed using `model.encode`.
+    """
+
+    audio_codes: Optional[torch.LongTensor] = None
+
+
+@dataclass
+class XCodec2DecoderOutput(ModelOutput):
+    """
+    Args:
+        audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
+            Decoded audio values, obtained using the decoder part of Mimi.
+    """
+
+    audio_values: Optional[torch.FloatTensor] = None
 
 
 def rotate_half(x):
@@ -1535,7 +1572,32 @@ class SemanticEncoder(nn.Module):
         return x
 
 
-class XCodec2Model(PreTrainedModel):
+class XCodec2PreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
+    """
+
+    config_class = XCodec2Config
+    base_model_prefix = "xcodec2"
+    main_input_name = "input_values"
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, (nn.Conv1d, nn.ConvTranspose1d)):
+            nn.init.kaiming_normal_(module.weight)
+            if module.bias is not None:
+                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
+                nn.init.uniform_(module.bias, a=-k, b=k)
+
+
+class XCodec2Model(XCodec2PreTrainedModel):
     config_class = XCodec2Config
 
     def __init__(self, config: XCodec2Config):
@@ -1564,11 +1626,12 @@ class XCodec2Model(PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def forward(self, input_waveform, sample_rate=16000):
+    def forward(
+        self,
+        input_values: torch.Tensor,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], XCodec2Output]:
         """
-        The forward here doesn't necessarily have to be called forward; it can be split into other methods;
-        But if you want to be compatible with the pipeline, you need to provide the core logic in forward.
-
         Parameters:
           input_waveform: [batch_size, waveform_length]
           sample_rate: default 16000
@@ -1578,8 +1641,8 @@ class XCodec2Model(PreTrainedModel):
         # 1) Feature extraction
         # If padding is needed, it can be done here
         input_features = self.feature_extractor(
-            input_waveform, sampling_rate=sample_rate, return_tensors="pt"
-        ).input_features.to(self.device)  # [batch, frames, feat_dim]
+            input_values, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+        ).input_features  # [batch, frames, feat_dim]
 
         # 2) Semantic layer
         semantic_output = self.semantic_model(input_features)
@@ -1588,7 +1651,7 @@ class XCodec2Model(PreTrainedModel):
         semantic_encoded = self.SemanticEncoder_module(semantic_hidden_16)
 
         # 3) codec encoder
-        wav = input_waveform.unsqueeze(1).to(self.device)  # shape: [batch, 1, time]
+        wav = input_values.unsqueeze(1)  # shape: [batch, 1, time]
         vq_emb = self.CodecEnc(wav)  # [batch, time//down, 1024] Example only
         vq_emb = vq_emb.transpose(1, 2)  # -> [batch, 1024, frames]
 
@@ -1617,64 +1680,89 @@ class XCodec2Model(PreTrainedModel):
         # 8) Finally decode into waveform
         recon_audio = self.generator(vq_post_emb.transpose(1, 2), vq=False)[0]
         # recon_audio: [batch, time]
-        return recon_audio
 
-    def encode_code(self, input_waveform):
+        if not return_dict:
+            return (recon_audio, vq_code)
+
+        return XCodec2Output(
+            audio_values=recon_audio,
+            audio_codes=vq_code,
+        )
+
+    def encode(
+        self,
+        input_values,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], XCodec2EncoderOutput]:
         """
         Encode the input audio into a code representation.
 
         Parameters:
-          input_waveform: [batch_size, 1, waveform_length]
+          input_values: [batch_size, 1, waveform_length]
         Returns:
           Encoded code (Tensor)
         """
-        with torch.no_grad():
-            # 1) Feature extraction
-            input_features = self.feature_extractor(
-                input_waveform.squeeze(1).numpy(),
-                sampling_rate=self.feature_extractor.sampling_rate,
-                return_tensors="pt",
-            ).input_features.to(self.device)  # [batch, frames, feat_dim]
+        # 1) Feature extraction
+        input_features = self.feature_extractor(
+            input_values.squeeze(1).numpy(),
+            sampling_rate=self.feature_extractor.sampling_rate,
+            return_tensors="pt",
+        ).input_features  # [batch, frames, feat_dim]
 
-            # 2) Semantic layer
-            semantic_output = self.semantic_model(input_features)
-            semantic_hidden_16 = semantic_output.hidden_states[16]  # Take the 16th layer
-            semantic_hidden_16 = semantic_hidden_16.transpose(1, 2)  # [batch, hidden_dim, frames]
-            semantic_encoded = self.SemanticEncoder_module(semantic_hidden_16)
+        # 2) Semantic layer
+        semantic_output = self.semantic_model(input_features)
+        semantic_hidden_16 = semantic_output.hidden_states[16]  # Take the 16th layer
+        semantic_hidden_16 = semantic_hidden_16.transpose(1, 2)  # [batch, hidden_dim, frames]
+        semantic_encoded = self.SemanticEncoder_module(semantic_hidden_16)
 
-            # 3) codec encoder
-            # wav = input_waveform.unsqueeze(1).to(self.device)  # shape: [batch, 1, time]
-            vq_emb = self.CodecEnc(input_waveform)  # [batch, time//down, 1024] Example only
-            vq_emb = vq_emb.transpose(1, 2)  # -> [batch, 1024, frames]
+        # 3) codec encoder
+        # wav = input_waveform.unsqueeze(1).to(self.device)  # shape: [batch, 1, time]
+        vq_emb = self.CodecEnc(input_values)  # [batch, time//down, 1024] Example only
+        vq_emb = vq_emb.transpose(1, 2)  # -> [batch, 1024, frames]
 
-            # Align the time frames of the semantic vector, example processing only
-            if vq_emb.shape[-1] != semantic_encoded.shape[-1]:
-                min_len = min(vq_emb.shape[-1], semantic_encoded.shape[-1])
-                vq_emb = vq_emb[:, :, :min_len]
-                semantic_encoded = semantic_encoded[:, :, :min_len]
+        # Align the time frames of the semantic vector, example processing only
+        if vq_emb.shape[-1] != semantic_encoded.shape[-1]:
+            min_len = min(vq_emb.shape[-1], semantic_encoded.shape[-1])
+            vq_emb = vq_emb[:, :, :min_len]
+            semantic_encoded = semantic_encoded[:, :, :min_len]
 
-            # 4) Concatenation
-            concat_emb = torch.cat([semantic_encoded, vq_emb], dim=1)  # [batch, 2048, frames]
+        # 4) Concatenation
+        concat_emb = torch.cat([semantic_encoded, vq_emb], dim=1)  # [batch, 2048, frames]
 
-            # 5) fc_prior
-            concat_emb = self.fc_prior(concat_emb.transpose(1, 2)).transpose(1, 2)
+        # 5) fc_prior
+        concat_emb = self.fc_prior(concat_emb.transpose(1, 2)).transpose(1, 2)
 
-            _, vq_code, _ = self.generator(concat_emb, vq=True)
-            # vq_code: [batch, frames]
+        _, vq_code, _ = self.generator(concat_emb, vq=True)
+        # vq_code: [batch, frames]
+
+        if not return_dict:
             return vq_code
 
-    def decode_code(self, vq_code):
-        with torch.no_grad():
-            # Get quantized embeddings
-            vq_post_emb = self.generator.quantizer.get_output_from_indices(vq_code.transpose(1, 2))
-            vq_post_emb = vq_post_emb.transpose(1, 2)  # [batch, 1024, frames]
+        return XCodec2EncoderOutput(
+            audio_codes=vq_code,
+        )
 
-            # 7) fc_post_a
-            vq_post_emb = self.fc_post_a(vq_post_emb.transpose(1, 2)).transpose(1, 2)  # [batch, 1024, frames]
+    def decode(
+        self,
+        vq_code,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], XCodec2DecoderOutput]:
+        # Get quantized embeddings
+        vq_post_emb = self.generator.quantizer.get_output_from_indices(vq_code.transpose(1, 2))
+        vq_post_emb = vq_post_emb.transpose(1, 2)  # [batch, 1024, frames]
 
-            # 8) Finally decode into waveform
-            recon_audio = self.generator(vq_post_emb.transpose(1, 2), vq=False)[0]  # [batch, time]
+        # 7) fc_post_a
+        vq_post_emb = self.fc_post_a(vq_post_emb.transpose(1, 2)).transpose(1, 2)  # [batch, 1024, frames]
+
+        # 8) Finally decode into waveform
+        recon_audio = self.generator(vq_post_emb.transpose(1, 2), vq=False)[0]  # [batch, time]
+
+        if not return_dict:
             return recon_audio
 
+        return XCodec2DecoderOutput(
+            audio_values=recon_audio,
+        )
 
-__all__ = ["XCodec2Model"]
+
+__all__ = ["XCodec2Model", "XCodec2PreTrainedModel"]
