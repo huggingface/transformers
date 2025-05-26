@@ -26,9 +26,10 @@
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, VideoInput
+from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...video_utils import VideoInput
 
 
 class Glm4vVideosProcessorKwargs(VideosKwargs, total=False):
@@ -68,14 +69,15 @@ class Glm4vProcessor(ProcessorMixin):
             in a chat into a tokenizable string.
     """
 
-    attributes = ["image_processor", "tokenizer"]
+    attributes = ["image_processor", "tokenizer", "video_processor"]
     valid_kwargs = ["chat_template"]
 
     image_processor_class = "AutoImageProcessor"
+    video_processor_class = "AutoVideoProcessor"
     tokenizer_class = ("PreTrainedTokenizer", "PreTrainedTokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
         self.image_token = "<|image|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
@@ -222,7 +224,7 @@ class Glm4vProcessor(ProcessorMixin):
                 or `(sequence_length,)`.
             skip_special_tokens (`bool`, *optional*, defaults to `True`):
                 Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
-            Clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
                 Whether or not to clean up the tokenization spaces. Argument passed to the tokenizer's `batch_decode` method.
             **kwargs:
                 Additional arguments to be passed to the tokenizer's `batch_decode method`.

@@ -53,10 +53,11 @@ from transformers.models.glm4.modeling_glm4 import Glm4RMSNorm, Glm4MLP, rotate_
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ...image_utils import ImageInput, VideoInput
+from ...image_utils import ImageInput
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...feature_extraction_utils import BatchFeature
+from ...video_utils import VideoInput
 
 logger = logging.get_logger(__name__)
 
