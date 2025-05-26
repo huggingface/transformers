@@ -655,7 +655,6 @@ class GenerationMixin(ContinuousMixin):
 
             # If it's not defined, it means the model uses the new general mask API
             if causal_mask_creation_function is None:  # can't be found
-                output_attentions = kwargs.get("output_attentions", False)
                 token_type_ids = getattr(model_input, "token_type_ids", None)
                 # Some models may overwrite the general one
                 causal_mask_creation_function = getattr(self, "create_masks_for_generate", create_masks_for_generate)
@@ -666,7 +665,6 @@ class GenerationMixin(ContinuousMixin):
                     attention_mask=attention_mask,
                     cache_position=cache_position,
                     past_key_values=past_key_values,
-                    output_attentions=output_attentions,
                     token_type_ids=token_type_ids,
                 )
             else:

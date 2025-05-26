@@ -498,8 +498,7 @@ class MBartPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["MBartDecoderLayer", "MBartEncoderLayer", "MBartAttention"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    # Compile issues
-    _supports_flex_attn = False
+    _supports_flex_attn = True
     _supports_cache_class = True
     _supports_static_cache = True
 

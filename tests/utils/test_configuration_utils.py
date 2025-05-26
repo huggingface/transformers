@@ -189,6 +189,7 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertListEqual(
             missing_keys,
             [
+                "_output_attentions",
                 "is_encoder_decoder",
                 "_name_or_path",
                 "_commit_hash",
