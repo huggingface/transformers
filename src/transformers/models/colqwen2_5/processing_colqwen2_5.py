@@ -19,7 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Union
+from typing import ClassVar, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
@@ -69,6 +69,9 @@ class ColQwen2_5Processor(ProcessorMixin):
     valid_kwargs = ["chat_template", "visual_prompt_prefix", "query_prefix", "num_image_tokens"]
     image_processor_class = "Qwen2VLImageProcessor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
+
+    visual_prompt_prefix: ClassVar[str] = "Describe the image."
+    query_prefix: ClassVar[str] = "Question: "
 
     def __init__(
         self,
@@ -259,10 +262,10 @@ class ColQwen2_5Processor(ProcessorMixin):
         **kwargs: Unpack[ColQwen2_5ProcessorKwargs],
     ) -> BatchFeature:
         """
-        Prepare for the model one or several image(s). This method is a wrapper around the `__call__` method of the ColQwen2.5Processor's
+        Prepare for the model one or several image(s). This method is a wrapper around the `__call__` method of the ColQwen2_5Processor's
         [`ColQwen2_5Processor.__call__`].
 
-        This method forwards the `images` and `kwargs` arguments to the image processor.
+        This method forwards the `images` and `kwargs` arguments to SiglipImageProcessor's [`~SiglipImageProcessor.__call__`].
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -294,10 +297,10 @@ class ColQwen2_5Processor(ProcessorMixin):
         **kwargs: Unpack[ColQwen2_5ProcessorKwargs],
     ) -> BatchFeature:
         """
-        Prepare for the model one or several texts. This method is a wrapper around the `__call__` method of the ColQwen2.5Processor's
+        Prepare for the model one or several texts. This method is a wrapper around the `__call__` method of the ColQwen2_5Processor's
         [`ColQwen2_5Processor.__call__`].
 
-        This method forwards the `text` and `kwargs` arguments to the tokenizer.
+        This method forwards the `text` and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`].
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
@@ -332,7 +335,7 @@ class ColQwen2_5Processor(ProcessorMixin):
     ) -> "torch.Tensor":
         """
         Compute the late-interaction/MaxSim score (ColBERT-like) for the given multi-vector
-        query embeddings (`qs`) and passage embeddings (`ps`). For ColQwen2.5, a passage is the
+        query embeddings (`qs`) and passage embeddings (`ps`). For ColQwen2_5, a passage is the
         image of a document page.
 
         Because the embedding tensors are multi-vector and can thus have different shapes, they
