@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,11 +28,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
-
 
 if is_torch_available():
     import torch
@@ -46,143 +40,26 @@ if is_torch_available():
         MiniMaxModel,
     )
 
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
-class MiniMaxModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=False,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        num_key_value_heads=2,
-        intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        pad_token_id=0,
-        scope=None,
-        router_jitter_noise=0.1,
-        attn_type_list=[1, 0],
-        block_size=3,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.pad_token_id = pad_token_id
-        self.scope = scope
-        self.router_jitter_noise = router_jitter_noise
+
+class MiniMaxModelTester(CausalLMModelTester):
+    config_class = MiniMaxConfig
+    if is_torch_available():
+        base_model_class = MiniMaxModel
+        causal_lm_class = MiniMaxForCausalLM
+        sequence_class = MiniMaxForSequenceClassification
+        token_class = MiniMaxForTokenClassification
+        question_answering_class = MiniMaxForQuestionAnswering
+
+    def __init__(self, parent, attn_type_list=[1, 0], block_size=3):
+        super().__init__(parent)
         self.attn_type_list = attn_type_list
         self.block_size = block_size
 
-    # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTester.prepare_config_and_inputs
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
-
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
-        if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
-
-        config = self.get_config()
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-
-    def get_config(self):
-        return MiniMaxConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
-            pad_token_id=self.pad_token_id,
-            num_experts_per_tok=2,
-            num_local_experts=2,
-            router_jitter_noise=self.router_jitter_noise,
-            attn_type_list=self.attn_type_list,
-            block_size=self.block_size,
-        )
-
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->MiniMax
-    def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = MiniMaxModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common with Llama->MiniMax
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
-        return config, inputs_dict
-
 
 @require_torch
-# Copied from tests.models.mixtral.test_modeling_mixtral.MixtralModelTest with Mixtral->MiniMax
-class MiniMaxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
         (
             MiniMaxModel,
@@ -200,15 +77,15 @@ class MiniMaxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             "text-classification": MiniMaxForSequenceClassification,
             "token-classification": MiniMaxForTokenClassification,
             "text-generation": MiniMaxForCausalLM,
-            "zero-shot": MiniMaxForSequenceClassification,
             "question-answering": MiniMaxForQuestionAnswering,
         }
         if is_torch_available()
         else {}
     )
+
     test_headmasking = False
     test_pruning = False
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
+    model_tester_class = MiniMaxModelTester
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
@@ -223,82 +100,6 @@ class MiniMaxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     ):
         return True
 
-    def setUp(self):
-        self.model_tester = MiniMaxModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MiniMaxConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_torch_fx_output_loss(self):
-        super().test_torch_fx_output_loss()
-
-    def test_MiniMax_sequence_classification_model(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = MiniMaxForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    def test_MiniMax_sequence_classification_model_for_single_label(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.problem_type = "single_label_classification"
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = MiniMaxForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    def test_MiniMax_sequence_classification_model_for_multi_label(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.problem_type = "multi_label_classification"
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor(
-            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
-        ).to(torch.float)
-        model = MiniMaxForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_token_classification_model with Llama->MiniMax,llama->MiniMax
-    def test_MiniMax_token_classification_model(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
-        model = MiniMaxForTokenClassification(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
-        self.assertEqual(
-            result.logits.shape,
-            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
-        )
-
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
@@ -306,7 +107,6 @@ class MiniMaxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest(reason="MiniMax flash attention does not support right padding")
 
-    # Ignore copy
     def test_load_balancing_loss(self):
         r"""
         Let's make sure we can actually compute the loss and do a backward on it.
@@ -335,14 +135,13 @@ class MiniMaxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         padded_result = model(padded_input_ids, attention_mask=padded_attention_mask)
         torch.testing.assert_close(result.aux_loss.cpu(), padded_result.aux_loss.cpu(), rtol=1e-4, atol=1e-4)
 
-        # We make sure that the loss of includding padding tokens != the loss without padding tokens
+        # We make sure that the loss of including padding tokens != the loss without padding tokens
         # if attention_mask=None --> we don't exclude padding tokens
         include_padding_result = model(padded_input_ids, attention_mask=None)
 
         # This is to mimic torch.testing.assert_not_close
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
 
-    # Ignore copy
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
@@ -370,7 +169,6 @@ class MiniMaxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 if config.attn_type_list[layer_idx] == 1:
                     self.assertEqual(layer_attention.shape, expected_shape)
 
-    # Ignore copy
     def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
         self.assertIsInstance(decoder_past_key_values, (tuple, Cache))
 
@@ -396,7 +194,6 @@ class MiniMaxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 self.assertEqual(decoder_past_key_values[layer_idx][0].shape, key_value_cache_expected_shape)
                 self.assertEqual(decoder_past_key_values[layer_idx][1].shape, key_value_cache_expected_shape)
 
-    # Ignore copy
     @pytest.mark.generate
     def test_past_key_values_format(self, custom_all_cache_shapes=None):
         """
@@ -416,37 +213,26 @@ class MiniMaxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             batch_size, seq_length = inputs["input_ids"].shape
             self._check_past_key_values_for_generate(batch_size, past_kv, seq_length, config)
 
-    # Ignore copy
     @unittest.skip(reason="MiniMaxCache doesnot support `crop()` method")
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
-    # Ignore copy
     @unittest.skip(reason="MiniMaxCache doesnot support `crop()` method")
     def test_contrastive_generate_low_memory(self):
         pass
 
-    # Ignore copy
     @unittest.skip(reason="MiniMaxCache doesnot support `crop()` method")
     def test_assisted_decoding_sample(self):
         pass
 
-    # Ignore copy
-    @unittest.skip(reason="MiniMaxCache doesnot support `crop()` method")
-    def test_assisted_decoding_with_logits_to_keep(self):
-        pass
-
-    # Ignore copy
     @unittest.skip(reason="MiniMaxCache doesnot support `crop()` method")
     def test_assisted_decoding_matches_greedy_search_0_random(self):
         pass
 
-    # Ignore copy
     @unittest.skip(reason="MiniMaxCache doesnot support `crop()` method")
     def test_assisted_decoding_matches_greedy_search_1_same(self):
         pass
 
-    # Ignore copy
     @unittest.skip(reason="MiniMaxCache doesnot support `crop()` method")
     def test_contrastive_generate_dict_outputs_use_cache(self):
         pass
@@ -456,6 +242,16 @@ class MiniMaxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 @require_torch_accelerator
 @slow
 class MiniMaxIntegrationTest(unittest.TestCase):
+    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
+    # Depending on the hardware we get different logits / generations
+    cuda_compute_capability_major_version = None
+
+    @classmethod
+    def setUpClass(cls):
+        if is_torch_available() and torch.cuda.is_available():
+            # 8 is for A100 / A10 and 7 for T4
+            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+
     def test_small_model_logits(self):
         model_id = "geetu040/MiniMax-tiny"
         dummy_input = torch.LongTensor([[0, 1, 0], [0, 1, 0]]).to(torch_device)
