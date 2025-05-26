@@ -474,10 +474,6 @@ class ChatCommand(BaseTransformersCLICommand):
             generation_config = GenerationConfig()
             # Apply deprecated CLI args on top of the default generation config
             pad_token_id, eos_token_ids = self.parse_eos_tokens(tokenizer, args.eos_tokens, args.eos_token_ids)
-            # Apply deprecated CLI args on top of the default generation config
-            pad_token_id, eos_token_ids = self.parse_eos_tokens(
-                tokenizer, generation_config, args.eos_tokens, args.eos_token_ids
-            )
             deprecated_kwargs = {
                 "max_new_tokens": args.max_new_tokens,
                 "do_sample": args.do_sample,
