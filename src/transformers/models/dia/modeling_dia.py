@@ -22,6 +22,11 @@ from torch.nn import RMSNorm
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
+from ...modeling_attn_mask_utils import (
+    AttentionMaskConverter,
+    _prepare_4d_attention_mask,
+    _prepare_4d_attention_mask_for_sdpa,
+)
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -30,16 +35,242 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
+    is_torch_flex_attn_available,
     logging,
 )
 from .configuration_dia import DiaConfig, DiaDecoderConfig, DiaEncoderConfig
 from .generation_dia import DiaGenerationMixin
 
 
+if is_torch_flex_attn_available():
+    from ...integrations.flex_attention import BlockMask, make_flex_block_causal_mask
+
+
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DiaConfig"
 _CHECKPOINT_FOR_DOC = "nari-labs/Dia-1.6B"
+
+
+class DiaPreTrainedModel(PreTrainedModel):
+    config_class = DiaConfig
+    base_model_prefix = "model"
+    main_input_name = "input_features"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["DiaEncoderLayer", "DiaDecoderLayer"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_cache_class = True
+    _supports_static_cache = True
+
+    def _init_weights(self, module):
+        std = getattr(self.config, "init_std", 0.2)
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
+
+    # TODO: refactor masks when merging with main --> new masking for causal etc
+
+    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
+    def _update_full_mask(
+        self,
+        attention_mask: Union[torch.Tensor, None],
+        inputs_embeds: torch.Tensor,
+    ):
+        if attention_mask is not None:
+            if self.config._attn_implementation == "flash_attention_2":
+                attention_mask = attention_mask if 0 in attention_mask else None
+            elif self.config._attn_implementation == "sdpa":
+                # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
+                # the manual implementation that requires a 4D causal mask in all cases.
+                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
+            elif self.config._attn_implementation == "flex_attention":
+                if isinstance(attention_mask, torch.Tensor):
+                    attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
+            else:
+                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+
+        return attention_mask
+
+    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_causal_mask
+    def _update_causal_mask(
+        self,
+        attention_mask: Optional[Union[torch.Tensor, "BlockMask"]],
+        input_tensor: torch.Tensor,
+        cache_position: torch.Tensor,
+        past_key_values: Cache,
+    ):
+        if self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
+            # Other attention flavors support in-built causal (when `mask is None`)
+            # while we need to create our specific block mask regardless
+            elif attention_mask is None:
+                attention_mask = make_flex_block_causal_mask(
+                    torch.ones(
+                        size=(input_tensor.shape[0], input_tensor.shape[1]),
+                        device=attention_mask.device,
+                    )
+                )
+            return attention_mask
+
+        if self.config._attn_implementation == "flash_attention_2":
+            if attention_mask is not None and (attention_mask == 0.0).any():
+                return attention_mask
+            return None
+
+        # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
+        # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
+        # to infer the attention mask.
+        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        using_compilable_cache = past_key_values.is_compileable if past_key_values is not None else False
+
+        # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
+        if self.config._attn_implementation == "sdpa" and not using_compilable_cache:
+            if AttentionMaskConverter._ignore_causal_mask_sdpa(
+                attention_mask,
+                inputs_embeds=input_tensor,
+                past_key_values_length=past_seen_tokens,
+                is_training=self.training,
+            ):
+                return None
+
+        dtype = input_tensor.dtype
+        sequence_length = input_tensor.shape[1]
+        if using_compilable_cache:
+            target_length = past_key_values.get_max_cache_shape()
+        else:
+            target_length = (
+                attention_mask.shape[-1]
+                if isinstance(attention_mask, torch.Tensor)
+                else past_seen_tokens + sequence_length + 1
+            )
+
+        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
+        causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
+            attention_mask,
+            sequence_length=sequence_length,
+            target_length=target_length,
+            dtype=dtype,
+            cache_position=cache_position,
+            batch_size=input_tensor.shape[0],
+        )
+
+        if (
+            self.config._attn_implementation == "sdpa"
+            and attention_mask is not None
+            and attention_mask.device.type in ["cuda", "xpu", "npu"]
+        ):
+            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
+            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
+            # Details: https://github.com/pytorch/pytorch/issues/110213
+            min_dtype = torch.finfo(dtype).min
+            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+
+        return causal_mask
+
+    @staticmethod
+    # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._prepare_4d_causal_attention_mask_with_cache_position
+    def _prepare_4d_causal_attention_mask_with_cache_position(
+        attention_mask: torch.Tensor,
+        sequence_length: int,
+        target_length: int,
+        dtype: torch.dtype,
+        cache_position: torch.Tensor,
+        batch_size: int,
+        **kwargs,
+    ):
+        """
+        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
+        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
+
+        Args:
+            attention_mask (`torch.Tensor`):
+                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape
+                `(batch_size, 1, query_length, key_value_length)`.
+            sequence_length (`int`):
+                The sequence length being processed.
+            target_length (`int`):
+                The target length: when generating with static cache, the mask should be as long as the static cache,
+                to account for the 0 padding, the part of the cache that is not filled yet.
+            dtype (`torch.dtype`):
+                The dtype to use for the 4D attention mask.
+            cache_position (`torch.Tensor`):
+                Indices depicting the position of the input sequence tokens in the sequence.
+            batch_size (`torch.Tensor`):
+                Batch size.
+        """
+        if attention_mask is not None and attention_mask.dim() == 4:
+            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
+            causal_mask = attention_mask
+        else:
+            min_dtype = torch.finfo(dtype).min
+            causal_mask = torch.full(
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
+            )
+            if sequence_length != 1:
+                causal_mask = torch.triu(causal_mask, diagonal=1)
+            causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
+            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
+            if attention_mask is not None:
+                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
+                    causal_mask.device
+                )
+                padding_mask = padding_mask == 0
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    padding_mask, min_dtype
+                )
+
+        return causal_mask
+
+    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_cross_attn_mask
+    def _update_cross_attn_mask(
+        self,
+        encoder_hidden_states: Union[torch.Tensor, None],
+        encoder_attention_mask: Union[torch.Tensor, None],
+        input_shape: torch.Size,
+        inputs_embeds: torch.Tensor,
+    ):
+        # expand encoder attention mask
+        if encoder_hidden_states is not None and encoder_attention_mask is not None:
+            if self.config._attn_implementation == "flash_attention_2":
+                encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
+            elif self.config._attn_implementation == "sdpa":
+                # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
+                # the manual implementation that requires a 4D causal mask in all cases.
+                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+                encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
+                    encoder_attention_mask,
+                    inputs_embeds.dtype,
+                    tgt_len=input_shape[-1],
+                )
+            elif self.config._attn_implementation == "flex_attention":
+                if isinstance(encoder_attention_mask, torch.Tensor):
+                    encoder_attention_mask = make_flex_block_causal_mask(
+                        encoder_attention_mask,
+                        query_length=input_shape[-1],
+                        is_causal=False,
+                    )
+            else:
+                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+                encoder_attention_mask = _prepare_4d_attention_mask(
+                    encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+                )
+
+        return encoder_attention_mask
 
 
 def apply_rotary_pos_emb(tensor, position_embeddings, unsqueeze_dim=1):
@@ -263,11 +494,11 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -275,8 +506,8 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
 
         hidden_states, self_attn_weights = self.self_attention(
             hidden_states=normed_states,
-            cache_position=cache_position,
             attention_mask=attention_mask,  # I don't mind if this never changes
+            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -287,32 +518,6 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
         mlp_out = self.mlp(normed_states)
         hidden_states = residual + mlp_out
         return hidden_states
-
-
-class DiaPreTrainedModel(PreTrainedModel):
-    config_class = DiaConfig
-    base_model_prefix = "model"
-    main_input_name = "input_features"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["DiaEncoderLayer", "DiaDecoderLayer"]
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_cache_class = True
-    _supports_static_cache = True
-
-    def _init_weights(self, module):
-        std = getattr(self.config, "init_std", 0.2)
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
 
 
 class DiaEncoder(DiaPreTrainedModel):
@@ -333,28 +538,37 @@ class DiaEncoder(DiaPreTrainedModel):
 
     def forward(
         self,
-        audio_codes: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,  # TODO can the auudio codes be "padded"?
+        input_ids: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,  # TODO can the auudio codes be "padded"? --> encoder only gets text
         cache_position: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
     ) -> torch.Tensor:
-        hidden_states = self.embedding(audio_codes)
+        if cache_position is None:
+            cache_position = torch.arange(input_ids.shape[-1], device=input_ids)[None, :]
+
+        hidden_states = self.embedding(input_ids)
         position_embeddings = self.rotary_embeddings(hidden_states, cache_position)
-        _attention_mask = torch.ones(
-            (audio_codes.shape[0], 1, hidden_states.shape[1], hidden_states.shape[1]), device=hidden_states.device
+
+        attention_mask = self._update_full_mask(
+            attention_mask,
+            hidden_states,
         )
-        _attention_mask = (_attention_mask.long() & attention_mask[:, None, None, :]) ^ attention_mask[
-            :, None, :, None
-        ]
+        """_attention_mask = attention_mask
+        if attention_mask is not None:
+            _attention_mask = torch.ones(
+                (input_ids.shape[0], 1, hidden_states.shape[1], hidden_states.shape[1]), device=hidden_states.device
+            )
+            _attention_mask = (_attention_mask.long() & attention_mask[:, None, None, :]) ^ attention_mask[
+                :, None, :, None
+            ]"""
+
         for layer in self.layers:
             hidden_states = layer(
                 hidden_states=hidden_states,
+                attention_mask=attention_mask,
                 cache_position=cache_position,
-                attention_mask=_attention_mask,
                 position_embeddings=position_embeddings,
-                past_key_values=past_key_values,
             )
 
         hidden_states = self.norm(hidden_states)
@@ -536,6 +750,7 @@ class DiaDecoder(DiaPreTrainedModel):
 class DiaModel(DiaGenerationMixin, DiaPreTrainedModel):
     def __init__(self, config: DiaConfig):
         super().__init__(config)
+        self.config = config
         self.encoder = DiaEncoder(config.encoder_config)
         self.decoder = DiaDecoder(config.decoder_config)
         self.post_init()
@@ -548,79 +763,61 @@ class DiaModel(DiaGenerationMixin, DiaPreTrainedModel):
 
     def forward(
         self,
-        input_audio_codes: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        input_ids: Optional[torch.LongTensor] = None,
+        audio_codes: Optional[Tuple[torch.FloatTensor]] = None,
+        audio_attention_mask: Optional[torch.LongTensor] = None,
+        encoder_input_ids: Optional[torch.LongTensor] = None,
+        encoder_attention_mask: Optional[torch.LongTensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         past_key_values: Optional[Union[EncoderDecoderCache, Tuple[torch.FloatTensor]]] = None,
-        audio_codes: Optional[Tuple[torch.FloatTensor]] = None,
-        position_ids: Optional[Tuple[torch.LongTensor]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        encoder_cache_position: Optional[torch.LongTensor] = None,
+        decoder_cache_position: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[torch.Tensor], Seq2SeqModelOutput]:
-        r"""
-        Returns:
 
-        Example:
-         ```python
-         >>> import torch
-         >>> from transformers import AutoFeatureExtractor, DiaModel
-         >>> from datasets import load_dataset
-
-         >>> model = DiaModel.from_pretrained("openai/dia-base")
-         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("openai/dia-base")
-         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-         >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
-         >>> input_features = inputs.input_features
-         >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
-         >>> last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
-         >>> list(last_hidden_state.shape)
-         [1, 2, 512]
-         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        if input_audio_codes is None:
-            input_audio_codes = torch.zeros_like(input_ids)
-        # your batch size becomes 2 * batch_size
-        input_audio_codes = torch.stack([input_audio_codes, input_ids], dim=1).view(-1, input_audio_codes.shape[-1])
-        if attention_mask is not None:
-            attention_mask = torch.cat((attention_mask, attention_mask), dim=0)
+        # your batch size becomes 2 * batch_size using unconditioned (0) and conditioned input
+        # TODO: fix caching
+        encoder_input_ids = encoder_input_ids[:, None, :]
+        unconditioned_encoder_input_ids = torch.zeros_like(encoder_input_ids)
+        encoder_input_ids = torch.stack([unconditioned_encoder_input_ids, encoder_input_ids], dim=1).view(-1, encoder_input_ids.shape[-1])
+        if encoder_attention_mask is not None:
+            encoder_attention_mask = encoder_attention_mask.repeat_interleave(2, dim=0)
 
-        if cache_position is None:
-            cache_position = torch.arange(input_ids.shape[-1], device=input_ids.device)[None, :]
+        if encoder_cache_position is None:
+            encoder_cache_position = torch.arange(encoder_input_ids.shape[-1], device=encoder_input_ids.device)[None, :]
 
-        if cache_position.shape[1] != 1:  # prefill computes encoder kv
+        if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_audio_codes,
-                attention_mask=attention_mask,
-                cache_position=cache_position,
+                encoder_input_ids,
+                attention_mask=encoder_attention_mask,
+                cache_position=encoder_cache_position,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
-        else:
-            encoder_outputs = None
 
         if audio_codes is None:
-            audio_codes = torch.full((input_audio_codes.shape[0], 1, 9), 1026, device=self.device)
+            audio_codes = torch.full((encoder_input_ids.shape[0], 1, 9), 1026, device=self.device)
         if audio_codes.shape[-1] != 9:
             audio_codes = audio_codes.repeat_interleave(2, dim=0)
             audio_codes = torch.nn.functional.pad(audio_codes, (0, 9 - audio_codes.shape[1]), value=1026)[:, None, :]
 
         decoder_outputs = self.decoder(
             audio_codes=audio_codes,
-            attention_mask=attention_mask,
+            #attention_mask=encoder_attention_mask,  # TODO: fix masking
+            attention_mask=None,  # TODO: fix masking
             encoder_hidden_states=encoder_outputs,
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            cross_cache_position=cache_position,
-            cache_position=cache_position if encoder_outputs is None else None,
+            cross_cache_position=encoder_cache_position,
+            cache_position=decoder_cache_position,
         )
 
         return Seq2SeqModelOutput(
@@ -632,7 +829,7 @@ class DiaModel(DiaGenerationMixin, DiaPreTrainedModel):
             encoder_last_hidden_state=encoder_outputs,
             # encoder_hidden_states=encoder_outputs.hidden_states,
             # encoder_attentions=encoder_outputs.attentions,
-        ).to_tuple()
+        )#.to_tuple()
 
 
 __all__ = [
