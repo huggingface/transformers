@@ -30,15 +30,10 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutputWithPast,
-    TokenClassifierOutput,
-)
+from ...modeling_outputs import BaseModelOutputWithPast,CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ..auto.modeling_tasks import GenericForQuestionAnswering, GenericForSequenceClassificationa, GenericForTokenClassification
 from ...processing_utils import Unpack
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
@@ -548,6 +543,24 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
             loss=loss, logits=logits, **outputs
         )
 
+class LlamaForSequenceClassification(GenericForSequenceClassificationa):
+    def __init__(self, config: LlamaConfig):
+        super().__init__(config)
+        logger.warning_once(
+            "LlamaForSequenceClassification is deprecated and will be removed in v4.56. Use LlamaForSequenceClassification instead."
+        )
+class LlamaForTokenClassification(GenericForTokenClassification):
+    def __init__(self, config: LlamaConfig):
+        super().__init__(config)
+        logger.warning_once(
+            "LlamaForTokenClassification is deprecated and will be removed in v4.56. Use LlamaForTokenClassification instead."
+        )
+class LlamaForQuestionAnswering(GenericForQuestionAnswering):
+    def __init__(self, config: LlamaConfig):
+        super().__init__(config)
+        logger.warning_once(
+            "LlamaForQuestionAnswering is deprecated and will be removed in v4.56. Use LlamaForQuestionAnswering instead."
+        )
 
 __all__ = [
     "LlamaForCausalLM",
