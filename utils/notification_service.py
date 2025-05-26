@@ -382,7 +382,6 @@ class Message:
 
                 # Model job has a special form for reporting
                 if job_name == "run_models_gpu":
-
                     pytorch_specific_failures = dict_failed.pop("PyTorch")
                     tensorflow_specific_failures = dict_failed.pop("TensorFlow")
                     other_failures = dicts_to_sum(dict_failed.values())
@@ -394,7 +393,6 @@ class Message:
                     }
 
                 else:
-
                     test_name = job_to_test_map[job_name]
                     specific_failures = dict_failed.pop(test_name)
                     failures[k] = {
@@ -419,10 +417,8 @@ class Message:
                     other_module_reports.append(report)
 
         for key, value in failures.items():
-
             # Model job has a special form for reporting
             if job_name == "run_models_gpu":
-
                 device_report_values = [
                     value["PyTorch"]["single"],
                     value["PyTorch"]["multi"],
@@ -432,7 +428,6 @@ class Message:
                 ]
 
             else:
-
                 test_name = job_to_test_map[job_name]
                 device_report_values = [
                     value[test_name]["single"],
@@ -1121,9 +1116,16 @@ if __name__ == "__main__":
             if len(folder_slices) > 0:
                 if isinstance(folder_slices[0], list):
                     # Need to change from elements like `models/bert` to `models_bert` (the ones used as artifact names).
-                    job_matrix = [x.replace("models/", "models_").replace("quantization/", "quantization_") for folders in folder_slices for x in folders]
+                    job_matrix = [
+                        x.replace("models/", "models_").replace("quantization/", "quantization_")
+                        for folders in folder_slices
+                        for x in folders
+                    ]
                 elif isinstance(folder_slices[0], str):
-                    job_matrix = [x.replace("models/", "models_").replace("quantization/", "quantization_") for x in folder_slices]
+                    job_matrix = [
+                        x.replace("models/", "models_").replace("quantization/", "quantization_")
+                        for x in folder_slices
+                    ]
         except Exception:
             Message.error_out(title, ci_title)
             raise ValueError("Errored out.")
@@ -1213,7 +1215,9 @@ if __name__ == "__main__":
                             matrix_job_results[matrix_name]["failures"][artifact_gpu] = []
 
                         trace = pop_default(stacktraces, 0, "Cannot retrieve error message.")
-                        matrix_job_results[matrix_name]["failures"][artifact_gpu].append({"line": line, "trace": trace})
+                        matrix_job_results[matrix_name]["failures"][artifact_gpu].append(
+                            {"line": line, "trace": trace}
+                        )
 
                         # TODO: How to deal wit this
 
@@ -1378,8 +1382,6 @@ if __name__ == "__main__":
             # The event that triggers the `workflow_run` event.
             if "workflow_run" in event_payload:
                 is_scheduled_ci_run = event_payload["workflow_run"]["event"] == "schedule"
-
-
 
     test_name_and_result_pairs = []
     if len(matrix_job_results) > 0:
