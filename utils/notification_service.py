@@ -1313,7 +1313,7 @@ if __name__ == "__main__":
             event_payload = json.load(fp)
             # The event that triggers the `workflow_run` event.
             if "workflow_run" in event_payload:
-                is_scheduled_ci_run = event_payload["event"] == "schedule"
+                is_scheduled_ci_run = event_payload["workflow_run"]["event"] == "schedule"
 
     # The values are used as the file names where to save the corresponding CI job results.
     test_to_result_name = {
