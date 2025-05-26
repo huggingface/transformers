@@ -375,4 +375,4 @@ class ColQwen2_5ForRetrieval(ColPaliForRetrieval):
         )
 
 
-__all__ = ["ColQwen2_5Processor"] 
+__all__ = ["ColQwen2_5Processor"]

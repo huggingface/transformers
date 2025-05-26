@@ -209,4 +209,4 @@ if __name__ == "__main__":
         push_to_hub=args.push_to_hub,
         revision=args.revision,
         original_vlm_name_or_path=args.original_vlm_name_or_path,
-    ) 
+    )

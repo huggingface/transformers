@@ -84,7 +84,7 @@ class ColQwen2_5ForRetrieval(ColPaliForRetrieval):
     ColQwen2.5 is part of the ColVision model family, which was introduced with ColPali in the following paper:
     [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://arxiv.org/abs/2407.01449).
     """
-    
+
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
