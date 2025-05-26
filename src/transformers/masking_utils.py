@@ -28,7 +28,8 @@ if is_torch_flex_attn_available():
     from torch._dynamo._trace_wrapped_higher_order_op import TransformGetItemToIndex
     from torch.nn.attention.flex_attention import BlockMask, create_block_mask
 else:
-    BlockMask = None
+    # Register a fake type to avoid crashing for annotations and `isinstance` checks
+    BlockMask = torch.Tensor
 
 
 _is_torch_greater_or_equal_than_2_5 = is_torch_greater_or_equal("2.5", accept_dev=True)

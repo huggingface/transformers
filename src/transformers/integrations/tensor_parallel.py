@@ -741,7 +741,7 @@ class ParallelInterface(GeneralInterface):
             "sequence_parallel": SequenceParallel(),
             "replicate": ReplicateParallel(),
         }
-        if is_torch_greater_or_equal("2.5") and _torch_distributed_available
+        if is_torch_greater_or_equal("2.3") and _torch_distributed_available
         else {}
     )
 
