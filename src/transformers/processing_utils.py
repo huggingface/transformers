@@ -522,9 +522,7 @@ class ProcessorMixin(PushToHubMixin):
         # Get the kwargs in `__init__`.
         sig = inspect.signature(self.__init__)
         # Only save the attributes that are presented in the kwargs of `__init__`.
-        attrs_to_save = sig.parameters
-        # Don't save attributes like `tokenizer`, `image processor` etc.
-        attrs_to_save = [x for x in attrs_to_save if x not in self.__class__.attributes]
+        attrs_to_save = list(sig.parameters)
         # extra attributes to be kept
         attrs_to_save += ["auto_map"]
 
@@ -534,21 +532,14 @@ class ProcessorMixin(PushToHubMixin):
 
         if "tokenizer" in output:
             del output["tokenizer"]
-        if "image_processor" in output:
-            del output["image_processor"]
-        if "video_processor" in output:
-            del output["video_processor"]
-        if "feature_extractor" in output:
-            del output["feature_extractor"]
         if "chat_template" in output:
             del output["chat_template"]
 
+        # Serialize attributes as a dict
+        output = {k: v.to_dict() if k in self.__class__.attributes else v for k, v in output.items()}
+
         # Some attributes have different names but containing objects that are not simple strings
-        output = {
-            k: v
-            for k, v in output.items()
-            if not (isinstance(v, PushToHubMixin) or v.__class__.__name__ == "BeamSearchDecoderCTC")
-        }
+        output = {k: v for k, v in output.items() if not v.__class__.__name__ == "BeamSearchDecoderCTC"}
 
         return output
 
@@ -634,16 +625,16 @@ class ProcessorMixin(PushToHubMixin):
         save_jinja_files = kwargs.get("save_jinja_files", True)
 
         for attribute_name in self.attributes:
-            attribute = getattr(self, attribute_name)
-            # Include the processor class in the attribute config so this processor can then be reloaded with the
-            # `AutoProcessor` API.
-            if hasattr(attribute, "_set_processor_class"):
-                attribute._set_processor_class(self.__class__.__name__)
+            # Save the tokenizer in its own vocab file. The other attributes are saved as part of `processor_config.json`
             if attribute_name == "tokenizer":
+                attribute = getattr(self, attribute_name)
+
+                # Include the processor class in the attribute config so this processor can then be reloaded with the `AutoProcessor` API.
+                if hasattr(attribute, "_set_processor_class"):
+                    attribute._set_processor_class(self.__class__.__name__)
+
                 # Propagate save_jinja_files to tokenizer to ensure we don't get conflicts
                 attribute.save_pretrained(save_directory, save_jinja_files=save_jinja_files)
-            else:
-                attribute.save_pretrained(save_directory)
 
         if self._auto_class is not None:
             # We added an attribute to the init_kwargs of the tokenizers, which needs to be cleaned up.
@@ -661,7 +652,6 @@ class ProcessorMixin(PushToHubMixin):
         )  # Legacy filename
         chat_template_dir = os.path.join(save_directory, CHAT_TEMPLATE_DIR)
 
-        processor_dict = self.to_dict()
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
         # to avoid serializing chat template in json config file. So let's get it from `self` directly
         if self.chat_template is not None:
@@ -702,11 +692,9 @@ class ProcessorMixin(PushToHubMixin):
                     "separate files using the `save_jinja_files` argument."
                 )
 
-        # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
-        # `auto_map` is not specified.
-        if set(processor_dict.keys()) != {"processor_class"}:
-            self.to_json_file(output_processor_file)
-            logger.info(f"processor saved in {output_processor_file}")
+        # Create a unified `preprocessor_config.json` and save all attributes as a composite config, except for tokenizers
+        self.to_json_file(output_processor_file)
+        logger.info(f"processor saved in {output_processor_file}")
 
         if push_to_hub:
             self._upload_modified_files(
@@ -717,8 +705,6 @@ class ProcessorMixin(PushToHubMixin):
                 token=kwargs.get("token"),
             )
 
-        if set(processor_dict.keys()) == {"processor_class"}:
-            return []
         return [output_processor_file]
 
     @classmethod
@@ -978,6 +964,10 @@ class ProcessorMixin(PushToHubMixin):
         if "auto_map" in processor_dict:
             del processor_dict["auto_map"]
 
+        for attribute_name in cls.attributes:
+            if attribute_name in processor_dict:
+                del processor_dict[attribute_name]
+
         unused_kwargs = cls.validate_init_kwargs(processor_config=processor_dict, valid_kwargs=cls.valid_kwargs)
         processor = cls(*args, **processor_dict)
 
@@ -1182,8 +1172,8 @@ class ProcessorMixin(PushToHubMixin):
         if token is not None:
             kwargs["token"] = token
 
-        args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
+        args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, processor_dict, **kwargs)
         return cls.from_args_and_dict(args, processor_dict, **kwargs)
 
     @classmethod
@@ -1213,7 +1203,7 @@ class ProcessorMixin(PushToHubMixin):
         cls._auto_class = auto_class
 
     @classmethod
-    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, processor_dict, **kwargs):
         """
         Identify and instantiate the subcomponents of Processor classes, like image processors and
         tokenizers. This method uses the Processor attributes like `tokenizer_class` to figure out what class those
@@ -1245,6 +1235,8 @@ class ProcessorMixin(PushToHubMixin):
             else:
                 attribute_class = cls.get_possibly_dynamic_module(class_name)
 
+            # This means file was saved after pr #3xxxx thus all attriutes are part of the processor's config
+            # TODO @raushan check with auto models if it still works
             args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
         return args
 
