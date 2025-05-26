@@ -749,8 +749,8 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
     ):
         # Overwritten -- uses `cache_params` as opposed to `past_key_values`
 
+        cache_params_not_initialized = cache_params is None
         if use_cache:
-            cache_params_not_initialized = cache_params is None
             if cache_params_not_initialized:
                 max_batch_size = inputs_embeds.size(0) if inputs_embeds is not None else input_ids.size(0)
                 cache_params = MambaCache(self.backbone.config, max_batch_size, device=self.device, dtype=self.dtype)
