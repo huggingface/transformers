@@ -1,12 +1,11 @@
 from typing import List, Union
 
-from ...utils.import_utils import is_torch_available
+import torch
+
+from ...utils.import_utils import requires
 
 
-if is_torch_available():
-    import torch
-
-
+@requires(backends=("torch",))
 class MambaCache:
     """
     Cache for mamba model which does not have attention mechanism and key value states.
