@@ -78,8 +78,7 @@ class PLBartPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["PLBartDecoderLayer", "PLBartEncoderLayer"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    # Compile issues
-    _supports_flex_attn = False
+    _supports_flex_attn = True
 
     def _init_weights(self, module):
         std = self.config.init_std

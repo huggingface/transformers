@@ -28,8 +28,8 @@ We present DeepSeek-V3, a strong Mixture-of-Experts (MoE) language model with 67
 We are super happy to make this code community-powered, and would love to see how you can best optimize the following: 
 
 - current implementation uses the "naive" attention compution (so not really MLA)
-- current implementation loops through the experts. This should be replaced. Pointers to use `get_packed_weights` from `intetrations/tensor_parallel`. 
-- current implementation uses the eleuther formula for ROPE, using the orginal one would be more efficient! (should still follow our API)
+- current implementation loops through the experts. This should be replaced. Pointers to use `get_packed_weights` from `integrations/tensor_parallel`. 
+- current implementation uses the eleuther formula for ROPE, using the original one would be more efficient! (should still follow our API)
 - static cache is not supported (this should be just a generation config issue / config shape issues)
 
 ### Usage tips
