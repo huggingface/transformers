@@ -28,8 +28,6 @@ from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .utils import (
     CONFIG_NAME,
     PushToHubMixin,
-    add_model_info_to_auto_map,
-    add_model_info_to_custom_pipelines,
     cached_file,
     copy_func,
     download_url,
@@ -713,15 +711,6 @@ class PretrainedConfig(PushToHubMixin):
         else:
             logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
 
-        if "auto_map" in config_dict and not is_local:
-            config_dict["auto_map"] = add_model_info_to_auto_map(
-                config_dict["auto_map"], pretrained_model_name_or_path
-            )
-        if "custom_pipelines" in config_dict and not is_local:
-            config_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
-                config_dict["custom_pipelines"], pretrained_model_name_or_path
-            )
-
         # timm models are not saved with the model_type in the config file
         if "model_type" not in config_dict and is_timm_config_dict(config_dict):
             config_dict["model_type"] = "timm_wrapper"
@@ -1044,11 +1033,7 @@ class PretrainedConfig(PushToHubMixin):
         Register this class with a given auto class. This should only be used for custom configurations as the ones in
         the library are already mapped with `AutoConfig`.
 
-        <Tip warning={true}>
 
-        This API is experimental and may have some slight breaking changes in the next releases.
-
-        </Tip>
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"AutoConfig"`):
