@@ -136,8 +136,9 @@ def main(verbose=False):
     for pr in prs:
         sha = pr.get("oid")
         if sha:
-            if commit_in_history(sha) and verbose:
-                print(f"🔁 PR #{pr['number']} ({pr["title"]}) already in history. Skipping.")
+            if commit_in_history(sha):
+                if verbose:
+                    print(f"🔁 PR #{pr['number']} ({pr['title']}) already in history. Skipping.")
             else:
                 print(f"🚀 PR #{pr['number']} ({pr["title"]}) not in history. Cherry-picking...")
                 cherry_pick_commit(sha)
