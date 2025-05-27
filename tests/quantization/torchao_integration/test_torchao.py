@@ -521,7 +521,7 @@ class TorchAoSerializationGPTTest(TorchAoSerializationTest):
         EXPECTED_OUTPUTS = Expectations(
             {
                 ("xpu", 3): "What are we having for dinner?\n\nJessica: (smiling)",
-                ("cuda", 7): "What are we having for dinner?\n- 2. What is the temperature outside",
+                ("cuda", 7): "What are we having for dinner?\n- 1. What is the temperature outside",
             }
         )
         # fmt: on
