@@ -105,7 +105,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
         self.add_prefix_space = kwargs.get("add_prefix_space", False)
         self.config_class = kwargs.pop("config_class", None)
-        self._do_lower_case = kwargs.pop("do_lower_case", False)
+        self.do_lower_case = kwargs.pop("do_lower_case", False)
 
         if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None and self.config_class is None:
             raise ValueError(
@@ -933,12 +933,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def add_bos_token(self):
         return self._add_bos_token
 
-    @property
-    def do_lower_case(self):
-        """
-        `bool`: Whether or not the tokenizer should lowercase the input when tokenizing.
-        """
-        return self._do_lower_case
+    # @property
+    # def do_lower_case(self):
+    #     """
+    #     `bool`: Whether or not the tokenizer should lowercase the input when tokenizing.
+    #     """
+    #     return self._do_lower_case
 
     @add_eos_token.setter
     def add_eos_token(self, value):
@@ -973,6 +973,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             special_tokens.append((bos, bos_token_id))
         if self.add_eos_token:
             special_tokens.append((eos, eos_token_id))
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=single, pair=pair, special_tokens=special_tokens
-        )
+        if self.add_eos_token or self.add_bos_token:
+            self._tokenizer.post_processor = processors.TemplateProcessing(
+                single=single, pair=pair, special_tokens=special_tokens
+            )

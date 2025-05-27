@@ -116,7 +116,6 @@ class RealmTokenizerFast(PreTrainedTokenizerFast):
             normalizer_state["handle_chinese_chars"] = tokenize_chinese_chars
             self.backend_tokenizer.normalizer = normalizer_class(**normalizer_state)
 
-        self.do_lower_case = do_lower_case
 
     def batch_encode_candidates(self, text, **kwargs):
         r"""

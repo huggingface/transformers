@@ -113,7 +113,6 @@ class SqueezeBertTokenizerFast(PreTrainedTokenizerFast):
             normalizer_state["handle_chinese_chars"] = tokenize_chinese_chars
             self.backend_tokenizer.normalizer = normalizer_class(**normalizer_state)
 
-        self.do_lower_case = do_lower_case
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)

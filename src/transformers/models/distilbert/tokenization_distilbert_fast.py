@@ -113,7 +113,6 @@ class DistilBertTokenizerFast(PreTrainedTokenizerFast):
             normalizer_state["handle_chinese_chars"] = tokenize_chinese_chars
             self.backend_tokenizer.normalizer = normalizer_class(**normalizer_state)
 
-        self.do_lower_case = do_lower_case
 
     # Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:

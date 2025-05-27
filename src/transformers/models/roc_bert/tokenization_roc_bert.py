@@ -903,7 +903,6 @@ class RoCBertBasicTokenizer:
     ):
         if never_split is None:
             never_split = []
-        self.do_lower_case = do_lower_case
         self.never_split = set(never_split)
         self.tokenize_chinese_chars = tokenize_chinese_chars
         self.strip_accents = strip_accents

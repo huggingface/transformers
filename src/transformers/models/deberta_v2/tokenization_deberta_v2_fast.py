@@ -115,7 +115,6 @@ class DebertaV2TokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-        self.do_lower_case = do_lower_case
         self.split_by_punct = split_by_punct
         self.vocab_file = vocab_file
 

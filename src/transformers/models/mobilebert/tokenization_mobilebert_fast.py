@@ -114,7 +114,6 @@ class MobileBertTokenizerFast(PreTrainedTokenizerFast):
             normalizer_state["handle_chinese_chars"] = tokenize_chinese_chars
             self.backend_tokenizer.normalizer = normalizer_class(**normalizer_state)
 
-        self.do_lower_case = do_lower_case
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """

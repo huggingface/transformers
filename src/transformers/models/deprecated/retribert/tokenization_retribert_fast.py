@@ -116,7 +116,6 @@ class RetriBertTokenizerFast(PreTrainedTokenizerFast):
             normalizer_state["handle_chinese_chars"] = tokenize_chinese_chars
             self.backend_tokenizer.normalizer = normalizer_class(**normalizer_state)
 
-        self.do_lower_case = do_lower_case
 
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None

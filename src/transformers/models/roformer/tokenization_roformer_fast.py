@@ -96,7 +96,6 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
         vocab = self.backend_tokenizer.get_vocab()
         self.backend_tokenizer.pre_tokenizer = PreTokenizer.custom(JiebaPreTokenizer(vocab))
 
-        self.do_lower_case = do_lower_case
 
     def __getstate__(self):
         state = self.__dict__.copy()

@@ -92,7 +92,6 @@ class TFBertTokenizer(keras.layers.Layer):
             )
 
         self.vocab_list = vocab_list
-        self.do_lower_case = do_lower_case
         self.cls_token_id = vocab_list.index("[CLS]") if cls_token_id is None else cls_token_id
         self.sep_token_id = vocab_list.index("[SEP]") if sep_token_id is None else sep_token_id
         self.pad_token_id = vocab_list.index("[PAD]") if pad_token_id is None else pad_token_id

@@ -129,7 +129,6 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
         )
 
         self._pad_token_type_id = 3
-        self.do_lower_case = do_lower_case
         self.remove_space = remove_space
         self.keep_accents = keep_accents
         self.vocab_file = vocab_file

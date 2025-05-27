@@ -114,7 +114,6 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
             pre_tok_state["strip_accents"] = strip_accents
             self.backend_tokenizer.normalizer = pre_tok_class(**pre_tok_state)
 
-        self.do_lower_case = do_lower_case
 
     @property
     def question_token_id(self):
