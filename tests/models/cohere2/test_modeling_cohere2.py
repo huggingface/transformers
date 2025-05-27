@@ -308,6 +308,5 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
         out = model.generate(**inputs, max_new_tokens=20)[:, input_size:]
         output_text = tokenizer.batch_decode(out)
-        print(f"output_text: {output_text}")
 
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)

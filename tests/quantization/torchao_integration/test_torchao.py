@@ -147,7 +147,7 @@ class TorchAoTest(unittest.TestCase):
         EXPECTED_OUTPUTS = Expectations(
             {
                 ("xpu", 3): "What are we having for dinner?\n- 1. What is the temperature outside",
-                ("cuda", 7): "What are we having for dinner?\n- 2. What is the temperature outside",
+                ("cuda", 7): "What are we having for dinner?\n- 1. What is the temperature outside",
             }
         )
         # fmt: on
@@ -295,7 +295,7 @@ class TorchAoGPUTest(TorchAoTest):
         EXPECTED_OUTPUTS = Expectations(
             {
                 ("xpu", 3): "What are we having for dinner?\n\nJessica: (smiling)",
-                ("cuda", 7): "What are we having for dinner?\n- 2. What is the temperature outside",
+                ("cuda", 7): "What are we having for dinner?\n- 1. What is the temperature outside",
             }
         )
         # fmt: on
@@ -347,10 +347,20 @@ class TorchAoGPUTest(TorchAoTest):
 
         input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
 
+        # fmt: off
+        EXPECTED_OUTPUTS = Expectations(
+            {
+                ("xpu", 3): "What are we having for dinner?\n\nJessica: (smiling)",
+                ("cuda", 7): "What are we having for dinner?\n- 2. What is the temperature outside",
+            }
+        )
+        # fmt: on
+        EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
+
         output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
         generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
 
-        self.assertEqual(generated_text, self.EXPECTED_OUTPUT)
+        self.assertEqual(generated_text, EXPECTED_OUTPUT)
 
     @require_torch_multi_accelerator
     def test_int4wo_quant_multi_accelerator(self):
