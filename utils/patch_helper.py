@@ -82,6 +82,12 @@ def get_prs_by_label(label):
     result = subprocess.run(cmd, capture_output=True, text=True)
     result.check_returncode()
     prs = json.loads(result.stdout)
+    for pr in prs:
+        pr["oid"] = pr.get("mergeCommit", {}).get("oid")
+        if pr["oid"]:
+            pr["timestamp"] = datetime.fromisoformat(pr["mergeCommit"]["committedDate"].replace("Z", "+00:00"))
+        else:
+            pr["timestamp"] = None
     return [pr.get("mergeCommit") for pr in prs if pr.get("mergeCommit")]
 
 def get_commit_timestamp(commit_sha):
@@ -127,9 +133,9 @@ def main():
     for pr in prs:
         sha = pr.get("oid")
         if commit_in_history(sha):
-            print(f"🔁 PR ({pr["title"]}) already in history. Skipping.")
+            print(f"🔁 PR #{pr['number']} ({pr["title"]}) already in history. Skipping.")
         else:
-            print(f"🚀 PR ({pr["title"]}) not in history. Cherry-picking...")
+            print(f"🚀 PR #{pr['number']} ({pr["title"]}) not in history. Cherry-picking...")
             cherry_pick_commit(sha)
 
 if __name__ == "__main__":
