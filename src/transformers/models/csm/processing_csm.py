@@ -353,7 +353,11 @@ class CsmProcessor(ProcessorMixin):
             else:
                 skip_frames_idxs = audio_frame_idxs
 
-            labels = torch.where(data["input_ids"] == self.audio_token_id, data["input_ids"], -100)
+            labels = torch.where(
+                (data["input_ids"] == self.audio_token_id) | (data["input_ids"] == self.audio_eos_token_id),
+                data["input_ids"],
+                -100,
+            )
             labels[skip_frames_idxs[:, 0], skip_frames_idxs[:, 1]] = -101
 
             data["labels"] = labels
