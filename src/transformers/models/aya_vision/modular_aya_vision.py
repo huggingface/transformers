@@ -190,7 +190,6 @@ class AyaVisionModel(LlavaModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        image_sizes: torch.Tensor = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, AyaVisionModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -218,7 +217,6 @@ class AyaVisionModel(LlavaModel):
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
-                image_sizes=image_sizes,
             )
 
             if input_ids is None:
