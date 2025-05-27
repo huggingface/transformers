@@ -125,7 +125,7 @@ def main():
 
     print(f"Found {len(prs)} PR(s) with label '{LABEL}'")
     for pr in prs:
-        sha = pr.get("mergeCommit").get("oid") if pr.get("mergeCommit") else None
+        sha = pr.get("oid") if pr.get("mergeCommit") else None
         if commit_in_history(sha):
             print(f"🔁 PR #{pr['number']} ({pr["title"]}) already in history. Skipping.")
         else:
