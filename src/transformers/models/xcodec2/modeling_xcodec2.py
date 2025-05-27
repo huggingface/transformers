@@ -1652,8 +1652,7 @@ class XCodec2Model(XCodec2PreTrainedModel):
         semantic_encoded = self.SemanticEncoder_module(semantic_hidden_16)
 
         # 3) codec encoder
-        wav = input_values.unsqueeze(1)  # shape: [batch, 1, time]
-        vq_emb = self.CodecEnc(wav)  # [batch, time//down, 1024] Example only
+        vq_emb = self.CodecEnc(input_values)  # [batch, time//down, 1024] Example only
         vq_emb = vq_emb.transpose(1, 2)  # -> [batch, 1024, frames]
 
         # Align the time frames of the semantic vector, example processing only
