@@ -693,8 +693,10 @@ class Idefics3Model(Idefics3PreTrainedModel):
         - To fit the format of that sequence, `input_ids`, `input_embeds`, `attention_mask` are all 3 adapted to insert the image hidden states.
         """
         special_image_token_mask = input_ids == self.image_token_id
-        #  Fixes RuntimeError: a leaf Variable that requires grad is being used in an in-place operation.
+        # Fixes RuntimeError: a leaf Variable that requires grad is being used in an in-place operation.
         new_inputs_embeds = inputs_embeds.clone()
+        # Flatten `image_hidden_states` if not flat yet
+        image_hidden_states = image_hidden_states.view(-1, image_hidden_states.shape[-1])
         # cast to the dtype of the input_embeds to support quantized models
         image_hidden_states = image_hidden_states.to(inputs_embeds.device, inputs_embeds.dtype)
         new_inputs_embeds[special_image_token_mask] = image_hidden_states
