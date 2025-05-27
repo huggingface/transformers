@@ -82,7 +82,7 @@ def get_prs_by_label(label):
     result = subprocess.run(cmd, capture_output=True, text=True)
     result.check_returncode()
     prs = json.loads(result.stdout)
-    return [pr for pr in prs if pr.get("mergeCommit")]
+    return [pr.get("mergeCommit") for pr in prs if pr.get("mergeCommit")]
 
 def get_commit_timestamp(commit_sha):
     """Get UNIX timestamp of a commit using git."""
