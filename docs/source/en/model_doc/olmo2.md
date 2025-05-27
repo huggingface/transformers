@@ -23,11 +23,7 @@ rendered properly in your Markdown viewer.
 </div>
 
 # OLMo2
-[OLMo2](https://huggingface.co/papers/2501.00656) is the next generation of fully open language models by AllenAI.
-It is the successor to [OLMo](https://huggingface.co/docs/transformers/main/en/model_doc/olmo), and improves upon the original family of models
-by changing the architecture and training recipes of the original models. This includes using 
-RMSNorm rather than nonparametric LayerNorm, normalizing the outputs of the attention/feedforward layers rather
-than the inputs, and using a new, specialized data mix called Dolmino Mix 1124 for the mid-training stage.
+[OLMo2](https://huggingface.co/papers/2501.00656) improves on [OLMo](./olmo) by changing the architecture and training recipes of the original models. This includes excluding all biases to improve training stability, non-parametric layer norm, SwiGLU activation function, rotary positional embeddings, and a modified BPE-based tokenizer that masks personal identifiable information. It is pretrained on [Dolma](https://huggingface.co/datasets/allenai/dolma), a dataset of 3T tokens.
 
 You can find all the original OLMo2 checkpoints under the [OLMo2](https://huggingface.co/collections/allenai/olmo-2-674117b93ab84e98afc72edc) collection.
 
@@ -78,7 +74,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers CLI">
 
 ```bash
 echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model allenai/OLMo-2-0425-1B --device 0
@@ -110,10 +106,11 @@ model = AutoModelForCausalLM.from_pretrained(
     quantization_config=torchao_config,
     torch_dtype=torch.bfloat16,
     device_map="auto",
+    attn_implementation="sdpa"
 )
 input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
 
-output = model.generate(**input_ids, max_length=50)
+output = model.generate(**input_ids, max_length=50, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ```
@@ -121,10 +118,13 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ## Notes
 
+- OLMo2 uses RMSNorm instead of standard layer norm. The RMSNorm is applied to attention queries and keys, and it is applied after the attention and feedforward layers rather than before.
 - OLMo2 requires Transformers v4.48 or higher.
-- Specific model revisions can be loaded with HuggingFace by adding the `revision` argument. For pretraining, the naming convention is `stage1-stepXXX-tokensYYYB`, and for checkpoints with ingredients of the soup, the naming convention is `stage2-ingredientN-stepXXX-tokensYYYB`.
+- Load specific intermediate checkpoints by adding the `revision` parameter to [`~PreTrainedModel.from_pretrained`]. 
 
 ```py
+from transformers import AutoModelForCausalLM
+
 model = AutoModelForCausalLM.from_pretrained("allenai/OLMo-2-0425-1B", revision="stage1-step140000-tokens294B")
 ```
 
