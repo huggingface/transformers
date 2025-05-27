@@ -82,7 +82,6 @@ def get_prs_by_label(label):
     result = subprocess.run(cmd, capture_output=True, text=True)
     result.check_returncode()
     prs = json.loads(result.stdout)
-    prs = json.loads(result.stdout)
     return [pr for pr in prs if pr.get("mergeCommit")]
 
 def get_commit_timestamp(commit_sha):
@@ -119,7 +118,7 @@ def main():
     prs = get_prs_by_label(LABEL)
     # Attach commit timestamps
     for pr in prs:
-        pr["timestamp"] = get_commit_timestamp(pr["mergeCommit"])
+        pr["timestamp"] = get_commit_timestamp(pr.get("oid"))
 
     # Sort by commit timestamp (ascending)
     prs.sort(key=lambda pr: pr["timestamp"])
