@@ -42,19 +42,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-
-
-
-
     from transformers import ViTImageProcessor
 
 
 class ViTModelTester:
-
-
-
-
-
     def __init__(
         self,
         parent,
