@@ -117,9 +117,7 @@ class UniSpeechSatGumbelVectorQuantizer(Wav2Vec2GumbelVectorQuantizer):
     @staticmethod
     def _compute_perplexity(probs, mask=None):
         marginal_probs = probs.mean(dim=0)
-        perplexity = torch.exp(
-            -torch.sum(marginal_probs * torch.log(marginal_probs + 1e-7), dim=-1)
-        ).sum()
+        perplexity = torch.exp(-torch.sum(marginal_probs * torch.log(marginal_probs + 1e-7), dim=-1)).sum()
         return perplexity
 
     def forward(self, hidden_states):
@@ -148,18 +146,14 @@ class UniSpeechSatGumbelVectorQuantizer(Wav2Vec2GumbelVectorQuantizer):
             codevector_probs = hidden_states.new_zeros(*hidden_states.shape).scatter_(
                 -1, codevector_idx.view(-1, 1), 1.0
             )
-            codevector_probs = codevector_probs.view(
-                batch_size * sequence_length, self.num_groups, -1
-            )
+            codevector_probs = codevector_probs.view(batch_size * sequence_length, self.num_groups, -1)
 
             perplexity = self._compute_perplexity(codevector_probs)
 
         codevector_probs = codevector_probs.view(batch_size * sequence_length, -1)
         # use probs to retrieve codevectors
         codevectors_per_group = codevector_probs.unsqueeze(-1) * self.codevectors
-        codevectors = codevectors_per_group.view(
-            batch_size * sequence_length, self.num_groups, self.num_vars, -1
-        )
+        codevectors = codevectors_per_group.view(batch_size * sequence_length, self.num_groups, self.num_vars, -1)
         codevectors = codevectors.sum(-2).view(batch_size, sequence_length, -1)
 
         return codevectors, perplexity
@@ -210,13 +204,9 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel, Wav2Vec2Model):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
             masked extracted features in *config.proj_codevector_dim* space.
         """
-        output_attentions = (
-            output_attentions if output_attentions is not None else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -225,9 +215,7 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel, Wav2Vec2Model):
 
         if attention_mask is not None:
             # compute reduced attention_mask corresponding to feature vectors
-            attention_mask = self._get_feature_vector_attention_mask(
-                extract_features.shape[1], attention_mask
-            )
+            attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
 
         hidden_states, extract_features = self.feature_projection(extract_features)
         hidden_states = self._mask_hidden_states(
@@ -273,9 +261,7 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         self.dropout = nn.Dropout(config.final_dropout)
 
         self.speaker_proj = nn.Linear(config.hidden_size, config.codevector_dim)
-        self.label_embeddings_concat = nn.Parameter(
-            torch.FloatTensor(config.num_clusters, config.codevector_dim)
-        )
+        self.label_embeddings_concat = nn.Parameter(torch.FloatTensor(config.num_clusters, config.codevector_dim))
         self.label_embeddings_concat.data.zero_()
 
         self.layer_norm_for_extract = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -323,9 +309,7 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         """
         target_features = torch.cat([target_features, negative_features], dim=0)
 
-        logits = torch.cosine_similarity(
-            predicted_features.float(), target_features.float(), dim=-1
-        )
+        logits = torch.cosine_similarity(predicted_features.float(), target_features.float(), dim=-1)
         logits = logits.type_as(target_features)
 
         # apply temperature

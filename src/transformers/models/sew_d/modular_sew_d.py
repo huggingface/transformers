@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch SEW model."""
+"""PyTorch SEW-D model."""
 
 import math
 from collections.abc import Sequence
@@ -24,12 +24,10 @@ from torch.nn import LayerNorm
 
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
+from ...modeling_outputs import BaseModelOutput
 from ...pytorch_utils import softmax_backward_data
 from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     logging,
 )
 from ..bert.modeling_bert import BertIntermediate
@@ -46,23 +44,6 @@ from .configuration_sew_d import SEWDConfig
 logger = logging.get_logger(__name__)
 
 _HIDDEN_STATES_START_POSITION = 1
-
-
-# General docstring
-_CONFIG_FOR_DOC = "SEWDConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "asapp/sew-d-tiny-100k-ft-ls100h"
-_EXPECTED_OUTPUT_SHAPE = [1, 292, 384]
-
-# CTC docstring
-_CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTIL OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
-_CTC_EXPECTED_LOSS = 0.21
-
-# Audio class docstring
-_SEQ_CLASS_CHECKPOINT = "anton-l/sew-d-mid-400k-ft-keyword-spotting"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
-_SEQ_CLASS_EXPECTED_LOSS = 3.16
 
 
 def make_log_bucket_position(relative_pos, bucket_size, max_position):
@@ -875,18 +856,15 @@ class SEWDEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class SEWDPreTrainedModel(HubertPreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = SEWDConfig
     base_model_prefix = "sew-d"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = False
     _supports_sdpa = False
+    _supports_flex_attn = False
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -925,100 +903,36 @@ class SEWDPreTrainedModel(HubertPreTrainedModel):
             module.bias.data.zero_()
 
 
-SEWD_START_DOCSTRING = r"""
-    SEW-D was proposed in [Performance-Efficiency Trade-offs in Unsupervised Pre-training for Speech
-    Recognition](https://arxiv.org/abs/2109.06870) by Felix Wu, Kwangyoun Kim, Jing Pan, Kyu Han, Kilian Q. Weinberger,
-    Yoav Artzi.
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving etc.).
-
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`SEWDConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-SEWD_INPUTS_DOCSTRING = r"""
-    Args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
-        attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
-            1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare SEW-D Model transformer outputting raw hidden-states without any specific head on top.",
-    SEWD_START_DOCSTRING,
-)
+@auto_docstring
 class SEWDModel(SEWModel):
     def __init__(self, config: SEWDConfig):
         super().__init__(config)
         self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.feature_layer_norm_eps)
 
 
-@add_start_docstrings(
-    """SEW-D Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
-    SEWD_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    SEW-D Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
+    """
 )
 class SEWDForCTC(Wav2Vec2ForCTC):
     pass
 
-    @add_start_docstrings_to_model_forward(SEWD_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_CTC_EXPECTED_OUTPUT,
-        expected_loss=_CTC_EXPECTED_LOSS,
-    )
+    @auto_docstring
     def forward(self, **super_kwargs):
         super().forward(**super_kwargs)
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     SEWD Model with a sequence classification head on top (a linear layer over the pooled output) for tasks like SUPERB
     Keyword Spotting.
-    """,
-    SEWD_START_DOCSTRING,
+    """
 )
 class SEWDForSequenceClassification(Wav2Vec2ForSequenceClassification):
     pass
 
-    @add_start_docstrings_to_model_forward(SEWD_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_SEQ_CLASS_CHECKPOINT,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
-    )
+    @auto_docstring
     def forward(self, **super_kwargs):
         super().forward(**super_kwargs)
 

@@ -149,7 +149,6 @@ class UniSpeechGumbelVectorQuantizer(Wav2Vec2GumbelVectorQuantizer):
         return codevectors, perplexity
 
 
-
 @auto_docstring
 class UniSpeechPreTrainedModel(HubertPreTrainedModel):
     config_class = UniSpeechConfig

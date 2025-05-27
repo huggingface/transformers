@@ -62,9 +62,7 @@ class Wav2Vec2BertRelPositionalEmbedding(Wav2Vec2ConformerRelPositionalEmbedding
 class Wav2Vec2BertFeatureProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.layer_norm = nn.LayerNorm(
-            config.feature_projection_input_dim, eps=config.layer_norm_eps
-        )
+        self.layer_norm = nn.LayerNorm(config.feature_projection_input_dim, eps=config.layer_norm_eps)
         self.projection = nn.Linear(config.feature_projection_input_dim, config.hidden_size)
         self.dropout = nn.Dropout(config.feat_proj_dropout)
 
@@ -96,9 +94,7 @@ class Wav2Vec2BertConvolutionModule(nn.Module):
     def __init__(self, config):
         super().__init__()
         if (config.conv_depthwise_kernel_size - 1) % 2 == 1:
-            raise ValueError(
-                "`config.conv_depthwise_kernel_size` should be a odd number for 'SAME' padding"
-            )
+            raise ValueError("`config.conv_depthwise_kernel_size` should be a odd number for 'SAME' padding")
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pointwise_conv1 = nn.Conv1d(
             config.hidden_size,
@@ -149,9 +145,7 @@ class Wav2Vec2BertConvolutionModule(nn.Module):
         hidden_states = self.glu(hidden_states)
 
         # Pad the sequence entirely on the left because of causal convolution.
-        hidden_states = torch.nn.functional.pad(
-            hidden_states, (self.depthwise_conv.kernel_size[0] - 1, 0)
-        )
+        hidden_states = torch.nn.functional.pad(hidden_states, (self.depthwise_conv.kernel_size[0] - 1, 0))
 
         # 1D Depthwise Conv
         hidden_states = self.depthwise_conv(hidden_states)
@@ -177,9 +171,7 @@ class Wav2Vec2BertSelfAttention(Wav2Vec2ConformerSelfAttention, nn.Module):
 
         self.head_size = hidden_size // config.num_attention_heads
         self.num_heads = config.num_attention_heads
-        self.position_embeddings_type = (
-            config.position_embeddings_type if not is_adapter_attention else None
-        )
+        self.position_embeddings_type = config.position_embeddings_type if not is_adapter_attention else None
 
         self.linear_q = nn.Linear(hidden_size, hidden_size)
         self.linear_k = nn.Linear(hidden_size, hidden_size)
@@ -199,9 +191,7 @@ class Wav2Vec2BertSelfAttention(Wav2Vec2ConformerSelfAttention, nn.Module):
         if self.position_embeddings_type == "relative_key":
             self.left_max_position_embeddings = config.left_max_position_embeddings
             self.right_max_position_embeddings = config.right_max_position_embeddings
-            num_positions = (
-                self.left_max_position_embeddings + self.right_max_position_embeddings + 1
-            )
+            num_positions = self.left_max_position_embeddings + self.right_max_position_embeddings + 1
             self.distance_embedding = nn.Embedding(num_positions, self.head_size)
 
     def forward(
@@ -223,9 +213,7 @@ class Wav2Vec2BertSelfAttention(Wav2Vec2ConformerSelfAttention, nn.Module):
                 raise ValueError(
                     "`relative_position_embeddings` has to be defined when `self.position_embeddings_type == 'rotary'"
                 )
-            query_key_states = self._apply_rotary_embedding(
-                query_key_states, relative_position_embeddings
-            )
+            query_key_states = self._apply_rotary_embedding(query_key_states, relative_position_embeddings)
 
         # project query_key_states and value_states
         query = self.linear_q(query_key_states).view(batch_size, -1, self.num_heads, self.head_size)
@@ -254,25 +242,15 @@ class Wav2Vec2BertSelfAttention(Wav2Vec2ConformerSelfAttention, nn.Module):
         if self.position_embeddings_type == "relative_key":
             query_length, key_length = query.shape[2], key.shape[2]
 
-            position_ids_l = torch.arange(
-                query_length, dtype=torch.long, device=hidden_states.device
-            ).view(-1, 1)
-            position_ids_r = torch.arange(
-                key_length, dtype=torch.long, device=hidden_states.device
-            ).view(1, -1)
+            position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
+            position_ids_r = torch.arange(key_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
             distance = position_ids_r - position_ids_l
-            distance = torch.clamp(
-                distance, -self.left_max_position_embeddings, self.right_max_position_embeddings
-            )
+            distance = torch.clamp(distance, -self.left_max_position_embeddings, self.right_max_position_embeddings)
 
-            positional_embedding = self.distance_embedding(
-                distance + self.left_max_position_embeddings
-            )
+            positional_embedding = self.distance_embedding(distance + self.left_max_position_embeddings)
             positional_embedding = positional_embedding.to(dtype=query.dtype)  # fp16 compatibility
 
-            relative_position_attn_weights = torch.einsum(
-                "bhld,lrd->bhlr", query, positional_embedding
-            )
+            relative_position_attn_weights = torch.einsum("bhld,lrd->bhlr", query, positional_embedding)
             scores = scores + (relative_position_attn_weights / math.sqrt(self.head_size))
 
         # apply attention_mask if necessary
@@ -287,9 +265,7 @@ class Wav2Vec2BertSelfAttention(Wav2Vec2ConformerSelfAttention, nn.Module):
         hidden_states = torch.matmul(probs, value)
 
         # => (batch, time1, hidden_size)
-        hidden_states = hidden_states.transpose(1, 2).reshape(
-            batch_size, -1, self.num_heads * self.head_size
-        )
+        hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, -1, self.num_heads * self.head_size)
         hidden_states = self.linear_out(hidden_states)
 
         return hidden_states, probs
@@ -376,9 +352,7 @@ class Wav2Vec2BertEncoder(nn.Module):
             self.embed_positions = None
 
         self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layers = nn.ModuleList(
-            [Wav2Vec2BertEncoderLayer(config) for _ in range(config.num_hidden_layers)]
-        )
+        self.layers = nn.ModuleList([Wav2Vec2BertEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -420,9 +394,7 @@ class Wav2Vec2BertEncoder(nn.Module):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = torch.rand([])
 
-            skip_the_layer = (
-                True if self.training and (dropout_probability < self.config.layerdrop) else False
-            )
+            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
@@ -454,9 +426,7 @@ class Wav2Vec2BertEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(
-                v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None
-            )
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -470,14 +440,10 @@ class Wav2Vec2BertAdapter(nn.Module):
         # feature dim might need to be down-projected
         if config.output_hidden_size != config.hidden_size:
             self.proj = nn.Linear(config.hidden_size, config.output_hidden_size)
-            self.proj_layer_norm = nn.LayerNorm(
-                config.output_hidden_size, eps=config.layer_norm_eps
-            )
+            self.proj_layer_norm = nn.LayerNorm(config.output_hidden_size, eps=config.layer_norm_eps)
         else:
             self.proj = self.proj_layer_norm = None
-        self.layers = nn.ModuleList(
-            Wav2Vec2BertAdapterLayer(config) for _ in range(config.num_adapter_layers)
-        )
+        self.layers = nn.ModuleList(Wav2Vec2BertAdapterLayer(config) for _ in range(config.num_adapter_layers))
         self.layerdrop = config.layerdrop
 
         self.kernel_size = config.adapter_kernel_size
@@ -498,15 +464,11 @@ class Wav2Vec2BertAdapter(nn.Module):
 
         sub_sampled_lengths = None
         if attention_mask is not None:
-            sub_sampled_lengths = (attention_mask.size(1) - (1 - attention_mask.int()).sum(1)).to(
-                hidden_states.device
-            )
+            sub_sampled_lengths = (attention_mask.size(1) - (1 - attention_mask.int()).sum(1)).to(hidden_states.device)
 
         for layer in self.layers:
             layerdrop_prob = torch.rand([])
-            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(
-                sub_sampled_lengths
-            )
+            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(sub_sampled_lengths)
             if not self.training or (layerdrop_prob > self.layerdrop):
                 hidden_states = layer(
                     hidden_states,
@@ -581,9 +543,7 @@ class Wav2Vec2BertAdapterLayer(nn.Module):
         hidden_states = hidden_states.transpose(1, 2)
 
         if attention_mask is not None:
-            attention_mask = _compute_new_attention_mask(
-                hidden_states=hidden_states, seq_lens=sub_sampled_lengths
-            )
+            attention_mask = _compute_new_attention_mask(hidden_states=hidden_states, seq_lens=sub_sampled_lengths)
             attention_mask = _prepare_4d_attention_mask(
                 attention_mask,
                 hidden_states.dtype,
@@ -668,10 +628,7 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
         def _conv_out_length(input_length, kernel_size, stride, padding):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return (
-                torch.div(input_length + 2 * padding - kernel_size, stride, rounding_mode="floor")
-                + 1
-            )
+            return torch.div(input_length + 2 * padding - kernel_size, stride, rounding_mode="floor") + 1
 
         if add_adapter:
             padding = self.config.adapter_kernel_size // 2
@@ -692,9 +649,7 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
         # on inference mode.
         non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
 
-        output_lengths = self._get_feat_extract_output_lengths(
-            non_padded_lengths, add_adapter=add_adapter
-        )
+        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths, add_adapter=add_adapter)
         output_lengths = output_lengths.to(torch.long)
 
         batch_size = attention_mask.shape[0]
@@ -764,13 +719,9 @@ class Wav2Vec2BertModel(Wav2Vec2Model, Wav2Vec2BertPreTrainedModel):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
             masked extracted features in *config.proj_codevector_dim* space.
         """
-        output_attentions = (
-            output_attentions if output_attentions is not None else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -865,13 +816,9 @@ class Wav2Vec2BertForCTC(Wav2Vec2ConformerForCTC):
             attention_mask = (
                 attention_mask
                 if attention_mask is not None
-                else torch.ones(
-                    input_features.shape[:2], device=input_features.device, dtype=torch.long
-                )
+                else torch.ones(input_features.shape[:2], device=input_features.device, dtype=torch.long)
             )
-            input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum([-1])).to(
-                torch.long
-            )
+            input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum([-1])).to(torch.long)
 
             # assuming that padded tokens are filled with -100
             # when not being attended to
@@ -880,9 +827,7 @@ class Wav2Vec2BertForCTC(Wav2Vec2ConformerForCTC):
             flattened_targets = labels.masked_select(labels_mask)
 
             # ctc_loss doesn't support fp16
-            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(
-                0, 1
-            )
+            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
 
             with torch.backends.cudnn.flags(enabled=False):
                 loss = nn.functional.ctc_loss(
@@ -969,9 +914,7 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2ForSequenceClassification):
         if attention_mask is None:
             pooled_output = hidden_states.mean(dim=1)
         else:
-            padding_mask = self._get_feature_vector_attention_mask(
-                hidden_states.shape[1], attention_mask
-            )
+            padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
             expand_padding_mask = padding_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states[~expand_padding_mask] = 0.0
             pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
@@ -1121,9 +1064,7 @@ class Wav2Vec2BertForXVector(Wav2Vec2ConformerForXVector):
             mean_features = hidden_states.mean(dim=1)
             std_features = hidden_states.std(dim=1)
         else:
-            feat_extract_output_lengths = self._get_feat_extract_output_lengths(
-                attention_mask.sum(dim=1)
-            )
+            feat_extract_output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(dim=1))
             tdnn_output_lengths = self._get_tdnn_output_lengths(feat_extract_output_lengths)
             mean_features = []
             std_features = []
