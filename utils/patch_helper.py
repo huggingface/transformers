@@ -34,7 +34,7 @@ git cherry-pick 936ab7bae5e040ec58994cb722dd587b9ab26581 #2024-05-28 11:56:05+02
 git cherry-pick 0bef4a273825d2cfc52ddfe62ba486ee61cc116f #2024-05-29 13:33:26+01:00
 ```
 """
-
+from datetime import datetime
 import subprocess
 import json
 import transformers 
@@ -81,7 +81,11 @@ def get_prs_by_label(label):
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     result.check_returncode()
-    return json.loads(result.stdout)
+    prs = json.loads(result.stdout)
+    # Filter and sort by merge date
+    prs = [pr for pr in prs if pr["mergeCommit"] and pr["mergedAt"]]
+    prs.sort(key=lambda pr: datetime.fromisoformat(pr["mergedAt"].rstrip("Z")))
+    return prs
 
 def cherry_pick_commit(sha):
     """Cherry-pick a given commit SHA."""
