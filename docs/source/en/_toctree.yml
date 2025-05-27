@@ -76,12 +76,12 @@
       title: Prompt engineering
     - local: llm_optims
       title: Optimizing inference
+    - local: cache_explanation
+      title: Caching
     - local: kv_cache
       title: KV cache strategies
     - local: serving
       title: Serving
-    - local: cache_explanation
-      title: Caching
     - local: llm_tutorial_optimization
       title: Getting the most out of LLMs
     - local: perplexity
