@@ -76,7 +76,7 @@ class CsmProcessor(ProcessorMixin):
         ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
         audio = ds[0]["audio"]["array"]
 
-        processor = CsmProcessor.from_pretrained("eustlb/csm-1b")
+        processor = CsmProcessor.from_pretrained("sesame/csm-1b")
 
         processor(
             text=["<|begin_of_text|>[0]What are you working on?<|end_of_text|><|AUDIO|><|audio_eos|><|begin_of_text|>[1]I'm figuring out my budget.<|end_of_text|>"],
