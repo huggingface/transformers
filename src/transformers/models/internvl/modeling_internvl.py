@@ -675,7 +675,6 @@ class InternVLModel(InternVLPreTrainedModel):
 
         # Project features through multi-modal projector
         vision_features = self.multi_modal_projector(vision_features)
-        vision_features = list(vision_features)
         return vision_features
 
     @can_return_tuple
@@ -695,7 +694,6 @@ class InternVLModel(InternVLPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        image_sizes: torch.Tensor = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, InternVLModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -723,9 +721,7 @@ class InternVLModel(InternVLPreTrainedModel):
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
-                image_sizes=image_sizes,
             )
-            image_features = torch.cat(image_features, dim=0)
 
             if input_ids is None:
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
