@@ -127,9 +127,9 @@ def main():
     for pr in prs:
         sha = pr.get("oid")
         if commit_in_history(sha):
-            print(f"🔁 PR #{pr['number']} ({pr["title"]}) already in history. Skipping.")
+            print(f"🔁 PR ({pr["title"]}) already in history. Skipping.")
         else:
-            print(f"🚀 PR #{pr['number']} ({pr["title"]}) not in history. Cherry-picking...")
+            print(f"🚀 PR ({pr["title"]}) not in history. Cherry-picking...")
             cherry_pick_commit(sha)
 
 if __name__ == "__main__":
