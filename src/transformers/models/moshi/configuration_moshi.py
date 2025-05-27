@@ -236,7 +236,7 @@ class MoshiConfig(PretrainedConfig):
 
     model_type = "moshi"
     keys_to_ignore_at_inference = ["past_key_values"]
-    sub_configs = {"audio_encoder_config": AutoConfig}
+    sub_configs = {"audio_encoder_config": AutoConfig, "depth_decoder_config": MoshiDepthConfig}
 
     def __init__(
         self,

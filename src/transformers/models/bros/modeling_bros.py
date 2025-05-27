@@ -31,99 +31,11 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_bros import BrosConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CHECKPOINT_FOR_DOC = "jinho8345/bros-base-uncased"
-_CONFIG_FOR_DOC = "BrosConfig"
-
-
-BROS_START_DOCSTRING = r"""
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`BrosConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-BROS_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`BrosProcessor`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-
-        bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
-            Bounding box coordinates for each token in the input sequence. Each bounding box is a list of four values
-            (x1, y1, x2, y2), where (x1, y1) is the top left corner, and (x2, y2) is the bottom right corner of the
-            bounding box.
-
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-        bbox_first_token_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to indicate the first token of each bounding box. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
-"""
 
 
 @dataclass
@@ -749,12 +661,8 @@ class BrosRelationExtractor(nn.Module):
         return relation_score
 
 
+@auto_docstring
 class BrosPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = BrosConfig
     base_model_prefix = "bros"
 
@@ -775,12 +683,13 @@ class BrosPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-@add_start_docstrings(
-    "The bare Bros Model transformer outputting raw hidden-states without any specific head on top.",
-    BROS_START_DOCSTRING,
-)
+@auto_docstring
 class BrosModel(BrosPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
+        """
         super().__init__(config)
         self.config = config
 
@@ -806,8 +715,7 @@ class BrosModel(BrosPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=BaseModelOutputWithPoolingAndCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -826,7 +734,10 @@ class BrosModel(BrosPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
-        Returns:
+        bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
+            Bounding box coordinates for each token in the input sequence. Each bounding box is a list of four values
+            (x1, y1, x2, y2), where (x1, y1) is the top left corner, and (x2, y2) is the bottom right corner of the
+            bounding box.
 
         Examples:
 
@@ -950,13 +861,7 @@ class BrosModel(BrosPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    Bros Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
-    Named-Entity-Recognition (NER) tasks.
-    """,
-    BROS_START_DOCSTRING,
-)
+@auto_docstring
 class BrosForTokenClassification(BrosPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
@@ -973,8 +878,7 @@ class BrosForTokenClassification(BrosPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=TokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -991,8 +895,15 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
+        bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
+            Bounding box coordinates for each token in the input sequence. Each bounding box is a list of four values
+            (x1, y1, x2, y2), where (x1, y1) is the top left corner, and (x2, y2) is the bottom right corner of the
+            bounding box.
+        bbox_first_token_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to indicate the first token of each bounding box. Mask values selected in `[0, 1]`:
 
-        Returns:
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
 
         Examples:
 
@@ -1054,15 +965,14 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Bros Model with a token classification head on top (initial_token_layers and subsequent_token_layer on top of the
     hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. The initial_token_classifier is used to
     predict the first token of each entity, and the subsequent_token_classifier is used to predict the subsequent
     tokens within an entity. Compared to BrosForTokenClassification, this model is more robust to serialization errors
     since it predicts next token from one token.
-    """,
-    BROS_START_DOCSTRING,
+    """
 )
 class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1092,8 +1002,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=BrosSpadeOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1111,7 +1020,19 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], BrosSpadeOutput]:
         r"""
-        Returns:
+        bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
+            Bounding box coordinates for each token in the input sequence. Each bounding box is a list of four values
+            (x1, y1, x2, y2), where (x1, y1) is the top left corner, and (x2, y2) is the bottom right corner of the
+            bounding box.
+        bbox_first_token_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to indicate the first token of each bounding box. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+        initial_token_labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for the initial token classification.
+        subsequent_token_labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for the subsequent token classification.
 
         Examples:
 
@@ -1200,12 +1121,11 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Bros Model with a token classification head on top (a entity_linker layer on top of the hidden-states output) e.g.
     for Entity-Linking. The entity_linker is used to predict intra-entity links (one entity to another entity).
-    """,
-    BROS_START_DOCSTRING,
+    """
 )
 class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1224,8 +1144,7 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=TokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1242,7 +1161,15 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
-        Returns:
+        bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
+            Bounding box coordinates for each token in the input sequence. Each bounding box is a list of four values
+            (x1, y1, x2, y2), where (x1, y1) is the top left corner, and (x2, y2) is the bottom right corner of the
+            bounding box.
+        bbox_first_token_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to indicate the first token of each bounding box. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
 
         Examples:
 
