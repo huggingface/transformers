@@ -22,17 +22,16 @@ rendered properly in your Markdown viewer.
 
 # MobileNet V2
 
-MobileNet V2 builds upon MobileNet V1, improving performance on mobile and embedded devices. Its key innovations are the **inverted residual blocks** (where shortcuts connect thin bottleneck layers) and the use of **linear bottlenecks** (removing non-linearities in narrow layers to preserve information). Like V1, it uses depthwise separable convolutions for efficiency and offers tunable hyperparameters.
+[MobileNet V2](https://huggingface.co/papers/1801.04381) improves performance on mobile devices with a more efficient architecture. It uses inverted residual blocks and linear bottlenecks to start with a smaller representation of the data, expands it for processing, and shrinks it again to reduce the number of computations. The model also removes non-linearities to maintain accuracy despite its simplified design. Like [MobileNet V1](./mobilenet_v1), it uses depthwise separable convolutions for efficiency.
 
-You can find checkpoints like [`google/mobilenet_v2_1.4_224`](https://huggingface.co/google/mobilenet_v2_1.4_224) (for classification) or [`google/deeplabv3_mobilenet_v2_1.0_513`](https://huggingface.co/google/deeplabv3_mobilenet_v2_1.0_513) (for segmentation) on the Hub. Check the [Google organization page](https://huggingface.co/google) for other variants. <!-- Consider linking to a dedicated Collection if one exists -->
+You can all the original MobileNet checkpoints under the [Google](https://huggingface.co/google?search_models=mobilenet) organization.
 
 > [!TIP]
 > Click on the MobileNet V2 models in the right sidebar for more examples of how to apply MobileNet to different vision tasks.
 
 
-The examples below demonstrate how to use MobileNetV2 for image classification and semantic segmentation with [`Pipeline`] or [`AutoModel`].
+The examples below demonstrate how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
 
-**Image Classification**
 
 <hfoptions id="usage-img-class">
 <hfoption id="Pipeline">
@@ -164,7 +163,7 @@ print(pred_seg.shape)
 -   **Checkpoint Naming:** Classification checkpoints often follow `mobilenet_v2_{depth_multiplier}_{resolution}`, like `mobilenet_v2_1.4_224`. Segmentation checkpoints (using DeepLabV3+ head) might have names like `deeplabv3_mobilenet_v2_{depth_multiplier}_{resolution}`.
 -   **Variable Input Size:** Like V1, the model works with images of different sizes (minimum 32x32), handled by [`MobileNetV2ImageProcessor`].
 -   **1001 Classes (Classification):** ImageNet-1k pretrained classification models output 1001 classes (index 0 is background).
--   **Segmentation Head:** Segmentation models use a [DeepLabV3+](https://arxiv.org/abs/1802.02611) head, often pretrained on datasets like PASCAL VOC.
+-   The segmentation models use a [DeepLabV3+](https://huggingface.co/papers/1802.02611) head which is often pretrained on datasets like [PASCAL VOC](https://huggingface.co/datasets/merve/pascal-voc).
 -   **Padding Differences:** Similar to V1, original TensorFlow checkpoints had dynamic padding. The HF PyTorch implementation uses static padding by default. Enable dynamic padding (TF behavior) via `tf_padding=True` in [`MobileNetV2Config`].
     ```python
     from transformers import MobileNetV2Config

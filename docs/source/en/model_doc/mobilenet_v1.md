@@ -22,16 +22,14 @@ rendered properly in your Markdown viewer.
 
 # MobileNet V1
 
-MobileNet V1 is a family of efficient convolutional neural networks optimized for on-device or embedded vision tasks. It achieves this efficiency by using depth-wise separable convolutions instead of standard convolutions. The architecture allows for easy trade-offs between latency and accuracy using two main hyperparameters: a width multiplier (alpha) and an image resolution multiplier.
+[MobileNet V1](https://huggingface.co/papers/1704.04861) is a family of efficient convolutional neural networks optimized for on-device or embedded vision tasks. It achieves this efficiency by using depth-wise separable convolutions instead of standard convolutions. The architecture allows for easy trade-offs between latency and accuracy using two main hyperparameters, a width multiplier (alpha) and an image resolution multiplier.
 
-You can find checkpoints like [`google/mobilenet_v1_1.0_224`](https://huggingface.co/google/mobilenet_v1_1.0_224), [`google/mobilenet_v1_0.75_192`](https://huggingface.co/google/mobilenet_v1_0.75_192) on the Hub.
+You can all the original MobileNet checkpoints under the [Google](https://huggingface.co/google?search_models=mobilenet) organization.
 
 > [!TIP]
 > Click on the MobileNet V1 models in the right sidebar for more examples of how to apply MobileNet to different vision tasks.
 
-
-
-The example below demonstrates how to perform image classification with [`Pipeline`] or [`AutoModel`].
+The example below demonstrates how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
 
 
 <hfoptions id="usage">
@@ -96,20 +94,20 @@ print(predicted_label)
 
 ## Notes
 
--   **Checkpoint Naming:** Checkpoints often follow the pattern `mobilenet_v1_{depth_multiplier}_{resolution}`, like `mobilenet_v1_1.0_224`.
--   **Variable Input Size:** While trained on fixed sizes (e.g., 224x224), the model architecture works with images of different sizes (minimum 32x32). The [`MobileNetV1ImageProcessor`] handles the necessary preprocessing.
--   **1001 Classes:** Models pretrained on ImageNet-1k output 1001 classes. Index 0 is a "background" class, and indices 1-1000 correspond to the standard ImageNet classes.
--   **Padding Differences:** Original TensorFlow checkpoints had dynamic padding behavior based on input size. The Hugging Face PyTorch implementation uses standard, static padding by default. To enable dynamic padding (matching TensorFlow behavior), instantiate the configuration with `tf_padding=True`.
+-   Checkpoint names follow the pattern `mobilenet_v1_{depth_multiplier}_{resolution}`, like `mobilenet_v1_1.0_224`. `1.0` is the depth multiplier and `224` is the image resolution.
+-   While trained on images of a specific sizes, the model architecture works with images of different sizes (minimum 32x32). The [`MobileNetV1ImageProcessor`] handles the necessary preprocessing.
+-   MobileNet is pretrained on [ImageNet-1k](https://huggingface.co/datasets/imagenet-1k), a dataset with 1000 classes. However, the model actually predicts 1001 classes. The additional class is an extra "background" class (index 0).
+-   The original TensorFlow checkpoints determines the padding amount at inference because it depends on the input image size. To use the native PyTorch padding behavior, set `tf_padding=False` in [`MobileNetV1Config`].
     ```python
     from transformers import MobileNetV1Config
 
-    # Example: Load config with dynamic padding enabled
     config = MobileNetV1Config.from_pretrained("google/mobilenet_v1_1.0_224", tf_padding=True)
     ```
--   **Unsupported Features:** The Hugging Face implementation has some differences from the original paper/TF implementation:
-    -   Uses global average pooling instead of the optional 7x7 average pooling with stride 2.
-    -   Does not support specifying a custom `output_stride` (which would require dilated convolutions). The output stride is fixed at 32.
-    -   `output_hidden_states=True` returns *all* intermediate hidden states; selecting specific layers is not directly supported.
+-   The Transformers implementation does not support the following features.
+    -   Uses global average pooling instead of the optional 7x7 average pooling with stride 2. For larger inputs, this gives a pooled output that is larger than a 1x1 pixel.
+    -   Does not support other `output_stride` values (fixed at 32). For smaller `output_strides`, the original implementation uses dilated convolution to prevent spatial resolution from being reduced further. (which would require dilated convolutions).
+    -   `output_hidden_states=True` returns *all* intermediate hidden states. It is not possible to extract the output from specific layers for other downstream purposes.
+    - Does not include the quantized models from the original checkpoints because they include "FakeQuantization" operations to unquantize the weights.
 
 ## Resources
 
