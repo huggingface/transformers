@@ -1639,13 +1639,14 @@ class XCodec2Model(XCodec2PreTrainedModel):
           Reconstructed speech audio (Tensor)
         """
         # 1) Feature extraction
-        # If padding is needed, it can be done here
         input_features = self.feature_extractor(
-            input_values, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+            input_values.squeeze(1).cpu().numpy(),
+            sampling_rate=self.feature_extractor.sampling_rate,
+            return_tensors="pt",
         ).input_features  # [batch, frames, feat_dim]
 
         # 2) Semantic layer
-        semantic_output = self.semantic_model(input_features)
+        semantic_output = self.semantic_model(input_features.to(self.device))
         semantic_hidden_16 = semantic_output.hidden_states[16]  # Take the 16th layer
         semantic_hidden_16 = semantic_hidden_16.transpose(1, 2)  # [batch, hidden_dim, frames]
         semantic_encoded = self.SemanticEncoder_module(semantic_hidden_16)
@@ -1704,13 +1705,13 @@ class XCodec2Model(XCodec2PreTrainedModel):
         """
         # 1) Feature extraction
         input_features = self.feature_extractor(
-            input_values.squeeze(1).numpy(),
+            input_values.squeeze(1).cpu().numpy(),
             sampling_rate=self.feature_extractor.sampling_rate,
             return_tensors="pt",
         ).input_features  # [batch, frames, feat_dim]
 
         # 2) Semantic layer
-        semantic_output = self.semantic_model(input_features)
+        semantic_output = self.semantic_model(input_features.to(self.device))
         semantic_hidden_16 = semantic_output.hidden_states[16]  # Take the 16th layer
         semantic_hidden_16 = semantic_hidden_16.transpose(1, 2)  # [batch, hidden_dim, frames]
         semantic_encoded = self.SemanticEncoder_module(semantic_hidden_16)
