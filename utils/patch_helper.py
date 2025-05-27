@@ -82,10 +82,18 @@ def get_prs_by_label(label):
     result = subprocess.run(cmd, capture_output=True, text=True)
     result.check_returncode()
     prs = json.loads(result.stdout)
-    # Filter and sort by merge date
-    prs = [pr for pr in prs if pr["mergeCommit"] and pr["mergedAt"]]
-    prs.sort(key=lambda pr: datetime.fromisoformat(pr["mergedAt"].rstrip("Z")))
-    return prs
+    prs = json.loads(result.stdout)
+    return [pr for pr in prs if pr.get("mergeCommit")]
+
+def get_commit_timestamp(commit_sha):
+    """Get UNIX timestamp of a commit using git."""
+    result = subprocess.run(
+        ["git", "show", "-s", "--format=%ct", commit_sha],
+        capture_output=True,
+        text=True
+    )
+    result.check_returncode()
+    return int(result.stdout.strip())
 
 def cherry_pick_commit(sha):
     """Cherry-pick a given commit SHA."""
@@ -109,6 +117,13 @@ def main():
     branch = get_release_branch_name()
     checkout_branch(branch)
     prs = get_prs_by_label(LABEL)
+    # Attach commit timestamps
+    for pr in prs:
+        pr["timestamp"] = get_commit_timestamp(pr["mergeCommit"])
+
+    # Sort by commit timestamp (ascending)
+    prs.sort(key=lambda pr: pr["timestamp"])
+
     print(f"Found {len(prs)} PR(s) with label '{LABEL}'")
     for pr in prs:
         sha = pr.get("mergeCommit").get("oid") if pr.get("mergeCommit") else None
