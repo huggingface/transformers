@@ -36,12 +36,6 @@ if is_torch_available():
     import torch
     from torch import nn
 
-
-
-
-
-
-
     from transformers import ViTForImageClassification, ViTForMaskedImageModeling, ViTModel
 
 
@@ -53,11 +47,6 @@ if is_vision_available():
 
 class ViTModelTester:
     def __init__(
-
-
-
-
-
         self,
         parent,
         batch_size=13,
