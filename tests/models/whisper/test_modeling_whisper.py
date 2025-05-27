@@ -546,12 +546,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_generate_with_head_masking(self):
         pass
 
-    @parameterized.expand([("offloaded",)])
-    @pytest.mark.generate
-    @unittest.skip(reason="Whisper doesn't work with offloaded cache implementation yet")
-    def test_offloaded_cache_implementation(self, cache_implementation):
-        pass
-
     @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
