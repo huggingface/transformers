@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_large_accelerator,
-    require_torch_large_gpu,
     slow,
     torch_device,
 )
@@ -183,7 +182,10 @@ class Cohere2IntegrationTest(unittest.TestCase):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Cohere2 before this PR
         model_id = "CohereForAI/c4ai-command-r7b-12-2024"
         # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
-        EXPECTED_TEXTS = ["Hello I am doing a project for a school assignment and I need to create a website for a fictional company. I have", "Hi today I'm going to show you how to make a simple and easy to make a chocolate cake.\n",]
+        EXPECTED_TEXTS = [
+            "Hello I am doing a project for a school assignment and I need to create a website for a fictional company. I have",
+            "Hi today I'm going to show you how to make a simple and easy to make a chocolate cake.\n",
+        ]
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
