@@ -173,6 +173,13 @@ else:
                 ),
             ),
             (
+                "deepseek_v2",
+                (
+                    "LlamaTokenizer" if is_sentencepiece_available() else None,
+                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
                 "deepseek_v3",
                 (
                     "LlamaTokenizer" if is_sentencepiece_available() else None,
