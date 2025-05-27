@@ -283,7 +283,7 @@ class TorchAoTest(unittest.TestCase):
 
 
 @require_torch_accelerator
-class TorchAoGPUTest(TorchAoTest):
+class TorchAoAcceleratorTest(TorchAoTest):
     device = torch_device
     quant_scheme_kwargs = {"group_size": 32}
 
@@ -509,7 +509,7 @@ class TorchAoSerializationW8CPUTest(TorchAoSerializationTest):
 
 
 @require_torch_accelerator
-class TorchAoSerializationGPTTest(TorchAoSerializationTest):
+class TorchAoSerializationAcceleratorTest(TorchAoSerializationTest):
     quant_scheme, quant_scheme_kwargs = "int4_weight_only", {"group_size": 32}
     device = f"{torch_device}:0"
 
@@ -529,7 +529,7 @@ class TorchAoSerializationGPTTest(TorchAoSerializationTest):
 
 
 @require_torch_accelerator
-class TorchAoSerializationW8A8GPUTest(TorchAoSerializationTest):
+class TorchAoSerializationW8A8AcceleratorTest(TorchAoSerializationTest):
     quant_scheme, quant_scheme_kwargs = "int8_dynamic_activation_int8_weight", {}
     device = f"{torch_device}:0"
 
@@ -541,7 +541,7 @@ class TorchAoSerializationW8A8GPUTest(TorchAoSerializationTest):
 
 
 @require_torch_accelerator
-class TorchAoSerializationW8GPUTest(TorchAoSerializationTest):
+class TorchAoSerializationW8AcceleratorTest(TorchAoSerializationTest):
     quant_scheme, quant_scheme_kwargs = "int8_weight_only", {}
     device = f"{torch_device}:0"
 
@@ -554,7 +554,7 @@ class TorchAoSerializationW8GPUTest(TorchAoSerializationTest):
 
 @require_torch_accelerator
 @require_torchao_version_greater_or_equal("0.10.0")
-class TorchAoSerializationFP8GPUTest(TorchAoSerializationTest):
+class TorchAoSerializationFP8AcceleratorTest(TorchAoSerializationTest):
     device = f"{torch_device}:0"
 
     # called only once for all test in this class
