@@ -920,7 +920,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
 
         >>> inputs = processor.apply_chat_template(
         ...     messages,
-        ...     tokenizer=True,
+        ...     tokenize=True,
         ...     return_dict=True,
         ...     return_tensors="pt",
         ...     add_generation_prompt=True
