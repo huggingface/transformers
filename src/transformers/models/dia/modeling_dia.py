@@ -758,12 +758,7 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
             generation_config, use_model_defaults, **kwargs
         )
 
-        # eos stopping criteria
-        _eos = self.config.eos_token_id
-        _pad = self.config.pad_token_id
-        _channel = self.config.decoder_config.num_channels
-        generation_config._eos_token_tensor = torch.tensor([_pad for _ in range(_channel - 1)] + [_eos])
-
+        # encoder part
         _encoder_length = self.config.encoder_config.max_length
         _encoder_pad = 0
         encoder_input_ids: Optional[torch.Tensor] = model_kwargs.get("encoder_input_ids", None)
@@ -776,14 +771,29 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
         if encoder_input_ids.shape[-1] == _encoder_length:
             raise ValueError(f"encoder_input_ids length must be {_encoder_length} for generation")
 
-        encoder_input_ids = torch.cat(
-            [encoder_input_ids, torch.zeros(1, encoder_input_ids.shape[-1], device=self.device)], dim=0
-        )
-
         batch_size = encoder_input_ids.shape[0]
-        model_kwargs["encoder_attention_mask"] = torch.ones(
-            (batch_size, encoder_input_ids.shape[-1]), device=self.device
-        )
+
+        encoder_padding_mask = (encoder_input_ids != _encoder_pad).to(self.device).repeat_interleave(2, dim=0)
+        model_kwargs["encoder_attention_mask"] = (
+            encoder_padding_mask.unsqueeze(2) & encoder_padding_mask.unsqueeze(1)
+        ).unsqueeze(1)
+
+        encoder_uncond_input_ids = torch.zeros_like(encoder_input_ids, dtype=torch.long, device=self.device)
+        encoder_input_ids = torch.stack([encoder_uncond_input_ids, encoder_input_ids], dim=1).view(2 * batch_size, -1)
+
+        model_kwargs["encoder_input_ids"] = encoder_input_ids
+
+        # decoder part
+        decoder_padding_mask = torch.ones((2 * batch_size, 1), dtype=torch.bool, device=self.device)
+        model_kwargs["decoder_attention_mask"] = (
+            decoder_padding_mask.unsqueeze(2) & encoder_padding_mask.unsqueeze(1)
+        ).unsqueeze(1)
+
+        # decoder eos stopping criteria
+        _eos = self.config.eos_token_id
+        _pad = self.config.pad_token_id
+        _channel = self.config.decoder_config.num_channels
+        generation_config._eos_token_tensor = torch.tensor([_pad for _ in range(_channel - 1)] + [_eos])
 
         return generation_config, model_kwargs
 
@@ -833,13 +843,11 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
     def forward(
         self,
         encoder_input_ids: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.LongTensor] = None,
+        encoder_outputs: Optional[BaseModelOutput] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[BaseModelOutput] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_position_ids: Optional[torch.LongTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -850,11 +858,6 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
         Forward method for DiaForConditionalGeneration, following WhisperForConditionalGeneration style.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if labels is not None:
-            if decoder_input_ids is None and decoder_inputs_embeds is None:
-                # No shift_tokens_right in Dia, so just pass labels as decoder_input_ids
-                decoder_input_ids = labels
 
         outputs = self.model(
             encoder_input_ids=encoder_input_ids,
