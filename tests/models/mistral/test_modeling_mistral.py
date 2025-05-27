@@ -21,8 +21,10 @@ from packaging import version
 
 from transformers import AutoTokenizer, MistralConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
+    Expectations,
     backend_empty_cache,
     cleanup,
+    get_device_properties,
     require_bitsandbytes,
     require_flash_attn,
     require_read_token,
@@ -110,15 +112,13 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch_accelerator
 class MistralIntegrationTest(unittest.TestCase):
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
+    # This variable is used to determine which accelerator are we using for our runners (e.g. A10 or T4)
     # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
+    device_properties = None
 
     @classmethod
     def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+        cls.device_properties = get_device_properties()
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -136,19 +136,20 @@ class MistralIntegrationTest(unittest.TestCase):
         EXPECTED_MEAN = torch.tensor([[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
 
-        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
-        #
-        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
+        # ("cuda", 8) for A100/A10, and ("cuda", 7) 7 for T4.
         # considering differences in hardware processing and potential deviations in output.
-        EXPECTED_SLICE = {
-            7: torch.tensor([-5.8828, -5.8633, -0.1042, -4.7266, -5.8828, -5.8789, -5.8789, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -1.0801,  1.7598, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828]),
-            8: torch.tensor([-5.8711, -5.8555, -0.1050, -4.7148, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -1.0781, 1.7568, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711]),
-            9: torch.tensor([-5.8750, -5.8594, -0.1047, -4.7188, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -1.0781,  1.7578, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750]),
-        }  # fmt: skip
-
-        torch.testing.assert_close(
-            out[0, 0, :30], EXPECTED_SLICE[self.cuda_compute_capability_major_version], atol=1e-4, rtol=1e-4
+        # fmt: off
+        EXPECTED_SLICES = Expectations(
+            {
+                ("cuda", 7): torch.tensor([-5.8828, -5.8633, -0.1042, -4.7266, -5.8828, -5.8789, -5.8789, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -1.0801,  1.7598, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828, -5.8828]),
+                ("cuda", 8): torch.tensor([-5.8711, -5.8555, -0.1050, -4.7148, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -1.0781, 1.7568, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711, -5.8711]),
+                ("rocm", 9): torch.tensor([-5.8750, -5.8594, -0.1047, -4.7188, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -1.0781,  1.7578, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750, -5.8750]),
+            }
         )
+        # fmt: on
+        expected_slice = EXPECTED_SLICES.get_expectation()
+
+        torch.testing.assert_close(out[0, 0, :30], expected_slice, atol=1e-4, rtol=1e-4)
 
     @slow
     @require_bitsandbytes
@@ -278,7 +279,7 @@ class MistralIntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.3.0"):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
-        if self.cuda_compute_capability_major_version == 7:
+        if self.device_properties == ("cuda", 7):
             self.skipTest(reason="This test is failing (`torch.compile` fails) on Nvidia T4 GPU.")
 
         NUM_TOKENS_TO_GENERATE = 40

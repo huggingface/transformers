@@ -73,7 +73,10 @@ from transformers.models.auto.modeling_auto import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
+    backend_device_count,
     backend_empty_cache,
+    backend_memory_allocated,
+    backend_torch_accelerator_module,
     get_device_properties,
     hub_retry,
     is_flaky,
@@ -2613,7 +2616,7 @@ class ModelTesterMixin:
         for k in blacklist_non_batched_params:
             inputs_dict.pop(k, None)
 
-        # move input tensors to cuda:O
+        # move input tensors to accelerator O
         for k, v in inputs_dict.items():
             if torch.is_tensor(v):
                 inputs_dict[k] = v.to(0)
@@ -2636,12 +2639,12 @@ class ModelTesterMixin:
 
         # a candidate for testing_utils
         def get_current_gpu_memory_use():
-            """returns a list of cuda memory allocations per GPU in MBs"""
+            """returns a list of VRAM allocations per GPU in MBs"""
 
             per_device_memory = []
-            for id in range(torch.cuda.device_count()):
-                with torch.cuda.device(id):
-                    per_device_memory.append(torch.cuda.memory_allocated() >> 20)
+            for id in range(backend_device_count(torch_device)):
+                with backend_torch_accelerator_module(torch_device).device(id):
+                    per_device_memory.append(backend_memory_allocated(torch_device) >> 20)
 
             return per_device_memory
 
@@ -2657,7 +2660,7 @@ class ModelTesterMixin:
 
             # Put model on device 0 and take a memory snapshot
             model = model_class(config)
-            model.to("cuda:0")
+            model.to(f"{torch_device}:0")
             memory_after_model_load = get_current_gpu_memory_use()
 
             # The memory use on device 0 should be higher than it was initially.
@@ -2717,7 +2720,7 @@ class ModelTesterMixin:
 
             model.parallelize()
 
-            parallel_output = model(**cast_to_device(inputs_dict, "cuda:0"))
+            parallel_output = model(**cast_to_device(inputs_dict, f"{torch_device}:0"))
 
             for value, parallel_value in zip(output, parallel_output):
                 if isinstance(value, torch.Tensor):
@@ -4240,10 +4243,10 @@ class ModelTesterMixin:
                 # add position_ids + fa_kwargs
                 data_collator = DataCollatorWithFlattening(return_tensors="pt", return_flash_attn_kwargs=True)
                 batch = data_collator(features)
-                batch_cuda = {k: t.cuda() if torch.is_tensor(t) else t for k, t in batch.items()}
+                batch_accelerator = {k: t.to(torch_device) if torch.is_tensor(t) else t for k, t in batch.items()}
 
                 res_padded = model(**inputs_dict)
-                res_padfree = model(**batch_cuda)
+                res_padfree = model(**batch_accelerator)
 
                 logits_padded = res_padded.logits[inputs_dict["attention_mask"].bool()]
                 logits_padfree = res_padfree.logits[0]
