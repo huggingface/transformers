@@ -1083,10 +1083,10 @@ class Qwen2_5OmniVisionSdpaAttention(nn.Module):
         q = apply_rotary_pos_emb_vision(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
         k = apply_rotary_pos_emb_vision(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
 
+        q, k, v = (x.transpose(0, 1) for x in (q, k, v))
+
         original_dtype = q.dtype
         device_type = q.device.type if isinstance(q.device.type, str) and q.device.type != "mps" else "cpu"
-
-        q, k, v = (x.transpose(0, 1) for x in (q, k, v))
 
         lengths = [cu_seqlens[i + 1] - cu_seqlens[i] for i in range(len(cu_seqlens) - 1)]
         q_splits = torch.split(q, lengths, dim=1)
