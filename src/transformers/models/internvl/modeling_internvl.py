@@ -675,7 +675,7 @@ class InternVLModel(InternVLPreTrainedModel):
 
         # Project features through multi-modal projector
         vision_features = self.multi_modal_projector(vision_features)
-
+        vision_features = list(vision_features)
         return vision_features
 
     @can_return_tuple

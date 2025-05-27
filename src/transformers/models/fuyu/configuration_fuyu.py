@@ -89,6 +89,8 @@ class FuyuConfig(PretrainedConfig):
             The id of the *beginning-of-sequence* token.
         eos_token_id (`Union[int, List[int]]`, *optional*, defaults to 2):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+        image_token_id (`int`, *optional*, defaults to 71011):
+            The id of the image placeholder token.
         text_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize the `language``[`Aut`].
 
