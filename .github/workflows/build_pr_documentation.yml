@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   build:
-    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@f3f3583caaac988cdf7c30d426a6f5bda4419a99
+    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@bf7555523dc19a4a24906c0a4d2c7d0e6fa3590a
     with:
       commit_sha: ${{ inputs.commit_sha || github.event.pull_request.head.sha }}
       pr_number: ${{ inputs.pr_number || github.event.number }}
