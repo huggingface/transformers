@@ -15,23 +15,20 @@
 # limitations under the License.
 """PyTorch MiniMax model."""
 
-from functools import partial
 from typing import List, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...processing_utils import Unpack
-from ...utils import (
-    logging,
-)
+from ...utils import logging
 from ..mixtral.configuration_mixtral import MixtralConfig
 from ..mixtral.modeling_mixtral import (
     MixtralAttention,
@@ -47,10 +44,6 @@ from ..mixtral.modeling_mixtral import (
 
 
 logger = logging.get_logger(__name__)
-
-
-_CHECKPOINT_FOR_DOC = "MiniMaxAI/MiniMax-Text-01"
-_CONFIG_FOR_DOC = "MiniMaxConfig"
 
 
 class MiniMaxConfig(MixtralConfig):
@@ -382,7 +375,7 @@ class MiniMaxAttention(MixtralAttention):
     pass
 
 
-class MiniMaxDecoderLayer(MixtralDecoderLayer):
+class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
     def __init__(self, config: MiniMaxConfig, layer_idx: int):
         super().__init__(config, layer_idx)
 
@@ -559,32 +552,18 @@ class MiniMaxModel(MixtralModel):
             else:
                 input_attention_mask = causal_mask
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    partial(decoder_layer.__call__, **flash_attn_kwargs),
-                    hidden_states,
-                    position_embeddings,
-                    input_attention_mask,
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    output_router_logits,
-                    use_cache,
-                    cache_position,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    position_embeddings=position_embeddings,
-                    attention_mask=input_attention_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    output_router_logits=output_router_logits,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    **flash_attn_kwargs,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                position_embeddings=position_embeddings,
+                attention_mask=input_attention_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                output_router_logits=output_router_logits,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                **flash_attn_kwargs,
+            )
 
             hidden_states = layer_outputs[0]
 
