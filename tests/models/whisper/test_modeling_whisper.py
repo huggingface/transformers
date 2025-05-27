@@ -546,12 +546,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_generate_with_head_masking(self):
         pass
 
-    @parameterized.expand([("offloaded",)])
-    @pytest.mark.generate
-    @unittest.skip(reason="Whisper doesn't work with offloaded cache implementation yet")
-    def test_offloaded_cache_implementation(self, cache_implementation):
-        pass
-
     @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
@@ -676,7 +670,8 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
 
@@ -2155,7 +2150,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         # task id and lang id prompts should not have timestamp tokens
         self.assertEqual(generate_outputs["sequences"].shape[-1] - 2, generate_outputs["token_timestamps"].shape[-1])
-
         self.assertEqual(len(generate_outputs["sequences"]), num_return_sequences * num_samples)
 
     @slow
