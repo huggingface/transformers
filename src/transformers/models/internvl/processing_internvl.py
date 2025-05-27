@@ -13,18 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from typing import List, Optional, Union
 
 import numpy as np
-
-from transformers.processing_utils import (
-    ImagesKwargs,
-    ProcessingKwargs,
-    ProcessorMixin,
-    Unpack,
-)
-from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
@@ -32,6 +23,14 @@ from ...image_utils import (
     concatenate_list,
     make_flat_list_of_images,
 )
+from ...processing_utils import (
+    ImagesKwargs,
+    MultiModalData,
+    ProcessingKwargs,
+    ProcessorMixin,
+    Unpack,
+)
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...video_utils import VideoInput, VideoMetadata, load_video, make_batched_videos
 
 
@@ -46,6 +45,7 @@ class InternVLProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding_side": "left",
+            "return_mm_token_type_ids": False,
         },
         "images_kwargs": {
             "crop_to_patches": True,
@@ -94,9 +94,12 @@ class InternVLProcessor(ProcessorMixin):
         self.image_seq_length = image_seq_length
         self.start_image_token = tokenizer.start_image_token
         self.end_image_token = tokenizer.end_image_token
+        self.start_image_token_id = tokenizer.start_image_token_id
+        self.end_image_token_id = tokenizer.end_image_token_id
         self.image_token = tokenizer.context_image_token
         self.video_token = tokenizer.video_token
         self.image_token_id = tokenizer.context_image_token_id
+        self.image_ids = [self.image_token_id, self.start_image_token_id, self.end_image_token_id]
 
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template, **kwargs)
 
@@ -261,10 +264,45 @@ class InternVLProcessor(ProcessorMixin):
             image_videos_inputs = {"pixel_values": concatenate_list(image_video_patches)}
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
         return BatchFeature(data={**text_inputs, **image_videos_inputs}, tensor_type=return_tensors)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`List[List[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = InternVLProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_tokens(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            # Add 2 for BOI and EOI tokens
+            num_image_tokens = [2 + (self.image_seq_length * num_patches) for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     def sample_indices_fn(
         self, metadata: VideoMetadata, num_frames: Optional[int] = None, initial_shift: Union[bool, float, int] = True
