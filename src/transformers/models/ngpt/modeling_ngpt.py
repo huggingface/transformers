@@ -42,7 +42,16 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 
-def normalize_vector(x, eps=0.0):
+def normalize_vector(x, eps=1e-8):
+    """
+    Normalize vectors using L2 norm with numerical stability.
+
+    Args:
+        x: Input tensor to normalize
+        eps: Small epsilon value for numerical stability. Default 1e-8 provides
+             good stability for nGPT's multiple normalization operations while
+             remaining compatible with mixed precision training.
+    """
     return x / (x.norm(p=2, dim=-1, keepdim=True) + eps)
 
 
@@ -199,7 +208,7 @@ class NGPTAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -306,11 +315,11 @@ class NGPTDecoderLayer(GradientCheckpointingLayer):
             self.mlp_alpha_init_scaling * torch.ones(config.hidden_size, dtype=torch.float32)
         )
 
-    def residual_update(self, hidden_states, residual, alpha, alpha_init_value, alpha_init_scaling, eps=0.0):
+    def residual_update(self, hidden_states, residual, alpha, alpha_init_value, alpha_init_scaling, eps=1e-8):
         lr = torch.abs(alpha * (alpha_init_value / alpha_init_scaling)).to(hidden_states.dtype)
         A_norm = residual
         B_norm = normalize_vector(hidden_states, eps=eps)
-        return normalize_vector(A_norm + lr * (B_norm - A_norm))
+        return normalize_vector(A_norm + lr * (B_norm - A_norm), eps=eps)
 
     def forward(
         self,
@@ -383,6 +392,14 @@ class NGPTPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, NGPTDecoderLayer):
+            # Initialize the alpha parameters for nGPT to match the __init__ method
+            module.attn_alpha.data.copy_(
+                module.attn_alpha_init_scaling * torch.ones(module.attn_alpha.shape, dtype=torch.float32)
+            )
+            module.mlp_alpha.data.copy_(
+                module.mlp_alpha_init_scaling * torch.ones(module.mlp_alpha.shape, dtype=torch.float32)
+            )
 
 
 @auto_docstring
@@ -667,6 +684,71 @@ class NGPTForCausalLM(NGPTPreTrainedModel, GenerationMixin):
 
     def get_decoder(self):
         return self.model
+
+    def resize_token_embeddings(
+        self,
+        new_num_tokens: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
+        mean_resizing: bool = True,
+    ) -> nn.Embedding:
+        """
+        Resizes input token embeddings matrix of the model if `new_num_tokens != config.vocab_size`.
+
+        This method extends the base implementation to also resize the nGPT-specific `sz` parameter
+        which is used for output scaling.
+
+        Arguments:
+            new_num_tokens (`int`, *optional*):
+                The new number of tokens in the embedding matrix. Increasing the size will add newly initialized
+                vectors at the end. Reducing the size will remove vectors from the end. If not provided or `None`, just
+                returns a pointer to the input tokens `torch.nn.Embedding` module of the model without doing anything.
+            pad_to_multiple_of (`int`, *optional*):
+                If set will pad the embedding matrix to a multiple of the provided value.If `new_num_tokens` is set to
+                `None` will just pad the embedding to a multiple of `pad_to_multiple_of`.
+
+                This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
+                `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128. For more
+                details about this, or help on choosing the correct value for resizing, refer to this guide:
+                https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc
+            mean_resizing (`bool`):
+                Whether to initialize the added embeddings from a multivariate normal distribution that has old embeddings' mean and
+                covariance or to initialize them with a normal distribution that has a mean of zero and std equals `config.initializer_range`.
+
+                Setting `mean_resizing` to `True` is useful when increasing the size of the embeddings of causal language models,
+                where the generated tokens' probabilities won't be affected by the added embeddings because initializing the new embeddings with the
+                old embeddings' mean will reduce the kl-divergence between the next token probability before and after adding the new embeddings.
+                Refer to this article for more information: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
+
+        Return:
+            `torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
+        """
+        # Call the parent method to handle standard embedding resizing
+        model_embeds = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
+
+        if new_num_tokens is None and pad_to_multiple_of is None:
+            return model_embeds
+
+        # Get the actual new vocabulary size after resizing
+        new_vocab_size = model_embeds.weight.shape[0]
+
+        # Resize the nGPT-specific sz parameter
+        old_sz = self.sz
+        new_sz = nn.Linear(1, new_vocab_size, bias=False)
+
+        # Initialize the new sz parameter with the same scaling as the original
+        torch.nn.init.constant_(new_sz.weight, self.sz_init_scaling)
+
+        # Copy the old weights to the new sz parameter (up to the minimum size)
+        min_size = min(old_sz.weight.shape[0], new_sz.weight.shape[0])
+        new_sz.weight.data[:min_size, :] = old_sz.weight.data[:min_size, :]
+
+        # Move to the same device and dtype as the old sz parameter
+        new_sz = new_sz.to(device=old_sz.weight.device, dtype=old_sz.weight.dtype)
+
+        # Replace the old sz parameter
+        self.sz = new_sz
+
+        return model_embeds
 
     @can_return_tuple
     @auto_docstring
