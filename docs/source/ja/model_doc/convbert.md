@@ -53,7 +53,7 @@ ConvBERT トレーニングのヒントは BERT のヒントと似ています�
 
 ## Resources
 
-- [テキスト分類タスクガイド](../tasks/sequence_classification)
+- [テキスト分類タスクガイド(英語版)](../../en/tasks/sequence_classification)
 - [トークン分類タスクガイド](../tasks/token_classification)
 - [質問回答タスク ガイド](../tasks/question_answering)
 - [マスクされた言語モデリング タスク ガイド](../tasks/masked_lang_modeling)

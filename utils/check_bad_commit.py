@@ -39,13 +39,16 @@ import os
 import subprocess
 
 result = subprocess.run(
-    ["python3", "-m", "pytest", "-v", f"{target_test}"],
+    ["python3", "-m", "pytest", "-v", "-rfEp", f"{target_test}"],
     capture_output = True,
     text=True,
 )
 print(result.stdout)
 
-if len(result.stderr) > 0:
+if f"PASSED {target_test}" in result.stdout:
+    print("test passed")
+    exit(0)
+elif len(result.stderr) > 0:
     if "ERROR: file or directory not found: " in result.stderr:
         print("test file or directory not found in this commit")
         exit(0)
@@ -144,7 +147,8 @@ def get_commit_info(commit):
         url = f"https://api.github.com/repos/huggingface/transformers/pulls/{pr_number}"
         pr_for_commit = requests.get(url).json()
         author = pr_for_commit["user"]["login"]
-        merged_author = pr_for_commit["merged_by"]["login"]
+        if pr_for_commit["merged_by"] is not None:
+            merged_author = pr_for_commit["merged_by"]["login"]
 
     if author is None:
         url = f"https://api.github.com/repos/huggingface/transformers/commits/{commit}"
