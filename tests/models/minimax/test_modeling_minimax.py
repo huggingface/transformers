@@ -52,9 +52,9 @@ class MiniMaxModelTester(CausalLMModelTester):
         token_class = MiniMaxForTokenClassification
         question_answering_class = MiniMaxForQuestionAnswering
 
-    def __init__(self, parent, attn_type_list=[1, 0], block_size=3):
+    def __init__(self, parent, layer_type_list=[1, 0], block_size=3):
         super().__init__(parent)
-        self.attn_type_list = attn_type_list
+        self.layer_type_list = layer_type_list
         self.block_size = block_size
 
 
@@ -166,7 +166,7 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
                 prompt_length + generated_length,
             )
             for layer_idx, layer_attention in enumerate(iter_attentions):
-                if config.attn_type_list[layer_idx] == 1:
+                if config.layer_type_list[layer_idx] == 1:
                     self.assertEqual(layer_attention.shape, expected_shape)
 
     def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
@@ -188,7 +188,7 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
         )
 
         for layer_idx in range(config.num_hidden_layers):
-            if config.attn_type_list[layer_idx] == 0:
+            if config.layer_type_list[layer_idx] == 0:
                 self.assertEqual(decoder_past_key_values[layer_idx][0].shape, linear_cache_expected_shape)
             else:
                 self.assertEqual(decoder_past_key_values[layer_idx][0].shape, key_value_cache_expected_shape)
