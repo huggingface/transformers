@@ -28,6 +28,7 @@ from typing import Optional
 import yaml
 from huggingface_hub.utils import disable_progress_bars
 
+from transformers import AutoTokenizer, GenerationConfig, TextIteratorStreamer, logging
 from transformers.utils import is_rich_available, is_torch_available
 
 from . import BaseTransformersCLICommand
@@ -44,14 +45,7 @@ if is_rich_available():
 if is_torch_available():
     import torch
 
-    from transformers import (
-        AutoModelForCausalLM,
-        AutoTokenizer,
-        BitsAndBytesConfig,
-        GenerationConfig,
-        TextIteratorStreamer,
-        logging,
-    )
+    from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
 
 ALLOWED_KEY_CHARS = set(string.ascii_letters + string.whitespace)
@@ -558,7 +552,7 @@ class ChatCommand(BaseTransformersCLICommand):
 
         return quantization_config
 
-    def load_model_and_tokenizer(self, args: ChatArguments) -> tuple[AutoModelForCausalLM, AutoTokenizer]:
+    def load_model_and_tokenizer(self, args: ChatArguments) -> tuple["AutoModelForCausalLM", AutoTokenizer]:
         tokenizer = AutoTokenizer.from_pretrained(
             args.model_name_or_path_positional,
             revision=args.model_revision,
