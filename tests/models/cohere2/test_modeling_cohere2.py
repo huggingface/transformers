@@ -130,7 +130,7 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
 
 
 @slow
-# @require_read_token
+@require_read_token
 @require_torch_large_accelerator
 class Cohere2IntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
