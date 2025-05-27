@@ -37,119 +37,45 @@ The examples below demonstrate how to classify an image with [`Pipeline`] or the
 <hfoption id="Pipeline">
 
 ```python
-import requests
-from PIL import Image
+import torch
 from transformers import pipeline
 
-# Use a pipeline as a high-level helper
-pipe = pipeline("image-classification", model="google/mobilenet_v2_1.4_224") # Example checkpoint
-
-# Load image from the web
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image = Image.open(requests.get(url, stream=True).raw)
-
-# Pass image to the pipeline
-results = pipe(image)
-print(results)
-# Example output: [{'label': 'tabby, tabby cat', 'score': 0.918...}, ...]
-```
-
-</hfoption>
-<hfoption id="AutoModel">
-
-```python
-import requests
-import torch
-from PIL import Image
-from transformers import AutoImageProcessor, AutoModelForImageClassification
-
-# Load processor and model
-processor = AutoImageProcessor.from_pretrained("google/mobilenet_v2_1.4_224") # Example checkpoint
-model = AutoModelForImageClassification.from_pretrained("google/mobilenet_v2_1.4_224")
-
-# Load image from the web
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image = Image.open(requests.get(url, stream=True).raw)
-
-# Preprocess image
-inputs = processor(images=image, return_tensors="pt")
-
-# Perform inference
-with torch.no_grad():
-    outputs = model(**inputs)
-    logits = outputs.logits
-
-# Post-process to get labels
-predicted_label_id = logits.argmax(-1).item()
-predicted_label = model.config.id2label[predicted_label_id]
-print(predicted_label)
-# Example output: tabby, tabby cat
-```
-
-</hfoption>
-</hfoptions>
-
-**Semantic Segmentation**
-
-<hfoptions id="usage-sem-seg">
-<hfoption id="Pipeline">
-
-```python
-import requests
-from PIL import Image
-from transformers import pipeline
-
-# Use a pipeline as a high-level helper
-pipe = pipeline("image-segmentation", model="google/deeplabv3_mobilenet_v2_1.0_513") # Example checkpoint
-
-# Load image from the web
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image = Image.open(requests.get(url, stream=True).raw)
-
-# Pass image to the pipeline
-results = pipe(image)
-# `results` is a list of masks, one per detected class
-# Example showing one mask: print(results[0]['mask'])
-# Example output: <PIL.Image.Image image mode=L size=640x480 at 0x...>
-```
-
-</hfoption>
-<hfoption id="AutoModel">
-
-```python
-import requests
-import torch
-from PIL import Image
-from transformers import AutoImageProcessor, AutoModelForSemanticSegmentation
-
-# Load processor and model
-processor = AutoImageProcessor.from_pretrained("google/deeplabv3_mobilenet_v2_1.0_513") # Example checkpoint
-model = AutoModelForSemanticSegmentation.from_pretrained("google/deeplabv3_mobilenet_v2_1.0_513")
-
-# Load image from the web
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image = Image.open(requests.get(url, stream=True).raw)
-
-# Preprocess image
-inputs = processor(images=image, return_tensors="pt")
-
-# Perform inference
-with torch.no_grad():
-    outputs = model(**inputs)
-    logits = outputs.logits # shape (batch_size, num_labels, height, width)
-
-# Post-process to get segmentation map
-# Upsample logits to original image size
-upsampled_logits = torch.nn.functional.interpolate(
-    logits,
-    size=image.size[::-1], # (height, width)
-    mode='bilinear',
-    align_corners=False
+pipeline = pipeline(
+    task="image-classification",
+    model="google/mobilenet_v2_1.4_224",
+    torch_dtype=torch.float16,
+    device=0
 )
-# Get predicted segmentation map
-pred_seg = upsampled_logits.argmax(dim=1)[0]
-print(pred_seg.shape)
-# Example output: torch.Size([480, 640])
+pipeline(images="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+import torch
+import requests
+from PIL import Image
+from transformers import AutoModelForImageClassification, AutoImageProcessor
+
+image_processor = AutoImageProcessor.from_pretrained(
+    "google/mobilenet_v2_1.4_224",
+)
+model = AutoModelForImageClassification.from_pretrained(
+    "google/mobilenet_v2_1.4_224",
+)
+
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+inputs = image_processor(image, return_tensors="pt")
+
+with torch.no_grad():
+  logits = model(**inputs).logits
+predicted_class_id = logits.argmax(dim=-1).item()
+
+class_labels = model.config.id2label
+predicted_class_label = class_labels[predicted_class_id]
+print(f"The predicted class label is: {predicted_class_label}")
 ```
 
 </hfoption>
@@ -175,20 +101,6 @@ print(pred_seg.shape)
     -   The HF implementation uses global average pooling, not the optional fixed 7x7 average pooling from the original paper.
     -   Extracting specific intermediate hidden states (e.g., from expansion layers 10/13) requires `output_hidden_states=True` (returning all states).
     -   For segmentation models, the final convolution layer of the backbone is computed even though the DeepLabV3+ head doesn't use it.
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with MobileNetV2.
-
-<PipelineTag pipeline="image-classification"/> <PipelineTag pipeline="image-segmentation"/>
-
--   **Image Classification:**
-    -   [`MobileNetV2ForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
-    -   See also: [Image classification task guide](../tasks/image_classification)
--   **Semantic Segmentation:**
-    -   See also: [Semantic segmentation task guide](../tasks/semantic_segmentation)
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 ## MobileNetV2Config
 
