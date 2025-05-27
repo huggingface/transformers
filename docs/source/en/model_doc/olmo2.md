@@ -34,7 +34,7 @@ You can find all the original OLMo2 checkpoints under the [OLMo2](https://huggin
 > [!TIP]
 > Click on the OLMo2 models in the right sidebar for more examples of how to apply OLMo2 to different language tasks.
 
-The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`] and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
