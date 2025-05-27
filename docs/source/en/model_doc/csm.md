@@ -356,6 +356,10 @@ The original code can be found [here](https://github.com/SesameAILabs/csm).
 
 ## CsmProcessor
 
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/eustlb/documentation-images/resolve/main/fig1.jpg"/>
+</div>
+
 [[autodoc]] CsmProcessor
     - __call__
 
