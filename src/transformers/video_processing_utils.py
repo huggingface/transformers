@@ -36,8 +36,6 @@ from .processing_utils import Unpack, VideosKwargs
 from .utils import (
     VIDEO_PROCESSOR_NAME,
     TensorType,
-    add_model_info_to_auto_map,
-    add_model_info_to_custom_pipelines,
     add_start_docstrings,
     cached_file,
     copy_func,
@@ -252,7 +250,10 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         videos: VideoInput,
         **kwargs: Unpack[VideosKwargs],
     ) -> BatchFeature:
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
+        validate_kwargs(
+            captured_kwargs=kwargs.keys(),
+            valid_processor_keys=list(self.valid_kwargs.__annotations__.keys()) + ["return_tensors"],
+        )
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
         for kwarg_name in self.valid_kwargs.__annotations__:
@@ -629,16 +630,6 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             logger.info(
                 f"loading configuration file {video_processor_file} from cache at {resolved_video_processor_file}"
             )
-
-        if not is_local:
-            if "auto_map" in video_processor_dict:
-                video_processor_dict["auto_map"] = add_model_info_to_auto_map(
-                    video_processor_dict["auto_map"], pretrained_model_name_or_path
-                )
-            if "custom_pipelines" in video_processor_dict:
-                video_processor_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
-                    video_processor_dict["custom_pipelines"], pretrained_model_name_or_path
-                )
         return video_processor_dict, kwargs
 
     @classmethod
