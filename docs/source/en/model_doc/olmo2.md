@@ -14,27 +14,119 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# OLMo2
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-## Overview
+# OLMo2
+[OLMo2](https://huggingface.co/papers/2501.00656) is the next generation of fully open language models by AllenAI.
+It is the successor to [OLMo](https://huggingface.co/docs/transformers/main/en/model_doc/olmo), and improves upon the original family of models
+by changing the architecture and training recipes of the original models. This includes using 
+RMSNorm rather than nonparametric LayerNorm, normalizing the outputs of the attention/feedforward layers rather
+than the inputs, and using a new, specialized data mix called Dolmino Mix 1124 for the mid-training stage.
 
-The OLMo2 model is the successor of the OLMo model, which was proposed in
-[OLMo: Accelerating the Science of Language Models](https://arxiv.org/abs/2402.00838).
+You can find all the original OLMo2 checkpoints under the [OLMo2](https://huggingface.co/collections/allenai/olmo-2-674117b93ab84e98afc72edc) collection.
 
- The architectural changes from the original OLMo model to this model are:
+> [!TIP]
+> Click on the OLMo2 models in the right sidebar for more examples of how to apply OLMo2 to different language tasks.
 
-- RMSNorm is used instead of standard layer norm.
-- Norm is applied to attention queries and keys.
-- Norm is applied after attention/feedforward layers rather than before.
+The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
-This model was contributed by [shanearora](https://huggingface.co/shanearora).
-The original code can be found [here](https://github.com/allenai/OLMo/tree/main/olmo).
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```py
+import torch
+from transformers import pipeline
+
+pipe = pipeline(
+    task="text-generation",
+    model="allenai/OLMo-2-0425-1B",
+    torch_dtype=torch.float16,
+    device=0,
+)
+    
+result = pipe("Plants create energy through a process known as")
+print(result)
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained(
+    "allenai/OLMo-2-0425-1B"
+)
+
+model = AutoModelForCausalLM.from_pretrained(
+    "allenai/OLMo-2-0425-1B",
+    torch_dtype=torch.float16,
+    device_map="auto",
+    attn_implementation="sdpa"
+)
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
+
+output = model.generate(**input_ids, max_length=50)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+</hfoption>
+<hfoption id="transformers-cli">
+
+```bash
+echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model allenai/OLMo-2-0425-1B --device 0
+```
+
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [torchao](../quantization/torchao) to only quantize the weights to 4-bits.
+```py
+
+#pip install torchao
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+
+torchao_config = TorchAoConfig(
+    "int4_weight_only",
+    group_size=128
+)
+
+tokenizer = AutoTokenizer.from_pretrained(
+    "allenai/OLMo-2-0425-1B"
+)
+
+model = AutoModelForCausalLM.from_pretrained(
+    "allenai/OLMo-2-0425-1B",
+    quantization_config=torchao_config,
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+)
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
+
+output = model.generate(**input_ids, max_length=50)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+
+```
+
+
+## Notes
+
+- OLMo2 requires Transformers v4.48 or higher.
+- Specific model revisions can be loaded with HuggingFace by adding the `revision` argument. For pretraining, the naming convention is `stage1-stepXXX-tokensYYYB`, and for checkpoints with ingredients of the soup, the naming convention is `stage2-ingredientN-stepXXX-tokensYYYB`.
+
+```py
+model = AutoModelForCausalLM.from_pretrained("allenai/OLMo-2-0425-1B", revision="stage1-step140000-tokens294B")
+```
 
 
 ## Olmo2Config
