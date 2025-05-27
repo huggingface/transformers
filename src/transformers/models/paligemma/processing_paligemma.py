@@ -310,7 +310,8 @@ class PaliGemmaProcessor(ProcessorMixin):
         return_data = {**inputs, "pixel_values": pixel_values}
 
         if return_token_type_ids:
-            labels = inputs["input_ids"].masked_fill(inputs["token_type_ids"] == 0, -100)
+            labels = np.array(inputs["input_ids"])
+            labels[np.array(inputs["token_type_ids"]) == 0] = -100
             return_data.update({"labels": labels})
         return BatchFeature(data=return_data, tensor_type=return_tensors)
 
