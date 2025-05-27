@@ -46,14 +46,6 @@ if is_vision_available():
 
 
 class ViTModelTester:
-
-
-
-
-
-
-
-
     def __init__(
         self,
         parent,
@@ -103,9 +95,6 @@ class ViTModelTester:
         self.mask_ratio = mask_ratio
         self.num_masks = int(mask_ratio * self.seq_length)
         self.mask_length = num_patches
-
-
-
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
