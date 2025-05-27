@@ -16,6 +16,7 @@
 import json
 import os
 import platform
+import re
 import string
 import time
 import warnings
@@ -25,8 +26,9 @@ from threading import Thread
 from typing import Optional
 
 import yaml
+from huggingface_hub.utils import disable_progress_bars
 
-from transformers import AutoTokenizer, GenerationConfig, TextIteratorStreamer
+from transformers import AutoTokenizer, GenerationConfig, TextIteratorStreamer, logging
 from transformers.utils import is_rich_available, is_torch_available
 
 from . import BaseTransformersCLICommand
@@ -63,6 +65,7 @@ DEFAULT_EXAMPLES = {
     "numbers": {"text": "Count to 10 but skip every number ending with an 'e'"},
     "birds": {"text": "Why aren't birds real?"},
     "socks": {"text": "Why is it important to eat socks after meditating?"},
+    "numbers2": {"text": "Which number is larger, 9.9 or 9.11?"},
 }
 
 # Printed at the start of a chat session
@@ -71,7 +74,7 @@ HELP_STRING_MINIMAL = """
 **TRANSFORMERS CHAT INTERFACE**
 
 Chat interface to try out a model. Besides chatting with the model, here are some basic commands:
-- **!help**: shows all available commands
+- **!help**: shows all available commands (set generation settings, save chat, etc.)
 - **!status**: shows the current status of the model and generation settings
 - **!clear**: clears the current conversation and starts a new one
 - **!exit**: closes the interface
@@ -135,6 +138,9 @@ class RichInterface:
             for i, outputs in enumerate(output_stream):
                 if not outputs or i == 0:
                     continue
+                # Escapes single words encased in <>, e.g. <think> -> \<think\>, for proper rendering in Markdown.
+                # It only escapes single words that may have `_`, optionally following a `/` (e.g. </think>)
+                outputs = re.sub(r"<(/*)(\w*)>", r"\<\1\2\>", outputs)
                 text += outputs
                 # Render the accumulated text as Markdown
                 # NOTE: this is a workaround for the rendering "unstandard markdown"
@@ -219,6 +225,7 @@ class ChatArguments:
     system_prompt: Optional[str] = field(default=None, metadata={"help": "System prompt."})
     save_folder: str = field(default="./chat_history/", metadata={"help": "Folder to save chat history."})
     examples_path: Optional[str] = field(default=None, metadata={"help": "Path to a yaml file with examples."})
+    verbose: bool = field(default=False, metadata={"help": "Whether to show runtime warnings in the chat interface."})
 
     # Generation settings
     generation_config: Optional[str] = field(
@@ -426,6 +433,9 @@ class ChatCommand(BaseTransformersCLICommand):
 
         # 2. b. strings should be quoted
         def is_number(s: str) -> bool:
+            # handle negative numbers
+            if s.startswith("-"):
+                s = s[1:]
             return s.replace(".", "", 1).isdigit()
 
         generate_flags_as_dict = {k: f'"{v}"' if not is_number(v) else v for k, v in generate_flags_as_dict.items()}
@@ -583,6 +593,7 @@ class ChatCommand(BaseTransformersCLICommand):
         Handles all user commands except for `!exit`. May update the chat history (e.g. reset it) or the
         generation config (e.g. set a new flag).
         """
+        valid_command = True
 
         if user_input == "!clear":
             chat = self.clear_chat_history(args.system_prompt)
@@ -644,10 +655,11 @@ class ChatCommand(BaseTransformersCLICommand):
             )
 
         else:
+            valid_command = False
             interface.print_color(text=f"'{user_input}' is not a valid command. Showing help message.", color="red")
             interface.print_help()
 
-        return chat, generation_config, model_kwargs
+        return chat, valid_command, generation_config, model_kwargs
 
     # -----------------------------------------------------------------------------------------------------------------
     # Main logic
@@ -673,6 +685,11 @@ class ChatCommand(BaseTransformersCLICommand):
         generation_streamer = TextIteratorStreamer(tokenizer, skip_special_tokens=True, skip_prompt=True)
         generation_config, model_kwargs = self.get_generation_parameterization(args, tokenizer)
 
+        # if not verbose -> disable warnings, progress bars, etc in the chat interface
+        if not args.verbose:
+            logging.set_verbosity_error()
+            disable_progress_bars()
+
         interface = RichInterface(model_name=args.model_name_or_path_positional, user_name=user)
         interface.clear()
         chat = self.clear_chat_history(args.system_prompt)
@@ -689,7 +706,7 @@ class ChatCommand(BaseTransformersCLICommand):
                     if user_input == "!exit":
                         break
                     else:
-                        chat, generation_config, model_kwargs = self.handle_non_exit_user_commands(
+                        chat, valid_command, generation_config, model_kwargs = self.handle_non_exit_user_commands(
                             user_input=user_input,
                             args=args,
                             interface=interface,
@@ -699,7 +716,7 @@ class ChatCommand(BaseTransformersCLICommand):
                             chat=chat,
                         )
                     # `!example` sends a user message to the model
-                    if not user_input.startswith("!example"):
+                    if not valid_command or not user_input.startswith("!example"):
                         continue
                 else:
                     chat.append({"role": "user", "content": user_input})
