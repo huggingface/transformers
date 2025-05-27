@@ -223,9 +223,16 @@ def extract_adapters_data(input_dir: str, output_dir: str):
         for k, v in original_state_dict.items():
             if "lora" in k:
                 if "speech" in k:
-                    speech_lora[k.replace("speech.", "")] = v
+                    new_key_name = k.replace("speech.", "")
+                    new_key_name = f"base_model.model.{new_key_name}"
+
+                    speech_lora[new_key_name] = v
+
                 elif "vision" in k:
-                    vision_lora[k.replace("vision.", "")] = v
+                    new_key_name = k.replace("vision.", "")
+                    new_key_name = f"base_model.model.{new_key_name}"
+
+                    vision_lora[new_key_name] = v
 
     # Create and save the lora configs
     speech_lora_config = LoraConfig(
