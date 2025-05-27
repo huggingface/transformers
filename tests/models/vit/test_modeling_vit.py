@@ -45,7 +45,20 @@ if is_vision_available():
     from transformers import ViTImageProcessor
 
 
+
+
+
+
 class ViTModelTester:
+
+
+
+
+
+
+
+
+
     def __init__(
         self,
         parent,
