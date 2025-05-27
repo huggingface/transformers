@@ -175,35 +175,6 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
         self._src_lang = new_src_lang
         self.set_src_lang_special_tokens(self._src_lang)
 
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. The special tokens depend on calling set_lang.
-
-        An NLLB sequence has the following format, where `X` represents the sequence:
-
-        - `input_ids` (for encoder) `X [eos, src_lang_code]`
-        - `decoder_input_ids`: (for decoder) `X [eos, tgt_lang_code]`
-
-        BOS is never used. Pairs of sequences are not the expected use case, but they will be handled without a
-        separator.
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        if token_ids_1 is None:
-            return self.prefix_tokens + token_ids_0 + self.suffix_tokens
-        # We don't expect to process pairs, but leave the pair logic for API consistency
-        return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
-
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:

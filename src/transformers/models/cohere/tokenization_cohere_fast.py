@@ -496,17 +496,5 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-    # TODO ArthurZ let's rely on the template processor instead, refactor all fast tokenizers
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-        bos_token_id = [self.bos_token_id] if self.add_bos_token else []
-        eos_token_id = [self.eos_token_id] if self.add_eos_token else []
-
-        output = bos_token_id + token_ids_0 + eos_token_id
-
-        if token_ids_1 is not None:
-            output = output + bos_token_id + token_ids_1 + eos_token_id
-
-        return output
-
 
 __all__ = ["CohereTokenizerFast"]

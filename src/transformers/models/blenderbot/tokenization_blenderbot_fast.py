@@ -264,21 +264,5 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
-    def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None):
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A Blenderbot sequence has the following format:
-        - single sequence: ` X </s>`
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs to which the special tokens will be added
-            token_ids_1 (`List[int]`, *optional*):
-                Will be ignored
-        Returns:
-            `List[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        return token_ids_0 + [self.eos_token_id]
-
 
 __all__ = ["BlenderbotTokenizerFast"]
