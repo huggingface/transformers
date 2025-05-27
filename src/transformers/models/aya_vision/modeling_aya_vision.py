@@ -270,6 +270,8 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
                 for height, width in kwargs["image_sizes"]
             ]
             image_features = torch.split(image_features.squeeze(0), split_sizes)
+        else:
+            image_features = list(image_features)
         return image_features
 
     @can_return_tuple
@@ -319,6 +321,7 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_sizes=image_sizes,
             )
+            image_features = torch.cat(image_features, dim=0)
 
             if input_ids is None:
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(

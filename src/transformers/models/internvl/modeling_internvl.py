@@ -725,6 +725,7 @@ class InternVLModel(InternVLPreTrainedModel):
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 image_sizes=image_sizes,
             )
+            image_features = torch.cat(image_features, dim=0)
 
             if input_ids is None:
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
