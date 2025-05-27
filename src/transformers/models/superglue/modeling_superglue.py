@@ -20,18 +20,15 @@ from typing import Optional, Tuple, Union
 import torch
 from torch import nn
 
-from transformers import PreTrainedModel, add_start_docstrings
+from transformers import PreTrainedModel
 from transformers.models.superglue.configuration_superglue import SuperGlueConfig
 
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import ModelOutput, add_start_docstrings_to_model_forward, logging
+from ...utils import ModelOutput, auto_docstring, logging
 from ..auto import AutoModelForKeypointDetection
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC_ = "SuperGlueConfig"
-_CHECKPOINT_FOR_DOC_ = "magic-leap-community/superglue_indoor"
 
 
 def concat_pairs(tensor_tuple0: Tuple[torch.Tensor], tensor_tuple1: Tuple[torch.Tensor]) -> Tuple[torch.Tensor]:
@@ -544,12 +541,8 @@ class SuperGlueFinalProjection(nn.Module):
         return self.final_proj(descriptors)
 
 
+@auto_docstring
 class SuperGluePreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = SuperGlueConfig
     base_model_prefix = "superglue"
     main_input_name = "pixel_values"
@@ -569,35 +562,10 @@ class SuperGluePreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.linear.bias, 0.0)
 
 
-SUPERGLUE_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`SuperGlueConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+@auto_docstring(
+    custom_intro="""
+    SuperGlue model taking images as inputs and outputting the matching of them.
     """
-
-SUPERGLUE_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`SuperGlueImageProcessor`]. See
-            [`SuperGlueImageProcessor.__call__`] for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors. See `attentions` under returned tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "SuperGlue model taking images as inputs and outputting the matching of them.",
-    SUPERGLUE_START_DOCSTRING,
 )
 class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
     """SuperGlue feature matching middle-end
@@ -776,7 +744,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
             all_attentions,
         )
 
-    @add_start_docstrings_to_model_forward(SUPERGLUE_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -785,7 +753,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, KeypointMatchingOutput]:
-        """
+        r"""
         Examples:
 
         ```python

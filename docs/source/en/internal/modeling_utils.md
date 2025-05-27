@@ -29,6 +29,11 @@ Most of those are only useful if you are studying the code of the models in the 
 [[autodoc]] AttentionInterface
     - register
 
+## Attention Mask Functions
+
+[[autodoc]] AttentionMaskInterface
+    - register
+
 ## Rotary Position Embedding Functions
 
 [[autodoc]] dynamic_rope_update

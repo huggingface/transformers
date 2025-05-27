@@ -17,13 +17,10 @@
 import warnings
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
-from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BaseImageProcessorFast,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_transforms import center_to_corners_format
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
-from ...utils import TensorType, add_start_docstrings, is_torch_available, logging
+from ...utils import TensorType, auto_docstring, is_torch_available, logging
 
 
 if TYPE_CHECKING:
@@ -39,10 +36,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-@add_start_docstrings(
-    "Constructs a fast OwlViT image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
+@auto_docstring
 class OwlViTImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN

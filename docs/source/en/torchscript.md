@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # TorchScript
 
-[TorchScript](https://pytorch.org/docs/stable/jit.html) serializes PyTorch models into programs that can be executed in non-Python processes. This is especially advantageous in production environments where Python may the most performant choice.
+[TorchScript](https://pytorch.org/docs/stable/jit.html) serializes PyTorch models into programs that can be executed in non-Python processes. This is especially advantageous in production environments where Python may not be the most performant choice.
 
 Transformers can export a model to TorchScript by:
 

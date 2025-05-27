@@ -157,5 +157,8 @@
       title: 通用工具
     - local: internal/time_series_utils
       title: 时序数据工具
+    - sections:
+      - local: model_doc/bert
+        title: BERT
     title: 内部辅助工具
   title: 应用程序接口 (API)

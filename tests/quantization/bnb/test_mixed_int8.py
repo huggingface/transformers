@@ -31,6 +31,8 @@ from transformers import (
 from transformers.models.opt.modeling_opt import OPTAttention
 from transformers.testing_utils import (
     apply_skip_if_not_implemented,
+    backend_empty_cache,
+    backend_torch_accelerator_module,
     is_accelerate_available,
     is_bitsandbytes_available,
     is_torch_available,
@@ -137,25 +139,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         del self.model_8bit
 
         gc.collect()
-        torch.cuda.empty_cache()
-
-    def test_get_keys_to_not_convert_trust_remote_code(self):
-        r"""
-        Test the `get_keys_to_not_convert` function with `trust_remote_code` models.
-        """
-        from accelerate import init_empty_weights
-
-        from transformers.integrations.bitsandbytes import get_keys_to_not_convert
-
-        model_id = "mosaicml/mpt-7b"
-        config = AutoConfig.from_pretrained(
-            model_id, trust_remote_code=True, revision="ada218f9a93b5f1c6dce48a4cc9ff01fcba431e7"
-        )
-        with init_empty_weights():
-            model = AutoModelForCausalLM.from_config(
-                config, trust_remote_code=True, code_revision="ada218f9a93b5f1c6dce48a4cc9ff01fcba431e7"
-            )
-        self.assertEqual(get_keys_to_not_convert(model), ["transformer.wte"])
+        backend_empty_cache(torch_device)
 
     def test_get_keys_to_not_convert(self):
         r"""
@@ -502,7 +486,7 @@ class MixedInt8T5Test(unittest.TestCase):
         avoid unexpected behaviors. Please see: https://discuss.pytorch.org/t/how-can-we-release-gpu-memory-cache/14530/27
         """
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     def test_inference_without_keep_in_fp32(self):
         r"""
@@ -617,7 +601,7 @@ class MixedInt8ModelClassesTest(BaseMixedInt8Test):
         del self.seq_to_seq_model
 
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     def test_correct_head_class(self):
         r"""
@@ -649,7 +633,7 @@ class MixedInt8TestPipeline(BaseMixedInt8Test):
             del self.pipe
 
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     def test_pipeline(self):
         r"""
@@ -890,10 +874,10 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
         model = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True)
         model.train()
 
-        if torch.cuda.is_available():
-            self.assertEqual(set(model.hf_device_map.values()), {torch.cuda.current_device()})
-        elif torch.xpu.is_available():
-            self.assertEqual(set(model.hf_device_map.values()), {f"xpu:{torch.xpu.current_device()}"})
+        if torch_device in ["cuda", "xpu"]:
+            self.assertEqual(
+                set(model.hf_device_map.values()), {backend_torch_accelerator_module(torch_device).current_device()}
+            )
         else:
             self.assertTrue(all(param.device.type == "cpu" for param in model.parameters()))
 

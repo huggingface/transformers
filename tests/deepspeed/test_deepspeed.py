@@ -1074,10 +1074,10 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
             def _convert_to_features(example_batch):
                 input_encodings = tokenizer.batch_encode_plus(
-                    example_batch["input_text"], pad_to_max_length=True, max_length=512, truncation=True
+                    example_batch["input_text"], padding="max_length", max_length=512, truncation=True
                 )
                 target_encodings = tokenizer.batch_encode_plus(
-                    example_batch["target_text"], pad_to_max_length=True, max_length=16, truncation=True
+                    example_batch["target_text"], padding="max_length", max_length=16, truncation=True
                 )
 
                 encodings = {

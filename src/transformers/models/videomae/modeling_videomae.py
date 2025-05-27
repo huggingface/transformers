@@ -31,19 +31,14 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     logging,
-    replace_return_docstrings,
 )
 from ...utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from .configuration_videomae import VideoMAEConfig
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "VideoMAEConfig"
-_CHECKPOINT_FOR_DOC = "MCG-NJU/videomae-base"
 
 
 @dataclass
@@ -488,12 +483,8 @@ class VideoMAEEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class VideoMAEPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = VideoMAEConfig
     base_model_prefix = "videomae"
     main_input_name = "pixel_values"
@@ -514,44 +505,7 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-VIDEOMAE_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`VideoMAEConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-VIDEOMAE_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`VideoMAEImageProcessor.__call__`] for details.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare VideoMAE Model transformer outputting raw hidden-states without any specific head on top.",
-    VIDEOMAE_START_DOCSTRING,
-)
+@auto_docstring
 class VideoMAEModel(VideoMAEPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -579,8 +533,7 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(VIDEOMAE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -595,8 +548,6 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Each video in the
             batch must have the same number of masked patches. If `None`, then all patches are considered. Sequence
             length is `(num_frames // tubelet_size) * (image_size // patch_size) ** 2`.
-
-        Returns:
 
         Examples:
 
@@ -775,9 +726,10 @@ class VideoMAEDecoder(nn.Module):
         return VideoMAEDecoderOutput(logits=logits, hidden_states=all_hidden_states, attentions=all_self_attentions)
 
 
-@add_start_docstrings(
-    "The VideoMAE Model transformer with the decoder on top for self-supervised pre-training.",
-    VIDEOMAE_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The VideoMAE Model transformer with the decoder on top for self-supervised pre-training.
+    """
 )
 class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
     def __init__(self, config):
@@ -797,8 +749,7 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(VIDEOMAE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=VideoMAEForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -813,8 +764,6 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Each video in the
             batch must have the same number of masked patches. Sequence length is `(num_frames // tubelet_size) *
             (image_size // patch_size) ** 2`.
-
-        Returns:
 
         Examples:
         ```python
@@ -959,10 +908,11 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """VideoMAE Model transformer with a video classification head on top (a linear layer on top of the average pooled hidden
-    states of all tokens) e.g. for ImageNet.""",
-    VIDEOMAE_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    VideoMAE Model transformer with a video classification head on top (a linear layer on top of the average pooled hidden
+    states of all tokens) e.g. for ImageNet.
+    """
 )
 class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
     def __init__(self, config):
@@ -978,8 +928,7 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(VIDEOMAE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -994,8 +943,6 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
 
         Examples:
 

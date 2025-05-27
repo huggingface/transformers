@@ -41,6 +41,9 @@ Tips:
 - OPT has the same architecture as [`BartDecoder`].
 - Contrary to GPT2, OPT adds the EOS token `</s>` to the beginning of every prompt.
 
+> [!NOTE]
+> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
+
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with OPT. If you're

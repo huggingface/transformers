@@ -370,7 +370,7 @@ class MllamaProcessor(ProcessorMixin):
                 or `(sequence_length,)`.
             skip_special_tokens (`bool`, *optional*, defaults to `True`):
                 Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
-            Clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
                 Whether or not to clean up the tokenization spaces. Argument passed to the tokenizer's `batch_decode` method.
             **kwargs:
                 Additional arguments to be passed to the tokenizer's `batch_decode method`.

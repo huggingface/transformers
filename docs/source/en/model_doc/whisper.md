@@ -32,6 +32,9 @@ rendered properly in your Markdown viewer.
 
 You can find all the original Whisper checkpoints under the [Whisper](https://huggingface.co/collections/openai/whisper-release-6501bba2cf999715fd953013) collection.
 
+> [!NOTE]
+> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
+
 > [!TIP]
 > Click on the Whisper models in the right sidebar for more examples of how to apply Whisper to different audio tasks.
 
@@ -92,7 +95,7 @@ transcription[0]
 
 ## Notes
 
-- Whisper relies on [`~GenerationMixin.generate`] for inference.
+- Whisper relies a custom [`generate`] for inference, make sure to check the docs below.
 - The [`WhisperProcessor`] can be used for preparing audio and decoding predicted ids back into text.
 
 ## WhisperConfig

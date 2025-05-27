@@ -136,7 +136,7 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             decode_kwargs={"use_source_tokenizer": True},
         )
 
-    def test_tokenizer_integration_seperate_vocabs(self):
+    def test_tokenizer_integration_separate_vocabs(self):
         tokenizer = MarianTokenizer.from_pretrained("hf-internal-testing/test-marian-two-vocabs")
 
         source_text = "Tämä on testi"

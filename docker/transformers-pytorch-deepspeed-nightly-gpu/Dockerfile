@@ -57,6 +57,9 @@ RUN python3 -m pip uninstall -y deepspeed
 #RUN git clone https://github.com/pytorch/TensorRT.git
 #RUN cd TensorRT/py && python3 setup.py install --fx-only
 
+# `kernels` may give different outputs (within 1e-5 range) even with the same model (weights) and the same inputs
+RUN python3 -m pip uninstall -y kernels
+
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop

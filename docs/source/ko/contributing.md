@@ -63,7 +63,7 @@ limitations under the License.
 운영체제와 소프트웨어 버전을 자동으로 가져오려면 다음 명령을 실행하세요:
 
 ```bash
-transformers-cli env
+transformers env
 ```
 
 저장소의 루트 디렉터리에서도 같은 명령을 실행할 수 있습니다:

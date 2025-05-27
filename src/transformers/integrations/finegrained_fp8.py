@@ -15,7 +15,7 @@
 
 from typing import List, Optional, Tuple
 
-from ..utils import is_accelerate_available, is_torch_available, logging
+from ..utils import is_accelerate_available, is_torch_accelerator_available, is_torch_available, logging
 
 
 if is_torch_available():
@@ -332,13 +332,11 @@ class FP8Linear(nn.Linear):
         if self.weight.element_size() > 1:
             return F.linear(input, self.weight, self.bias)
         else:
-            # Context manager used to switch among the available cuda devices
-            # with torch.cuda.device(input.device):
-            qinput, scale = act_quant(input, self.block_size[1])
-            # Blocks the CPU until all CUDA operations on the specified device are complete. It is used to ensure that the results of the
-            # preceding operations are ready before proceeding
-            # torch.cuda.synchronize(device=self.weight.device)
-            with torch.cuda.device(input.device):
+            # Context manager used to switch among the available accelerators
+            device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
+            torch_accelerator_module = getattr(torch, device_type, torch.cuda)
+            with torch_accelerator_module.device(input.device):
+                qinput, scale = act_quant(input, self.block_size[1])
                 output = w8a8_block_fp8_matmul_triton(
                     qinput,
                     self.weight,
@@ -347,7 +345,9 @@ class FP8Linear(nn.Linear):
                     self.block_size,
                     output_dtype=input.dtype,
                 )
-            torch.cuda.synchronize()
+            # Blocks the CPU until all accelerator operations on the specified device are complete. It is used to ensure that the results of the
+            # preceding operations are ready before proceeding
+            torch_accelerator_module.synchronize()
             if self.bias is not None:
                 output = output + self.bias
             return output.to(dtype=input.dtype)

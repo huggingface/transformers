@@ -71,7 +71,7 @@ def main():
     # You can also build the corpus yourself using TransfoXLCorpus methods
     # The pre-processing involve computing word frequencies to prepare the Adaptive input and SoftMax
     # and tokenizing the dataset
-    # The pre-processed corpus is a convertion (using the conversion script )
+    # The pre-processed corpus is a conversion (using the conversion script )
     corpus = TransfoXLCorpus.from_pretrained(args.model_name)
 
     va_iter = corpus.get_iterator("valid", args.batch_size, args.tgt_len, device=device, ext_len=args.ext_len)

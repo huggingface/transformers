@@ -38,10 +38,8 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import Conv1D, isin_mps_friendly
 from ...utils import (
     ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     logging,
-    replace_return_docstrings,
 )
 from .configuration_clvp import (
     ClvpConfig,
@@ -51,8 +49,6 @@ from .configuration_clvp import (
 
 
 logger = logging.get_logger(__name__)
-
-_CHECKPOINT_FOR_DOC = "susnato/clvp_dev"
 
 
 # Copied from transformers.models.clip.modeling_clip.contrastive_loss
@@ -807,12 +803,8 @@ class ClvpConditioningEncoder(nn.Module):
         return torch.concat([mel_spec, text_embeds], dim=1)
 
 
+@auto_docstring
 class ClvpPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = ClvpConfig
     base_model_prefix = "clvp"
     supports_gradient_checkpointing = True
@@ -849,122 +841,6 @@ class ClvpPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-
-CLVP_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`ClvpConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-CLVP_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, time_dim)`):
-            Indicates log mel-spectrogram representations for audio returned by [`ClvpFeatureExtractor`].
-        conditioning_encoder_inputs_embeds (`torch.FloatTensor`, *optional*):
-            inputs_embeds for `ClvpConditioningEncoder`. Can be used in place of `input_ids`.
-        text_encoder_inputs_embeds (`torch.FloatTensor`, *optional*):
-            inputs_embeds for the text encoder model passed in place of `input_ids`.
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding text token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        return_loss (`bool`, *optional*):
-            Whether or not to return the contrastive loss.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-CLVP_DECODER_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        past_key_values (`Tuple[Tuple[torch.Tensor]]` of length `config.n_layers`):
-            Contains precomputed hidden-states (key and values in the attention blocks) as computed by the model (see
-            `past_key_values` output below). Can be used to speed up sequential decoding. The `input_ids` which have
-            their past given to this model should not be passed as `input_ids` as they have already been computed.
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            If `past_key_values` is used, `attention_mask` needs to contain the masking strategy that was used for
-            `past_key_values`. In other words, the `attention_mask` always has to have the length:
-            `len(past_key_values) + len(input_ids)`
-
-            [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, input_ids_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-
-            If `past_key_values` is used, optionally only the last `inputs_embeds` have to be input (see
-            `past_key_values`).
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
 
 
 class ClvpEncoder(ClvpPreTrainedModel):
@@ -1158,7 +1034,7 @@ class ClvpDecoder(ClvpPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.layers[layer].attn.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(CLVP_DECODER_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1302,10 +1178,7 @@ class ClvpDecoder(ClvpPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    "The bare Clvp decoder model outputting raw hidden-states without any specific head on top.",
-    CLVP_START_DOCSTRING,
-)
+@auto_docstring
 class ClvpModel(ClvpPreTrainedModel):
     def __init__(self, config: ClvpDecoderConfig):
         super().__init__(config)
@@ -1324,7 +1197,7 @@ class ClvpModel(ClvpPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    @add_start_docstrings_to_model_forward(CLVP_DECODER_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1373,9 +1246,10 @@ class ClvpModel(ClvpPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    "The CLVP decoder model with a language modelling head on top.",
-    CLVP_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The CLVP decoder model with a language modelling head on top.
+    """
 )
 class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
     def __init__(self, config):
@@ -1516,7 +1390,7 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
         )
         return model_inputs
 
-    @add_start_docstrings_to_model_forward(CLVP_DECODER_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1603,11 +1477,10 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
         )
 
 
-@add_start_docstrings(
-    "The composite CLVP model with a text encoder, speech encoder and speech decoder model."
-    "The speech decoder model generates the speech_ids from the text and the text encoder and speech encoder works"
-    "together to filter out the best speech_ids.",
-    CLVP_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The composite CLVP model with a text encoder, speech encoder and speech decoder model.
+    """
 )
 class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
     config_class = ClvpConfig
@@ -1831,8 +1704,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
 
         return outputs[0]
 
-    @add_start_docstrings_to_model_forward(CLVP_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ClvpOutput, config_class=ClvpConfig)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1846,7 +1718,14 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, ClvpOutput]:
         r"""
-        Returns:
+        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, time_dim)`):
+            Indicates log mel-spectrogram representations for audio returned by [`ClvpFeatureExtractor`].
+        conditioning_encoder_inputs_embeds (`torch.FloatTensor`, *optional*):
+            inputs_embeds for `ClvpConditioningEncoder`. Can be used in place of `input_ids`.
+        text_encoder_inputs_embeds (`torch.FloatTensor`, *optional*):
+            inputs_embeds for the text encoder model passed in place of `input_ids`.
+        return_loss (`bool`, *optional*):
+            Whether or not to return the contrastive loss.
 
         Examples:
 

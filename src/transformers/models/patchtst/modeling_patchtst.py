@@ -16,25 +16,56 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 import torch
 from torch import nn
 
 from ...activations import ACT2CLS
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
-from ...utils import ModelOutput, add_start_docstrings, logging
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_patchtst import PatchTSTConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "PatchTSTConfig"
+
+# Copied from transformers.models.bart.modeling_bart.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: Optional[float] = None,
+    dropout: float = 0.0,
+    head_mask: Optional[torch.Tensor] = None,
+    **kwargs,
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+
+    if head_mask is not None:
+        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
+
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->PatchTST
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Attention with Wav2Vec2->PatchTST
 class PatchTSTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -69,9 +100,6 @@ class PatchTSTAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -80,6 +108,9 @@ class PatchTSTAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        # TODO: we need a refactor so that the different attention modules can get their specific kwargs
+        # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -87,10 +118,16 @@ class PatchTSTAttention(nn.Module):
         # for the decoder
         is_cross_attention = key_value_states is not None
 
-        bsz, tgt_len, _ = hidden_states.size()
+        # determine input shapes
+        bsz, tgt_len = hidden_states.shape[:-1]
+        src_len = key_value_states.shape[1] if is_cross_attention else tgt_len
+
+        q_input_shape = (bsz, tgt_len, -1, self.head_dim)
+        kv_input_shape = (bsz, src_len, -1, self.head_dim)
 
         # get query proj
-        query_states = self.q_proj(hidden_states) * self.scaling
+        query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
+
         # get key, value proj
         # `past_key_value[0].shape[2] == key_value_states.shape[1]`
         # is checking that the `sequence_length` of the `past_key_value` is the same as
@@ -105,18 +142,18 @@ class PatchTSTAttention(nn.Module):
             value_states = past_key_value[1]
         elif is_cross_attention:
             # cross_attentions
-            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
+            key_states = self.k_proj(key_value_states).view(*kv_input_shape).transpose(1, 2)
+            value_states = self.v_proj(key_value_states).view(*kv_input_shape).transpose(1, 2)
         elif past_key_value is not None:
             # reuse k, v, self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            key_states = self.k_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
+            value_states = self.v_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
         else:
             # self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            key_states = self.k_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
+            value_states = self.v_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
 
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
@@ -128,69 +165,27 @@ class PatchTSTAttention(nn.Module):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.reshape(*proj_shape)
-        value_states = value_states.reshape(*proj_shape)
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            output_attentions=output_attentions,
+            head_mask=layer_head_mask,
+            **kwargs,
+        )
 
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if layer_head_mask is not None:
-            if layer_head_mask.size() != (self.num_heads,):
-                raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
-                    f" {layer_head_mask.size()}"
-                )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to be reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
-        else:
-            attn_weights_reshaped = None
-
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.bmm(attn_probs, value_states)
-
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz * self.num_heads, tgt_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-
-        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned across GPUs when using tensor-parallelism.
-        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
-
+        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights_reshaped, past_key_value
+        return attn_output, attn_weights, past_key_value
 
 
 class PatchTSTBatchNorm(nn.Module):
@@ -463,6 +458,7 @@ class PatchTSTEncoderLayer(nn.Module):
             embed_dim=config.d_model,
             num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,
+            config=config,
         )
 
         # Add & Norm of the sublayer 1
@@ -587,6 +583,7 @@ class PatchTSTEncoderLayer(nn.Module):
         return outputs
 
 
+@auto_docstring
 class PatchTSTPreTrainedModel(PreTrainedModel):
     config_class = PatchTSTConfig
     base_model_prefix = "model"
@@ -772,23 +769,6 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
                 all_attentions = all_attentions + (layer_outputs[1],)
         # return past_values, hidden_states
         return BaseModelOutput(last_hidden_state=hidden_state, hidden_states=encoder_states, attentions=all_attentions)
-
-
-PATCHTST_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`PatchTSTConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
 
 
 @dataclass
@@ -1139,10 +1119,7 @@ class PatchTSTScaler(nn.Module):
         return data, loc, scale
 
 
-@add_start_docstrings(
-    "The bare PatchTST Model outputting raw hidden-states without any specific head.",
-    PATCHTST_START_DOCSTRING,
-)
+@auto_docstring
 class PatchTSTModel(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
@@ -1283,9 +1260,10 @@ class PatchTSTMaskPretrainHead(nn.Module):
         return embedding
 
 
-@add_start_docstrings(
-    "The PatchTST for pretrain model.",
-    PATCHTST_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The PatchTST for pretrain model.
+    """
 )
 class PatchTSTForPretraining(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
@@ -1435,9 +1413,10 @@ class PatchTSTClassificationHead(nn.Module):
         return output
 
 
-@add_start_docstrings(
-    "The PatchTST for classification model.",
-    PATCHTST_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The PatchTST for classification model.
+    """
 )
 class PatchTSTForClassification(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
@@ -1454,6 +1433,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1464,27 +1444,16 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, PatchTSTForClassificationOutput]:
         r"""
-        Parameters:
-            past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
-                Input sequence to the model
-            target_values (`torch.Tensor`, *optional*):
-                Labels associates with the `past_values`
-            past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
-                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
-                in `[0, 1]`:
+        past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
+            Input sequence to the model
+        target_values (`torch.Tensor`, *optional*):
+            Labels associates with the `past_values`
+        past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+            in `[0, 1]`:
 
-                - 1 for values that are **observed**,
-                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the output attention of all layers
-            return_dict (`bool`, *optional*):
-                Whether or not to return a `ModelOutput` instead of a plain tuple.
-
-        Returns:
-            `PatchTSTForClassificationOutput` or tuple of `torch.Tensor` (if `return_dict`=False or
-            `config.return_dict`=False)
+            - 1 for values that are **observed**,
+            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
         Examples:
 
@@ -1536,12 +1505,19 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    "The PatchTST for regression Model.",
-    PATCHTST_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The PatchTST for regression Model.
+    """
 )
 class PatchTSTPredictionHead(nn.Module):
-    def __init__(self, config: PatchTSTConfig, num_patches, distribution_output=None):
+    def __init__(self, config: PatchTSTConfig, num_patches: int, distribution_output=None):
+        r"""
+        num_patches (`int`):
+            The number of patches in the input sequence.
+        distribution_output (`DistributionOutput`, *optional*):
+            The distribution output layer for probabilistic forecasting. If None, a linear output layer is used.
+        """
         super().__init__()
 
         self.share_projection = config.share_projection
@@ -1630,9 +1606,10 @@ class PatchTSTPredictionHead(nn.Module):
         return output
 
 
-@add_start_docstrings(
-    "The PatchTST for prediction model.",
-    PATCHTST_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The PatchTST for prediction model.
+    """
 )
 class PatchTSTForPrediction(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
@@ -1876,9 +1853,10 @@ class PatchTSTRegressionHead(nn.Module):
         return output
 
 
-@add_start_docstrings(
-    "The PatchTST for regression model.",
-    PATCHTST_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The PatchTST for regression model.
+    """
 )
 class PatchTSTForRegression(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
@@ -1907,6 +1885,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @auto_docstring
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1917,27 +1896,17 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, PatchTSTForRegressionOutput]:
         r"""
-        Parameters:
-            past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
-                Input sequence to the model
-            target_values (`torch.Tensor` of shape `(bs, num_input_channels)`):
-                Target values associates with the `past_values`
-            past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
-                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
-                in `[0, 1]`:
+        past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
+            Input sequence to the model
+        target_values (`torch.Tensor` of shape `(bs, num_input_channels)`):
+            Target values associates with the `past_values`
+        past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+            in `[0, 1]`:
 
-                - 1 for values that are **observed**,
-                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the output attention of all layers
-            return_dict (`bool`, *optional*):
-                Whether or not to return a `ModelOutput` instead of a plain tuple.
-
-        Returns:
-            `PatchTSTForRegressionOutput` or tuple of `torch.Tensor` (if `return_dict`=False or
-            `config.return_dict`=False)
+            - 1 for values that are **observed**,
+            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+            Whether or not to return a `ModelOutput` instead of a plain tuple.
 
         Examples:
 

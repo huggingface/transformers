@@ -40,6 +40,8 @@ torchao supports the [quantization techniques](https://github.com/pytorch/ao/blo
 - A16W4 Int4 Weight Only Quantization
 - Autoquantization
 
+torchao also supports module level configuration by specifying a dictionary from fully qualified name of module and its corresponding quantization config. This allows skip quantizing certain layers and using different quantization config for different modules.
+
 
 Check the table below to see if your hardware is compatible.
 
@@ -89,7 +91,7 @@ We'll show examples for recommended quantization methods based on hardwares, e.g
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
-from torchao.quantization import Float8DynamicActivationFloat8WeightConfig
+from torchao.quantization import Float8DynamicActivationFloat8WeightConfig, Float8WeightOnlyConfig
 
 quant_config = Float8DynamicActivationFloat8WeightConfig()
 # or float8 weight only quantization
@@ -149,7 +151,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
-from torchao.quantization import Int8DynamicActivationInt8WeightConfig
+from torchao.quantization import Int8DynamicActivationInt8WeightConfig, Int8WeightOnlyConfig
 
 quant_config = Int8DynamicActivationInt8WeightConfig()
 # or int8 weight only quantization
@@ -179,7 +181,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
-from torchao.quantization import GemliteUIntXWeightOnlyConfig
+from torchao.quantization import GemliteUIntXWeightOnlyConfig, Int4WeightOnlyConfig
 
 # For batch size N, we recommend gemlite, which may require autotuning
 # default is 4 bit, 8 bit is also supported by passing `bit_width=8`
@@ -216,7 +218,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
-from torchao.quantization import Int8DynamicActivationInt8WeightConfig
+from torchao.quantization import Int8DynamicActivationInt8WeightConfig, Int8WeightOnlyConfig
 
 quant_config = Int8DynamicActivationInt8WeightConfig()
 # quant_config = Int8WeightOnlyConfig()
@@ -271,6 +273,74 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 </hfoption>
 </hfoptions>
+
+### Per Module Quantization
+#### 1. Skip quantization for certain layers
+With `AOPerModuleConfig` we can specify a default configuration for all layers while skipping quantization for certain layers.
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+
+model_id = "meta-llama/Llama-3.1-8B-Instruct"
+
+from torchao.quantization import Int4WeightOnlyConfig, AOPerModuleConfig
+config = Int4WeightOnlyConfig(group_size=128)
+
+# set default to int4 (for linears), and skip quantizing `model.layers.0.self_attn.q_proj`
+quant_config = AOPerModuleConfig({"_default": config, "model.layers.0.self_attn.q_proj": None})
+quantization_config = TorchAoConfig(quant_type=quant_config)
+quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype=torch.bfloat16, quantization_config=quantization_config)
+# lm_head is not quantized and model.layers.0.self_attn.q_proj is not quantized
+print("quantized model:", quantized_model)
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+# Manual Testing
+prompt = "Hey, are you conscious? Can you talk to me?"
+inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+generated_ids = quantized_model.generate(**inputs, max_new_tokens=128)
+output_text = tokenizer.batch_decode(
+    generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+)
+print(output_text)
+```
+
+#### 2. Quantizing different layers with different quantization configs
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+
+model_id = "facebook/opt-125m"
+
+from torchao.quantization import Int4WeightOnlyConfig, AOPerModuleConfig, Int8DynamicActivationInt4WeightConfig, IntxWeightOnlyConfig, PerAxis, MappingType
+
+weight_dtype = torch.int8
+granularity = PerAxis(0)
+mapping_type = MappingType.ASYMMETRIC
+embedding_config = IntxWeightOnlyConfig(
+    weight_dtype=weight_dtype,
+    granularity=granularity,
+    mapping_type=mapping_type,
+)
+linear_config = Int8DynamicActivationInt4WeightConfig(group_size=128)
+quant_config = AOPerModuleConfig({"_default": linear_config, "model.decoder.embed_tokens": embedding_config, "model.decoder.embed_positions": None})
+# set `include_embedding` to True in order to include embedding in quantization
+# when `include_embedding` is True, we'll remove input embedding from `modules_not_to_convert` as well
+quantization_config = TorchAoConfig(quant_type=quant_config, include_embedding=True)
+quantized_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cpu", torch_dtype=torch.bfloat16, quantization_config=quantization_config)
+print("quantized model:", quantized_model)
+# make sure embedding is quantized
+print("embed_tokens weight:", quantized_model.model.decoder.embed_tokens.weight)
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+# Manual Testing
+prompt = "Hey, are you conscious? Can you talk to me?"
+inputs = tokenizer(prompt, return_tensors="pt").to("cpu")
+generated_ids = quantized_model.generate(**inputs, max_new_tokens=128, cache_implementation="static")
+output_text = tokenizer.batch_decode(
+    generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+)
+print(output_text)
+```
 
 ### Autoquant
 

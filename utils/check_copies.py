@@ -18,7 +18,7 @@ Utility that checks whether the copies defined in the library match the original
 - The list of models in the main README.md matches the ones in the localized READMEs,
 - Files that are registered as full copies of one another in the `FULL_COPIES` constant of this script.
 
-This also checks the list of models in the README is complete (has all models) and add a line to complete if there is
+This also checks the list of models in the README is complete (has all models) and adds a line to complete if there is
 a model missing.
 
 Use from the root of the repo with:
@@ -420,7 +420,7 @@ def find_code_in_transformers(
 
     # Detail: the `Copied from` statement is originally designed to work with the last part of `TRANSFORMERS_PATH`,
     # (which is `transformers`). The same should be applied for `MODEL_TEST_PATH`. However, its last part is `models`
-    # (to only check and search in it) which is a bit confusing. So we keep the copied statement staring with
+    # (to only check and search in it) which is a bit confusing. So we keep the copied statement starting with
     # `tests.models.` and change it to `tests` here.
     if base_path == MODEL_TEST_PATH:
         base_path = "tests"

@@ -21,10 +21,11 @@ from typing import List, Optional, Union
 
 import numpy as np
 
-from ...image_utils import ImageInput, VideoInput
+from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import AudioInput, BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import is_tf_available, is_torch_available
+from ...video_utils import VideoInput
 
 
 if is_torch_available():

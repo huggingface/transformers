@@ -18,8 +18,6 @@ from functools import lru_cache
 from typing import Optional, Union
 
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     BatchFeature,
     DefaultFastImageProcessorKwargs,
@@ -35,7 +33,7 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -53,14 +51,19 @@ if is_torchvision_available():
 
 
 class EfficientNetFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    Args:
+        rescale_offset (`bool`, *optional*, defaults to `self.rescale_offset`):
+            Whether to rescale the image between [-max_range/2, scale_range/2] instead of [0, scale_range].
+        include_top (`bool`, *optional*, defaults to `self.include_top`):
+            Normalize the image again with the standard deviation only for image classification if set to True.
+    """
+
     rescale_offset: bool
     include_top: bool
 
 
-@add_start_docstrings(
-    "Constructs a fast EfficientNet image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
+@auto_docstring
 class EfficientNetImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.NEAREST
     image_mean = IMAGENET_STANDARD_MEAN
@@ -210,15 +213,7 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-        rescale_offset (`bool`, *optional*, defaults to `self.rescale_offset`):
-            Whether to rescale the image between [-max_range/2, scale_range/2] instead of [0, scale_range].
-        include_top (`bool`, *optional*, defaults to `self.include_top`):
-            Normalize the image again with the standard deviation only for image classification if set to True.
-        """,
-    )
+    @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[EfficientNetFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 

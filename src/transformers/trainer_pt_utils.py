@@ -921,8 +921,9 @@ def _get_learning_rate(self):
             last_lr = self.optimizer.param_groups[0]["lr"]
         else:
             last_lr = self.lr_scheduler.get_last_lr()[0]
-        if torch.is_tensor(last_lr):
-            last_lr = last_lr.item()
+
+    if torch.is_tensor(last_lr):
+        last_lr = last_lr.item()
     return last_lr
 
 
@@ -1377,8 +1378,7 @@ class LayerWiseDummyScheduler(LRScheduler):
         self.default_lr = kwargs["lr"]
         optimizer = LayerWiseDummyOptimizer(**kwargs)
         last_epoch = -1
-        verbose = False
-        super().__init__(optimizer, last_epoch, verbose)
+        super().__init__(optimizer, last_epoch)
 
     def get_lr(self):
         # default value

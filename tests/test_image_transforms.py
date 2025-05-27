@@ -578,6 +578,25 @@ class ImageTransformsTester(unittest.TestCase):
             )
         )
 
+        # Test that padding works on batched images
+        image = np.array(
+            [
+                [[0, 1], [2, 3]],
+            ]
+        )[None, ...]
+        expected_image = np.array(
+            [
+                [[0, 0], [0, 1], [2, 3]],
+                [[0, 0], [0, 0], [0, 0]],
+            ]
+        )[None, ...]
+        # fmt: on
+        self.assertTrue(
+            np.allclose(
+                expected_image, pad(image, ((0, 1), (1, 0)), mode="constant", input_data_format="channels_last")
+            )
+        )
+
     @require_vision
     def test_convert_to_rgb(self):
         # Test that an RGBA image is converted to RGB
