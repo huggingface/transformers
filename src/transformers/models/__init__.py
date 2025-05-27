@@ -68,6 +68,7 @@ if TYPE_CHECKING:
     from .convnextv2 import *
     from .cpm import *
     from .cpmant import *
+    from .csm import *
     from .ctrl import *
     from .cvt import *
     from .d_fine import *
@@ -103,6 +104,7 @@ if TYPE_CHECKING:
     from .ernie import *
     from .esm import *
     from .falcon import *
+    from .falcon_h1 import *
     from .falcon_mamba import *
     from .fastspeech2_conformer import *
     from .flaubert import *
@@ -130,6 +132,7 @@ if TYPE_CHECKING:
     from .granite import *
     from .granite_speech import *
     from .granitemoe import *
+    from .granitemoehybrid import *
     from .granitemoeshared import *
     from .grounding_dino import *
     from .groupvit import *
