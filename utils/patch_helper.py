@@ -75,7 +75,7 @@ def get_prs_by_label(label):
     cmd = [
         "gh", "pr", "list",
         "--label", label,
-        "--state", "merged",
+        "--state", "all",
         "--json", "number,title,mergeCommit,url",
         "--limit", "100"
     ]
@@ -83,8 +83,10 @@ def get_prs_by_label(label):
     result.check_returncode()
     prs = json.loads(result.stdout)
     for pr in prs:
-        pr["oid"] = pr.get("mergeCommit", {}).get("oid")
-    return [pr for pr in prs]
+        is_merged = pr.get("mergeCommit", {}) 
+        if is_merged:
+            pr["oid"] = is_merged.get("oid")
+    return prs
 
 def get_commit_timestamp(commit_sha):
     """Get UNIX timestamp of a commit using git."""
@@ -114,35 +116,26 @@ def commit_in_history(commit_sha, base_branch="HEAD"):
     )
     return result.returncode == 0
 
-def is_merged_into_main(commit_sha, main_ref="origin/main"):
-    """Check if the commit is part of the main branch history."""
-    result = subprocess.run(
-        ["git", "merge-base", "--is-ancestor", commit_sha, main_ref],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
-    return result.returncode == 0
-
 def main():
     branch = get_release_branch_name()
     # checkout_branch(branch)
     prs = get_prs_by_label(LABEL)
     # Attach commit timestamps
     for pr in prs:
-        pr["timestamp"] = get_commit_timestamp(pr.get("oid"))
-
-    # Sort by commit timestamp (ascending)
-    prs.sort(key=lambda pr: pr["timestamp"])
-
-    print(f"Found {len(prs)} PR(s) with label '{LABEL}'")
-    for pr in prs:
         sha = pr.get("oid")
-        if not is_merged_into_main(sha):
+        if sha:
+            pr["timestamp"] = get_commit_timestamp(sha) 
+        else:
             print("\n" + "="*80)
             print(f"⚠️  WARNING: PR #{pr['number']} ({sha}) is NOT in main!")
             print("⚠️  A core maintainer must review this before cherry-picking.")
             print("="*80 + "\n")
-        else:
+    # Sort by commit timestamp (ascending)
+    prs = [pr for pr in prs if pr.get("timestamp") is not None]
+    prs.sort(key=lambda pr: pr["timestamp"])
+    for pr in prs:
+        sha = pr.get("oid")
+        if sha:
             if commit_in_history(sha):
                 print(f"🔁 PR #{pr['number']} ({pr["title"]}) already in history. Skipping.")
             else:
