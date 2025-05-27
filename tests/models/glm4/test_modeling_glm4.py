@@ -80,7 +80,7 @@ class Glm4ModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_large_gpu
 class Glm4IntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
-    model_id = "THUDM/glm-4-0414-9b-chat"
+    model_id = "THUDM/GLM-4-9B-0414"
     revision = "refs/pr/15"
 
     def test_model_9b_fp16(self):
