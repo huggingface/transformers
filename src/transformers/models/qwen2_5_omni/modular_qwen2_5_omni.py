@@ -2051,14 +2051,21 @@ class Qwen2_5OmniVisionSdpaAttention(nn.Module):
         q = apply_rotary_pos_emb_vision(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
         k = apply_rotary_pos_emb_vision(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
 
-        attention_mask = torch.zeros([1, seq_length, seq_length], device=q.device, dtype=torch.bool)
-        for i in range(1, len(cu_seqlens)):
-            attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = True
-        q = q.transpose(0, 1)
-        k = k.transpose(0, 1)
-        v = v.transpose(0, 1)
-        attn_output = F.scaled_dot_product_attention(q, k, v, attention_mask, dropout_p=0.0)
-        attn_output = attn_output.transpose(0, 1)
+        original_dtype = q.dtype
+        device_type = q.device.type if isinstance(q.device.type, str) and q.device.type != "mps" else "cpu"
+
+        lengths = [cu_seqlens[i + 1] - cu_seqlens[i] for i in range(len(cu_seqlens) - 1)]
+        q_splits = torch.split(q, lengths, dim=1)
+        k_splits = torch.split(k, lengths, dim=1)
+        v_splits = torch.split(v, lengths, dim=1)
+
+        with torch.amp.autocast(device_type=device_type, dtype=torch.float32):
+            attn_output = [
+                F.scaled_dot_product_attention(q_, k_, v_, dropout_p=0.0).to(original_dtype)
+                for q_, k_, v_ in zip(q_splits, k_splits, v_splits)
+            ]
+
+        attn_output = torch.cat(attn_output, dim=1).transpose(0, 1)
         attn_output = attn_output.reshape(seq_length, -1)
         attn_output = self.proj(attn_output)
         return attn_output

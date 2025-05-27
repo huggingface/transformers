@@ -305,21 +305,21 @@ class Qwen2_5_VLVisionSdpaAttention(nn.Module):
             cos, sin = position_embeddings
         q, k = apply_rotary_pos_emb_vision(q, k, cos, sin)
 
-        q = q.transpose(0, 1)
-        k = k.transpose(0, 1)
-        v = v.transpose(0, 1)
+        q, k, v = (x.transpose(0, 1) for x in (q, k, v))
 
-        attn_output = []
-        for i in range(len(cu_seqlens) - 1):
-            start = cu_seqlens[i]
-            end = cu_seqlens[i + 1]
+        original_dtype = q.dtype
+        device_type = q.device.type if isinstance(q.device.type, str) and q.device.type != "mps" else "cpu"
 
-            q_window = q[:, start:end, :]
-            k_window = k[:, start:end, :]
-            v_window = v[:, start:end, :]
+        lengths = [cu_seqlens[i + 1] - cu_seqlens[i] for i in range(len(cu_seqlens) - 1)]
+        q_splits = torch.split(q, lengths, dim=1)
+        k_splits = torch.split(k, lengths, dim=1)
+        v_splits = torch.split(v, lengths, dim=1)
 
-            attn_output_window = F.scaled_dot_product_attention(q_window, k_window, v_window, dropout_p=0.0)
-            attn_output.append(attn_output_window)
+        with torch.amp.autocast(device_type=device_type, dtype=torch.float32):
+            attn_output = [
+                F.scaled_dot_product_attention(q_, k_, v_, dropout_p=0.0).to(original_dtype)
+                for q_, k_, v_ in zip(q_splits, k_splits, v_splits)
+            ]
 
         attn_output = torch.cat(attn_output, dim=1).transpose(0, 1)
         attn_output = attn_output.reshape(seq_length, -1)
@@ -985,14 +985,21 @@ class Qwen2_5_VLSdpaAttention(Qwen2_5_VLAttention):
         # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
         is_causal = True if causal_mask is None and q_len > 1 else False
 
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=causal_mask,
-            dropout_p=self.attention_dropout if self.training else 0.0,
-            is_causal=is_causal,
+        original_dtype = query_states.dtype
+        device_type = (
+            query_states.device.type
+            if isinstance(query_states.device.type, str) and query_states.device.type != "mps"
+            else "cpu"
         )
+        with torch.amp.autocast(device_type=device_type, dtype=torch.float32):
+            attn_output = torch.nn.functional.scaled_dot_product_attention(
+                query_states,
+                key_states,
+                value_states,
+                attn_mask=causal_mask,
+                dropout_p=self.attention_dropout if self.training else 0.0,
+                is_causal=is_causal,
+            ).to(original_dtype)
 
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.view(bsz, q_len, -1)
