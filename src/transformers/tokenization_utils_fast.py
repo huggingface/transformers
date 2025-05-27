@@ -21,7 +21,8 @@ import json
 import os
 from collections import defaultdict
 from collections.abc import Iterable
-from typing import Any, Optional, Union
+from shutil import copyfile
+from typing import Any, Optional, Union, Tuple
 
 import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from tokenizers import Encoding as EncodingFast
@@ -977,3 +978,26 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             self._tokenizer.post_processor = processors.TemplateProcessing(
                 single=single, pair=pair, special_tokens=special_tokens
             )
+
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        if hasattr(self, "_tokenizer"):
+            files = self._tokenizer.model.save(save_directory, name=filename_prefix)
+            return tuple(files)
+
+        if not self.can_save_slow_tokenizer:
+            raise ValueError(
+                "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
+                "tokenizer."
+            )
+
+        if not os.path.isdir(save_directory):
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
+            return
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
+
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
+            copyfile(self.vocab_file, out_vocab_file)
+
+        return (out_vocab_file,)

@@ -176,9 +176,6 @@ class DebertaTokenizerFast(PreTrainedTokenizerFast):
         return super()._encode_plus(*args, **kwargs)
 
     # Copied from transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
-        return tuple(files)
 
 
 __all__ = ["DebertaTokenizerFast"]

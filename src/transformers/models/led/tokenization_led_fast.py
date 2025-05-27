@@ -237,9 +237,6 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
         return super()._encode_plus(*args, **kwargs)
 
     # Copied from transformers.models.bart.tokenization_bart_fast.BartTokenizerFast.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
-        return tuple(files)
 
     # Copied from transformers.models.bart.tokenization_bart_fast.BartTokenizerFast.create_token_type_ids_from_sequences with BART->LED
     def create_token_type_ids_from_sequences(

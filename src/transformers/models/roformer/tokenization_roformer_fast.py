@@ -107,9 +107,6 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
         vocab = self.__dict__["_tokenizer"].get_vocab()
         self.__dict__["_tokenizer"].pre_tokenizer = PreTokenizer.custom(JiebaPreTokenizer(vocab))
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
-        return tuple(files)
 
     def save_pretrained(
         self,

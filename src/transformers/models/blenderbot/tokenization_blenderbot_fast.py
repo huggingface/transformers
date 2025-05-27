@@ -236,9 +236,6 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
         return super()._encode_plus(*args, **kwargs)
 
     # Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast.save_vocabulary with Roberta->Blenderbot, RoBERTa->Blenderbot
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
-        return tuple(files)
 
     # Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast.create_token_type_ids_from_sequences with Roberta->Blenderbot, RoBERTa->Blenderbot
     def create_token_type_ids_from_sequences(

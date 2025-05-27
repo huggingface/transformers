@@ -169,9 +169,6 @@ class FunnelTokenizerFast(PreTrainedTokenizerFast):
         return len(cls) * [self.cls_token_type_id] + len(token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
     # Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
-        return tuple(files)
 
 
 __all__ = ["FunnelTokenizerFast"]

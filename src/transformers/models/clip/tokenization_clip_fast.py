@@ -129,9 +129,6 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
             return len(bos_token + token_ids_0 + eos_token) * [0]
         return len(bos_token + token_ids_0 + eos_token + eos_token + token_ids_1 + eos_token) * [0]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
-        return tuple(files)
 
 
 __all__ = ["CLIPTokenizerFast"]
