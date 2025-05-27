@@ -118,7 +118,7 @@ def commit_in_history(commit_sha, base_branch="HEAD"):
 
 def main(verbose=False):
     branch = get_release_branch_name()
-    # checkout_branch(branch)
+    checkout_branch(branch)
     prs = get_prs_by_label(LABEL)
     # Attach commit timestamps
     for pr in prs:
