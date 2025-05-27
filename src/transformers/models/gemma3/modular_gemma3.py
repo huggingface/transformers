@@ -424,14 +424,7 @@ class Gemma3Attention(Gemma2Attention):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. "
-                    "Falling back to eager attention. This warning can be removed using the argument "
-                    '`attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -617,7 +610,6 @@ class Gemma3TextModel(Gemma2Model):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
-                "output_attentions": output_attentions,
             }
             # Create the masks
             causal_mask_mapping = {
@@ -845,7 +837,6 @@ class Gemma3Model(PaliGemmaModel):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values,
-                "output_attentions": output_attentions,
             }
             if token_type_ids is not None and inputs_embeds.shape[1] != 1:
                 # We need to pass an additional mask function to account for token type ids, and it needs to be an `or`
@@ -934,7 +925,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
 
         >>> inputs = processor.apply_chat_template(
         ...     messages,
-        ...     tokenizer=True,
+        ...     tokenize=True,
         ...     return_dict=True,
         ...     return_tensors="pt",
         ...     add_generation_prompt=True
@@ -1055,7 +1046,6 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         attention_mask: Optional[torch.Tensor],
         cache_position: torch.Tensor,
         past_key_values: Optional[Cache],
-        output_attentions: bool = False,
         token_type_ids: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> dict:
@@ -1066,7 +1056,6 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             "attention_mask": attention_mask,
             "cache_position": cache_position,
             "past_key_values": past_key_values,
-            "output_attentions": output_attentions,
         }
         # Add the token type ids mask for generate as well
         if token_type_ids is not None and input_embeds.shape[1] != 1:
