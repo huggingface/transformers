@@ -151,7 +151,7 @@ class MiniMaxConfig(MixtralConfig):
 
     def __init__(
         self,
-        attn_type_list=[0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1],
+        attn_type_list=None,
         block_size=256,
         full_attn_alpha_factor=1,
         full_attn_beta_factor=1,
@@ -162,7 +162,7 @@ class MiniMaxConfig(MixtralConfig):
         **super_kwargs,
     ):
         super().__init__(**super_kwargs)
-        self.attn_type_list = attn_type_list
+        self.attn_type_list = [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1] if attn_type_list is None else attn_type_list
         self.block_size = block_size
         self.full_attn_alpha_factor = full_attn_alpha_factor
         self.full_attn_beta_factor = full_attn_beta_factor
