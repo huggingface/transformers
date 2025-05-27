@@ -432,15 +432,7 @@ class TorchAoSerializationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
-        # fmt: off
-        EXPECTED_OUTPUTS = Expectations(
-            {
-                ("xpu", 3): "What are we having for dinner?\n- 1. What is the temperature outside",
-                ("cuda", 7): "What are we having for dinner?\n- 2. What is the temperature outside",
-            }
-        )
-        # fmt: on
-        cls.EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
+        cls.EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
 
     def setUp(self):
         self.quant_config = TorchAoConfig(self.quant_scheme, **self.quant_scheme_kwargs)
