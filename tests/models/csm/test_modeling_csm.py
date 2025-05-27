@@ -150,7 +150,6 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
     test_headmasking = False
     test_resize_embeddings = False
     test_resize_embeddings_untied = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = CsmModelTester(self)
@@ -418,7 +417,7 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
 class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         # TODO: @eustlb, update with correct sesame's repo
-        self.model_checkpoint = "eustlb/csm-1b"
+        self.model_checkpoint = "sesame/csm-1b"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
