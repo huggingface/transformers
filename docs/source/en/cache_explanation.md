@@ -56,10 +56,10 @@ Attention is calculated independently in each layer of the model, and caching is
 
 Refer to the table below to compare how caching improves efficiency.
 
-| without caching | with caching |  |  |  |
-|---|---|---|---|---|
-| for each step, recompute all previous `K` and `V`  | for each step, only compute current `K` and `V` |  |  |  |
-| attention cost per step is **quadratic** with sequence length | attention cost per step is **linear** with sequence length (memory grows linearly, but compute/token remains low) |  |  |  |
+| without caching | with caching |
+|---|---|
+| for each step, recompute all previous `K` and `V`  | for each step, only compute current `K` and `V` 
+| attention cost per step is **quadratic** with sequence length | attention cost per step is **linear** with sequence length (memory grows linearly, but compute/token remains low) |
 
 
 
