@@ -84,11 +84,7 @@ def get_prs_by_label(label):
     prs = json.loads(result.stdout)
     for pr in prs:
         pr["oid"] = pr.get("mergeCommit", {}).get("oid")
-        if pr["oid"]:
-            pr["timestamp"] = datetime.fromisoformat(pr["mergeCommit"]["committedDate"].replace("Z", "+00:00"))
-        else:
-            pr["timestamp"] = None
-    return [pr.get("mergeCommit") for pr in prs if pr.get("mergeCommit")]
+    return [pr for pr in prs if pr.get("mergeCommit")]
 
 def get_commit_timestamp(commit_sha):
     """Get UNIX timestamp of a commit using git."""
