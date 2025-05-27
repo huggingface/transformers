@@ -42,7 +42,7 @@ class NGPTConfig(PretrainedConfig):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
-        head_dim (`int`, *optional*, defaults to 128):
+        head_dim (`int`, *optional*, defaults to None):
             The attention head dimension. If None, it will default to hidden_size // num_attention_heads
         num_key_value_heads (`int`, *optional*, defaults to 8):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
@@ -168,7 +168,7 @@ class NGPTConfig(PretrainedConfig):
         intermediate_size=21504,
         num_hidden_layers=32,
         num_attention_heads=32,
-        head_dim=128,
+        head_dim=None,
         num_key_value_heads=8,
         hidden_act="relu2",
         max_position_embeddings=8192,
