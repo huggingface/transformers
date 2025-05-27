@@ -28,6 +28,7 @@ from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
+from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 
 from .convert_slow_tokenizer import convert_slow_tokenizer
 from .integrations.ggml import convert_gguf_tokenizer
@@ -107,8 +108,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         self._do_lower_case = kwargs.pop("do_lower_case", False)
 
         if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None and self.config_class is None:
-
-        if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
             raise ValueError(
                 "Cannot instantiate this tokenizer from a slow version. If it's based on sentencepiece, make sure you "
                 "have sentencepiece installed."
