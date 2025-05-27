@@ -1086,6 +1086,8 @@ class Qwen2_5OmniVisionSdpaAttention(nn.Module):
         original_dtype = q.dtype
         device_type = q.device.type if isinstance(q.device.type, str) and q.device.type != "mps" else "cpu"
 
+        q, k, v = (x.transpose(0, 1) for x in (q, k, v))
+
         lengths = [cu_seqlens[i + 1] - cu_seqlens[i] for i in range(len(cu_seqlens) - 1)]
         q_splits = torch.split(q, lengths, dim=1)
         k_splits = torch.split(k, lengths, dim=1)

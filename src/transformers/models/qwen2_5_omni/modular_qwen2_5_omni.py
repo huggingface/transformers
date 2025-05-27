@@ -2051,6 +2051,8 @@ class Qwen2_5OmniVisionSdpaAttention(nn.Module):
         q = apply_rotary_pos_emb_vision(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
         k = apply_rotary_pos_emb_vision(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
 
+        q, k, v = (x.transpose(0, 1) for x in (q, k, v))
+
         original_dtype = q.dtype
         device_type = q.device.type if isinstance(q.device.type, str) and q.device.type != "mps" else "cpu"
 
