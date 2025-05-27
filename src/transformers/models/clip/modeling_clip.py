@@ -233,6 +233,105 @@ class CLIPVisionEmbeddings(nn.Module):
         return embeddings
 
 
+class CLIPREGVisionEmbeddings(nn.Module):
+    def __init__(self, config: CLIPVisionConfig):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.image_size = config.image_size
+        self.patch_size = config.patch_size
+
+        self.class_embedding = nn.Parameter(torch.randn(self.embed_dim))
+
+        self.patch_embedding = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=self.embed_dim,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
+            bias=False,
+        )
+
+        self.num_patches = (self.image_size // self.patch_size) ** 2
+
+        # -------- CLIPREG: Register tokens support --------
+        self.use_register_tokens = getattr(config, "use_register_tokens", False)
+        self.num_register_tokens = getattr(config, "num_register_tokens", 0) if self.use_register_tokens else 0
+        if self.use_register_tokens:
+            self.register_embeddings = nn.Parameter(torch.randn(self.num_register_tokens, self.embed_dim))
+
+        # -------- Adjust total positions (CLS + REG + PATCH) --------
+        self.num_positions = self.num_patches + 1 + self.num_register_tokens
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        self.register_buffer(
+            "position_ids",
+            torch.arange(self.num_positions).expand((1, -1)),
+            persistent=False
+        )
+
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        Interpolates positional encodings for patch tokens only (not [CLS]/registers).
+        """
+        # CLIPREG: index math for new token order
+        n_cls = 1
+        n_reg = self.num_register_tokens
+        n_patch = (embeddings.shape[1] - n_cls - n_reg)
+
+        # Position embedding shape: (1, n_cls+n_reg+n_patch, dim)
+        pos_embed_w = self.position_embedding.weight.unsqueeze(0)
+        n_total = pos_embed_w.shape[1]
+        dim = embeddings.shape[-1]
+
+        # Don't interpolate non-patch tokens ([CLS] + [REG])
+        class_reg_pos_embed = pos_embed_w[:, :n_cls + n_reg]     # (1, n_cls+n_reg, dim)
+        patch_pos_embed = pos_embed_w[:, n_cls + n_reg:]         # (1, n_patch_orig, dim)
+
+        # Interpolate patch positional embedding as in vanilla
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        n_patch_orig = patch_pos_embed.shape[1]
+        sqrt_patch_orig = int(n_patch_orig ** 0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_patch_orig, sqrt_patch_orig, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            size=(new_height, new_width),
+            mode="bicubic",
+            align_corners=False,
+        )
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+
+        # Recombine for final shape
+        return torch.cat((class_reg_pos_embed, patch_pos_embed), dim=1)
+
+    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
+        batch_size, _, height, width = pixel_values.shape
+        if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size}*{self.image_size})."
+            )
+        target_dtype = self.patch_embedding.weight.dtype
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # [B, D, grid, grid]
+        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)                   # [B, n_patches, D]
+
+        # -------- CLIPREG: Concatenate tokens in [CLS | REGs | PATCHES] order --------
+        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
+        if self.use_register_tokens:
+            register_embeds = self.register_embeddings.unsqueeze(0).expand(batch_size, -1, -1)  # [B, n_reg, D]
+            embeddings = torch.cat([class_embeds, register_embeds, patch_embeds], dim=1)
+        else:
+            embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
+
+        # -------- Position Embedding --------
+        if interpolate_pos_encoding:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            embeddings = embeddings + self.position_embedding(self.position_ids)
+
+        return embeddings
+
+
 class CLIPTextEmbeddings(nn.Module):
     def __init__(self, config: CLIPTextConfig):
         super().__init__()
@@ -462,6 +561,13 @@ class CLIPPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+        elif isinstance(module, CLIPREGVisionEmbeddings):
+            nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
+            nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
+            nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+            # --- Register token initialization (CLIPREG-specific) ---
+            if getattr(module, "use_register_tokens", False):
+                nn.init.normal_(module.register_embeddings, mean=0.0, std=module.embed_dim**-0.5 * factor)
         elif isinstance(module, CLIPAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
@@ -500,6 +606,19 @@ class CLIPPreTrainedModel(PreTrainedModel):
                 module.classifier.weight,
                 std=self.config.vision_config.hidden_size**-0.5 * self.config.initializer_factor,
             )
+        elif hasattr(module, "intermediate_fusion_mlps"):
+            for mlp in module.intermediate_fusion_mlps:
+                for layer in mlp.modules():
+                    if isinstance(layer, nn.Linear):
+                        nn.init.xavier_uniform_(layer.weight)
+                        if layer.bias is not None:
+                            nn.init.zeros_(layer.bias)
+        elif hasattr(module, "fusion_mlp"):
+            for layer in module.fusion_mlp.modules():
+                if isinstance(layer, nn.Linear):
+                    nn.init.xavier_uniform_(layer.weight)
+                    if layer.bias is not None:
+                        nn.init.zeros_(layer.bias)
 
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
@@ -800,6 +919,149 @@ class CLIPVisionTransformer(nn.Module):
         )
 
 
+class CLIPREGVisionTransformer(nn.Module):
+    """
+    HuggingFace-style CLIPREG Vision Transformer, supporting register tokens and fusion MLP gates.
+    """
+
+    def __init__(self, config: CLIPVisionConfig):
+        super().__init__()
+        self.config = config
+        embed_dim = config.hidden_size
+
+        # Register-aware embeddings (CLS + REG + PATCH)
+        self.embeddings = CLIPREGVisionEmbeddings(config)
+        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+
+        # Use standard CLIPEncoder for the transformer stack (unchanged resblocks)
+        self.encoder = CLIPEncoder(config)
+
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+
+        # --- Fusion MLP gates ---
+        self.use_fusion_mlp = getattr(config, "use_fusion_mlp", False)
+        self.use_register_tokens = getattr(config, "use_register_tokens", False)
+        self.gate_start_layer = getattr(config, "gate_start_layer", 100)  # large number disables by default
+        self.num_register_tokens = getattr(config, "num_register_tokens", 0)
+        num_layers = config.num_hidden_layers
+
+        # Only create fusion MLPs if enabled in config
+        if self.use_fusion_mlp and num_layers >= self.gate_start_layer:
+            self.intermediate_fusion_mlps = nn.ModuleList([
+                nn.Sequential(
+                    nn.Linear(2 * embed_dim, embed_dim),
+                    nn.ReLU(),
+                    nn.Linear(embed_dim, 1)
+                ) for _ in range(num_layers - self.gate_start_layer + 1)
+            ])
+            # Weight init
+            for gate in self.intermediate_fusion_mlps:
+                for m in gate.modules():
+                    if isinstance(m, nn.Linear):
+                        nn.init.xavier_uniform_(m.weight)
+                        if m.bias is not None:
+                            nn.init.zeros_(m.bias)
+        else:
+            self.intermediate_fusion_mlps = None
+
+        # Final fusion MLP
+        if self.use_fusion_mlp:
+            self.fusion_mlp = nn.Sequential(
+                nn.Linear(2 * embed_dim, embed_dim),
+                nn.ReLU(),
+                nn.Linear(embed_dim, 1)
+            )
+            for m in self.fusion_mlp.modules():
+                if isinstance(m, nn.Linear):
+                    nn.init.xavier_uniform_(m.weight)
+                    if m.bias is not None:
+                        nn.init.zeros_(m.bias)
+        else:
+            self.fusion_mlp = None
+
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
+    ) -> BaseModelOutputWithPooling:
+        """
+        Returns: BaseModelOutputWithPooling with:
+            - last_hidden_state: (batch, seq_len, hidden_dim)
+            - pooler_output: (batch, hidden_dim)
+        """
+        # Input embeddings: [CLS | REGs | PATCHES]
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        hidden_states = self.pre_layrnorm(hidden_states)
+
+        # Go through transformer layers, applying fusion MLPs at appropriate points
+        all_hidden_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
+        seq_len = hidden_states.shape[1]
+        batch_size = hidden_states.shape[0]
+
+        # Transpose for CLIPEncoder: (batch, seq_len, dim)
+        curr_hidden_states = hidden_states
+        for idx, encoder_layer in enumerate(self.encoder.layers):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (curr_hidden_states,)
+
+            layer_outputs = encoder_layer(
+                curr_hidden_states,
+                attention_mask=None,              # Vision transformer doesn't use masks
+                causal_attention_mask=None,
+                output_attentions=output_attentions,
+            )
+            curr_hidden_states = layer_outputs[0]
+
+            # Apply fusion MLPs after specified layers
+            if (
+                self.use_fusion_mlp and
+                self.intermediate_fusion_mlps is not None and
+                (idx + 1) >= self.gate_start_layer
+            ):
+                cls_token = curr_hidden_states[:, 0, :]  # [batch, dim]
+                reg_tokens = curr_hidden_states[:, 1:1+self.num_register_tokens, :]  # [batch, n_reg, dim]
+                reg_summary = reg_tokens.mean(dim=1)     # [batch, dim]
+                fusion_input = torch.cat([cls_token, reg_summary], dim=-1)
+                gate_index = (idx + 1) - self.gate_start_layer
+                gate = torch.sigmoid(self.intermediate_fusion_mlps[gate_index](fusion_input))  # [batch, 1]
+                fused = gate * cls_token + (1 - gate) * reg_summary
+                # Replace CLS token
+                curr_hidden_states = torch.cat([fused.unsqueeze(1), curr_hidden_states[:, 1:, :]], dim=1)
+
+            if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[1],)
+
+        # Final LayerNorm
+        last_hidden_state = self.post_layernorm(curr_hidden_states)
+
+        # Pool output: fusion of CLS and register summary (if enabled), else vanilla CLS
+        if self.use_register_tokens and self.use_fusion_mlp:
+            cls_token = last_hidden_state[:, 0, :]  # [batch, dim]
+            reg_tokens = last_hidden_state[:, 1:1+self.num_register_tokens, :]
+            reg_summary = reg_tokens.mean(dim=1)
+            fusion_input = torch.cat([cls_token, reg_summary], dim=-1)
+            gate = torch.sigmoid(self.fusion_mlp(fusion_input))  # [batch, 1]
+            pooled_output = gate * cls_token + (1 - gate) * reg_summary  # [batch, dim]
+        elif self.use_register_tokens:
+            # No fusion, just pool CLS for vanilla compatibility
+            pooled_output = last_hidden_state[:, 0, :]
+        else:
+            # Vanilla CLIP
+            pooled_output = last_hidden_state[:, 0, :]
+
+        # Return for HuggingFace
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+            hidden_states=all_hidden_states if output_hidden_states else None,
+            attentions=all_attentions if output_attentions else None,
+        )
+
+
 @auto_docstring(
     custom_intro="""
     The vision model from CLIP without any head or projection on top.
@@ -812,7 +1074,10 @@ class CLIPVisionModel(CLIPPreTrainedModel):
 
     def __init__(self, config: CLIPVisionConfig):
         super().__init__(config)
-        self.vision_model = CLIPVisionTransformer(config)
+        if getattr(config, "use_register_tokens", False) or getattr(config, "use_fusion_mlp", False):
+            self.vision_model = CLIPREGVisionTransformer(config)
+        else:
+            self.vision_model = CLIPVisionTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
 
