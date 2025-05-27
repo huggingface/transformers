@@ -116,7 +116,7 @@ def commit_in_history(commit_sha, base_branch="HEAD"):
     )
     return result.returncode == 0
 
-def main():
+def main(verbose=False):
     branch = get_release_branch_name()
     # checkout_branch(branch)
     prs = get_prs_by_label(LABEL)
@@ -136,7 +136,7 @@ def main():
     for pr in prs:
         sha = pr.get("oid")
         if sha:
-            if commit_in_history(sha):
+            if commit_in_history(sha) and verbose:
                 print(f"🔁 PR #{pr['number']} ({pr["title"]}) already in history. Skipping.")
             else:
                 print(f"🚀 PR #{pr['number']} ({pr["title"]}) not in history. Cherry-picking...")
