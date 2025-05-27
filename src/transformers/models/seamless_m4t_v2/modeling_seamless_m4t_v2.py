@@ -357,7 +357,7 @@ class SeamlessM4Tv2ConformerEncoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         embed_dim = config.hidden_size
-        dropout = config.speech_encoder_dropout
+        dropout = config.speech_encoder_dropout  # noqa: F841
 
         # Feed-forward 1
         self.ffn1_layer_norm = nn.LayerNorm(embed_dim)
@@ -2619,10 +2619,29 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     return shifted_input_ids
 
 
-SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS = r"""
+############ WHOLE MODEL related code ################
+
+
+SEAMLESS_M4T_V2_T2T_START_DOCSTRING = r"""
+    Generates sequences of token ids.
+
+    <Tip warning={true}>
+
+    Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
+    model's default generation configuration. You can override any `generation_config` by passing the corresponding
+    parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
+
+    For an overview of generation strategies and code examples, check out the [following
+    guide](./generation_strategies).
+
+    </Tip>
+"""
+
+
+SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS_DOCSTRING = r"""
     input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
-        Input audio features. This should be returned by the [`SeamlessM4Tv2FeatureExtractor`] class or the
-        [`SeamlessM4Tv2Processor`] class. See [`SeamlessM4Tv2FeatureExtractor.__call__`] for details.
+        Input audio features. This should be returned by the [`SeamlessM4TFeatureExtractor`] class or the
+        [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
     decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
         Indices of decoder input sequence tokens in the vocabulary.
 
@@ -2650,8 +2669,46 @@ SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS = r"""
         model's internal embedding lookup matrix.
 """
 
+SEAMLESS_M4T_V2_T2T_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.Tensor` of varying shape depending on the modality, *optional*):
+            Indices of input sequence tokens in the vocabulary.
 
-############ WHOLE MODEL related code ################
+            Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See
+            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        tgt_lang (`str`, *optional*):
+            The language to use as target language for translation.
+        generation_config (`~generation.GenerationConfig`, *optional*):
+            The generation configuration to be used as base parametrization for the generation call. `**kwargs`
+            passed to generate matching the attributes of `generation_config` will override them. If
+            `generation_config` is not provided, the default will be used, which had the following loading
+            priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
+            configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
+            default values, whose documentation should be checked to parameterize generation.
+        logits_processor (`LogitsProcessorList`, *optional*):
+            Custom logits processors that complement the default logits processors built from arguments and
+            generation config. If a logit processor is passed that is already created with the arguments or a
+            generation config an error is thrown. This feature is intended for advanced users.
+        stopping_criteria (`StoppingCriteriaList`, *optional*):
+            Custom stopping criteria that complement the default stopping criteria built from arguments and a
+            generation config. If a stopping criteria is passed that is already created with the arguments or a
+            generation config an error is thrown. This feature is intended for advanced users.
+        prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
+            If provided, this function constraints the beam search to allowed tokens only at each step. If not
+            provided no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
+            `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
+            on the batch ID `batch_id` and the previously generated tokens `inputs_ids`. This argument is useful
+            for constrained generation conditioned on the prefix, as described in [Autoregressive Entity
+            Retrieval](https://arxiv.org/abs/2010.00904).
+        synced_gpus (`bool`, *optional*, defaults to `False`):
+            Whether to continue running the while loop until max_length (needed to avoid deadlocking with
+            `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
+        kwargs (`Dict[str, Any]`, *optional*):
+            Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
+            forwarded to the `forward` function of the model.
+"""
 
 
 @auto_docstring(
@@ -2707,7 +2764,7 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
             self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.lm_head, self.shared)
 
-    @auto_docstring(custom_args=SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS)
+    @auto_docstring(custom_args=SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2805,6 +2862,7 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
             encoder_attentions=encoder_outputs.attentions,
         )
 
+    @auto_docstring(custom_intro=SEAMLESS_M4T_V2_T2T_START_DOCSTRING, custom_args=SEAMLESS_M4T_V2_T2T_INPUTS_DOCSTRING)
     def generate(
         self,
         input_ids=None,
@@ -2817,58 +2875,6 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
         **kwargs,
     ):
         """
-        Generates sequences of token ids.
-
-        <Tip warning={true}>
-
-        Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
-        model's default generation configuration. You can override any `generation_config` by passing the corresponding
-        parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
-
-        For an overview of generation strategies and code examples, check out the [following
-        guide](./generation_strategies).
-
-        </Tip>
-
-        Parameters:
-            input_ids (`torch.Tensor` of varying shape depending on the modality, *optional*):
-                Indices of input sequence tokens in the vocabulary.
-
-                Indices can be obtained using [`SeamlessM4Tv2Tokenizer`] or [`SeamlessM4Tv2Processor`]. See
-                [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
-
-                [What are input IDs?](../glossary#input-ids)
-            tgt_lang (`str`, *optional*):
-                The language to use as target language for translation.
-            generation_config (`~generation.GenerationConfig`, *optional*):
-                The generation configuration to be used as base parametrization for the generation call. `**kwargs`
-                passed to generate matching the attributes of `generation_config` will override them. If
-                `generation_config` is not provided, the default will be used, which had the following loading
-                priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
-                configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
-                default values, whose documentation should be checked to parameterize generation.
-            logits_processor (`LogitsProcessorList`, *optional*):
-                Custom logits processors that complement the default logits processors built from arguments and
-                generation config. If a logit processor is passed that is already created with the arguments or a
-                generation config an error is thrown. This feature is intended for advanced users.
-            stopping_criteria (`StoppingCriteriaList`, *optional*):
-                Custom stopping criteria that complement the default stopping criteria built from arguments and a
-                generation config. If a stopping criteria is passed that is already created with the arguments or a
-                generation config an error is thrown. This feature is intended for advanced users.
-            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
-                If provided, this function constraints the beam search to allowed tokens only at each step. If not
-                provided no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
-                `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
-                on the batch ID `batch_id` and the previously generated tokens `inputs_ids`. This argument is useful
-                for constrained generation conditioned on the prefix, as described in [Autoregressive Entity
-                Retrieval](https://arxiv.org/abs/2010.00904).
-            synced_gpus (`bool`, *optional*, defaults to `False`):
-                Whether to continue running the while loop until max_length (needed to avoid deadlocking with
-                `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
-            kwargs (`Dict[str, Any]`, *optional*):
-                Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
-                forwarded to the `forward` function of the model.
-
         Return:
             [`~utils.ModelOutput`] or `torch.LongTensor`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
             or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`. The possible
@@ -2927,6 +2933,61 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
         return reordered_past
 
 
+SEAMLESS_M4T_V2_S2T_START_DOCSTRING = r"""
+    Generates sequences of token ids.
+
+    <Tip warning={true}>
+
+    Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
+    model's default generation configuration. You can override any `generation_config` by passing the corresponding
+    parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
+
+    For an overview of generation strategies and code examples, check out the [following
+    guide](./generation_strategies).
+
+    </Tip>
+"""
+
+
+SEAMLESS_M4T_V2_S2T_INPUTS_DOCSTRING = r"""
+    Args:
+        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
+                Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the
+                [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
+
+        tgt_lang (`str`, *optional*):
+            The language to use as target language for translation.
+        generation_config (`~generation.GenerationConfig`, *optional*):
+            The generation configuration to be used as base parametrization for the generation call. `**kwargs`
+            passed to generate matching the attributes of `generation_config` will override them. If
+            `generation_config` is not provided, the default will be used, which had the following loading
+            priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
+            configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
+            default values, whose documentation should be checked to parameterize generation.
+        logits_processor (`LogitsProcessorList`, *optional*):
+            Custom logits processors that complement the default logits processors built from arguments and
+            generation config. If a logit processor is passed that is already created with the arguments or a
+            generation config an error is thrown. This feature is intended for advanced users.
+        stopping_criteria (`StoppingCriteriaList`, *optional*):
+            Custom stopping criteria that complement the default stopping criteria built from arguments and a
+            generation config. If a stopping criteria is passed that is already created with the arguments or a
+            generation config an error is thrown. This feature is intended for advanced users.
+        prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
+            If provided, this function constraints the beam search to allowed tokens only at each step. If not
+            provided no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
+            `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
+            on the batch ID `batch_id` and the previously generated tokens `inputs_ids`. This argument is useful
+            for constrained generation conditioned on the prefix, as described in [Autoregressive Entity
+            Retrieval](https://arxiv.org/abs/2010.00904).
+        synced_gpus (`bool`, *optional*, defaults to `False`):
+            Whether to continue running the while loop until max_length (needed to avoid deadlocking with
+            `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
+        kwargs (`Dict[str, Any]`, *optional*):
+            Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
+            forwarded to the `forward` function of the model.
+"""
+
+
 @auto_docstring(
     custom_intro="""
     The speech-to-text SeamlessM4Tv2 Model transformer which can be used for S2TT.
@@ -2975,7 +3036,7 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin
             self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.lm_head, self.shared)
 
-    @auto_docstring(custom_args=SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS)
+    @auto_docstring(custom_args=SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS_DOCSTRING)
     def forward(
         self,
         input_features: Optional[torch.LongTensor] = None,
@@ -3080,6 +3141,7 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin
             encoder_attentions=encoder_outputs.attentions,
         )
 
+    @auto_docstring(custom_intro=SEAMLESS_M4T_V2_S2T_START_DOCSTRING, custom_args=SEAMLESS_M4T_V2_S2T_INPUTS_DOCSTRING)
     def generate(
         self,
         input_features=None,
@@ -3092,55 +3154,6 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin
         **kwargs,
     ):
         """
-        Generates sequences of token ids.
-
-        <Tip warning={true}>
-
-        Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
-        model's default generation configuration. You can override any `generation_config` by passing the corresponding
-        parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
-
-        For an overview of generation strategies and code examples, check out the [following
-        guide](./generation_strategies).
-
-        </Tip>
-
-        Parameters:
-            input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
-                Input audio features. This should be returnes by the [`SeamlessM4Tv2FeatureExtractor`] class or the
-                [`SeamlessM4Tv2Processor`] class. See [`SeamlessM4Tv2FeatureExtractor.__call__`] for details.
-
-            tgt_lang (`str`, *optional*):
-                The language to use as target language for translation.
-            generation_config (`~generation.GenerationConfig`, *optional*):
-                The generation configuration to be used as base parametrization for the generation call. `**kwargs`
-                passed to generate matching the attributes of `generation_config` will override them. If
-                `generation_config` is not provided, the default will be used, which had the following loading
-                priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
-                configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
-                default values, whose documentation should be checked to parameterize generation.
-            logits_processor (`LogitsProcessorList`, *optional*):
-                Custom logits processors that complement the default logits processors built from arguments and
-                generation config. If a logit processor is passed that is already created with the arguments or a
-                generation config an error is thrown. This feature is intended for advanced users.
-            stopping_criteria (`StoppingCriteriaList`, *optional*):
-                Custom stopping criteria that complement the default stopping criteria built from arguments and a
-                generation config. If a stopping criteria is passed that is already created with the arguments or a
-                generation config an error is thrown. This feature is intended for advanced users.
-            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
-                If provided, this function constraints the beam search to allowed tokens only at each step. If not
-                provided no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
-                `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
-                on the batch ID `batch_id` and the previously generated tokens `inputs_ids`. This argument is useful
-                for constrained generation conditioned on the prefix, as described in [Autoregressive Entity
-                Retrieval](https://arxiv.org/abs/2010.00904).
-            synced_gpus (`bool`, *optional*, defaults to `False`):
-                Whether to continue running the while loop until max_length (needed to avoid deadlocking with
-                `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
-            kwargs (`Dict[str, Any]`, *optional*):
-                Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
-                forwarded to the `forward` function of the model.
-
         Return:
             [`~utils.ModelOutput`] or `torch.LongTensor`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
             or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`. The possible
@@ -3299,7 +3312,7 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin
             self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.lm_head, self.shared)
 
-    @auto_docstring(custom_args=SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS)
+    @auto_docstring(custom_args=SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -3662,7 +3675,7 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMix
             self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.lm_head, self.shared)
 
-    @auto_docstring(custom_args=SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS)
+    @auto_docstring(custom_args=SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS_DOCSTRING)
     def forward(
         self,
         input_features: Optional[torch.LongTensor] = None,
@@ -4061,7 +4074,7 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
             self._tie_or_clone_weights(self.text_decoder.embed_tokens, self.shared)
             self._tie_or_clone_weights(self.lm_head, self.shared)
 
-    @auto_docstring(custom_args=SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS)
+    @auto_docstring(custom_args=SEAMLESS_M4T_V2_COMMON_CUSTOM_ARGS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
