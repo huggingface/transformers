@@ -16,7 +16,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -100,6 +100,7 @@ class FuyuConfig(PretrainedConfig):
     ```"""
 
     model_type = "fuyu"
+    sub_configs = {"text_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -127,6 +128,7 @@ class FuyuConfig(PretrainedConfig):
         pad_token_id=None,
         bos_token_id=1,
         eos_token_id=2,
+        image_token_id=71011,
         text_config=None,
         **kwargs,
     ):
@@ -176,6 +178,7 @@ class FuyuConfig(PretrainedConfig):
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
         self.partial_rotary_factor = partial_rotary_factor
+        self.image_token_id = image_token_id
         self._rope_scaling_validation()
 
         super().__init__(
