@@ -19,6 +19,7 @@ import unittest
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, FineGrainedFP8Config, OPTForCausalLM
 from transformers.testing_utils import (
     backend_empty_cache,
+    get_device_properties,
     require_accelerate,
     require_read_token,
     require_torch_accelerator,
@@ -254,7 +255,7 @@ class FP8LinearTest(unittest.TestCase):
     device = torch_device
 
     @unittest.skipIf(
-        torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 9,
+        get_device_properties()[0] == "cuda" and get_device_properties()[1] < 9,
         "Skipping FP8LinearTest because it is not supported on GPU with capability < 9.0",
     )
     def test_linear_preserves_shape(self):
@@ -270,7 +271,7 @@ class FP8LinearTest(unittest.TestCase):
         self.assertEqual(x_.shape, x.shape)
 
     @unittest.skipIf(
-        torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 9,
+        get_device_properties()[0] == "cuda" and get_device_properties()[1] < 9,
         "Skipping FP8LinearTest because it is not supported on GPU with capability < 9.0",
     )
     def test_linear_with_diff_feature_size_preserves_shape(self):
