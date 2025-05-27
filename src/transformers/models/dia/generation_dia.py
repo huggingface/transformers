@@ -18,9 +18,9 @@ import time
 import numpy as np
 import torch
 
-from ...cache_utils import DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...utils import logging
+from .configuration_dia import DiaConfig
 from .processing_dia import apply_audio_delay, build_delay_indices, build_revert_indices, revert_audio_delay
 
 
@@ -106,6 +106,11 @@ def _sample_next_token(
 
 
 class DiaGenerationMixin(GenerationMixin):
+    def __init__(self, config: DiaConfig):
+        super().__init__(config)
+        self.dac_model = None
+        self.config = config
+
     def _load_dac_model(self):
         try:
             import dac
@@ -218,6 +223,7 @@ class DiaGenerationMixin(GenerationMixin):
     def generate(
         self,
         input_ids: torch.Tensor,
+        eos_token_id: int | None = None,
         attention_mask: torch.Tensor | None = None,
         max_new_tokens: int | None = None,
         temperature: float = 1.3,
@@ -227,12 +233,13 @@ class DiaGenerationMixin(GenerationMixin):
         use_torch_compile: bool = False,
         audio_prompt: list[str | torch.Tensor | None] | str | torch.Tensor | None = None,
         verbose: bool = False,
+        **kwargs,
     ) -> np.ndarray | list[np.ndarray]:
-        self._load_dac_model()
+        # self._load_dac_model()
         device = self.device
         batch_size = input_ids.shape[0]
 
-        audio_eos_value = self.generation_config.eos_token_id
+        audio_eos_value = eos_token_id or self.generation_config.eos_token_id
         audio_pad_value = self.generation_config.pad_token_id
         audio_bos_value = self.generation_config.bos_token_id
         delay_pattern = self.config.delay_pattern

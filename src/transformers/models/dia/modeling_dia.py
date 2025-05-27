@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch Dia model."""
 
-from typing import Callable, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 import torch
 from torch import nn
@@ -22,6 +22,7 @@ from torch.nn import RMSNorm
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
+from ...generation import GenerationConfig, GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -32,11 +33,8 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    logging,
-)
+from ...utils import ModelOutput, logging
 from .configuration_dia import DiaConfig, DiaDecoderConfig, DiaEncoderConfig
-from .generation_dia import DiaGenerationMixin
 
 
 logger = logging.get_logger(__name__)
@@ -45,7 +43,9 @@ _CONFIG_FOR_DOC = "DiaConfig"
 _CHECKPOINT_FOR_DOC = "nari-labs/Dia-1.6B"
 
 
-def apply_rotary_pos_emb(tensor, position_embeddings, unsqueeze_dim=1):
+def apply_rotary_pos_emb(
+    tensor: torch.Tensor, position_embeddings: Tuple[torch.Tensor, torch.Tensor], unsqueeze_dim: int = 1
+) -> torch.Tensor:
     cos = position_embeddings[0]
     sin = position_embeddings[1]
     first_half, second_half = torch.chunk(tensor.to(torch.float32), 2, dim=-1)
@@ -55,7 +55,7 @@ def apply_rotary_pos_emb(tensor, position_embeddings, unsqueeze_dim=1):
 
 
 class DiaRotaryEmbedding(nn.Module):
-    def __init__(self, config: DiaConfig, device=None):
+    def __init__(self, config: DiaEncoderConfig | DiaDecoderConfig):
         super().__init__()
         self.embedding_dims = config.head_dim
         self.min_timescale = config.rope_min_timescale
@@ -67,7 +67,7 @@ class DiaRotaryEmbedding(nn.Module):
         self.register_buffer("freqs", freqs, persistent=False)
 
     @torch.no_grad()
-    def forward(self, x, position_ids):
+    def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         position_ids_expanded = position_ids[:, :, None, None].float().repeat(x.shape[0], 1, 1, 1)
         half_embedding_dim = self.embedding_dims // 2
         fraction = (2.0 * torch.arange(0, half_embedding_dim)) / self.embedding_dims
@@ -119,7 +119,7 @@ def eager_attention_forward(
 class DiaSelfAttention(nn.Module):  # Modular : LlamaAttentions
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config, layer_idx: int, is_causal: bool = False):
+    def __init__(self, config: DiaEncoderConfig | DiaDecoderConfig, layer_idx: int, is_causal: bool = False):
         super().__init__()
         self.config = config
         self.num_heads = self.config.num_attention_heads
@@ -188,8 +188,8 @@ class DiaCrossAttention(nn.Module):
 
     def __init__(
         self,
-        config: Optional[DiaDecoderConfig],
-        layer_idx: Optional[int] = None,
+        config: DiaDecoderConfig,
+        layer_idx: int,
     ):
         super().__init__()
         self.config = config
@@ -229,9 +229,9 @@ class DiaCrossAttention(nn.Module):
                 key_states, value_states = past_key_values.update(
                     key_states, value_states, self.layer_idx, {"cache_positions": cache_position}
                 )
-        else:  # not prefill, make it compile compatible
-            key_states = past_key_values.key_cache[self.layer_idx]
-            value_states = past_key_values.value_cache[self.layer_idx]
+        elif past_key_values is not None:  # not prefill, make it compile compatible
+            key_states = past_key_values.key_cache[self.layer_idx]  # ty: ignore[unresolved-attribute]
+            value_states = past_key_values.value_cache[self.layer_idx]  # ty: ignore[unresolved-attribute]
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -256,7 +256,7 @@ class DiaCrossAttention(nn.Module):
 
 
 class DiaEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: DiaConfig, layer_idx):
+    def __init__(self, config: DiaEncoderConfig, layer_idx: int):
         super().__init__()
         self.pre_sa_norm = RMSNorm(config.hidden_size, eps=config.norm_eps)
         self.self_attention = DiaSelfAttention(config, layer_idx)
@@ -278,8 +278,6 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
             hidden_states=normed_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
-            past_key_values=None,
-            cache_position=None,
             output_attentions=output_attentions,
             **kwargs,
         )
@@ -318,9 +316,9 @@ class DiaPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-class DiaEncoder(DiaPreTrainedModel):
-    def __init__(self, config: DiaEncoderConfig):
-        super().__init__(config)
+class DiaEncoder(nn.Module):
+    def __init__(self, config: DiaEncoderConfig, **kwargs):
+        super().__init__()
         self.config = config
 
         self.embedding = nn.Embedding(config.vocab_size, config.hidden_size)
@@ -336,20 +334,19 @@ class DiaEncoder(DiaPreTrainedModel):
 
     def forward(
         self,
-        audio_codes: torch.Tensor,
+        input_features: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,  # TODO can the auudio codes be "padded"?
         cache_position: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
-    ) -> BaseModelOutput:
-        hidden_states = self.embedding(audio_codes)
-        position_embeddings = self.rotary_embeddings(hidden_states, cache_position)
+    ) -> BaseModelOutput | Tuple[torch.Tensor, ...]:
+        hidden_states = self.embedding(input_features)
+        position_embeddings = self.rotary_embeddings(hidden_states, cache_position)  # type: ignore
         _attention_mask = torch.ones(
-            (audio_codes.shape[0], 1, hidden_states.shape[1], hidden_states.shape[1]), device=hidden_states.device
+            (input_features.shape[0], 1, hidden_states.shape[1], hidden_states.shape[1]), device=hidden_states.device
         )
-        _attention_mask = (_attention_mask.long() & attention_mask[:, None, None, :]) & attention_mask[
+        _attention_mask = (_attention_mask.long() & attention_mask[:, None, None, :]) & attention_mask[  # type: ignore
             :, None, :, None
         ]
 
@@ -357,26 +354,25 @@ class DiaEncoder(DiaPreTrainedModel):
         all_self_attn_weights = () if output_attentions else None
 
         for layer in self.layers:
-            if output_hidden_states:
+            if all_hidden_states is not None:
                 all_hidden_states += (hidden_states,)
 
             hidden_states, self_attn_weights = layer(
                 hidden_states=hidden_states,
                 attention_mask=_attention_mask,
                 position_embeddings=position_embeddings,
-                past_key_values=past_key_values,
                 output_attentions=output_attentions,
             )
 
-            if output_attentions:
+            if all_self_attn_weights is not None:
                 all_self_attn_weights += (self_attn_weights,)
 
-        if output_hidden_states:
+        if all_hidden_states is not None:
             all_hidden_states += (hidden_states,)
 
         hidden_states = self.norm(hidden_states)
 
-        if output_hidden_states:
+        if all_hidden_states is not None:
             all_hidden_states += (hidden_states,)
 
         if not return_dict:
@@ -409,7 +405,7 @@ class DiaMLP(nn.Module):  # Modular GlmMLP
 
 
 class DiaDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: DiaDecoderConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: DiaDecoderConfig, layer_idx: int):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.dropout = config.dropout
@@ -436,18 +432,18 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         position_embeddings: torch.Tensor,
         cache_position: torch.LongTensor,
         attention_mask: torch.Tensor,
-        past_key_values: Optional[Cache] = None,
+        past_key_values: Optional[EncoderDecoderCache] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         residual = hidden_states
         normed_states = self.pre_sa_norm(hidden_states)
-        self_mask = torch.ones_like(normed_states)
+        self_mask = torch.tril(torch.ones_like(normed_states))
         self_mask[..., : cache_position + 1] = 0
         hidden_states, self_attn_weights = self.self_attention(
             hidden_states=normed_states,
             attention_mask=self_mask[:, None, ...],
             position_embeddings=position_embeddings,
-            past_key_values=past_key_values.self_attention_cache,
+            past_key_values=past_key_values.self_attention_cache if past_key_values is not None else None,
             cache_position=cache_position,
             output_attentions=output_attentions,
         )
@@ -462,7 +458,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
             cross_attention_states=encoder_hidden_states,
             attention_mask=attention_mask,
             cache_position=cache_position,
-            past_key_values=past_key_values.cross_attention_cache,
+            past_key_values=past_key_values.cross_attention_cache if past_key_values is not None else None,
             output_attentions=output_attentions,
         )
         cross_states = nn.functional.dropout(cross_states, p=self.dropout, training=self.training)
@@ -489,7 +485,7 @@ class DiaMultiChannelEmbed(nn.Module):
     This allows us to use a single embedding layer for all channels.
     """
 
-    def __init__(self, config: DiaConfig):
+    def __init__(self, config: DiaDecoderConfig):
         super().__init__()
         self.embed = nn.Embedding(config.vocab_size * config.num_channels, config.hidden_size)
         self.hidden_size = config.hidden_size
@@ -503,11 +499,11 @@ class DiaMultiChannelEmbed(nn.Module):
         return embeds.sum(dim=2)
 
 
-class DiaDecoder(DiaPreTrainedModel):
+class DiaDecoder(nn.Module):
     """Transformer Decoder Stack using DenseGeneral."""
 
-    def __init__(self, config: DiaDecoderConfig):
-        super().__init__(config)
+    def __init__(self, config: DiaDecoderConfig, **kwargs):
+        super().__init__()
         self.num_channels = config.num_channels
         self.vocab_size = config.vocab_size
         self.embeddings = DiaMultiChannelEmbed(config)
@@ -528,25 +524,22 @@ class DiaDecoder(DiaPreTrainedModel):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: Optional[bool] = None,
-    ) -> BaseModelOutputWithPastAndCrossAttentions:
+    ) -> BaseModelOutputWithPastAndCrossAttentions | Tuple[torch.Tensor, ...]:
         if past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
 
-        past_length = 0
-        if cache_position is not None:
-            past_length = cache_position[0]
-        elif past_key_values is not None:
-            past_length = past_key_values.get_seq_length()
-
         hidden_states = self.embeddings(audio_codes)
+
         if cache_position is None:
-            cache_position = torch.arange(
-                past_length, past_length + hidden_states.shape[1], device=hidden_states.device
+            past_length = 0
+            if past_key_values is not None:
+                past_length = past_key_values.get_seq_length()
+
+            cache_position = torch.arange(  # ty: ignore[invalid-assignment]
+                past_length, past_length + hidden_states.shape[1], dtype=torch.long, device=hidden_states.device
             )[None, :]
 
         position_embeddings = self.rotary_embeddings(hidden_states, cache_position)
-        if attention_mask is not None:
-            attention_mask = 1 - (attention_mask[:, None, None, :])
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attn_weights = () if output_attentions else None
@@ -564,11 +557,13 @@ class DiaDecoder(DiaPreTrainedModel):
                 output_hidden_states=output_hidden_states,
             )
 
-            if output_hidden_states:
+            if all_hidden_states is not None:
                 all_hidden_states += (hidden_states,)
 
-            if output_attentions:
+            if all_self_attn_weights is not None:
                 all_self_attn_weights += (self_attn_weights,)
+
+            if all_cross_attn_weights is not None:
                 all_cross_attn_weights += (cross_attn_weights,)
 
         hidden_states = self.norm(hidden_states)
@@ -589,7 +584,7 @@ class DiaDecoder(DiaPreTrainedModel):
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=last_hidden_states,
-            past_key_values=past_key_values.self_attention_cache,
+            past_key_values=past_key_values,  # ty: ignore[invalid-argument-type]
             hidden_states=all_hidden_states,
             attentions=all_self_attn_weights,
             cross_attentions=all_cross_attn_weights,
@@ -597,11 +592,17 @@ class DiaDecoder(DiaPreTrainedModel):
 
 
 class DiaModel(DiaPreTrainedModel):
-    def __init__(self, config: DiaConfig):
+    def __init__(self, config: DiaConfig, **kwargs):
         super().__init__(config)
         self.encoder = DiaEncoder(config.encoder_config)
         self.decoder = DiaDecoder(config.decoder_config)
         self.post_init()
+
+    def get_encoder(self):
+        return self.encoder
+
+    def get_decoder(self):
+        return self.decoder
 
     def get_input_embeddings(self):
         return self.decoder.embed_tokens
@@ -611,14 +612,12 @@ class DiaModel(DiaPreTrainedModel):
 
     def forward(
         self,
-        input_audio_codes: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        input_ids: Optional[torch.LongTensor] = None,
+        encoder_input_ids: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.LongTensor] = None,
         encoder_outputs: Optional[BaseModelOutput] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
-        audio_codes: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[Tuple[torch.LongTensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -648,43 +647,74 @@ class DiaModel(DiaPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        if input_audio_codes is None:
-            input_audio_codes = torch.zeros_like(input_ids)
-        # your batch size becomes 2 * batch_size
-        input_audio_codes = torch.stack([input_audio_codes, input_ids], dim=1).view(-1, input_audio_codes.shape[-1])
-        if attention_mask is not None:
-            attention_mask = torch.cat((attention_mask, attention_mask), dim=0)
-        if decoder_attention_mask is not None:
-            decoder_attention_mask = decoder_attention_mask.repeat_interleave(2, dim=0)
-
-        if cache_position is None:
-            cache_position = torch.arange(input_ids.shape[-1], device=input_ids.device)[None, :]
-
         if encoder_outputs is None:
+            if encoder_input_ids is None:
+                raise ValueError("Either `encoder_input_ids` or `encoder_outputs` must be provided.")
+            encoder_input_features_prepared = encoder_input_ids
+
+            encoder_cache_position: torch.LongTensor
+            if cache_position is None:
+                encoder_cache_position = torch.arange(encoder_input_ids.shape[-1], device=encoder_input_ids.device)[
+                    None, :
+                ]
+            else:
+                encoder_cache_position = cache_position
+
             encoder_outputs = self.encoder(
-                input_audio_codes,
-                attention_mask=attention_mask,
-                cache_position=cache_position,
+                input_features=encoder_input_features_prepared,
+                attention_mask=encoder_attention_mask,
+                cache_position=encoder_cache_position,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
 
-        if audio_codes is None:
-            audio_codes = torch.full((input_audio_codes.shape[0], 1, 9), 1026, device=self.device)
-        if audio_codes.shape[-1] != 9:
-            audio_codes = audio_codes.repeat_interleave(2, dim=0)
-            audio_codes = torch.nn.functional.pad(audio_codes, (0, 9 - audio_codes.shape[1]), value=1026)[:, None, :]
+        encoder_hidden_states_tensor: torch.Tensor
+        if isinstance(encoder_outputs, tuple):
+            encoder_hidden_states_tensor = encoder_outputs[0]
+        elif hasattr(encoder_outputs, "last_hidden_state") and encoder_outputs.last_hidden_state is not None:
+            encoder_hidden_states_tensor = encoder_outputs.last_hidden_state
+        else:
+            raise TypeError(
+                f"Unexpected type or missing last_hidden_state for encoder_outputs: {type(encoder_outputs)}"
+            )
+
+        processed_decoder_audio_codes: torch.LongTensor
+        if decoder_input_ids is None:
+            batch_size = encoder_input_features_prepared.shape[0]
+            processed_decoder_audio_codes = torch.full((batch_size, 1, 9), 1026, device=self.device, dtype=torch.long)
+        else:
+            if decoder_input_ids.dtype != torch.long:
+                temp_audio_codes = decoder_input_ids.to(torch.long)
+            else:
+                temp_audio_codes = decoder_input_ids
+
+            if temp_audio_codes.shape[-1] != 9:
+                num_dims_to_pad_from_end = temp_audio_codes.ndim * 2
+                padding_config = [0] * num_dims_to_pad_from_end
+                padding_config[1] = 9 - temp_audio_codes.shape[-1]
+
+                padded_audio_codes = torch.nn.functional.pad(temp_audio_codes, tuple(padding_config), value=1026)
+
+                if padded_audio_codes.ndim == 2:
+                    processed_decoder_audio_codes = padded_audio_codes[:, None, :]
+                elif padded_audio_codes.ndim == 3:
+                    processed_decoder_audio_codes = padded_audio_codes
+                else:
+                    raise ValueError(f"Padded audio_codes has unexpected ndim: {padded_audio_codes.ndim}")
+            else:
+                processed_decoder_audio_codes = temp_audio_codes
+
+        if past_key_values is None:
+            past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
 
         decoder_outputs = self.decoder(
-            audio_codes=audio_codes,
-            attention_mask=attention_mask,
-            encoder_hidden_states=encoder_outputs,
+            audio_codes=processed_decoder_audio_codes,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=encoder_hidden_states_tensor,
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            cross_cache_position=cache_position,
-            cache_position=cache_position if encoder_outputs is None else None,
             return_dict=return_dict,
         )
 
@@ -703,17 +733,106 @@ class DiaModel(DiaPreTrainedModel):
         )
 
 
-class DiaForConditionalGeneration(DiaGenerationMixin, DiaPreTrainedModel):
+class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
     def __init__(self, config: DiaConfig):
         super().__init__(config)
+        self.config = config
         self.model = DiaModel(config)
-        self.proj_out = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.max_target_positions = config.max_target_positions
+
+    def get_encoder(self):
+        return self.model.get_encoder()
+
+    def get_decoder(self):
+        return self.model.get_decoder()
+
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
+    def _prepare_generation_config(
+        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Dict
+    ) -> Tuple[GenerationConfig, Dict]:
+        generation_config, model_kwargs = super()._prepare_generation_config(
+            generation_config, use_model_defaults, **kwargs
+        )
+
+        # eos stopping criteria
+        _eos = self.config.eos_token_id
+        _pad = self.config.pad_token_id
+        _channel = self.config.decoder_config.num_channels
+        generation_config._eos_token_tensor = torch.tensor([_pad for _ in range(_channel - 1)] + [_eos])
+
+        _encoder_length = self.config.encoder_config.max_length
+        _encoder_pad = 0
+        encoder_input_ids: Optional[torch.Tensor] = model_kwargs.get("encoder_input_ids", None)
+        if encoder_input_ids is None:
+            raise ValueError("encoder_input_ids must be provided")
+        if encoder_input_ids.ndim == 1:
+            encoder_input_ids = encoder_input_ids.unsqueeze(0)
+        if encoder_input_ids.ndim != 2:
+            raise ValueError("encoder_input_ids must be a 1D or 2D tensor")
+        if encoder_input_ids.shape[-1] == _encoder_length:
+            raise ValueError(f"encoder_input_ids length must be {_encoder_length} for generation")
+
+        encoder_input_ids = torch.cat(
+            [encoder_input_ids, torch.zeros(1, encoder_input_ids.shape[-1], device=self.device)], dim=0
+        )
+
+        batch_size = encoder_input_ids.shape[0]
+        model_kwargs["encoder_attention_mask"] = torch.ones(
+            (batch_size, encoder_input_ids.shape[-1]), device=self.device
+        )
+
+        return generation_config, model_kwargs
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids: torch.LongTensor,
+        past_key_values: Optional[Cache] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **model_kwargs,
+    ) -> Dict[str, Any]:
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids, past_key_values, attention_mask, inputs_embeds, cache_position, **model_kwargs
+        )
+
+        batch_size = input_ids.shape[0]
+        eos_detected_Bx = model_kwargs["eos_detected_Bx"]
+        eos_countdown_Bx = model_kwargs["eos_countdown_Bx"]
+        finished_step_Bx = model_kwargs["finished_step_Bx"]
+
+        if eos_detected_Bx is None:
+            eos_detected_Bx = torch.zeros((batch_size,), dtype=torch.bool, device=self.device)
+        if eos_countdown_Bx is None:
+            eos_countdown_Bx = torch.full((batch_size,), -1, dtype=torch.long, device=self.device)
+        if finished_step_Bx is None:
+            finished_step_Bx = torch.full((batch_size,), -1, dtype=torch.long, device=self.device)
+
+        model_kwargs["eos_detected_Bx"] = eos_detected_Bx
+        model_kwargs["eos_countdown_Bx"] = eos_countdown_Bx
+        model_kwargs["finished_step_Bx"] = finished_step_Bx
+
+        return model_inputs
+
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs: ModelOutput,
+        model_kwargs: Dict[str, Any],
+        is_encoder_decoder: bool = False,
+        num_new_tokens: int = 1,
+    ) -> Dict[str, Any]:
+        model_kwargs = super()._update_model_kwargs_for_generation(
+            outputs, model_kwargs, is_encoder_decoder, num_new_tokens
+        )
+        return model_kwargs
 
     def forward(
         self,
-        input_audio_codes: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
+        encoder_input_ids: Optional[torch.FloatTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         encoder_outputs: Optional[BaseModelOutput] = None,
@@ -738,25 +857,24 @@ class DiaForConditionalGeneration(DiaGenerationMixin, DiaPreTrainedModel):
                 decoder_input_ids = labels
 
         outputs = self.model(
-            input_audio_codes=input_audio_codes,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
+            encoder_input_ids=encoder_input_ids,
+            encoder_attention_mask=encoder_attention_mask,
             encoder_outputs=encoder_outputs,
+            decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             past_key_values=past_key_values,
-            decoder_inputs_embeds=decoder_inputs_embeds,
-            position_ids=decoder_position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
         )
-        lm_logits = self.proj_out(outputs[0])
+
+        lm_logits = outputs.last_hidden_state
 
         loss = None
         if labels is not None:
             loss_fct = nn.CrossEntropyLoss()
-            labels = labels.to(lm_logits.device)
+            labels = labels.to(lm_logits.device)  # ty: ignore[invalid-assignment]
             loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.reshape(-1))
 
         if not return_dict:

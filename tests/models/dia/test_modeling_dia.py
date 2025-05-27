@@ -156,8 +156,7 @@ def prepare_dia_inputs_dict(
     if cross_attn_head_mask is None:
         cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
     return {
-        # "input_ids": input_features,
-        "input_features": input_features,
+        "input_ids": input_features,
         "decoder_input_ids": decoder_input_ids,
         "decoder_attention_mask": decoder_attention_mask,
         "head_mask": head_mask,
@@ -232,6 +231,14 @@ class DiaModelTester:
         )
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_common(self):
+        config, inputs_dict = self.prepare_config_and_inputs()
+        return config, inputs_dict
+
+    def prepare_config_and_inputs_for_generate(self):
+        config, inputs_dict = self.prepare_config_and_inputs()
+        return config, inputs_dict
+
     def get_config(self):
         return DiaConfig(
             vocab_size=self.vocab_size,
@@ -254,10 +261,6 @@ class DiaModelTester:
             decoder_start_token_id=self.decoder_start_token_id,
             suppress_tokens=self.suppress_tokens,
         )
-
-    def prepare_config_and_inputs_for_common(self):
-        config, inputs_dict = self.prepare_config_and_inputs()
-        return config, inputs_dict
 
     def get_subsampled_output_lengths(self, input_lengths):
         """
@@ -348,7 +351,7 @@ class DiaModelTester:
 
 @require_torch
 class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (DiaModel, DiaForConditionalGeneration) if is_torch_available() else ()
+    all_model_classes = (DiaForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
     fx_compatible = False
     test_pruning = False
@@ -356,6 +359,10 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     # Needs higher percentages after model tester's vocab_size is changed to 200 (PR #21222)
     # `0.5` is for `test_disk_offload` (which also works for `test_model_parallelism`)
     model_split_percents = [0.5, 0.8, 0.9]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.model_tester = DiaModelTester(parent=self)
 
     # training is not supported yet
     @unittest.skip(reason="Training is not supported yet")

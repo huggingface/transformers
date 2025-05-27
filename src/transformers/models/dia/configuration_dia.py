@@ -31,20 +31,22 @@ class DiaEncoderConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_hidden_layers=12,
-        hidden_size=1024,
-        num_attention_heads=16,
-        num_key_value_heads=16,
-        head_dim=128,
-        intermediate_size=4096,
-        norm_eps=1e-5,
-        vocab_size=256,
-        dropout=0,
-        hidden_act="silu",
-        rope_min_timescale=1,
-        rope_max_timescale=10_000,
+        max_length: int = 1024,
+        num_hidden_layers: int = 12,
+        hidden_size: int = 1024,
+        num_attention_heads: int = 16,
+        num_key_value_heads: int = 16,
+        head_dim: int = 128,
+        intermediate_size: int = 4096,
+        norm_eps: float = 1e-5,
+        vocab_size: int = 256,
+        dropout: float = 0,
+        hidden_act: str = "silu",
+        rope_min_timescale: int = 1,
+        rope_max_timescale: int = 10_000,
         **kwargs,
     ):
+        self.max_length = max_length
         self.num_hidden_layers = num_hidden_layers
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -65,25 +67,27 @@ class DiaDecoderConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_hidden_layers=18,
-        hidden_size=2048,
-        intermediate_size=8192,
-        num_attention_heads=16,
-        num_key_value_heads=4,
-        head_dim=128,
-        cross_num_attention_heads=16,
-        cross_head_dim=128,
-        cross_num_key_value_heads=8,
-        cross_hidden_size=1024,
-        norm_eps=1e-5,
-        vocab_size=1028,
-        dropout=0,
-        hidden_act="silu",
-        num_channels=9,
-        rope_min_timescale=1,
-        rope_max_timescale=10_000,
+        max_length: int = 3072,
+        num_hidden_layers: int = 18,
+        hidden_size: int = 2048,
+        intermediate_size: int = 8192,
+        num_attention_heads: int = 16,
+        num_key_value_heads: int = 4,
+        head_dim: int = 128,
+        cross_num_attention_heads: int = 16,
+        cross_head_dim: int = 128,
+        cross_num_key_value_heads: int = 8,
+        cross_hidden_size: int = 1024,
+        norm_eps: float = 1e-5,
+        vocab_size: int = 1028,
+        dropout: float = 0,
+        hidden_act: str = "silu",
+        num_channels: int = 9,
+        rope_min_timescale: int = 1,
+        rope_max_timescale: int = 10_000,
         **kwargs,
     ):
+        self.max_length = max_length
         self.num_hidden_layers = num_hidden_layers
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -109,14 +113,14 @@ class DiaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        encoder_config=None,
-        decoder_config=None,
-        norm_eps=1e-5,
-        is_encoder_decoder=True,
-        pad_token_id=1025,
-        eos_token_id=1024,
-        bos_token_id=1026,
-        delay_pattern=None,
+        encoder_config: DiaEncoderConfig | None = None,
+        decoder_config: DiaDecoderConfig | None = None,
+        norm_eps: float = 1e-5,
+        is_encoder_decoder: bool = True,
+        pad_token_id: int = 1025,
+        eos_token_id: int = 1024,
+        bos_token_id: int = 1026,
+        delay_pattern: list[int] | None = None,
         **kwargs,
     ):
         if isinstance(encoder_config, dict):
@@ -124,7 +128,7 @@ class DiaConfig(PretrainedConfig):
         if isinstance(decoder_config, dict):
             decoder_config = DiaDecoderConfig(**decoder_config)
         self.encoder_config = encoder_config if encoder_config is not None else DiaEncoderConfig()
-        self.decoder_config = decoder_config if encoder_config is not None else DiaDecoderConfig()
+        self.decoder_config = decoder_config if decoder_config is not None else DiaDecoderConfig()
         self.norm_eps = norm_eps
         self.delay_pattern = delay_pattern if delay_pattern is not None else [0, 8, 9, 10, 11, 12, 13, 14, 15]
         super().__init__(
