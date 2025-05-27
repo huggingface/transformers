@@ -1013,10 +1013,12 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
             image_grid_thw = image_inputs["image_grid_thw"]
 
         if videos is not None:
+            # pop fps in advance for passing kwargs validation
+            fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
+
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
 
-            fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
             if isinstance(fps, (int, float)):
                 second_per_grid_ts = [self.video_processor.temporal_patch_size / fps] * len(video_grid_thw)
             elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
