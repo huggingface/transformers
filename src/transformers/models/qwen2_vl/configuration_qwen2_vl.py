@@ -14,7 +14,7 @@
 # limitations under the License.
 """Qwen2VL model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
@@ -106,6 +106,8 @@ class Qwen2VLTextConfig(PretrainedConfig):
             Sliding window attention (SWA) window size. If not specified, will default to `4096`.
         max_window_layers (`int`, *optional*, defaults to 80):
             The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         rope_scaling (`Dict`, *optional*):
@@ -200,6 +202,7 @@ class Qwen2VLTextConfig(PretrainedConfig):
         use_sliding_window=False,
         sliding_window=4096,
         max_window_layers=80,
+        layer_types=None,
         attention_dropout=0.0,
         rope_scaling=None,
         image_token_id=None,
@@ -213,7 +216,7 @@ class Qwen2VLTextConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window
+        self.sliding_window = sliding_window if self.use_sliding_window else None
         self.max_window_layers = max_window_layers
 
         # for backward compatibility
@@ -228,6 +231,16 @@ class Qwen2VLTextConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
         self.rope_scaling = rope_scaling
+
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention"
+                if self.sliding_window is not None and i >= self.max_window_layers
+                else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types)
 
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, move it to 'rope_type'.

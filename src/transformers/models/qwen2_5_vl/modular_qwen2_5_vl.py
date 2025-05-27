@@ -682,15 +682,14 @@ class Qwen2_5_VLModel(Qwen2VLModel):
                 video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
-            if attention_mask is not None:
-                attention_mask = attention_mask.to(inputs_embeds.device)
-
         if position_ids is None:
-            attention_mask_2d = attention_mask
-            if attention_mask is not None and attention_mask.ndim == 4:
-                attention_mask_2d = torch.diagonal(attention_mask_2d[:, 0], dim1=1, dim2=2)
-                attention_mask_2d = attention_mask_2d / torch.finfo(attention_mask_2d.dtype).min
-                attention_mask_2d = (1.0 - attention_mask_2d).int()
+            attention_mask_tensor = (
+                attention_mask if not isinstance(attention_mask, dict) else attention_mask["full_attention"]
+            )
+            if attention_mask_tensor is not None and attention_mask_tensor.ndim == 4:
+                attention_mask_tensor = torch.diagonal(attention_mask_tensor[:, 0], dim1=1, dim2=2)
+                attention_mask_tensor = attention_mask_tensor / torch.finfo(attention_mask_tensor.dtype).min
+                attention_mask_tensor = (1.0 - attention_mask_tensor).int()
 
             # Calculate RoPE index once per generation in the pre-fill stage only.
             # When compiling, we can't check tensor values thus we check only input length
@@ -710,7 +709,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
                     image_grid_thw,
                     video_grid_thw,
                     second_per_grid_ts=second_per_grid_ts,
-                    attention_mask=attention_mask_2d,
+                    attention_mask=attention_mask_tensor,
                 )
                 self.rope_deltas = rope_deltas
             # then use the prev pre-calculated rope-deltas to get the correct position ids
