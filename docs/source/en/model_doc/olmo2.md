@@ -122,11 +122,11 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 - OLMo2 requires Transformers v4.48 or higher.
 - Load specific intermediate checkpoints by adding the `revision` parameter to [`~PreTrainedModel.from_pretrained`]. 
 
-```py
-from transformers import AutoModelForCausalLM
-
-model = AutoModelForCausalLM.from_pretrained("allenai/OLMo-2-0425-1B", revision="stage1-step140000-tokens294B")
-```
+    ```py
+    from transformers import AutoModelForCausalLM
+    
+    model = AutoModelForCausalLM.from_pretrained("allenai/OLMo-2-0425-1B", revision="stage1-step140000-tokens294B")
+    ```
 
 
 ## Olmo2Config
