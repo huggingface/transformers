@@ -170,12 +170,15 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         if images is not None:
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 
+            batch_num_images = iter(image_inputs["batch_num_images"])
             image_sizes = iter(image_inputs["image_sizes"])
             height, width = get_image_size(
                 to_numpy_array(image_inputs["pixel_values"][0][0]),
                 channel_dim=output_kwargs["images_kwargs"].get("data_format"),
             )
-            text, num_image_tokens = self._expand_image_tokens(text, image_sizes, height, width, self.image_token)
+            text, num_image_tokens = self._expand_image_tokens(
+                text, image_sizes, height, width, self.image_token, batch_num_images
+            )
 
         if videos is not None:
             video_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
@@ -205,23 +208,29 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         height: int,
         width: int,
         special_token: str,
-        num_frames: int = 1,
+        batch_num_images: Iterable[int],
     ):
         prompt_strings = []
         max_num_vision_tokens = 0
         for sample in text:
+            if special_token in sample:
+                is_multi_image = next(batch_num_images) != 1
+            else:
+                is_multi_image = False
             while special_token in sample:
-                image_size_list = next(image_sizes)
-                original_size = image_size_list[0] if num_frames != 1 else image_size_list
-                if not isinstance(original_size, (list, tuple)):
-                    # cast to list to avoid numerical precision errors when calculating unpadding
-                    original_size = original_size.tolist()
-                orig_height, orig_width = original_size
-                num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
+                if is_multi_image:
+                    num_image_tokens = self.num_image_tokens + 1  # one for image_newline
+                else:
+                    original_size = next(image_sizes)
+                    if not isinstance(original_size, (list, tuple)):
+                        # cast to list to avoid numerical precision errors when calculating unpadding
+                        original_size = original_size.tolist()
+                    orig_height, orig_width = original_size
+                    num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
                 max_num_vision_tokens = max(max_num_vision_tokens, num_image_tokens)
                 if self.vision_feature_select_strategy == "default":
                     num_image_tokens -= 1
-                sample = sample.replace(special_token, "<placeholder>" * num_image_tokens * num_frames, 1)
+                sample = sample.replace(special_token, "<placeholder>" * num_image_tokens, 1)
             prompt_strings.append(sample)
         text = [sample.replace("<placeholder>", special_token) for sample in prompt_strings]
         return text, max_num_vision_tokens

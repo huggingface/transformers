@@ -50,8 +50,6 @@ from .generic import (
     ModelOutput,
     PaddingStrategy,
     TensorType,
-    add_model_info_to_auto_map,
-    add_model_info_to_custom_pipelines,
     cached_property,
     can_return_loss,
     can_return_tuple,

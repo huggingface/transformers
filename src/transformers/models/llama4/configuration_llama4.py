@@ -15,7 +15,7 @@
 # limitations under the License.
 
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...utils import logging
 
 
@@ -233,12 +233,13 @@ class Llama4TextConfig(PretrainedConfig):
             `no_rope_layer_interval` layers.
         attention_chunk_size (`int`, *optional*, defaults to 8192):
             <TODO>
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
         attn_temperature_tuning (`bool`, *optional*, defaults to `True`):
             Whether to dynamically scale the attention temperature for each query token based on sequence length.
             Recommended for long sequences (e.g., >32k tokens) to maintain stable output results.
         floor_scale (`int`, *optional*, defaults to 8192): TODO
         attn_scale (`int`, *optional*, defaults to 0.1): TODO
-        cache_implementation (`<fill_type>`, *optional*, defaults to `"hybrid"`): <fill_docstring>
 
     Example:
     """
@@ -298,10 +299,10 @@ class Llama4TextConfig(PretrainedConfig):
         no_rope_layers=None,
         no_rope_layer_interval=4,
         attention_chunk_size=8192,
+        layer_types=None,
         attn_temperature_tuning=True,
         floor_scale=8192,
         attn_scale=0.1,
-        cache_implementation="hybrid",
         **kwargs,
     ):
         super().__init__(
@@ -323,7 +324,6 @@ class Llama4TextConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.rope_scaling = rope_scaling
         self.attention_bias = False
-        self.cache_implementation = cache_implementation
         # for backward compatibility
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
@@ -362,6 +362,13 @@ class Llama4TextConfig(PretrainedConfig):
             else list(range(interleave_moe_layer_step - 1, num_hidden_layers, interleave_moe_layer_step))
         )
         self.attention_chunk_size = attention_chunk_size
+
+        self.layer_types = layer_types
+        if layer_types is None:
+            self.layer_types = [
+                "chunked_attention" if no_rope else "full_attention" for no_rope in self.no_rope_layers
+            ]
+        layer_type_validation(self.layer_types)
 
 
 class Llama4Config(PretrainedConfig):

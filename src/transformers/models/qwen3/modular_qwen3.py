@@ -28,16 +28,18 @@ from ...utils import LossKwargs, logging
 from ..gemma.modeling_gemma import GemmaMLP
 from ..llama.modeling_llama import (
     LlamaAttention,
-    LlamaDecoderLayer,
-    LlamaForCausalLM,
-    LlamaForQuestionAnswering,
-    LlamaForSequenceClassification,
-    LlamaForTokenClassification,
-    LlamaRMSNorm,
+)
+from ..qwen2.modeling_qwen2 import (
+    Qwen2DecoderLayer,
+    Qwen2ForCausalLM,
+    Qwen2ForQuestionAnswering,
+    Qwen2ForSequenceClassification,
+    Qwen2ForTokenClassification,
+    Qwen2Model,
+    Qwen2RMSNorm,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..mistral.modeling_mistral import MistralModel
 from .configuration_qwen3 import Qwen3Config
 
 
@@ -46,7 +48,7 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "Qwen/Qwen3-8B"
 
 
-class Qwen3RMSNorm(LlamaRMSNorm):
+class Qwen3RMSNorm(Qwen2RMSNorm):
     pass
 
 
@@ -59,13 +61,7 @@ class Qwen3Attention(LlamaAttention):
         super().__init__(config, layer_idx)
         self.q_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
-        self.sliding_window = config.sliding_window
-        if not (
-            self.config.use_sliding_window
-            and getattr(self.config, "sliding_window", None) is not None
-            and self.layer_idx >= self.config.max_window_layers
-        ):
-            self.sliding_window = None
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
     def forward(
         self,
@@ -93,13 +89,7 @@ class Qwen3Attention(LlamaAttention):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -118,28 +108,18 @@ class Qwen3Attention(LlamaAttention):
         return attn_output, attn_weights
 
 
-class Qwen3DecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: Qwen3Config, layer_idx: int):
-        super().__init__()
-        self.self_attn = Qwen3Attention(config=config, layer_idx=layer_idx)
-        self.mlp = Qwen3MLP(config)
-        if (
-            config.sliding_window and config._attn_implementation != "flash_attention_2"
-        ):  # diff with Llama is this warning
-            logger.warning_once(
-                f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
-                "unexpected results may be encountered."
-            )
+class Qwen3DecoderLayer(Qwen2DecoderLayer):
+    pass
 
 
-class Qwen3Model(MistralModel):  # mistral model creates sliding window
+class Qwen3Model(Qwen2Model):
     pass
 
 
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
-class Qwen3ForCausalLM(LlamaForCausalLM):
+class Qwen3ForCausalLM(Qwen2ForCausalLM):
     def forward(
         self,
         **super_kwargs: Unpack[KwargsForCausalLM],
@@ -169,15 +149,15 @@ class Qwen3ForCausalLM(LlamaForCausalLM):
         return super().forward(**super_kwargs)
 
 
-class Qwen3ForSequenceClassification(LlamaForSequenceClassification):
+class Qwen3ForSequenceClassification(Qwen2ForSequenceClassification):
     pass
 
 
-class Qwen3ForTokenClassification(LlamaForTokenClassification):
+class Qwen3ForTokenClassification(Qwen2ForTokenClassification):
     pass
 
 
-class Qwen3ForQuestionAnswering(LlamaForQuestionAnswering):
+class Qwen3ForQuestionAnswering(Qwen2ForQuestionAnswering):
     pass
 
 

@@ -126,3 +126,43 @@ would expect from a usual Python dictionary:
 # You can also globally `register` a new function directly on it
 >>> ALL_ATTENTION_FUNCTIONS.register("new_func", new_func)
 ```
+
+## Attention Mask Interface
+
+Having a new attention function may mean that you need a new format of attention mask to decide what key and value tokens
+the query tokens should attend to. This is now possible with the `AttentionMaskInterface`! It works in the same way as
+the `AttentionInterface`:
+
+```python
+from transformers import AttentionMaskInterface
+from transformers.masking_utils import sdpa_mask
+import torch
+
+def my_new_sdpa_mask(*args, **kwargs):
+    print("I just entered the attention mask computation")
+    return sdpa_mask(*args, **kwargs)
+
+AttentionMaskInterface.register("my_new_sdpa_mask", my_new_sdpa_mask)
+```
+
+The reason you have to register it is because we need to automatically correct your mask format based on the attention implementation (for example, flex attention uses a BlockMask format, while sdpa uses a 4D tensor).
+By default, if you do not register an attention mask function along with your attention function, mask creation will be skipped
+and `attention_mask=None` will be passed along to the Attention layers.
+
+The default signature of the attention mask functions is the following:
+
+```python
+def custom_attention_mask(
+    batch_size: int,  # required arg
+    cache_position: torch.Tensor,  # required arg
+    kv_length: int,  # required arg
+    kv_offset: int = 0,  # required arg
+    mask_function: Callable = causal_mask_function,  # required arg
+    attention_mask: Optional[torch.Tensor] = None,  # required arg
+    **kwargs,  # a few additional args may be passed as kwargs, especially the model's config is always passed
+) -> Optional[torch.Tensor]:
+```
+
+It mostly works thanks to the `mask_function`, which is a `Callable` in the form of [torch's mask_mod functions](https://pytorch.org/blog/flexattention/), taking 4 indices as input and returning a boolean to indicate if this position should take part in the attention computation.
+
+If you cannot use the `mask_function` to create your mask for some reason, you can try to work around it by doing something similar to our [torch export workaround](https://github.com/huggingface/transformers/blob/main/src/transformers/integrations/executorch.py).

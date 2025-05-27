@@ -259,6 +259,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
         model_test_kwargs = {}
         if model.can_generate():  # not all models in this pipeline can generate and, therefore, take `generate` kwargs
             model_test_kwargs["max_new_tokens"] = 5
+        model.config._attn_implementation = "eager"
         speech_generator = TextToAudioPipeline(
             model=model,
             tokenizer=tokenizer,

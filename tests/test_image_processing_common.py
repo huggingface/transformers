@@ -233,7 +233,7 @@ class ImageProcessingTestMixin:
             avg_time = sum(sorted(all_times[:3])) / 3.0
             return avg_time
 
-        dummy_images = torch.randint(0, 255, (4, 3, 224, 224), dtype=torch.uint8)
+        dummy_images = [torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8) for _ in range(4)]
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 

@@ -972,7 +972,9 @@ class Trainer:
         )
         return remove_columns_collator
 
-    def _get_train_sampler(self, train_dataset) -> Optional[torch.utils.data.Sampler]:
+    def _get_train_sampler(self, train_dataset: Optional[Dataset] = None) -> Optional[torch.utils.data.Sampler]:
+        if train_dataset is None:
+            train_dataset = self.train_dataset
         if train_dataset is None or not has_length(train_dataset):
             return None
 

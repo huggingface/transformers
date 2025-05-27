@@ -50,7 +50,7 @@ from ...image_utils import ImageInput
 from ...modeling_flash_attention_utils import is_flash_attn_available
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import is_torchdynamo_compiling, logging
 from ...video_utils import VideoInput
 
 
@@ -647,9 +647,9 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
             if pixel_values is not None:
                 image_embeds = self.get_image_features(pixel_values, image_grid_thw)
-                n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
+                n_image_tokens = (input_ids == self.config.image_token_id).sum()
                 n_image_features = image_embeds.shape[0]
-                if n_image_tokens != n_image_features:
+                if not is_torchdynamo_compiling() and n_image_tokens != n_image_features:
                     raise ValueError(
                         f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                     )
@@ -664,9 +664,9 @@ class Qwen2_5_VLModel(Qwen2VLModel):
 
             if pixel_values_videos is not None:
                 video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
-                n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
+                n_video_tokens = (input_ids == self.config.video_token_id).sum()
                 n_video_features = video_embeds.shape[0]
-                if n_video_tokens != n_video_features:
+                if not is_torchdynamo_compiling() and n_video_tokens != n_video_features:
                     raise ValueError(
                         f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
                     )
@@ -682,20 +682,32 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
 
-        # if we get 4D attention mask we cannot calculate rope deltas anymore. TODO @raushan fixme
-        if position_ids is None and (attention_mask is None or attention_mask.ndim == 2):
-            # calculate RoPE index once per generation in the pre-fill stage only
-            if (
+        if position_ids is None:
+            attention_mask_2d = attention_mask
+            if attention_mask is not None and attention_mask.ndim == 4:
+                attention_mask_2d = torch.diagonal(attention_mask_2d[:, 0], dim1=1, dim2=2)
+                attention_mask_2d = attention_mask_2d / torch.finfo(attention_mask_2d.dtype).min
+                attention_mask_2d = (1.0 - attention_mask_2d).int()
+
+            # Calculate RoPE index once per generation in the pre-fill stage only.
+            # When compiling, we can't check tensor values thus we check only input length
+            # It is safe to assume that `length!=1` means we're in pre-fill because compiled
+            # models currently cannot do asssisted decoding
+            prefill_compiled_stage = is_torchdynamo_compiling() and (
+                (input_ids is not None and input_ids.shape[1] != 1)
+                or (inputs_embeds is not None and inputs_embeds.shape[1] != 1)
+            )
+            prefill_noncompiled_stage = not is_torchdynamo_compiling() and (
                 (cache_position is not None and cache_position[0] == 0)
-                or self.rope_deltas is None
                 or (past_key_values is None or past_key_values.get_seq_length() == 0)
-            ):
+            )
+            if (prefill_compiled_stage or prefill_noncompiled_stage) or self.rope_deltas is None:
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
                     image_grid_thw,
                     video_grid_thw,
-                    second_per_grid_ts,
-                    attention_mask,
+                    second_per_grid_ts=second_per_grid_ts,
+                    attention_mask=attention_mask_2d,
                 )
                 self.rope_deltas = rope_deltas
             # then use the prev pre-calculated rope-deltas to get the correct position ids
