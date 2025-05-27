@@ -39,10 +39,6 @@ if is_torch_available():
     from transformers import ViTForImageClassification, ViTForMaskedImageModeling, ViTModel
 
 
-
-
-
-
 if is_vision_available():
     from PIL import Image
 
@@ -50,13 +46,6 @@ if is_vision_available():
 
 
 class ViTModelTester:
-
-
-
-
-
-
-
     def __init__(
         self,
         parent,
