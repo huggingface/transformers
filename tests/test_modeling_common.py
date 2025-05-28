@@ -3638,7 +3638,8 @@ class ModelTesterMixin:
                 processed_inputs[model.main_input_name] = inputs_dict[model.main_input_name]
 
                 for key in getattr(self, "additional_model_inputs", []):
-                    processed_inputs[key] = inputs_dict[key]
+                    if key in inputs_dict:
+                        processed_inputs[key] = inputs_dict[key]
 
                 for key, value in processed_inputs.items():
                     if torch.is_floating_point(value):

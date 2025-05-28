@@ -103,7 +103,7 @@ class SiglipVisionModelTester:
         patch_size=2,
         num_channels=3,
         is_training=True,
-        hidden_size=32,
+        hidden_size=64,
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
