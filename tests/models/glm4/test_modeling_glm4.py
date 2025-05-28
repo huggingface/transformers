@@ -28,8 +28,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...models.gemma.test_modeling_gemma import GemmaModelTest, GemmaModelTester
-from ...test_configuration_common import ConfigTester
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
@@ -43,17 +42,18 @@ if is_torch_available():
     )
 
 
-class Glm4ModelTester(GemmaModelTester):
+class Glm4ModelTester(CausalLMModelTester):
     if is_torch_available():
         config_class = Glm4Config
-        model_class = Glm4Model
-        for_causal_lm_class = Glm4ForCausalLM
-        for_sequence_class = Glm4ForSequenceClassification
-        for_token_class = Glm4ForTokenClassification
+        base_model_class = Glm4Model
+        causal_lm_class = Glm4ForCausalLM
+        sequence_classification_class = Glm4ForSequenceClassification
+        token_classification_class = Glm4ForTokenClassification
 
 
 @require_torch
-class Glm4ModelTest(GemmaModelTest, unittest.TestCase):
+class Glm4ModelTest(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = Glm4ModelTester
     all_model_classes = (
         (Glm4Model, Glm4ForCausalLM, Glm4ForSequenceClassification, Glm4ForTokenClassification)
         if is_torch_available()
@@ -75,10 +75,6 @@ class Glm4ModelTest(GemmaModelTest, unittest.TestCase):
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
 
-    def setUp(self):
-        self.model_tester = Glm4ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Glm4Config, hidden_size=37)
-
 
 @slow
 @require_torch_large_gpu
@@ -86,15 +82,6 @@ class Glm4IntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
     model_id = "THUDM/glm-4-0414-9b-chat"
     revision = "refs/pr/15"
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
-
-    @classmethod
-    def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     def test_model_9b_fp16(self):
         EXPECTED_TEXTS = [
