@@ -49,6 +49,7 @@ from transformers import (
     enable_full_determinism,
     get_polynomial_decay_schedule_with_warmup,
     is_torch_available,
+    is_datasets_available,
     logging,
     set_seed,
 )
@@ -161,6 +162,8 @@ if is_torch_available():
     if is_safetensors_available():
         import safetensors.torch
 
+if is_datasets_available():
+    import datasets
 
 # for version specific tests in TrainerIntegrationTest
 require_accelerate_version_min_0_28 = partial(require_accelerate, min_version="0.28")
@@ -519,7 +522,6 @@ if is_torch_available():
             return logits
 
     def create_dummy_dataset_for_text_generation(vocab_size, seq_length, num_samples):
-        import datasets
         import numpy as np
 
         # Create random input sequences
@@ -595,8 +597,6 @@ if is_torch_available():
         )
 
     def get_language_model_trainer(**kwargs):
-        import datasets
-
         dataset = datasets.load_dataset("fka/awesome-chatgpt-prompts")
         model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
@@ -764,8 +764,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             self.check_trained_model(trainer.model, alternate_seed=True)
 
     def test_trainer_with_datasets(self):
-        import datasets
-
         np.random.seed(42)
         x = np.random.normal(size=(64,)).astype(np.float32)
         y = 2.0 * x + 3.0 + np.random.normal(scale=0.1, size=(64,)).astype(np.float32)
@@ -814,7 +812,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
     @slow
     def test_gradient_accumulation_loss_alignment_with_model_loss(self):
         set_seed(42)
-        import datasets
 
         model_name = "nickypro/tinyllama-15M"
         dataset_name = "wikitext"
@@ -914,7 +911,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
     def test_gradient_accumulation_loss_alignment_with_loss_func(self):
         set_seed(42)
-        import datasets
 
         model_name = "roneneldan/TinyStories-33M"
         dataset_name = "wikitext"
@@ -4907,38 +4903,50 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             assert len(os.listdir(tmpdir)) == trainer.state.global_step // 2
 
-    def test_bnb_compile(self):
-        from peft import LoraConfig, get_peft_model
+    def test_special_token_aligment(self):
+        """
+        Tests that special token changes in the tokenizer result in model configs updates when using the trainer, to
+        ensure special tokens are aligned across configs
+        """
 
-        # Simply tests if initializing a Trainer with a PEFT + compiled model works out of the box
-        # QLoRA + torch compile is not really supported yet, but we should at least support the model
-        # loading and let torch throw the
-        tiny_model = AutoModelForCausalLM.from_pretrained(
-            "hf-internal-testing/tiny-random-LlamaForCausalLM", load_in_4bit=True
-        )
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
 
-        peft_config = LoraConfig(
-            r=8,
-            lora_alpha=32,
-            target_modules=["q_proj", "k_proj", "v_proj"],
-            lora_dropout=0.05,
-            bias="none",
-            task_type="CAUSAL_LM",
-        )
-        tiny_model = get_peft_model(tiny_model, peft_config)
+        # add new special tokens to tokenizer, so we can test that trainer aligns the model configs with the tokenizer
+        tokenizer.eos_token = "<|im_end|>"
+        tokenizer.pad_token = "<|im_end|>"
+        tokenizer.bos_token = "<|im_start|>"
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<|im_end|>", "<|im_start|>"]})
 
-        tiny_model = torch.compile(tiny_model)
+        # the model needs to have its embedding layer resized accordingly
+        model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=64)
 
-        x = torch.randint(0, 100, (128,))
-        train_dataset = RepeatDataset(x)
+        # create a random dataset from the **new** vocab size
+        x = torch.randint(0, len(tokenizer), (64,))
+        dataset = RepeatDataset(x, length=2)
 
-        args = TrainingArguments(
-            self.get_auto_remove_tmp_dir(),
-            learning_rate=1e-9,
-            logging_steps=5,
-        )
-        with self.assertRaises(ValueError):
-            _ = Trainer(tiny_model, args, train_dataset=train_dataset)  # noqa
+        with tempfile.TemporaryDirectory() as tmpdir:
+            training_args = TrainingArguments(
+                output_dir=tmpdir, report_to="none", max_steps=1, per_device_train_batch_size=1
+            )
+            trainer = Trainer(
+                model=model,
+                args=training_args,
+                processing_class=tokenizer,
+                train_dataset=dataset,
+            )
+
+            # We haven't started training -> not yet aligned
+            self.assertNotEqual(trainer.model.config.eos_token_id, tokenizer.eos_token_id)
+            self.assertNotEqual(trainer.model.config.pad_token_id, tokenizer.pad_token_id)
+            self.assertNotEqual(trainer.model.config.bos_token_id, tokenizer.bos_token_id)
+
+            trainer.train()
+
+            # Must be aligned as soon as we start training
+            self.assertEqual(trainer.model.config.eos_token_id, tokenizer.eos_token_id)
+            self.assertEqual(trainer.model.config.pad_token_id, tokenizer.pad_token_id)
+            self.assertEqual(trainer.model.config.bos_token_id, tokenizer.bos_token_id)
 
 
 @require_torch
