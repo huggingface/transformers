@@ -551,8 +551,8 @@ class Glm4ForCausalLM(Glm4PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, Glm4ForCausalLM
 
-        >>> model = Glm4ForCausalLM.from_pretrained("THUDM/GLM-4-9B-Chat-0414")
-        >>> tokenizer = AutoTokenizer.from_pretrained("THUDM/GLM-4-9B-Chat-0414")
+        >>> model = Glm4ForCausalLM.from_pretrained("THUDM/GLM-4-9B-0414")
+        >>> tokenizer = AutoTokenizer.from_pretrained("THUDM/GLM-4-9B-0414")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")

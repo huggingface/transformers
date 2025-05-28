@@ -51,7 +51,6 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
 
 class Gemma3Processor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "image_seq_length"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 

@@ -497,7 +497,6 @@ class ProcessorMixin(PushToHubMixin):
     feature_extractor_class = None
     tokenizer_class = None
     _auto_class = None
-    valid_kwargs: list[str] = []
 
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
@@ -996,18 +995,27 @@ class ProcessorMixin(PushToHubMixin):
         if "auto_map" in processor_dict:
             del processor_dict["auto_map"]
 
-        unused_kwargs = cls.validate_init_kwargs(processor_config=processor_dict, valid_kwargs=cls.valid_kwargs)
-        processor = cls(*args, **processor_dict)
+        # override processor_dict with given kwargs
+        processor_dict.update(kwargs)
 
-        # Update processor with kwargs if needed
-        for key in set(kwargs.keys()):
-            if hasattr(processor, key):
-                setattr(processor, key, kwargs.pop(key))
+        # check if there is an overlap between args and processor_dict
+        accepted_args_and_kwargs = cls.__init__.__code__.co_varnames[: cls.__init__.__code__.co_argcount][1:]
 
-        kwargs.update(unused_kwargs)
+        # validate both processor_dict and given kwargs
+        unused_kwargs, valid_kwargs = cls.validate_init_kwargs(
+            processor_config=processor_dict, valid_kwargs=accepted_args_and_kwargs
+        )
+
+        # remove args that are in processor_dict to avoid duplicate arguments
+        args_to_remove = [i for i, arg in enumerate(accepted_args_and_kwargs) if arg in processor_dict]
+        args = [arg for i, arg in enumerate(args) if i not in args_to_remove]
+
+        # instantiate processor with used (and valid) kwargs only
+        processor = cls(*args, **valid_kwargs)
+
         logger.info(f"Processor {processor}")
         if return_unused_kwargs:
-            return processor, kwargs
+            return processor, unused_kwargs
         else:
             return processor
 
@@ -1294,12 +1302,16 @@ class ProcessorMixin(PushToHubMixin):
 
     @staticmethod
     def validate_init_kwargs(processor_config, valid_kwargs):
-        kwargs_from_config = processor_config.keys()
-        unused_kwargs = {}
-        unused_keys = set(kwargs_from_config) - set(valid_kwargs)
-        if unused_keys:
-            unused_kwargs = {k: processor_config[k] for k in unused_keys}
-        return unused_kwargs
+        kwargs_from_config = set(processor_config.keys())
+        valid_kwargs_set = set(valid_kwargs)
+
+        unused_keys = kwargs_from_config - valid_kwargs_set
+        valid_keys = kwargs_from_config & valid_kwargs_set
+
+        unused_kwargs = {k: processor_config[k] for k in unused_keys} if unused_keys else {}
+        valid_kwargs = {k: processor_config[k] for k in valid_keys} if valid_keys else {}
+
+        return unused_kwargs, valid_kwargs
 
     def prepare_and_validate_optional_call_args(self, *args):
         """

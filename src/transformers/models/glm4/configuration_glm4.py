@@ -22,7 +22,7 @@ class Glm4Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Glm4Model`]. It is used to instantiate an Glm4
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Glm4-4-9b-chat.
-    e.g. [THUDM/glm-4-0414-9b-chat-chat](https://huggingface.co/THUDM/glm-4-0414-9b-chat-chat)
+    e.g. [THUDM/GLM-4-9B-0414](https://huggingface.co/THUDM/GLM-4-9B-0414)
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
     Args:
