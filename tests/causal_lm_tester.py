@@ -22,9 +22,7 @@ from transformers import set_seed
 from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
-    require_torch_accelerator,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
 )
 
