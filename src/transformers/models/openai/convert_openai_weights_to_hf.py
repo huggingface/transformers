@@ -37,7 +37,7 @@ from transformers.convert_slow_tokenizer import TikTokenConverter
 # r"layers.(\d+).attention.wqkv.weight": r"layers.\1.self_attn.q|k|v|_proj.weight"
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"norm.weight":                 r"norm.weight",
-    r"^norm.scale":                 r"norm.weight",
+    r"\nnorm.scale":                 r"\nnorm.weight",
     r"unembedding.weight":          r"lm_head.weight",
     r"embedding":                   r"embed_tokens",
     # special key, wqkv needs to be split afterwards
