@@ -87,26 +87,6 @@ class Dots1ModelTest(CausalLMModelTest, unittest.TestCase):
     test_pruning = False
     model_tester_class = Dots1ModelTester
 
-    # # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
-    # def is_pipeline_test_to_skip(
-    #     self,
-    #     pipeline_test_case_name,
-    #     config_class,
-    #     model_architecture,
-    #     tokenizer_name,
-    #     image_processor_name,
-    #     feature_extractor_name,
-    #     processor_name,
-    # ):
-    #     return True
-
-    # @require_flash_attn
-    # @require_torch_gpu
-    # @pytest.mark.flash_attn_test
-    # @slow
-    # def test_flash_attn_2_inference_equivalence_right_padding(self):
-    #     self.skipTest(reason="Dots1 flash attention does not support right padding")
-
     @unittest.skip("dots.llm1's moe is not compatible `token_indices, weight_indices = torch.where(mask)`.")
     def test_generate_compilation_all_outputs(self):
         pass
