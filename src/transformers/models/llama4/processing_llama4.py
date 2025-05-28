@@ -16,19 +16,11 @@
 
 from typing import List, Optional, Union
 
-from transformers.processing_utils import (
-    ImagesKwargs,
-    ProcessingKwargs,
-    ProcessorMixin,
-    Unpack,
-)
+from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import (
-    ImageInput,
-    make_flat_list_of_images,
-)
+from ...image_utils import ImageInput, make_flat_list_of_images
 
 
 class Llama4ImagesKwargs(ImagesKwargs, total=False):
@@ -83,19 +75,6 @@ class Llama4Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = [
-        "chat_template",
-        "image_token",
-        "patch_size",
-        "img_size",
-        "downsample_factor",
-        "start_of_img_token",
-        "end_of_img_token",
-        "img_patch_token",
-        "img_line_break_token",
-        "tile_token",
-        "tile_global_token",
-    ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 

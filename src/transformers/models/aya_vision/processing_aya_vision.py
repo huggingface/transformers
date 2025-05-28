@@ -18,17 +18,8 @@ from typing import List, Optional, Union
 import numpy as np
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import (
-    ImageInput,
-    make_flat_list_of_images,
-)
-from ...processing_utils import (
-    ImagesKwargs,
-    MultiModalData,
-    ProcessingKwargs,
-    ProcessorMixin,
-    Unpack,
-)
+from ...image_utils import ImageInput, make_flat_list_of_images
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
@@ -87,19 +78,6 @@ class AyaVisionProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = [
-        "chat_template",
-        "image_token",
-        "patch_size",
-        "img_size",
-        "downsample_factor",
-        "start_of_img_token",
-        "end_of_img_token",
-        "img_patch_token",
-        "img_line_break_token",
-        "tile_token",
-        "tile_global_token",
-    ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
