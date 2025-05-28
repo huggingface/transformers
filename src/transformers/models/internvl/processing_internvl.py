@@ -31,7 +31,7 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...video_utils import VideoInput, VideoMetadata, load_video, make_batched_videos
+from ...video_utils import VideoInput, make_batched_videos
 
 
 class InternVLImagesKwargs(ImagesKwargs, total=False):
