@@ -91,6 +91,10 @@ class OpenaiConfig(PretrainedConfig):
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
 
+        self.attention_bias = False
+        self.mlp_bias = False
+        self.max_position_embeddings = 8192
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

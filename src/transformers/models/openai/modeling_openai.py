@@ -166,7 +166,11 @@ class OpenaiPreTrainedModel(LlamaPreTrainedModel):
 
 
 class OpenaiModel(LlamaModel):
-    pass
+    def __init__(self, config: OpenaiConfig):
+        super().__init__(config)
+        self.rope = OpenaiRotaryEmbedding(config)
+        self.layers = nn.ModuleList([OpenaiDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)])
+        self.norm = OpenaiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 class OpenaiForCausalLM(LlamaForCausalLM):
