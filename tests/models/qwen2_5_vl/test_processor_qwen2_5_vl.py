@@ -85,9 +85,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = Qwen2_5_VLProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertEqual(
-            processor.image_processor.to_json_string(), image_processor.to_json_string()
-        )
+        self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertIsInstance(processor.tokenizer, Qwen2Tokenizer)
         self.assertIsInstance(processor.image_processor, Qwen2VLImageProcessor)
 
@@ -105,14 +103,10 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_input = self.prepare_image_inputs()
 
         input_image_proc = image_processor(image_input, return_tensors="np")
-        input_processor = processor(
-            images=image_input, text="dummy", return_tensors="np"
-        )
+        input_processor = processor(images=image_input, text="dummy", return_tensors="np")
 
         for key in input_image_proc.keys():
-            self.assertAlmostEqual(
-                input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2
-            )
+            self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_processor(self):
         image_processor = self.get_image_processor()
@@ -177,9 +171,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.skipTest("Processor has no chat template")
 
         if processor_name not in self.processor_class.attributes:
-            self.skipTest(
-                f"{processor_name} attribute not present in {self.processor_class}"
-            )
+            self.skipTest(f"{processor_name} attribute not present in {self.processor_class}")
 
         batch_messages = [
             [
@@ -191,9 +183,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ] * batch_size
 
         # Test that jinja can be applied
-        formatted_prompt = processor.apply_chat_template(
-            batch_messages, add_generation_prompt=True, tokenize=False
-        )
+        formatted_prompt = processor.apply_chat_template(batch_messages, add_generation_prompt=True, tokenize=False)
         self.assertEqual(len(formatted_prompt), batch_size)
 
         # Test that tokenizing with template and directly with `self.tokenizer` gives same output
@@ -204,9 +194,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_tensors=return_tensors,
         )
         add_special_tokens = True
-        if processor.tokenizer.bos_token is not None and formatted_prompt[0].startswith(
-            processor.tokenizer.bos_token
-        ):
+        if processor.tokenizer.bos_token is not None and formatted_prompt[0].startswith(processor.tokenizer.bos_token):
             add_special_tokens = False
         tok_output = processor.tokenizer(
             formatted_prompt,
@@ -214,9 +202,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             add_special_tokens=add_special_tokens,
         )
         expected_output = tok_output.input_ids
-        self.assertListEqual(
-            expected_output.tolist(), formatted_prompt_tokenized.tolist()
-        )
+        self.assertListEqual(expected_output.tolist(), formatted_prompt_tokenized.tolist())
 
         # Test that kwargs passed to processor's `__call__` are actually used
         tokenized_prompt_100 = processor.apply_chat_template(
@@ -238,9 +224,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
             return_tensors=return_tensors,
         )
-        self.assertTrue(
-            all(key in out_dict_text for key in ["input_ids", "attention_mask"])
-        )
+        self.assertTrue(all(key in out_dict_text for key in ["input_ids", "attention_mask"]))
         self.assertEqual(len(out_dict_text["input_ids"]), batch_size)
         self.assertEqual(len(out_dict_text["attention_mask"]), batch_size)
 
@@ -264,9 +248,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
         self.assertEqual(len(out_dict["attention_mask"]), batch_size)
 
-        video_len = (
-            360 if batch_size == 1 else 320
-        )  # qwen pixels don't scale with bs same way as other models
+        video_len = 360 if batch_size == 1 else 320  # qwen pixels don't scale with bs same way as other models
         mm_len = batch_size * 192 if modality == "image" else video_len
         self.assertEqual(len(out_dict[input_name]), mm_len)
 
@@ -299,22 +281,14 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ]
         ]
 
-        formatted_prompt = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=False
-        )
+        formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
         self.assertEqual(len(formatted_prompt), 1)
 
-        formatted_prompt_tokenized = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True
-        )
-        expected_output = processor.tokenizer(
-            formatted_prompt, return_tensors=None
-        ).input_ids
+        formatted_prompt_tokenized = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
+        expected_output = processor.tokenizer(formatted_prompt, return_tensors=None).input_ids
         self.assertListEqual(expected_output, formatted_prompt_tokenized)
 
-        out_dict = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True
-        )
+        out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
         self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
 
         # Add video URL for return dict and load with `num_frames` arg
@@ -390,9 +364,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor_components["tokenizer"] = self.get_component("tokenizer")
         processor_kwargs = self.prepare_processor_dict()
 
-        processor = self.processor_class(
-            **processor_components, **processor_kwargs, use_fast=True
-        )
+        processor = self.processor_class(**processor_components, **processor_kwargs, use_fast=True)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs()
@@ -453,9 +425,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     {
                         "role": "user",
                         "content": [
-                            {
-                                "type": "video"
-                            },  # no need to use path, video is loaded already by this moment
+                            {"type": "video"},  # no need to use path, video is loaded already by this moment
                             {
                                 "type": "text",
                                 "text": "Dummy prompt for preprocess testing",
@@ -466,9 +436,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ]
             return new_msg
 
-        processor._process_messages_for_chat_template = (
-            _process_messages_for_chat_template
-        )
+        processor._process_messages_for_chat_template = _process_messages_for_chat_template
         out_dict_with_video = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
@@ -479,9 +447,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(self.videos_input_name in out_dict_with_video)
 
         # Check with `in` because we don't know how each template formats the prompt with BOS/EOS/etc
-        formatted_text = processor.batch_decode(
-            out_dict_with_video["input_ids"], skip_special_tokens=True
-        )[0]
+        formatted_text = processor.batch_decode(out_dict_with_video["input_ids"], skip_special_tokens=True)[0]
         self.assertTrue("Dummy prompt for preprocess testing" in formatted_text)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 21960)
 
@@ -496,16 +462,12 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         try:
             tokenizer = Qwen2Tokenizer.from_pretrained(model_id, trust_remote_code=True)
         except OSError as e:
-            self.skipTest(
-                f"Could not load tokenizer {model_id} for testing. Error: {e}"
-            )
+            self.skipTest(f"Could not load tokenizer {model_id} for testing. Error: {e}")
             return
 
         text_inputs = tokenizer([""], return_tensors="pt")
 
-        self.assertIn(
-            "input_ids", text_inputs, "Key 'input_ids' not found in tokenizer output."
-        )
+        self.assertIn("input_ids", text_inputs, "Key 'input_ids' not found in tokenizer output.")
         input_ids_tensor = text_inputs["input_ids"]
         self.assertIsNotNone(input_ids_tensor, "input_ids tensor is None.")
 
