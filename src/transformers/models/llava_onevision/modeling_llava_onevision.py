@@ -35,7 +35,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     FlashAttentionKwargs,
-    LossKwargs,
+    KwargsForCausalLM,
     auto_docstring,
     can_return_tuple,
     is_torchdynamo_compiling,
@@ -687,9 +687,6 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         image_features = image_features.permute(0, 2, 3, 1)
         image_features = image_features.view(batch_frames, -1, dim)
         return image_features
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring(
