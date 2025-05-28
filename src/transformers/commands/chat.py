@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-import copy
+import asyncio
 import json
 import os
 import platform
@@ -27,18 +27,17 @@ from threading import Thread
 from typing import Optional
 
 import yaml
-from huggingface_hub.utils import disable_progress_bars
+from huggingface_hub import AsyncInferenceClient
+from pydantic import BaseModel
 
 from transformers import (
     AutoTokenizer,
     GenerationConfig,
     PreTrainedTokenizer,
-    TextIteratorStreamer,
-    logging,
 )
+from transformers.commands import BaseTransformersCLICommand
+from transformers.commands.serving import ServeArguments, ServeCommand
 from transformers.utils import is_rich_available, is_torch_available
-
-from . import BaseTransformersCLICommand
 
 
 if platform.system() != "Windows":
@@ -52,7 +51,19 @@ if is_rich_available():
 if is_torch_available():
     import torch
 
-    from transformers import AutoModelForCausalLM, BitsAndBytesConfig, PreTrainedModel
+    from transformers import (
+        AutoModelForCausalLM,
+        AutoTokenizer,
+        BitsAndBytesConfig,
+        GenerationConfig,
+    )
+
+
+class ChatCompletionInput(BaseModel):
+    model: str
+    max_tokens: int
+    stream: bool
+    messages: list
 
 
 ALLOWED_KEY_CHARS = set(string.ascii_letters + string.whitespace)
@@ -133,18 +144,17 @@ class RichInterface:
         else:
             self.user_name = user_name
 
-    def stream_output(self, output_stream: TextIteratorStreamer) -> str:
-        """Stream output from a role, and return the generated text after it's done steaming."""
-        # This method is originally from the FastChat CLI:
-        # https://github.com/lm-sys/FastChat/blob/main/fastchat/serve/cli.py
-        # Create a Live context for updating the console output
-        text = ""
+    async def stream_output(self, stream) -> tuple[str, int]:
         self._console.print(f"[bold blue]<{self.model_name}>:")
-        with Live(console=self._console, refresh_per_second=4) as live:
-            # Read lines from the stream
-            for i, outputs in enumerate(output_stream):
-                if not outputs or i == 0:
+        with Live(console=self._console, refresh_per_second=20) as live:
+            text = ""
+            async for token in await stream:
+                outputs = token.choices[0].delta.content
+                request_id = token.id
+
+                if not outputs:
                     continue
+
                 # Escapes single words encased in <>, e.g. <think> -> \<think\>, for proper rendering in Markdown.
                 # It only escapes single words that may have `_`, optionally following a `/` (e.g. </think>)
                 outputs = re.sub(r"<(/*)(\w*)>", r"\<\1\2\>", outputs)
@@ -160,6 +170,7 @@ class RichInterface:
                 #  introduce trailing spaces (only) in code block, but it works well
                 #  especially for console output, because in general the console does not
                 #  care about trailing spaces.
+
                 lines = []
                 for line in text.splitlines():
                     lines.append(line)
@@ -169,11 +180,13 @@ class RichInterface:
                         lines.append("\n")
                     else:
                         lines.append("  \n")
+
                 markdown = Markdown("".join(lines).strip(), code_theme="github-dark")
                 # Update the Live console output
                 live.update(markdown)
         self._console.print()
-        return text
+
+        return text, request_id
 
     def input(self) -> str:
         """Gets user input from the console."""
@@ -300,6 +313,10 @@ class ChatArguments:
     bnb_4bit_quant_type: str = field(default="nf4", metadata={"help": "Quantization type.", "choices": ["fp4", "nf4"]})
     use_bnb_nested_quant: bool = field(default=False, metadata={"help": "Whether to use nested quantization."})
 
+    # Serving settings
+    host: str = field(default="localhost", metadata={"help": "Interface the server will listen to.."})
+    port: int = field(default=8000, metadata={"help": "Port the server will listen to."})
+
 
 def chat_command_factory(args: Namespace):
     """
@@ -322,7 +339,10 @@ class ChatCommand(BaseTransformersCLICommand):
 
         group = chat_parser.add_argument_group("Positional arguments")
         group.add_argument(
-            "model_name_or_path_positional", type=str, default=None, help="Name of the pre-trained model."
+            "model_name_or_path_or_address",
+            type=str,
+            default=None,
+            help="Name of the pre-trained model or address to connect to.",
         )
         group.add_argument(
             "generate_flags",
@@ -340,6 +360,23 @@ class ChatCommand(BaseTransformersCLICommand):
 
     def __init__(self, args):
         args = self._handle_deprecated_args(args)
+
+        if args.model_name_or_path_or_address is not None:
+            name = args.model_name_or_path_or_address
+            if name.startswith("http") or name.startswith("https") or name.startswith("localhost"):
+                self.spawn_backend = False
+
+                if not (args.host == "localhost" and args.port == 8000):
+                    raise ValueError(
+                        "Cannot indicate a server as a positional argument as well as with a custom host and port. "
+                        "Please only provide one."
+                    )
+
+                args.host, args.port = args.model_name_or_path_or_address.rsplit(":", 1)
+            else:
+                self.spawn_backend = True
+                args.model_name_or_path = args.model_name_or_path_or_address
+
         self.args = args
 
     def _handle_deprecated_args(self, args: ChatArguments) -> ChatArguments:
@@ -349,22 +386,7 @@ class ChatCommand(BaseTransformersCLICommand):
         """
         has_warnings = False
 
-        # 1. Model as a positional argument
-        args.model_name_or_path_positional = args.model_name_or_path_positional or args.model_name_or_path
-        if args.model_name_or_path_positional is None:
-            raise ValueError(
-                "One of the following must be provided:"
-                "\n- The positional argument containing the model repo, e.g. `transformers chat <model_repo>`"
-                "\n- the optional --model_name_or_path argument, containing the model repo (deprecated)"
-            )
-        elif args.model_name_or_path is not None:
-            has_warnings = True
-            warnings.warn(
-                "The --model_name_or_path argument is deprecated will be removed in v4.54.0. Use the positional "
-                "argument instead, e.g. `transformers chat <model_repo>`.",
-                FutureWarning,
-            )
-        # 2. Named generate option args
+        # Named generate option args
         for deprecated_arg, default_value, new_arg in _DEPRECATION_MAP:
             value = getattr(args, deprecated_arg)
             if value != default_value:
@@ -404,7 +426,7 @@ class ChatCommand(BaseTransformersCLICommand):
 
         if filename is None:
             time_str = time.strftime("%Y-%m-%d_%H-%M-%S")
-            filename = f"{args.model_name_or_path_positional}/chat_{time_str}.json"
+            filename = f"{args.model_name_or_path_or_address}/chat_{time_str}.json"
             filename = os.path.join(folder, filename)
 
         os.makedirs(os.path.dirname(filename), exist_ok=True)
@@ -477,40 +499,20 @@ class ChatCommand(BaseTransformersCLICommand):
             )
         return processed_generate_flags
 
-    def get_generation_parameterization(
-        self, args: ChatArguments, tokenizer: AutoTokenizer, model: PreTrainedModel
-    ) -> tuple[GenerationConfig, dict]:
+    def get_generation_parameterization(self, args: ChatArguments) -> tuple[GenerationConfig, dict]:
         """
         Returns a GenerationConfig object holding the generation parameters for the CLI command.
         """
-        # No generation config arg provided -> use default generation config, apply CLI defaults
-        if args.generation_config is None:
-            # We start off from the checkpoint's generation config
-            generation_config = copy.deepcopy(model.generation_config)
-            # Apply deprecated CLI args on top of the default generation config
-            pad_token_id, eos_token_ids = self.parse_eos_tokens(
-                tokenizer, generation_config, args.eos_tokens, args.eos_token_ids
-            )
-            deprecated_kwargs = {
-                "max_new_tokens": args.max_new_tokens,
-                "do_sample": args.do_sample,
-                "num_beams": args.num_beams,
-                "temperature": args.temperature,
-                "top_k": args.top_k,
-                "top_p": args.top_p,
-                "repetition_penalty": args.repetition_penalty,
-                "pad_token_id": pad_token_id,
-                "eos_token_id": eos_token_ids,
-            }
-            generation_config.update(**deprecated_kwargs)
-        # generation config arg provided -> use it as the base parameterization
-        else:
+        # No generation config arg provided -> use base generation config, apply CLI defaults
+        if args.generation_config is not None:
             if ".json" in args.generation_config:  # is a local file
                 dirname = os.path.dirname(args.generation_config)
                 filename = os.path.basename(args.generation_config)
                 generation_config = GenerationConfig.from_pretrained(dirname, filename)
             else:
                 generation_config = GenerationConfig.from_pretrained(args.generation_config)
+        else:
+            generation_config = GenerationConfig()
 
         # Finally: parse and apply `generate_flags`
         parsed_generate_flags = self.parse_generate_flags(args.generate_flags)
@@ -664,7 +666,7 @@ class ChatCommand(BaseTransformersCLICommand):
 
         elif user_input == "!status":
             interface.print_status(
-                model_name=args.model_name_or_path_positional,
+                model_name=args.model_name_or_path,
                 generation_config=generation_config,
                 model_kwargs=model_kwargs,
             )
@@ -679,6 +681,32 @@ class ChatCommand(BaseTransformersCLICommand):
     # -----------------------------------------------------------------------------------------------------------------
     # Main logic
     def run(self):
+        if self.spawn_backend:
+            serve_args = ServeArguments(
+                system_prompt=self.args.system_prompt,
+                model_revision=self.args.model_revision,
+                device=self.args.device,
+                torch_dtype=self.args.torch_dtype,
+                trust_remote_code=self.args.trust_remote_code,
+                attn_implementation=self.args.attn_implementation,
+                load_in_8bit=self.args.load_in_8bit,
+                load_in_4bit=self.args.load_in_4bit,
+                bnb_4bit_quant_type=self.args.bnb_4bit_quant_type,
+                use_bnb_nested_quant=self.args.use_bnb_nested_quant,
+                host=self.args.host,
+                port=self.args.port,
+            )
+
+            serve_args.model_name_or_path = self.args.model_name_or_path
+
+            serve_command = ServeCommand(serve_args)
+
+            thread = Thread(target=serve_command.run)
+            thread.start()
+
+        host = "http://localhost" if self.args.host == "localhost" else self.args.host
+        client = AsyncInferenceClient(f"{host}:{self.args.port}")
+
         if not is_rich_available():
             raise ImportError("You need to install rich to use the chat interface. (`pip install rich`)")
         if not is_torch_available():
@@ -696,18 +724,13 @@ class ChatCommand(BaseTransformersCLICommand):
         else:
             user = args.user
 
-        model, tokenizer = self.load_model_and_tokenizer(args)
-        generation_streamer = TextIteratorStreamer(tokenizer, skip_special_tokens=True, skip_prompt=True)
-        generation_config, model_kwargs = self.get_generation_parameterization(args, tokenizer, model)
+        generation_config, model_kwargs = self.get_generation_parameterization(args)
 
-        # if not verbose -> disable warnings, progress bars, etc in the chat interface
-        if not args.verbose:
-            logging.set_verbosity_error()
-            disable_progress_bars()
-
-        interface = RichInterface(model_name=args.model_name_or_path_positional, user_name=user)
+        interface = RichInterface(model_name=args.model_name_or_path, user_name=user)
         interface.clear()
         chat = self.clear_chat_history(args.system_prompt)
+
+        request_id = None
 
         # Starts the session with a minimal help message at the top, so that a user doesn't get stuck
         interface.print_help(minimal=True)
@@ -736,23 +759,20 @@ class ChatCommand(BaseTransformersCLICommand):
                 else:
                     chat.append({"role": "user", "content": user_input})
 
-                inputs = tokenizer.apply_chat_template(chat, return_tensors="pt", add_generation_prompt=True).to(
-                    model.device
-                )
-                attention_mask = torch.ones_like(inputs)
-                generation_kwargs = {
-                    "inputs": inputs,
-                    "attention_mask": attention_mask,
-                    "streamer": generation_streamer,
-                    "generation_config": generation_config,
-                    **model_kwargs,
-                }
+                stream = client.chat_completion(chat, stream=True, extra_body={"request_id": request_id})
+                model_output, request_id = asyncio.run(interface.stream_output(stream))
+                asyncio.run(client.close())
 
-                thread = Thread(target=model.generate, kwargs=generation_kwargs)
-                thread.start()
-                model_output = interface.stream_output(generation_streamer)
-                thread.join()
                 chat.append({"role": "assistant", "content": model_output})
 
             except KeyboardInterrupt:
                 break
+
+
+if __name__ == "__main__":
+    args = ChatArguments()
+    args.model_name_or_path_or_address = "meta-llama/Llama-3.2-3b-Instruct"
+    args.generate_flags = []
+
+    chat = ChatCommand(args)
+    chat.run()
