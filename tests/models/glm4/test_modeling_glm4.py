@@ -129,7 +129,6 @@ class Glm4IntegrationTest(unittest.TestCase):
             low_cpu_mem_usage=True,
             torch_dtype=torch.bfloat16,
             attn_implementation="eager",
-            revision=self.revision,
         )
         model.to(torch_device)
 
@@ -153,7 +152,6 @@ class Glm4IntegrationTest(unittest.TestCase):
             low_cpu_mem_usage=True,
             torch_dtype=torch.bfloat16,
             attn_implementation="sdpa",
-            revision=self.revision,
         )
         model.to(torch_device)
 
@@ -178,7 +176,6 @@ class Glm4IntegrationTest(unittest.TestCase):
             low_cpu_mem_usage=True,
             torch_dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
-            revision=self.revision,
         )
         model.to(torch_device)
 
