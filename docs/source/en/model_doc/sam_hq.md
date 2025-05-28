@@ -43,8 +43,8 @@ import requests
 from transformers import SamHQModel, SamHQProcessor
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model = SamHQModel.from_pretrained("sushmanth/sam_hq_vit_b").to(device)
-processor = SamHQProcessor.from_pretrained("sushmanth/sam_hq_vit_b")
+model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base").to(device)
+processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
 
 img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
 raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
@@ -69,8 +69,8 @@ import requests
 from transformers import SamHQModel, SamHQProcessor
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model = SamHQModel.from_pretrained("sushmanth/sam_hq_vit_b").to(device)
-processor = SamHQProcessor.from_pretrained("sushmanth/sam_hq_vit_b")
+model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base").to(device)
+processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
 
 img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
 raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
