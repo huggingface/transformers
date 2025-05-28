@@ -24,7 +24,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...processing_utils import Unpack
-from ...utils import FlashAttentionKwargs, LossKwargs, logging, KwargsForCausalLM
+from ...utils import FlashAttentionKwargs, KwargsForCausalLM, logging
 from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,

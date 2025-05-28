@@ -32,7 +32,7 @@ from ...cache_utils import DynamicCache
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...processing_utils import Unpack
-from ...utils import FlashAttentionKwargs, logging, KwargsForCausalLM
+from ...utils import FlashAttentionKwargs, KwargsForCausalLM, logging
 from ..mistral.modeling_mistral import (
     MistralAttention,
     MistralForCausalLM,

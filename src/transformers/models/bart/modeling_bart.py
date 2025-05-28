@@ -44,11 +44,11 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
+    FlashAttentionKwargs,
     auto_docstring,
     is_torch_flex_attn_available,
     is_torchdynamo_compiling,
     logging,
-    FlashAttentionKwargs,
 )
 from .configuration_bart import BartConfig
 
