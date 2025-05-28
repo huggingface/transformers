@@ -26,7 +26,6 @@
 from typing import List, Optional, Union
 
 import numpy as np
-import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
