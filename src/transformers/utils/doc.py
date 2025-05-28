@@ -910,7 +910,7 @@ IMAGE_TEXT_TO_TEXT_GENERATION_SAMPLE = r"""
 
     >>> inputs = processor.apply_chat_template(
     ...     messages,
-    ...     tokenizer=True,
+    ...     tokenize=True,
     ...     return_dict=True,
     ...     return_tensors="pt",
     ...     add_generation_prompt=True

@@ -1716,6 +1716,19 @@ class EncoderDecoderCache(Cache):
         self.self_attention_cache.batch_select_indices(indices)
         self.cross_attention_cache.batch_select_indices(indices)
 
+    def get_max_cache_shape(self) -> Optional[int]:
+        """Returns the maximum sequence length (i.e. max capacity) of the cache object"""
+        return self.self_attention_cache.get_max_cache_shape()
+
+    def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
+        """
+        Return a tuple (kv_length, kv_offset) corresponding to the length and offset that will be returned for
+        the given layer at `layer_idx`.
+        The masks are then prepared according to the given lengths (kv_length, kv_offset) and patterns (i.e. sliding_window, chunk_size),
+        for each layer.
+        """
+        return self.self_attention_cache.get_mask_sizes(cache_position, layer_idx)
+
 
 class HybridCache(Cache):
     """
@@ -1967,7 +1980,8 @@ class HybridChunkedCache(Cache):
         else:
             self.sliding_window = config.sliding_window
         self.max_cache_len = max_cache_len
-        self._sliding_window_max_len = min(self.sliding_window, max_cache_len)
+        # Sliding layers can't be larger than the overall max cache len
+        self.sliding_window = min(self.sliding_window, self.max_cache_len)
         self.max_batch_size = max_batch_size
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self._dtype = dtype
@@ -1989,7 +2003,7 @@ class HybridChunkedCache(Cache):
         num_key_value_heads = key_states.shape[1]
         device = key_states.device
         global_cache_shape = (self.max_batch_size, num_key_value_heads, self.max_cache_len, self.head_dim)
-        sliding_cache_shape = (self.max_batch_size, num_key_value_heads, self._sliding_window_max_len, self.head_dim)
+        sliding_cache_shape = (self.max_batch_size, num_key_value_heads, self.sliding_window, self.head_dim)
         # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
         # breaks when updating the cache.
         cache_shape = sliding_cache_shape if self.is_sliding[layer_idx] else global_cache_shape
@@ -2163,7 +2177,7 @@ class OffloadedHybridCache(HybridChunkedCache):
         device = key_states.device if self.is_sliding[layer_idx] else self.offload_device
         pin_memory = not self.is_sliding[layer_idx]
         global_cache_shape = (self.max_batch_size, num_key_value_heads, self.max_cache_len, self.head_dim)
-        sliding_cache_shape = (self.max_batch_size, num_key_value_heads, self._sliding_window_max_len, self.head_dim)
+        sliding_cache_shape = (self.max_batch_size, num_key_value_heads, self.sliding_window, self.head_dim)
         # Note: `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
         # breaks when updating the cache.
         cache_shape = sliding_cache_shape if self.is_sliding[layer_idx] else global_cache_shape
@@ -2231,7 +2245,7 @@ class OffloadedHybridCache(HybridChunkedCache):
 
     def _prefetch_layer_in_context(self, layer_idx: int) -> None:
         """Performs the actual copy of the layer to device cache."""
-        if len(self.key_cache) >= layer_idx:
+        if len(self.key_cache) > layer_idx:
             self.device_key_cache[self.active_device_layer].copy_(self.key_cache[layer_idx], non_blocking=True)
             self.device_value_cache[self.active_device_layer].copy_(self.value_cache[layer_idx], non_blocking=True)
         # The layer was not yet initialized

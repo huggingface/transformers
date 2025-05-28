@@ -18,9 +18,18 @@ Processor class for Chameleon.
 
 from typing import List, Optional, Union
 
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack, _validate_images_text_input_order
+from ...processing_utils import (
+    MultiModalData,
+    ProcessingKwargs,
+    ProcessorMixin,
+    TextKwargs,
+    Unpack,
+    _validate_images_text_input_order,
+)
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
@@ -34,6 +43,7 @@ class ChameleonProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": False,
             "return_for_text_completion": False,
+            "return_mm_token_type_ids": False,
         },
         "common_kwargs": {
             "return_tensors": "pt",
@@ -62,7 +72,6 @@ class ChameleonProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
-    valid_kwargs = ["image_seq_length", "image_token"]
     image_processor_class = "ChameleonImageProcessor"
 
     def __init__(self, image_processor, tokenizer, image_seq_length: int = 1024, image_token: str = "<image>"):
@@ -73,6 +82,10 @@ class ChameleonProcessor(ProcessorMixin):
             tokenizer.boi_token if hasattr(tokenizer, "boi_token") else "<racm3:break>"
         )  # fixed tokens for start and end, so can hardcode
         self.image_end_token = tokenizer.eoi_token if hasattr(tokenizer, "eoi_token") else "<eoss>"
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.image_start_token_id = tokenizer.convert_tokens_to_ids(self.image_start_token)
+        self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
+        self.image_ids = [self.image_token_id, self.image_start_token_id, self.image_end_token_id]
 
         super().__init__(image_processor, tokenizer)
 
@@ -141,14 +154,45 @@ class ChameleonProcessor(ProcessorMixin):
                 sample += self.tokenizer.sep_token  # special Chameleon treatment to add sep for chat mode
             prompt_strings.append(sample)
 
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        data = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(prompt_strings, data, modalities=["image"])
-
+        image_inputs = {}
         if images is not None:
-            data["pixel_values"] = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
+            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None)
+        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
+
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`List[List[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            # add 2 for BOI and EOI tokens
+            num_image_tokens = [self.image_seq_length + 2] * len(image_sizes)
+            num_image_patches = [1] * len(image_sizes)
+
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

@@ -402,5 +402,31 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of image patches per image.
+        """
+        min_pixels = images_kwargs.get("min_pixels", None) or self.size["shortest_edge"]
+        max_pixels = images_kwargs.get("max_pixels", None) or self.size["longest_edge"]
+        patch_size = images_kwargs.get("patch_size", None) or self.patch_size
+        merge_size = images_kwargs.get("merge_size", None) or self.merge_size
+
+        factor = patch_size * merge_size
+        resized_height, resized_width = smart_resize(
+            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
+        )
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        return grid_h * grid_w
+
 
 __all__ = ["Qwen2VLImageProcessorFast"]

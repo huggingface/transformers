@@ -21,10 +21,7 @@ from typing import List, Union
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
-from ...tokenization_utils_base import (
-    PreTokenizedInput,
-    TextInput,
-)
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 
 
@@ -68,7 +65,6 @@ class JanusProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "use_default_system_prompt"]
     image_processor_class = "JanusImageProcessor"
     tokenizer_class = "LlamaTokenizerFast"
 
