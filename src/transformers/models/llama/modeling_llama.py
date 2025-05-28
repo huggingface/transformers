@@ -379,6 +379,9 @@ class LlamaModel(LlamaPreTrainedModel):
         use_cache: Optional[bool] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> BaseModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 

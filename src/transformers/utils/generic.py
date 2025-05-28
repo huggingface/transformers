@@ -986,19 +986,23 @@ def check_model_inputs(func):
                 if output_attentions:
                     collected_attentions.append(out[1])
 
-            for _, layer in self.named_modules():
-                if isinstance(layer, GradientCheckpointingLayer):  # TODO a bit slow to iterate over all layers no?
-                    hooks.append(layer.register_forward_hook(output_hidden_and_attention))
+        def capture_outputs(module, input, output):
+            if output_hidden_states:
+                collected_hidden_states.append(output[0])
+            if output_attentions:
+                collected_attentions.append(output[1])
 
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds.")
+        # Register hooks if needed
+        if output_attentions or output_hidden_states:
+            with torch.compiler.disable():  # Avoid issues with torch.compile
+                for _, layer in self.named_modules():
+                    if isinstance(layer, GradientCheckpointingLayer):
+                        hooks.append(layer.register_forward_hook(capture_outputs))
 
         if getattr(self, "gradient_checkpointing", False) and getattr(self, "training", False) and use_cache:
             logger.warning("`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.")
             kwargs["use_cache"] = False  # update it directly in kwargs
 
-        if past_key_values is not None and "Cache" not in past_key_values.__class__.__name__:
-            raise ValueError("The `past_key_values` should be either a `Cache` object or `None`.")
 
         outputs = func(self, *args, **kwargs)
         if output_attentions or output_hidden_states:
