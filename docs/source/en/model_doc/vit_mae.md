@@ -36,7 +36,7 @@ You can find all the original ViTMAE checkpoints under the [AI at Meta](https://
 > [!TIP]
 > Click on the ViTMAE models in the right sidebar for more examples of how to apply ViTMAE to vision tasks.
 
-The example below demonstrates how to reconstruct the missing pixels with the [`AutoModel`] class.
+The example below demonstrates how to reconstruct the missing pixels with the [`ViTMAEForPreTraining`] class.
 
 <hfoptions id="usage">
 <hfoption id="AutoModel">
