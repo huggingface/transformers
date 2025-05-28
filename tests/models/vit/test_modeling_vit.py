@@ -16,11 +16,6 @@
 import unittest
 
 from transformers import ViTConfig
-
-
-
-
-
 from transformers.testing_utils import (
     require_accelerate,
     require_torch,
@@ -30,10 +25,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-
-
-
-
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -55,11 +46,6 @@ if is_vision_available():
 
 
 class ViTModelTester:
-
-
-
-
-
     def __init__(
         self,
         parent,
