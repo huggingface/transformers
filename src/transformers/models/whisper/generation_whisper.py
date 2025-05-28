@@ -1988,17 +1988,8 @@ class WhisperGenerationMixin(GenerationMixin):
         # don't remove the eos token logprob! it counts in avg_logprob calculation in the original implementation
         sum_logprobs = sum(logprobs[i][tokens[i]] for i in range(logprobs.shape[0]))
 
-        # REGRESSION FIX: Support both legacy and new logprob calculation for backward compatibility
-        # The original implementation used (length + 1) in the denominator, not len(tokens)
-        # This change affects confidence scoring and temperature fallback decisions
-        # which can lead to different transcription results between versions
-        if getattr(self.config, "use_legacy_logprob_calculation", True):
-            # Legacy behavior for backward compatibility (transformers < 4.52.0)
-            avg_logprobs = sum_logprobs / (len(tokens) + 1)
-        else:
-            # New behavior (transformers >= 4.52.0)
-            avg_logprobs = sum_logprobs / len(tokens)
-
+        # Use the original formula from before v4.52.0 to maintain backward compatibility
+        avg_logprobs = sum_logprobs / (len(tokens) + 1)
         return avg_logprobs
 
     @staticmethod
