@@ -436,10 +436,7 @@ class DiaCrossAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         cross_attention_states: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
-        cross_position_embeddings: Optional[torch.Tensor] = None,
         past_key_values: Optional[Cache] = None,
-        output_attentions: bool = False,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
@@ -447,15 +444,12 @@ class DiaCrossAttention(nn.Module):
 
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        #query_states = apply_rotary_pos_emb(query_states, position_embeddings).transpose(1, 2)
-
         if cross_attention_states is not None:
             cross_shape = (*cross_attention_states.shape[:-1], -1, self.head_dim)
             key_states = self.k_proj(cross_attention_states).view(cross_shape).transpose(1, 2)
             value_states = self.v_proj(cross_attention_states).view(cross_shape).transpose(1, 2)
-            #key_states = apply_rotary_pos_emb(key_states, cross_position_embeddings).transpose(1, 2)
             if past_key_values is not None:
-                # TODO: mark layer + general cache fixing
+                # TODO: mark layer + general cache fixing + I dont think we need the cache positions anymore
                 key_states, value_states = past_key_values.update(
                     key_states, value_states, self.layer_idx, {"cache_positions": cache_position}
                 )
@@ -633,7 +627,6 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         encoder_hidden_states: torch.Tensor,
         encoder_attention_mask: torch.Tensor,
         position_embeddings: torch.Tensor,
-        cross_position_embeddings: torch.Tensor,
         cache_position: torch.LongTensor,
         attention_mask: torch.Tensor,
         past_key_values: Optional[Cache] = None,
@@ -653,6 +646,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
             output_attentions=output_attentions,
         )
 
+        # TODO: dropout isnt used anywhere
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
@@ -662,7 +656,6 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             cross_attention_states=encoder_hidden_states,
             position_embeddings=position_embeddings,
-            cross_position_embeddings=cross_position_embeddings,
             attention_mask=encoder_attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values.cross_attention_cache,
@@ -759,10 +752,6 @@ class DiaDecoder(DiaPreTrainedModel):
             cross_cache_position = torch.arange(encoder_hidden_states.shape[1], device=encoder_hidden_states.device)[None, :]
 
         # RoPE
-        cross_position_embeddings = None
-        if encoder_hidden_states is not None:
-            cross_position_embeddings = self.rotary_embeddings(encoder_hidden_states, cross_cache_position)
-
         hidden_states = self.embeddings(audio_codes)
         position_embeddings = self.rotary_embeddings(hidden_states, cache_position)
 
@@ -771,6 +760,7 @@ class DiaDecoder(DiaPreTrainedModel):
             mask_seq_length = past_key_values_length + seq_length
             attention_mask = torch.ones(batch_size, mask_seq_length, device=audio_codes.device)
 
+        # TODO: update to new mask function
         self_attn_cache = (
             past_key_values.self_attention_cache
             if isinstance(past_key_values, EncoderDecoderCache)
@@ -798,7 +788,6 @@ class DiaDecoder(DiaPreTrainedModel):
                 position_embeddings=position_embeddings,
                 cache_position=cache_position,
                 attention_mask=attention_mask,
-                cross_position_embeddings=cross_position_embeddings,
                 past_key_values=past_key_values,
             )
 
