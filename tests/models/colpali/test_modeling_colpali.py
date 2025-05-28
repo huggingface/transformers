@@ -29,6 +29,7 @@ from transformers.models.colpali.configuration_colpali import ColPaliConfig
 from transformers.models.colpali.modeling_colpali import ColPaliForRetrieval, ColPaliForRetrievalOutput
 from transformers.models.colpali.processing_colpali import ColPaliProcessor
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_torch,
     require_vision,
     slow,
@@ -303,7 +304,7 @@ class ColPaliModelIntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     @slow
     def test_model_integration_test(self):
