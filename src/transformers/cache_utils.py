@@ -2616,15 +2616,15 @@ class OffloadedStaticCache(StaticCache):
 
 class LagKVCache(DynamicCache):
     """
-    A KV compression algorithm that as described in the [LagKV paper](https://arxiv.org/abs/2504.04704). 
+    A KV compression algorithm that as described in the [LagKV paper](https://arxiv.org/abs/2504.04704).
     The algorithm equips Sink Attention and SlidingWindow like SinkCache but with additional selective tokens in the middle.
-    It allows the model to generate with fewer memory resource and faster decoding speed. 
+    It allows the model to generate with fewer memory resource and faster decoding speed.
     The model will hold the main part of information retrieval capbility during the compression, compared to a completed loss
     of the SinkCache.
 
-    It stores the Key and Value states as a list of tensors, one for each layer. The expected shape for each tensor is
+    It stores the Key and Value states as a list of tensors, one for each layer. The expected shape for each tensor is 
     `[batch_size, num_heads, seq_len, head_dim]`.
-    
+
     For the chunked prefilling, see https://github.com/AI-Lab-China-Merchants-Bank/LagKV.
 
     Parameters:
@@ -2658,13 +2658,13 @@ class LagKVCache(DynamicCache):
         LagKVCache()
         ```
     """
-    def __init__(self, 
+    def __init__(self,
                  _distributed_cache_data = None,
                  ratio: float = 0.25,
                  sink_size: int = 16,
                  lag_size: int = 1024,
                  score_v_ratio: float = 1.0,
-                 skip_layer_idx: List[int] = None,
+                 skip_layer_idx: Optional[List[int]] = None,
                 ):
         super().__init__(_distributed_cache_data)
         self.ratio = ratio
@@ -2720,7 +2720,7 @@ class LagKVCache(DynamicCache):
             else:
                 self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
                 self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
-            
+
             if layer_idx not in self.skip_layer_idx:
                 return self._compress_kv_by_lag(layer_idx)
                 
@@ -2739,15 +2739,15 @@ class LagKVCache(DynamicCache):
         max_r = ref.max(dim=-2).values.unsqueeze(-2).expand(-1, -1, -1, self.lag_size, -1)
 
         score = ((v - min_r) / (max_r - min_r)).std(dim=-1).softmax(dim=-1)
-        
-        return score        
+
+        return score
     
     def _modify_kv(self, value, base_len, end_idx, selected_idx, tail_len):
         # idx is offset by base_len
         selected_value = torch.gather(value[:, :, base_len:end_idx], -2, selected_idx)
         value = torch.cat((value[:, :, :base_len], selected_value, value[:, :, -tail_len:]), dim=-2)
         return value
-    
+
     def _compress_algo(self, layer_idx, base_len):
         """
         Calculate the scores of KV tokens in each head and partition. See the paper.
@@ -2768,15 +2768,14 @@ class LagKVCache(DynamicCache):
         new_base_len = base_len + selected_idx.size()[-2]
         # alwarys keep the last window
         tail_len = self.lag_size + in_size[-2] - end_idx
-            
-        self.key_cache[layer_idx] = self._modify_kv(self.key_cache[layer_idx], 
-                                                   base_len, end_idx, 
+        self.key_cache[layer_idx] = self._modify_kv(self.key_cache[layer_idx],
+                                                   base_len, end_idx,
                                                    selected_idx, tail_len)
-        self.value_cache[layer_idx] = self._modify_kv(self.value_cache[layer_idx], 
-                                                     base_len, end_idx, 
+        self.value_cache[layer_idx] = self._modify_kv(self.value_cache[layer_idx],
+                                                     base_len, end_idx,
                                                      selected_idx, tail_len)
         self._compressed_len[layer_idx] = new_base_len
-    
+
     def _compress_kv_by_lag(self, layer_idx):
         """the KV cache will be used then compressed"""
         kv_size = self.key_cache[layer_idx].size()
