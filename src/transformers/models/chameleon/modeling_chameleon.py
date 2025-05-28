@@ -32,7 +32,7 @@ from ...processing_utils import Unpack
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     FlashAttentionKwargs,
-    LossKwargs,
+    KwargsForCausalLM,
     auto_docstring,
     can_return_tuple,
     is_torch_flex_attn_available,
@@ -1181,10 +1181,6 @@ class ChameleonModel(ChameleonPreTrainedModel):
                 )
 
         return causal_mask
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
 
 @auto_docstring(
     custom_intro="""

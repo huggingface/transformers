@@ -37,7 +37,7 @@ from ...processing_utils import Unpack
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     FlashAttentionKwargs,
-    LossKwargs,
+    KwargsForCausalLM,
     auto_docstring,
     can_return_tuple,
     is_torch_flex_attn_available,
@@ -959,10 +959,6 @@ class IdeficsPreTrainedModel(PreTrainedModel):
                 module.alpha_dense.data.normal_(mean=0.0, std=self.config.alphas_initializer_range)
         elif isinstance(module, IdeficsPerceiverResampler):
             module.latents.data.normal_()
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
 
 @auto_docstring
 class IdeficsModel(IdeficsPreTrainedModel):

@@ -34,7 +34,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     FlashAttentionKwargs,
-    LossKwargs,
+    KwargsForCausalLM,
     ModelOutput,
     auto_docstring,
     can_return_tuple,
@@ -1396,8 +1396,6 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
             **kwargs,
         )
 
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring(

@@ -32,7 +32,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     FlashAttentionKwargs,
-    LossKwargs,
+    KwargsForCausalLM,
     auto_docstring,
     can_return_tuple,
     is_torch_flex_attn_available,
@@ -1462,10 +1462,6 @@ class MllamaTextModel(MllamaPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
 
 @auto_docstring(
     custom_intro="""

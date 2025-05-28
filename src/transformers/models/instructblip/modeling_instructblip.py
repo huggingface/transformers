@@ -36,7 +36,7 @@ from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     FlashAttentionKwargs,
-    LossKwargs,
+    KwargsForCausalLM,
     ModelOutput,
     auto_docstring,
     can_return_tuple,
@@ -1185,9 +1185,6 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
             attentions=encoder_outputs.attentions,
             cross_attentions=encoder_outputs.cross_attentions,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring(

@@ -28,7 +28,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     FlashAttentionKwargs,
-    LossKwargs,
+    KwargsForCausalLM,
     auto_docstring,
     can_return_tuple,
     is_torchdynamo_compiling,
@@ -411,10 +411,6 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             image_hidden_states=image_features if pixel_values_images is not None else None,
             video_hidden_states=video_features if pixel_values_videos is not None else None,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
 
 @auto_docstring(
     custom_intro="""

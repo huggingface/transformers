@@ -35,7 +35,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     FlashAttentionKwargs,
-    LossKwargs,
+    KwargsForCausalLM,
     auto_docstring,
     can_return_tuple,
     is_torch_flex_attn_available,
@@ -792,10 +792,6 @@ class OPTModel(OPTPreTrainedModel):
             hidden_states=decoder_outputs.hidden_states,
             attentions=decoder_outputs.attentions,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
 
 class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]

@@ -28,7 +28,7 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import FlashAttentionKwargs, LossKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import FlashAttentionKwargs, KwargsForCausalLM, auto_docstring, can_return_tuple, logging
 from ..auto import AutoModel
 from .configuration_idefics2 import Idefics2Config, Idefics2PerceiverConfig, Idefics2VisionConfig
 
@@ -1131,10 +1131,6 @@ class Idefics2Model(Idefics2PreTrainedModel):
             attentions=outputs.attentions,
             image_hidden_states=image_hidden_states,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
 
 @auto_docstring(
     custom_intro="""

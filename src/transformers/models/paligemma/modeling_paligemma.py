@@ -28,7 +28,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     FlashAttentionKwargs,
-    LossKwargs,
+    KwargsForCausalLM,
     ModelOutput,
     auto_docstring,
     can_return_tuple,
@@ -386,10 +386,6 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
 
 @auto_docstring(
     custom_intro="""
