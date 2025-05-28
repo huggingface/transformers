@@ -211,14 +211,13 @@ def convert_tiktoken(tokenizer, output_dir):
 
 
 KEYS_TO_MODIFY_MAPPING = {
+    "^model": "model.text_model",
     "^encoder": "model.vqmodel.encoder",
     "^decoder": "model.vqmodel.decoder",
     "^post_quant_conv": "model.vqmodel.post_quant_conv",
     "^quant_conv": "model.vqmodel.quant_conv",
     "^quantize": "model.vqmodel.quantize",
-    "^model": "text_model.model",
-    r"lm_head\.weight": "text_model.lm_head.weight",
-    r"^text_model\.model\.vqmodel": "vqmodel",
+    r"lm_head\.weight": "lm_head.weight",
     # rename QKV proj for the VQ-VAE model because we use SiglipAttention
     r"\.q\.": ".q_proj.",
     r"\.k\.": ".k_proj.",

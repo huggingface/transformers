@@ -136,7 +136,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             if torch.cuda.is_available():
                 device_map = {"": torch.cuda.current_device()}
             elif is_torch_xpu_available():
-                device_map = {"": f"xpu:{torch.xpu.current_device()}"}
+                device_map = {"": torch.xpu.current_device()}
             else:
                 device_map = {"": "cpu"}
             logger.info(

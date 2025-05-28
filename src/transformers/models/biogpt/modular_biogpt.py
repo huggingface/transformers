@@ -175,8 +175,7 @@ class BioGptPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    # Compile issues
-    _supports_flex_attn = False
+    _supports_flex_attn = True
     _supports_cache_class = True
     _supports_static_cache = True
 
