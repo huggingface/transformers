@@ -933,9 +933,10 @@ def can_return_tuple(func):
         return_dict = kwargs.get("return_dict", self.config.use_return_dict)
         kwargs["return_dict"] = True
         output = func(self, *args, **kwargs)
-        if user_return_dict is False:
+        if return_dict is False:
             output = output.to_tuple()
         return output
+
     return wrapper
 
 
@@ -998,7 +999,7 @@ def check_model_inputs(func):
         if output_attentions:
             outputs.attentions = tuple(collected_attentions)
         if return_dict is False:
-            output = output.to_tuple()
+            outputs = outputs.to_tuple()
         return outputs
 
     return wrapper
