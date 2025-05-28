@@ -49,6 +49,8 @@ if is_torch_available():
     import torch  # noqa: F401
 
     from ..modeling_layers import GradientCheckpointingLayer
+    from torch._dynamo import is_compiling, disable
+
 
 
 class cached_property(property):
@@ -943,6 +945,14 @@ def can_return_tuple(func):
     return wrapper
 
 
+def register_hook_if_needed(layer, capture_outputs):
+    if is_compiling():
+        pass
+        # TorchDynamo is tracing — wrap in disable context
+    else:
+        # Eager mode — no need to disable
+        return layer.register_forward_hook(capture_outputs)
+
 def check_model_inputs(func):
     """
     Decorator to check if the model inputs are valid before calling the function.
@@ -996,13 +1006,14 @@ def check_model_inputs(func):
         if output_attentions or output_hidden_states:
             for _, layer in self.named_modules():
                 if isinstance(layer, GradientCheckpointingLayer):
-                    hooks.append(layer.register_forward_hook(capture_outputs))
+                    hooks.append(register_hook_if_needed(layer, capture_outputs))
 
 
         outputs = func(self, *args, **kwargs)
         if output_attentions or output_hidden_states:
             for h in hooks:
-                h.remove()
+                if h is not None:
+                    h.remove()
 
         if output_hidden_states:
             collected_hidden_states.append(outputs.last_hidden_state)
