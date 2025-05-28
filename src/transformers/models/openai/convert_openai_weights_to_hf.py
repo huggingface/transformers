@@ -102,7 +102,7 @@ def write_model(
     state_dict = {}
     for key in all_keys:
         # Post-process the current_parameter.
-        new_key = new_keys.get(key, key)
+        new_key = "model." + new_keys.get(key, key)
         if re.search("(k|v|q)_proj.weight", new_key) and "language_model" in new_key:
             q, k, v = loaded[0][key].chunk(3, dim=-1)
             q_key = re.sub(r"(k|v|q)_proj.weight", "q_proj.weight", new_key)
@@ -117,7 +117,7 @@ def write_model(
     del loaded
     gc.collect()
 
-    print("Loading the checkpoint in a Mllama ")
+    print("Loading the checkpoint in a OpenAI ")
     with torch.device("meta"):
         model = OpenaiForCausalLM(config)
     model.load_state_dict(state_dict, strict=True, assign=True)

@@ -63,6 +63,7 @@ class OpenaiConfig(PretrainedConfig):
         eos_token_id: int = 2,
         rope_scaling=None,
         attention_dropout: float = 0.0,
+        num_experts_per_tok=4,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -72,7 +73,7 @@ class OpenaiConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.num_experts = num_experts
         self.sliding_window = sliding_window
-
+        self.num_experts_per_tok = num_experts_per_tok
         # for backward compatibility
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads

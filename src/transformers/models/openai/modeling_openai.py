@@ -56,7 +56,7 @@ class OpenaiMLP(nn.Module):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.hidden_dim = config.hidden_size
-        self.num_experts = config.num_local_experts
+        self.num_local_experts = config.num_local_experts
         self.experts = OpenaiExperts(config)
         self.router = nn.Linear(config.hidden_size, config.num_local_experts, bias=False)
 
@@ -68,11 +68,11 @@ class OpenaiMLP(nn.Module):
             torch.full_like(router_logits, float("-inf")).scatter_(1, router_indices, router_top_value).transpose(0, 1)
         )
         router_scores = torch.sigmoid(router_scores.float()).to(hidden_states.dtype)
-        routed_in = hidden_states.repeat(self.num_experts, 1)
+        routed_in = hidden_states.repeat(self.num_local_experts, 1)
         routed_in = routed_in * router_scores.reshape(-1, 1)
         routed_out = self.experts(routed_in)
         out = self.shared_expert(hidden_states)
-        out.add_(routed_out.reshape(self.num_experts, -1, self.hidden_dim).sum(dim=0))
+        out.add_(routed_out.reshape(self.num_local_experts, -1, self.hidden_dim).sum(dim=0))
         return out, router_scores
 
 
@@ -140,17 +140,13 @@ ALL_ATTENTION_FUNCTIONS.register("openai_flex_attention", openai_flex_attention_
 
 
 class OpenaiAttention(LlamaAttention):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
     def __init__(self, config: OpenaiConfig, layer_idx: int):
-        super().__init__()
+        super().__init__(config, layer_idx)
         self.sinks = torch.empty(config.num_attention_heads)
 
-
-# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->Openai
 class OpenaiDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: OpenaiConfig, layer_idx: int):
-        super().__init__()
+        super().__init__(config, layer_idx)
         self.hidden_size = config.hidden_size
         self.self_attn = OpenaiAttention(config=config, layer_idx=layer_idx)
         self.mlp = OpenaiMLP(config)
@@ -174,7 +170,9 @@ class OpenaiModel(LlamaModel):
 
 
 class OpenaiForCausalLM(LlamaForCausalLM):
-    pass
+    def __init__(self, config: OpenaiConfig):
+        super().__init__(config)
+        self.model = OpenaiModel(config)
 
 
 __all__ = [
