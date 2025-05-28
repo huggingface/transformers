@@ -181,14 +181,6 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
-    def test_inputs_embeds():
-        pass
-
-    @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
-
     @unittest.skip(reason="Model does not support padding right")
     def test_flash_attn_2_inference_padding_right(self):
         pass
@@ -347,10 +339,6 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
         self.model_tester = SmolVLMVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SmolVLMConfig, has_text_modality=False)
 
-    @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
-    def test_inputs_embeds():
-        pass
-
     @unittest.skip(reason="Model does not support padding right")
     def test_flash_attn_2_inference_padding_right(self):
         pass
@@ -392,14 +380,6 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
         reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Unsupported")
-    def test_generate_from_inputs_embeds_0_greedy(self):
-        pass
-
-    @unittest.skip(reason="Unsupported")
-    def test_generate_from_inputs_embeds_1_beam_search(self):
         pass
 
     @unittest.skip(reason="Unsupported")

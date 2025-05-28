@@ -457,14 +457,6 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             # self.assertTrue(model.transformer.wte.weight.shape, model.lm_head.weight.shape)
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
 
-    @pytest.mark.generate
-    @parameterized.expand([("greedy", 1), ("beam search", 2)])
-    @unittest.skip(
-        "KOSMOS-2 doesn't support inputs embeds. The test isn't skipped by checking input args because KOSMOS-2 has `generate()` overwritten"
-    )
-    def test_generate_from_inputs_embeds(self):
-        pass
-
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @require_torch_sdpa
     @unittest.skip("KOSMOS-2 doesn't support padding")

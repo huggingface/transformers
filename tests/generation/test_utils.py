@@ -1687,6 +1687,11 @@ class GenerationTesterMixin:
 
     @pytest.mark.generate
     def test_generate_from_random_inputs_embeds(self):
+        """
+        Tests that the model uses `inputs_embeds` when passed along with `ids`. Different from the general `test_generate_from_inputs_embeds`
+        test, this one pop out all kwargs from the input dict except for the `ids`. It is done because some models (e.g. VLMs) cannot
+        get random embeddings at input and otherwise fail to merge multimodal features.
+        """
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
@@ -1699,7 +1704,9 @@ class GenerationTesterMixin:
                 continue
 
             if model_class.main_input_name != "input_ids":
-                print("model_class:", model_class)
+                self.skipTest(
+                    "The model's main input name in not `input_ids` and we need kwargs from input dict as well."
+                )
 
             if hasattr(config, "scale_embedding"):
                 config.scale_embedding = False
@@ -1719,7 +1726,9 @@ class GenerationTesterMixin:
             # If we pass different inputs_embeds, we should get different outputs (the output text may be the
             # same, but the logits will almost surely be different)
             random_embeds = torch.rand_like(inputs_embeds)
-            outputs_from_rand_embeds = model.generate(input_ids, inputs_embeds=random_embeds, **generation_kwargs)
+            outputs_from_rand_embeds = model.generate(
+                input_ids=input_ids, inputs_embeds=random_embeds, **generation_kwargs
+            )
             for i in range(len(outputs_from_rand_embeds.scores)):
                 self.assertFalse(torch.allclose(outputs_from_embeds.scores[i], outputs_from_rand_embeds.scores[i]))
 
@@ -1773,14 +1782,14 @@ class GenerationTesterMixin:
                 "max_new_tokens": 5,
                 "min_new_tokens": 5,  # generate exactly 5 tokens
             }
-            outputs_from_ids = model.generate(input_ids, **generation_kwargs, **inputs_dict)
+            outputs_from_ids = model.generate(input_ids=input_ids, **generation_kwargs, **inputs_dict)
             self.assertEqual(outputs_from_ids.sequences.shape[:2], (input_ids.shape[0], input_ids.shape[1] + 5))
 
             # Same thing, but from input embeddings (`input_ids` is passed so the prompt is present in the output).
             # The output of the two calls should be the same.
             inputs_embeds = model.get_input_embeddings()(input_ids)
             outputs_from_embeds = model.generate(
-                input_ids, inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
+                input_ids=input_ids, inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
             )
             if not has_complex_embeds_computation:
                 self._check_similar_generate_outputs(outputs_from_ids, outputs_from_embeds)
@@ -1813,17 +1822,6 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device).eval()
             if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
                 self.skipTest(reason="This model does not support `inputs_embeds` in generation")
-
-            #   Some VLMs assume `inputs_embeds` and `pixel_values` are mutually exclusive AND fall in the
-            #   exception above (complex `inputs_embeds` computation). Popping `pixel_values` allow us to run the
-            #   checks without adding test complexity. Ditto for `pixel_values_videos` and `pixel_values_images`
-            pixel_values_is_mutually_exclusive = any(
-                model_name in model_class.__name__.lower() for model_name in VLM_CLASS_NAMES
-            )
-            if pixel_values_is_mutually_exclusive:
-                inputs_dict.pop("pixel_values", None)
-                inputs_dict.pop("pixel_values_videos", None)
-                inputs_dict.pop("pixel_values_images", None)
 
             input_ids = inputs_dict.pop("input_ids")
 
@@ -1985,14 +1983,6 @@ class GenerationTesterMixin:
             outputs = model(**inputs_dict)
             if "past_key_values" not in outputs:
                 self.skipTest(reason="This model doesn't return `past_key_values`")
-
-            pixel_values_is_mutually_exclusive = any(
-                model_name in model_class.__name__.lower() for model_name in VLM_CLASS_NAMES
-            )
-            if pixel_values_is_mutually_exclusive:
-                inputs_dict.pop("pixel_values", None)
-                inputs_dict.pop("pixel_values_videos", None)
-                inputs_dict.pop("pixel_values_images", None)
 
             input_ids = inputs_dict.pop("input_ids")
 
