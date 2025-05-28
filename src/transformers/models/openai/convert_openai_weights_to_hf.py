@@ -42,7 +42,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"rope.freqs":                  None, # meaning we skip it and don't want it
     # special key, wqkv needs to be split afterwards
     r"block.(\d+).attn.qkv":        r"layers.\1.self_attn.(k|v|q)_proj",
-    r"block.(\d+).attn.out":        r"layers.\1.self_attn.\2_proj",
+    r"block.(\d+).attn.out":        r"layers.\1.self_attn.o_proj",
     r"block.(\d+).attn.sinks":      r"layers.\1.self_attn.sinks",
     r"block.(\d+).attn.norm":       r"layers.\1.input_layernorm.weight",
 
