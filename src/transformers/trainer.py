@@ -907,6 +907,46 @@ class Trainer:
         if self.args.parallel_mode == ParallelMode.TPU and hasattr(model, "tie_weights"):
             model.tie_weights()
 
+    def _align_eos_token(self):
+        """
+        Aligns the EOS token of the tokenizer with the model configs.
+
+        A new EOS token may be defined for fine-tuning purposes, e.g. an "end of turn" token may be added on chat
+        models. In that case, we want the model configs to be aligned with the tokenizer, so that all downstream
+        uses work as expected. This alignment should happen before training, to ensure the prediction step uses the
+        new EOS token as well.
+        """
+        if isinstance(self.processing_class, ProcessorMixin):
+            tokenizer = self.processing_class.tokenizer
+        else:
+            tokenizer = self.tokenizer
+
+        tokenizer_has_new_eos = tokenizer.eos_token_id != self.model.config.eos_token_id
+
+        model_has_generation_config = hasattr(self.model, "generation_config") and self.model.generation_config is not None
+        if model_has_generation_config:
+            # `generation_config.eos_token_id` is None: direct comparision
+            if self.model.generation_config.eos_token_id is None:
+                tokenizer_has_new_eos |= tokenizer.eos_token_id != self.model.generation_config.eos_token_id
+            else:
+                # `generation_config.eos_token_id` is an `int`: convert it to list (and continue below)
+                if isinstance(self.model.generation_config.eos_token_id, int):
+                    self.model.generation_config.eos_token_id = [self.model.generation_config.eos_token_id]
+                # `generation_config.eos_token_id` is a `list`: check if the tokenizer's EOS token is in the list
+                tokenizer_has_new_eos |= tokenizer.eos_token_id not in self.model.generation_config.eos_token_id
+
+        if tokenizer_has_new_eos:
+            logger.warning(
+                f"The tokenizer has a new EOS token ({tokenizer.eos_token_id}), aligning the model configs "
+                "accordingly."
+            )
+            self.model.config.eos_token_id = tokenizer.eos_token_id
+            # The generation config may hold more than one EOS token. We preserve the original EOS tokens: any of the
+            # EOS tokens defined here will halt generation.
+            if model_has_generation_config:
+                all_eos_tokens = [tokenizer.eos_token_id] + list(self.model.generation_config.eos_token_id)
+                self.model.generation_config.eos_token_id = [token for token in all_eos_tokens if token is not None]
+
     def _set_signature_columns_if_needed(self):
         if self._signature_columns is None:
             # Inspect model forward signature to keep only the arguments it accepts.
@@ -2163,6 +2203,10 @@ class Trainer:
         args = self.args
 
         self.is_in_train = True
+
+        # If the model uses a tokenizer, it may have a new EOS token for fine-tuning purposes.
+        if isinstance(self.processing_class, (PreTrainedTokenizerBase, ProcessorMixin)):
+            self._align_eos_token()
 
         # Attach NEFTune hooks if necessary
         if self.neftune_noise_alpha is not None:
