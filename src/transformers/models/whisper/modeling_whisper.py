@@ -934,7 +934,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
             input_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
-            past_key_values=past_key_values.self_attention_cache if past_key_values is not None else None,
+            past_key_values=past_key_values,
         )
 
         if self.gradient_checkpointing and self.training:

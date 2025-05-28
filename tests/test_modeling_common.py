@@ -4584,10 +4584,6 @@ class ModelTesterMixin:
                 config.attention_dropout = 0
             if hasattr(config, "attention_probs_dropout_prob"):
                 config.attention_probs_dropout_prob = 0
-            # Flex attention relies on triton on compilation
-            # However, triton cannot handle hidden dimensions of less than 16
-            # --> forcing at least a hidden dim of 16
-            config.hidden_size *= max(16 // (config.hidden_size // config.num_attention_heads), 1)
 
             # Flex attention relies on triton on compilation
             # However, triton cannot handle hidden dimensions of less than 16
