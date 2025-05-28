@@ -1,6 +1,10 @@
 # coding=utf-8
-# Copyright 2018 The OpenAI Team Authors and HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2025 EleutherAI and the HuggingFace Inc. team. All rights reserved.
+#
+# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
+# and OPT implementations in this library. It has been modified from its
+# original forms to accommodate minor architectural differences compared
+# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,144 +17,201 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""OpenAI GPT configuration"""
+"""openai model configuration"""
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from ...modeling_rope_utils import rope_config_validation
 
 
-logger = logging.get_logger(__name__)
-
-
-class OpenAIGPTConfig(PretrainedConfig):
-    """
-    This is the configuration class to store the configuration of a [`OpenAIGPTModel`] or a [`TFOpenAIGPTModel`]. It is
-    used to instantiate a GPT model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the GPT
-    [openai-community/openai-gpt](https://huggingface.co/openai-community/openai-gpt) architecture from OpenAI.
+class OpenaiConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`OpenaiModel`]. It is used to instantiate an openai
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the openai-7B.
+    e.g. [meta-openai/Openai-2-7b-hf](https://huggingface.co/meta-openai/Openai-2-7b-hf)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
+
     Args:
-        vocab_size (`int`, *optional*, defaults to 40478):
-            Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`OpenAIGPTModel`] or [`TFOpenAIGPTModel`].
-        n_positions (`int`, *optional*, defaults to 512):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        n_embd (`int`, *optional*, defaults to 768):
-            Dimensionality of the embeddings and hidden states.
-        n_layer (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        n_head (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        afn (`str` or `Callable`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        resid_pdrop (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        embd_pdrop (`int`, *optional*, defaults to 0.1):
-            The dropout ratio for the embeddings.
-        attn_pdrop (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention.
-        layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
-            The epsilon to use in the layer normalization layers
+        vocab_size (`int`, *optional*, defaults to 32000):
+            Vocabulary size of the openai model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`OpenaiModel`]
+        hidden_size (`int`, *optional*, defaults to 4096):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 11008):
+            Dimension of the MLP representations.
+        num_hidden_layers (`int`, *optional*, defaults to 32):
+            Number of hidden layers in the Transformer decoder.
+        num_attention_heads (`int`, *optional*, defaults to 32):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        num_key_value_heads (`int`, *optional*):
+            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+            by meanpooling all the original heads within that group. For more details checkout [this
+            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            `num_attention_heads`.
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the decoder.
+        max_position_embeddings (`int`, *optional*, defaults to 2048):
+            The maximum sequence length that this model might ever be used with. Openai 1 supports up to 2048 tokens,
+            Openai 2 up to 4096, CodeOpenai up to 16384.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        summary_type (`str`, *optional*, defaults to `"cls_index"`):
-            Argument used when doing sequence summary, used in the models [`OpenAIGPTDoubleHeadsModel`] and
-            [`OpenAIGPTDoubleHeadsModel`].
-
-            Has to be one of the following options:
-
-                - `"last"`: Take the last token hidden state (like XLNet).
-                - `"first"`: Take the first token hidden state (like BERT).
-                - `"mean"`: Take the mean of all tokens hidden states.
-                - `"cls_index"`: Supply a Tensor of classification token position (like GPT/GPT-2).
-                - `"attn"`: Not implemented now, use multi-head attention.
-        summary_use_proj (`bool`, *optional*, defaults to `True`):
-            Argument used when doing sequence summary, used in the models [`OpenAIGPTDoubleHeadsModel`] and
-            [`OpenAIGPTDoubleHeadsModel`].
-
-            Whether or not to add a projection after the vector extraction.
-        summary_activation (`str`, *optional*):
-            Argument used when doing sequence summary, used in the models [`OpenAIGPTDoubleHeadsModel`] and
-            [`OpenAIGPTDoubleHeadsModel`].
-
-            Pass `"tanh"` for a tanh activation to the output, any other value will result in no activation.
-        summary_proj_to_labels (`bool`, *optional*, defaults to `True`):
-            Argument used when doing sequence summary, used in the models [`OpenAIGPTDoubleHeadsModel`] and
-            [`OpenAIGPTDoubleHeadsModel`].
-
-            Whether the projection outputs should have `config.num_labels` or `config.hidden_size` classes.
-        summary_first_dropout (`float`, *optional*, defaults to 0.1):
-            Argument used when doing sequence summary, used in the models [`OpenAIGPTDoubleHeadsModel`] and
-            [`OpenAIGPTDoubleHeadsModel`].
-
-            The dropout ratio to be used after the projection and activation.
-
-
-    Examples:
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the rms normalization layers.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if `config.is_decoder=True`.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*, defaults to 1):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*, defaults to 2):
+            End of stream token id.
+        pretraining_tp (`int`, *optional*, defaults to 1):
+            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
+            document](https://huggingface.co/docs/transformers/main/perf_train_gpu_many#tensor-parallelism) to
+            understand more about it. This value is necessary to ensure exact reproducibility of the pretraining
+            results. Please refer to [this issue](https://github.com/pytorch/pytorch/issues/76232).
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
+        rope_theta (`float`, *optional*, defaults to 10000.0):
+            The base period of the RoPE embeddings.
+        rope_scaling (`Dict`, *optional*):
+            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
+            Expected contents:
+                `rope_type` (`str`):
+                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
+                    'openai3'], with 'default' being the original RoPE implementation.
+                `factor` (`float`, *optional*):
+                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
+                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
+                    original maximum pre-trained length.
+                `original_max_position_embeddings` (`int`, *optional*):
+                    Used with 'dynamic', 'longrope' and 'openai3'. The original max position embeddings used during
+                    pretraining.
+                `attention_factor` (`float`, *optional*):
+                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
+                    computation. If unspecified, it defaults to value recommended by the implementation, using the
+                    `factor` field to infer the suggested value.
+                `beta_fast` (`float`, *optional*):
+                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
+                    ramp function. If unspecified, it defaults to 32.
+                `beta_slow` (`float`, *optional*):
+                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
+                    ramp function. If unspecified, it defaults to 1.
+                `short_factor` (`List[float]`, *optional*):
+                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
+                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+                    size divided by the number of attention heads divided by 2
+                `long_factor` (`List[float]`, *optional*):
+                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
+                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
+                    size divided by the number of attention heads divided by 2
+                `low_freq_factor` (`float`, *optional*):
+                    Only used with 'openai3'. Scaling factor applied to low frequency components of the RoPE
+                `high_freq_factor` (`float`, *optional*):
+                    Only used with 'openai3'. Scaling factor applied to high frequency components of the RoPE
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        mlp_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
+        head_dim (`int`, *optional*):
+            The attention head dimension. If None, it will default to hidden_size // num_attention_heads
 
     ```python
-    >>> from transformers import OpenAIGPTConfig, OpenAIGPTModel
+    >>> from transformers import OpenaiModel, OpenaiConfig
 
-    >>> # Initializing a GPT configuration
-    >>> configuration = OpenAIGPTConfig()
+    >>> # Initializing a openai openai-7b style configuration
+    >>> configuration = OpenaiConfig()
 
-    >>> # Initializing a model (with random weights) from the configuration
-    >>> model = OpenAIGPTModel(configuration)
+    >>> # Initializing a model from the openai-7b style configuration
+    >>> model = OpenaiModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "openai-gpt"
-    attribute_map = {
-        "max_position_embeddings": "n_positions",
-        "hidden_size": "n_embd",
-        "num_attention_heads": "n_head",
-        "num_hidden_layers": "n_layer",
+    model_type = "openai"
+    keys_to_ignore_at_inference = ["past_key_values"]
+    # Default tensor parallel plan for base model `OpenaiModel`
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
     }
 
     def __init__(
         self,
-        vocab_size=40478,
-        n_positions=512,
-        n_embd=768,
-        n_layer=12,
-        n_head=12,
-        afn="gelu",
-        resid_pdrop=0.1,
-        embd_pdrop=0.1,
-        attn_pdrop=0.1,
-        layer_norm_epsilon=1e-5,
-        initializer_range=0.02,
-        summary_type="cls_index",
-        summary_use_proj=True,
-        summary_activation=None,
-        summary_proj_to_labels=True,
-        summary_first_dropout=0.1,
+        num_hidden_layers: int = 36,
+        num_experts: int = 128,
+        vocab_size: int = 201088,
+        hidden_size: int = 2880,
+        intermediate_size: int = 2880,
+        head_dim: int = 64,
+        num_attention_heads: int = 64,
+        num_key_value_heads: int = 8,
+        sliding_window: int = 128,
+        rope_theta: float = 150000.0,
+        tie_word_embeddings= False,
+        hidden_act: str = "silu",
+        initializer_range: float = 0.02,
+        rms_norm_eps: float = 1e-6,
+        pad_token_id: int = 0,
+        bos_token_id: int = 1,
+        eos_token_id: int = 2,
         **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.n_positions = n_positions
-        self.n_embd = n_embd
-        self.n_layer = n_layer
-        self.n_head = n_head
-        self.afn = afn
-        self.resid_pdrop = resid_pdrop
-        self.embd_pdrop = embd_pdrop
-        self.attn_pdrop = attn_pdrop
-        self.layer_norm_epsilon = layer_norm_epsilon
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_experts = num_experts
+        self.sliding_window = sliding_window
+
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        self.summary_type = summary_type
-        self.summary_use_proj = summary_use_proj
-        self.summary_activation = summary_activation
-        self.summary_first_dropout = summary_first_dropout
-        self.summary_proj_to_labels = summary_proj_to_labels
-        super().__init__(**kwargs)
+        self.rms_norm_eps = rms_norm_eps
+        self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling
+        self.attention_dropout = attention_dropout
+        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
+        # Validate the correctness of rotary position embeddings parameters
+        # BC: if there is a 'type' field, copy it it to 'rope_type'.
+        if self.rope_scaling is not None and "type" in self.rope_scaling:
+            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_config_validation(self)
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
 
 
-__all__ = ["OpenAIGPTConfig"]
+__all__ = ["OpenaiConfig"]
