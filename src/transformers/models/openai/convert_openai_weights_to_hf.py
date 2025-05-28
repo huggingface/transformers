@@ -40,7 +40,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"unembedding.weight":          r"lm_head.weight",
     r"embedding":                   r"embed_tokens",
     # special key, wqkv needs to be split afterwards
-    r"block.(\d+).attn.qkv":        r"layers.\1.self_attn.k|v|q_proj",
+    r"block.(\d+).attn.qkv":        r"layers.\1.self_attn.qkv_proj",
     r"block.(\d+).attn.out":        r"layers.\1.self_attn.o_proj",
     r"block.(\d+).attn.sinks":      r"layers.\1.self_attn.sinks",
     r"block.(\d+).attn.norm":       r"layers.\1.input_layernorm.weight",
@@ -103,12 +103,12 @@ def write_model(
     for key in all_keys:
         # Post-process the current_parameter.
         new_key = "model." + new_keys.get(key, key)
-        if re.search("(k|v|q)_proj.weight", new_key) and "language_model" in new_key:
+        if re.search("qkv_proj.weight", new_key):
             q, k, v = loaded[0][key].chunk(3, dim=-1)
-            q_key = re.sub(r"(k|v|q)_proj.weight", "q_proj.weight", new_key)
+            q_key = re.sub(r"(qkv)_proj.weight", "q", new_key)
             state_dict[q_key] = q
-            k_key = re.sub(r"(k|v|q)_proj.weight", "k_proj.weight", new_key)
-            v_key = re.sub(r"(k|v|q)_proj.weight", "v_proj.weight", new_key)
+            k_key = re.sub(r"(qkv)_proj.weight", "k", new_key)
+            v_key = re.sub(r"(qkv)_proj.weight", "v", new_key)
             state_dict[k_key] = k
             state_dict[v_key] = v
         else:

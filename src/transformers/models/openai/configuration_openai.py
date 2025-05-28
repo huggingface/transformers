@@ -45,7 +45,7 @@ class OpenaiConfig(PretrainedConfig):
     def __init__(
         self,
         num_hidden_layers: int = 36,
-        num_experts: int = 128,
+        num_local_experts: int = 128,
         vocab_size: int = 201088,
         hidden_size: int = 2880,
         intermediate_size: int = 2880,
@@ -71,7 +71,7 @@ class OpenaiConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.num_experts = num_experts
+        self.num_local_experts = num_local_experts
         self.sliding_window = sliding_window
         self.num_experts_per_tok = num_experts_per_tok
         # for backward compatibility
