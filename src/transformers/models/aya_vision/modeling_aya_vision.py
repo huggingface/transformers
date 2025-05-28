@@ -27,11 +27,16 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
+from ...utils import (
+    FlashAttentionKwargs,
+    KwargsForCausalLM,
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+)
 from ..auto import AutoModel
 from .configuration_aya_vision import AyaVisionConfig
 
@@ -352,9 +357,6 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring(

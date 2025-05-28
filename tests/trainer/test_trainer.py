@@ -4086,7 +4086,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         from torch import _dynamo as torchdynamo
 
         class CustomTrainer(Trainer):
-            def compute_loss(self, model, inputs, return_outputs=False):
+            def compute_loss(self, model, inputs, num_item_in_batch=None, return_outputs=False):
                 x = inputs["x"]
                 output = model(x)
                 if self.args.n_gpu == 1:

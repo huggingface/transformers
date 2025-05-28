@@ -24,7 +24,6 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -33,7 +32,15 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, ModelOutput, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils import (
+    FlashAttentionKwargs,
+    KwargsForCausalLM,
+    ModelOutput,
+    auto_docstring,
+    can_return_tuple,
+    logging,
+    torch_int,
+)
 from .configuration_kosmos2 import Kosmos2Config, Kosmos2TextConfig, Kosmos2VisionConfig
 
 
@@ -1388,9 +1395,6 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
             return_dict=return_dict,
             **kwargs,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring(

@@ -46,6 +46,8 @@ from .doc import (
 from .generic import (
     ContextManagers,
     ExplicitEnum,
+    FlashAttentionKwargs,
+    KwargsForCausalLM,
     LossKwargs,
     ModelOutput,
     PaddingStrategy,

@@ -26,7 +26,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import Any, Callable, ContextManager, List, Optional, TypedDict
+from typing import TYPE_CHECKING, Any, Callable, ContextManager, List, Optional, TypedDict
 
 import numpy as np
 from packaging import version
@@ -40,6 +40,9 @@ from .import_utils import (
     is_torch_fx_proxy,
 )
 
+
+if TYPE_CHECKING:
+    import torch
 
 if is_torch_available():
     # required for @can_return_tuple decorator to work with torchdynamo
@@ -848,19 +851,6 @@ def filter_out_non_signature_kwargs(extra: Optional[list] = None):
     return decorator
 
 
-class LossKwargs(TypedDict, total=False):
-    """
-    Keyword arguments to be passed to the loss function
-
-    Attributes:
-        num_items_in_batch (`int`, *optional*):
-            Number of items in the batch. It is recommended to pass it when
-            you are doing gradient accumulation.
-    """
-
-    num_items_in_batch: Optional[int]
-
-
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
     """Checks whether a config dict is a timm config dict."""
     return "pretrained_cfg" in config_dict
@@ -992,3 +982,40 @@ class GeneralInterface(MutableMapping):
 
     def valid_keys(self) -> List[str]:
         return list(self.keys())
+
+
+class LossKwargs(TypedDict, total=False):
+    """
+    Keyword arguments to be passed to the loss function
+
+    Attributes:
+        num_items_in_batch (`int`, *optional*):
+            Number of items in the batch. It is recommended to pass it when
+            you are doing gradient accumulation.
+    """
+
+    num_items_in_batch: Optional[int]
+
+
+class FlashAttentionKwargs(TypedDict, total=False):
+    """
+    Keyword arguments for Flash Attention with Compile.
+
+    Attributes:
+        cumulative_seqlens_q (`torch.LongTensor`, *optional*)
+            Gets cumulative sequence length for query state.
+        cumulative_seqlens_k (`torch.LongTensor`, *optional*)
+            Gets cumulative sequence length for key state.
+        max_length_q (`int`, *optional*):
+            Maximum sequence length for query state.
+        max_length_k (`int`, *optional*):
+            Maximum sequence length for key state.
+    """
+
+    cumulative_seqlens_q: Optional["torch.LongTensor"]
+    cumulative_seqlens_k: Optional["torch.LongTensor"]
+    max_length_q: Optional[int]
+    max_length_k: Optional[int]
+
+
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...

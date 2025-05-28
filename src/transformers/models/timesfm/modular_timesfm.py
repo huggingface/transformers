@@ -22,11 +22,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import FlashAttentionKwargs, auto_docstring, can_return_tuple, logging
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..phi4_multimodal.modeling_phi4_multimodal import simple_eager_attention_forward
 from .configuration_timesfm import TimesFmConfig

@@ -904,11 +904,15 @@ class ModelTesterMixin:
             loss = model(**inputs).loss
             loss.backward()
 
-    def test_causal_lm_can_accept_kwargs(self):
-        if not getattr(self.model_tester, "is_training", False):
+    def test_model_accepts_loss_kwargs(self):
+        if not self.model_tester.is_training:
             self.skipTest(reason="ModelTester is not configured to run training tests")
 
-        valid_model_class = False
+        from typing import get_args, get_origin
+
+        from transformers.processing_utils import Unpack
+        from transformers.utils import KwargsForCausalLM, LossKwargs
+
         incompatible_models = (
             "MusicgenForCausalLM",
             "MusicgenMelodyForCausalLM",
@@ -917,29 +921,38 @@ class ModelTesterMixin:
             "GotOcr2ForConditionalGeneration",
         )
         for model_class in self.all_model_classes:
-            if (
-                model_class.__name__ in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
-                and model_class.__name__ not in incompatible_models
-            ):
-                valid_model_class = True
-        if not valid_model_class:
-            self.skipTest(reason="No causal lm model classes found")
-        for model_class in self.all_model_classes:
-            model_name = model_class.__name__
-            if model_name in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES) and model_name not in incompatible_models:
-                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if model_class.__name__ in [
+                *get_values(MODEL_MAPPING_NAMES),
+                *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
+                *incompatible_models,
+            ]:
+                continue
 
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    with torch.device(torch_device):
-                        model_eager = AutoModelForCausalLM.from_config(config, torch_dtype=torch.float32)
+            # Perform forward checks for Trainer
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-                    model_eager.save_pretrained(tmpdir)
-                    model = AutoModelForCausalLM.from_pretrained(
-                        tmpdir, torch_dtype=torch.float32, device_map=torch_device
-                    )
-                    inputs_dict["num_items_in_batch"] = inputs_dict["input_ids"].shape[0]
-                    inputs_dict["labels"] = inputs_dict["input_ids"]
-                    _ = model(**inputs_dict, return_dict=False)
+            # Check that the model is capable of taking num_items_in_batch as an arg
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            if "labels" not in inputs:
+                # if there is no labels, this is not possible to train the model
+                continue
+
+            model = model_class(config).to(torch_device)
+            model.train()
+            inputs["num_items_in_batch"] = 10  # hardcoded
+            _ = model(**inputs, return_dict=False)
+
+            # Perform forward checks for Trainer
+            has_typed_kwargs = True
+            forward_params = inspect.signature(model.forward).parameters
+            for k in forward_params.values():
+                # check for kwargs that are of type unpack[LossKwargs]
+                if k.kind == inspect.Parameter.VAR_KEYWORD and get_origin(k.annotation) is Unpack:
+                    unpacked_type = get_args(k.annotation)[0]
+                    if unpacked_type in [LossKwargs, KwargsForCausalLM]:
+                        has_typed_kwargs = True
+                        break
+            self.assertTrue(has_typed_kwargs, True)
 
     def test_training_gradient_checkpointing(self):
         # Scenario - 1 default behaviour

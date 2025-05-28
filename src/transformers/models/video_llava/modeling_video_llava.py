@@ -23,11 +23,17 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import (
+    FlashAttentionKwargs,
+    KwargsForCausalLM,
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+    logging,
+)
 from ..auto import AutoModel
 from .configuration_video_llava import VideoLlavaConfig
 
@@ -405,9 +411,6 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             image_hidden_states=image_features if pixel_values_images is not None else None,
             video_hidden_states=video_features if pixel_values_videos is not None else None,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring(

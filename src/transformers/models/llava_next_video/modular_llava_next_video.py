@@ -31,9 +31,8 @@ from transformers.models.llava_next.modeling_llava_next import (
 )
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
-from ...utils import is_torchdynamo_compiling, logging
+from ...utils import FlashAttentionKwargs, is_torchdynamo_compiling, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 

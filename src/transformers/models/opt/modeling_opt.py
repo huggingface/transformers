@@ -25,7 +25,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attention_utils import FlashAttentionKwargs, is_flash_attn_available
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -34,7 +33,14 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
+from ...utils import (
+    FlashAttentionKwargs,
+    KwargsForCausalLM,
+    auto_docstring,
+    can_return_tuple,
+    is_torch_flex_attn_available,
+    logging,
+)
 from .configuration_opt import OPTConfig
 
 
@@ -42,10 +48,6 @@ if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask
 
     from ...integrations.flex_attention import make_flex_block_causal_mask
-
-
-if is_flash_attn_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
@@ -790,9 +792,6 @@ class OPTModel(OPTPreTrainedModel):
             hidden_states=decoder_outputs.hidden_states,
             attentions=decoder_outputs.attentions,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):

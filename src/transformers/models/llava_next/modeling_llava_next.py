@@ -25,11 +25,17 @@ from torch import nn
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import (
+    FlashAttentionKwargs,
+    KwargsForCausalLM,
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+    logging,
+)
 from ..auto import AutoModel
 from .configuration_llava_next import LlavaNextConfig
 
@@ -529,9 +535,6 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring(

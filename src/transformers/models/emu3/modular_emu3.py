@@ -25,11 +25,10 @@ import torch.utils.checkpoint
 
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import FlashAttentionKwargs, auto_docstring, can_return_tuple, logging
 from ..chameleon.modeling_chameleon import ChameleonPreTrainedModel, ChameleonVQVAEEncoderConvDownsample
 from ..llama.modeling_llama import KwargsForCausalLM, LlamaDecoderLayer, LlamaForCausalLM, LlamaModel
 from ..siglip.modeling_siglip import SiglipAttention
