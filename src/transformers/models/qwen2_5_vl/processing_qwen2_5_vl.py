@@ -26,6 +26,7 @@
 from typing import List, Optional, Union
 
 import numpy as np
+import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -195,6 +196,12 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+
+        if return_tensors == "pt":
+           input_ids = text_inputs.get("input_ids", None)
+           if input_ids is not None and input_ids.numel() == 0:
+               text_inputs["input_ids"] = torch.empty((1, 0), dtype=torch.long)
+
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
         if return_mm_token_type_ids:
