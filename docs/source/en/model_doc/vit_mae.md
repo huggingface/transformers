@@ -36,7 +36,6 @@ You can find all the original ViTMAE checkpoints under the [AI at Meta](https://
 The example below demonstrates how to use ViTMAE with the [`AutoModel`] class.
 
 <hfoptions id="usage">
-<hfoption id="Pipeline">
 
 <!-- This model is not currently supported via pipeline. -->
 
