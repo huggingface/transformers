@@ -1,4 +1,5 @@
-# Copyright 2025 EleutherAI and The HuggingFace Inc. team. All rights reserved.
+
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,595 +12,509 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import argparse
 import gc
 import json
+import math
 import os
-import tempfile
-import warnings
-from typing import List
+from typing import List, Optional
 
+import regex as re
 import torch
-from tokenizers import AddedToken, processors
+import torch.nn.functional as F
 
-from transformers import GenerationConfig, LlamaTokenizer, OpenaiConfig, OpenaiForCausalLM, PreTrainedTokenizerFast
+from transformers import (
+    GenerationConfig,
+    MllamaConfig,
+    MllamaForConditionalGeneration,
+    MllamaImageProcessor,
+    PreTrainedTokenizerFast,
+)
 from transformers.convert_slow_tokenizer import TikTokenConverter
+# fmt: off
+# If a weight needs to be split in two or more keys, use `|` to indicate it. ex:
+# r"layers.(\d+).attention.wqkv.weight": r"layers.\1.self_attn.q|k|v|_proj.weight"
+ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
+    r"norm.weight":                                                                  r"norm.weight",
+    r"unembedding.weight":                                                                r"lm_head.weight",
+    r"embedding":                                                               r"embed_tokens",
+    r"rope.freqs":                                                                   None, # meaning we skip it and don't want it
+    # special key, wqkv needs to be split afterwards
+    r"block.(\d+).attn.qkv":                              r"layers.\1.self_attn.(q|k|v)_proj",
+    r"block.(\d+).attn.out":                                     r"layers.\1.self_attn.\2_proj",
+    r"block.(\d+).attn.sinks":                            r"layers.\1.self_attn.sinks",
+    r"block.(\d+).attn.norm":                               r"layers.\1.input_layernorm.weight",
 
-
-try:
-    from transformers import LlamaTokenizerFast
-except ImportError as e:
-    warnings.warn(e)
-    warnings.warn(
-        "The converted tokenizer will be the `slow` tokenizer. To use the fast, update your `tokenizers` library and re-run the tokenizer conversion"
-    )
-    LlamaTokenizerFast = None
-
-"""
-Sample usage:
-
-```
-python src/transformers/models/openai/convert_openai_weights_to_hf.py \
-    --input_dir /path/to/downloaded/openai/weights --model_size 1B --openai_version 3.2 --output_dir /output/path
-```
-
-Thereafter, models can be loaded via:
-
-```py
-from transformers import OpenaiForCausalLM, LlamaTokenizer
-
-model = OpenaiForCausalLM.from_pretrained("/output/path")
-tokenizer = LlamaTokenizer.from_pretrained("/output/path")
-```
-
-Important note: you need to be able to host the whole model in RAM to execute this script (even if the biggest versions
-come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM).
-
-If you want your tokenizer to add a bos automatically you should update the tokenizer._tokenizers.post_processor:
-
-```py
-from tokenizers import processors
-bos = "<|begin_of_text|>"
-tokenizer._tokenizers.post_processor = processors.Sequence(
-    [
-        processors.ByteLevel(trim_offsets=False),
-        processors.TemplateProcessing(
-            single=f"{bos}:0 $A:0",
-            pair=f"{bos}:0 $A:0 {bos}:1 $B:1",
-            special_tokens=[
-                (bos, tokenizer.encode(bos)),
-            ],
-        ),
-    ]
-)
-```
-"""
-
-NUM_SHARDS = {
-    "1B": 1,
-    "3B": 1,
-    "7B": 1,
-    "8B": 1,
-    "8Bf": 1,
-    "7Bf": 1,
-    "13B": 2,
-    "13Bf": 2,
-    "34B": 4,
-    "30B": 4,
-    "65B": 8,
-    "70B": 8,
-    "70Bf": 8,
-    "405B": 8,
-    "405B-MP16": 16,
+    r"block.(\d+).mlp.mlp1_weight":                          r"layers.\1.mlp.gate_up_proj.weight",
+    r"block.(\d+).mlp.mlp1_bias":                          r"layers.\1.mlp.gate_up_proj.bias",
+    r"block.(\d+).mlp.mlp2_weight":                          r"layers.\1.mlp.down_proj.weight",
+    r"block.(\d+).mlp.mlp2_bias":                          r"layers.\1.mlp.down_proj.bias",
+    r"block.(\d+).mlp.norm":                                 r"layers.\1.post_attention_layernorm.weight",
+    r"block.(\d+).mlp.gate":                                 r"layers.\1.mlp.router.weight",
 }
+# fmt: on
 
-CONTEXT_LENGTH_FOR_VERSION = {"Guard-3": 131072, "3.2": 131072, "3.1": 131072, "3": 8192, "2": 4096, "1": 2048}
-
-BOS_ADDED_TOKEN = AddedToken(
-    "<|begin_of_text|>", single_word=False, lstrip=False, rstrip=False, normalized=False, special=True
-)
-EOS_ADDED_TOKEN = AddedToken(
-    "<|end_of_text|>", single_word=False, lstrip=False, rstrip=False, normalized=False, special=True
-)
-EOT_ADDED_TOKEN = AddedToken(
-    "<|eot_id|>", single_word=False, lstrip=False, rstrip=False, normalized=False, special=True
-)
-
-DEFAULT_OPENAI_SPECIAL_TOKENS = {
-    "3": [
-        "<|begin_of_text|>",
-        "<|end_of_text|>",
-        "<|reserved_special_token_0|>",
-        "<|reserved_special_token_1|>",
-        "<|reserved_special_token_2|>",
-        "<|reserved_special_token_3|>",
-        "<|start_header_id|>",
-        "<|end_header_id|>",
-        "<|reserved_special_token_4|>",
-        "<|eot_id|>",  # end of turn
-    ]
-    + [f"<|reserved_special_token_{i}|>" for i in range(5, 256 - 5)],
-    "3.1": [
-        "<|begin_of_text|>",
-        "<|end_of_text|>",
-        "<|reserved_special_token_0|>",
-        "<|reserved_special_token_1|>",
-        "<|finetune_right_pad_id|>",
-        "<|reserved_special_token_2|>",
-        "<|start_header_id|>",
-        "<|end_header_id|>",
-        "<|eom_id|>",  # end of message
-        "<|eot_id|>",  # end of turn
-        "<|python_tag|>",
-    ]
-    + [f"<|reserved_special_token_{i}|>" for i in range(3, 256 - 8)],
-    "3.2": [
-        "<|begin_of_text|>",
-        "<|end_of_text|>",
-        "<|reserved_special_token_0|>",
-        "<|reserved_special_token_1|>",
-        "<|finetune_right_pad_id|>",
-        "<|reserved_special_token_2|>",
-        "<|start_header_id|>",
-        "<|end_header_id|>",
-        "<|eom_id|>",  # end of message
-        "<|eot_id|>",  # end of turn
-        "<|python_tag|>",
-    ]
-    + [f"<|reserved_special_token_{i}|>" for i in range(3, 256 - 8)],
-    "Guard-3": [
-        "<|begin_of_text|>",
-        "<|end_of_text|>",
-        "<|reserved_special_token_0|>",
-        "<|reserved_special_token_1|>",
-        "<|finetune_right_pad_id|>",
-        "<|reserved_special_token_2|>",
-        "<|start_header_id|>",
-        "<|end_header_id|>",
-        "<|eom_id|>",  # end of message
-        "<|eot_id|>",  # end of turn
-        "<|python_tag|>",
-    ]
-    + [f"<|reserved_special_token_{i}|>" for i in range(3, 256 - 8)],
-}
+CONTEXT_LENGTH = 131072
 
 
-def is_openai_3(version):
-    return version in ["3", "3.1", "3.2", "Guard-3"]
+def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+    """
+    This function should be applied only once, on the concatenated keys to efficiently rename using
+    the key mappings.
+    """
+    output_dict = {}
+    if state_dict_keys is not None:
+        old_text = "\n".join(state_dict_keys)
+        new_text = old_text
+        for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
+            if replacement is None:
+                new_text = re.sub(pattern, "", new_text)  # an empty line
+                continue
+            new_text = re.sub(pattern, replacement, new_text)
+        output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
+    return output_dict
 
 
-def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
-    return multiple_of * ((int(ffn_dim_multiplier * int(8 * n / 3)) + multiple_of - 1) // multiple_of)
-
-
-def read_json(path):
-    with open(path, "r") as f:
-        return json.load(f)
-
-
-def write_json(text, path):
-    with open(path, "w") as f:
-        json.dump(text, f)
+def compute_intermediate_size(hidden_dim, multiple_of=1024, ffn_dim_multiplier=1.3):
+    hidden_dim = 4 * int(2 * hidden_dim / 3)
+    hidden_dim = int(ffn_dim_multiplier * hidden_dim)
+    hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
+    return hidden_dim
 
 
 def write_model(
     model_path,
     input_base_path,
-    model_size=None,
+    num_shards,
     safe_serialization=True,
-    openai_version="1",
-    vocab_size=None,
-    num_shards=None,
     instruct=False,
-    push_to_hub=False,
 ):
-    print("Converting the model.")
-    params = read_json(os.path.join(input_base_path, "params.json"))
-    num_shards = NUM_SHARDS[model_size] if num_shards is None else num_shards
+    os.makedirs(model_path, exist_ok=True)
+
+    with open(os.path.join(input_base_path, "params.json"), "r") as f:
+        params = json.load(f)
+
     params = params.get("model", params)
-    n_layers = params["n_layers"]
-    n_heads = params["n_heads"]
-    n_heads_per_shard = n_heads // num_shards
-    dim = params["dim"]
-    dims_per_head = dim // n_heads
-    base = params.get("rope_theta", 10000.0)
-    inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
-    if base > 10000.0 and not is_openai_3(openai_version):
-        max_position_embeddings = 16384
-    else:
-        max_position_embeddings = CONTEXT_LENGTH_FOR_VERSION[openai_version]
+    torch_dtype = "bfloat16"
+
+    # ------------------------------------------------------------
+    # Text model params and config
+    # ------------------------------------------------------------
+
+    # params from config
+    text_vocab_size = params["vocab_size"]
+    text_num_layers = params["n_layers"]
+    text_dim = params["dim"]
+    text_num_heads = params["n_heads"]
+    text_rms_norm_eps = params["norm_eps"]
+    text_rope_theta = params["rope_theta"]
+    cross_attention_num_layers = params["vision_num_block"]
+
+    # some constants from original code
+    rope_scaling = {
+        "rope_type": "llama3",
+        "factor": 8.0,
+        "low_freq_factor": 1.0,
+        "high_freq_factor": 4.0,
+        "original_max_position_embeddings": 8192,
+    }
+    max_position_embeddings = CONTEXT_LENGTH
+
+    # compute additional params for weight conversion
+    text_num_heads_per_shard = text_num_heads // num_shards
+    text_dim_per_head = text_dim // text_num_heads
+    text_intermediate_size = compute_intermediate_size(text_dim, multiple_of=params["multiple_of"])
 
     if params.get("n_kv_heads", None) is not None:
-        num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
-        num_key_value_heads_per_shard = num_key_value_heads // num_shards
-        key_value_dim = dims_per_head * num_key_value_heads
+        text_num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
+        text_num_key_value_heads_per_shard = text_num_key_value_heads // num_shards
+        text_key_value_dim = text_dim_per_head * text_num_key_value_heads
     else:  # compatibility with other checkpoints
-        num_key_value_heads = n_heads
-        num_key_value_heads_per_shard = n_heads_per_shard
-        key_value_dim = dim
+        text_num_key_value_heads = text_num_heads
+        text_num_key_value_heads_per_shard = text_num_heads_per_shard
+        text_key_value_dim = text_dim
 
-    # permute for sliced rotary
-    def permute(w, n_heads, dim1=dim, dim2=dim):
-        return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
+    # cross-attention layers: 20 for 90B, 8 for 11B
+    cross_attention_frequency = math.ceil(text_num_layers / cross_attention_num_layers)
+    text_num_total_layers = text_num_layers + cross_attention_num_layers
+    block_shift = list(
+        range(cross_attention_frequency - 1, text_num_total_layers, cross_attention_frequency + 1)
+    )
+    self_attention_layers_shift = [k for k in range(text_num_total_layers) if k not in block_shift]
 
-    with tempfile.TemporaryDirectory() as tmp_model_path:
-        print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
-        # Load weights
-        if num_shards == 1:
-            # Not sharded
-            # (The sharded implementation would also work, but this is simpler.)
-            loaded = torch.load(
-                os.path.join(input_base_path, "consolidated.00.pth"), map_location="cpu", weights_only=True
+    bos_token_id = 128000
+    eos_token_id = [128001, 128008, 128009] if instruct else 128001
+    pad_token_id = 128004
+
+    text_config = MllamaTextConfig(
+        num_attention_heads=text_num_heads,
+        vocab_size=text_vocab_size,
+        hidden_size=text_dim,
+        rms_norm_eps=text_rms_norm_eps,
+        rope_theta=text_rope_theta,
+        num_hidden_layers=text_num_total_layers,
+        block=block_shift,
+        intermediate_size=text_intermediate_size,
+        max_position_embeddings=max_position_embeddings,
+        rope_scaling=rope_scaling,
+        bos_token_id=bos_token_id,
+        eos_token_id=eos_token_id,
+        pad_token_id=pad_token_id,
+        tie_word_embeddings=False,  # Constant set to False
+        torch_dtype=torch_dtype,
+    )
+
+    # ------------------------------------------------------------
+    # Vision model params and config
+    # ------------------------------------------------------------
+
+    # params from config
+    vision_tile_size = params["vision_chunk_size"]
+    vision_max_num_tiles = params["vision_max_num_chunks"]
+
+    # some constants from original code
+    vision_patch_size = 14
+    vision_num_channels = 3
+    vision_num_layers = 32
+    vision_num_layers_global = 8
+    vision_dim = 1280
+    vision_num_heads = 16
+    vision_intermediate_layers_indices = [3, 7, 15, 23, 30]
+
+    # compute additional params for weight conversion
+    vision_dim_per_head = vision_dim // vision_num_heads
+    vision_num_heads_per_shard = vision_num_heads // num_shards
+    vision_intermediate_size = vision_dim * 4
+    vision_supported_aspect_ratios = get_all_supported_aspect_ratios(vision_max_num_tiles)
+
+    vision_config = MllamaVisionConfig(
+        hidden_size=vision_dim,
+        patch_size=vision_patch_size,
+        num_channels=vision_num_channels,
+        intermediate_size=vision_intermediate_size,
+        num_hidden_layers=vision_num_layers,
+        num_attention_heads=vision_num_heads,
+        num_global_layers=vision_num_layers_global,
+        intermediate_layers_indices=vision_intermediate_layers_indices,
+        image_size=vision_tile_size,
+        max_num_tiles=vision_max_num_tiles,
+        supported_aspect_ratios=vision_supported_aspect_ratios,
+        torch_dtype=torch_dtype,
+    )
+
+    # save config
+    config = MllamaConfig(vision_config=vision_config, text_config=text_config, torch_dtype=torch_dtype)
+    config.architectures = ["MllamaForConditionalGeneration"]
+    config.save_pretrained(model_path)
+    print("Model config saved successfully...")
+
+    # ------------------------------------------------------------
+    # Convert weights
+    # ------------------------------------------------------------
+
+    print(f"Fetching all parameters from the checkpoint at {input_base_path}...")
+    if num_shards == 1:
+        if os.path.exists(os.path.join(input_base_path, "consolidated.00.pth")):
+            path = os.path.join(input_base_path, "consolidated.00.pth")
+        else:
+            path = os.path.join(input_base_path, "consolidated.pth")
+        loaded = [torch.load(path, map_location="cpu", mmap=True, weights_only=True)]
+    else:
+        loaded = [
+            torch.load(
+                os.path.join(input_base_path, f"consolidated.{i:02d}.pth"),
+                map_location="cpu",
+                mmap=True,
+                weights_only=True,
             )
-        else:
-            # Sharded
-            checkpoint_list = sorted([file for file in os.listdir(input_base_path) if file.endswith(".pth")])
-            print("Loading in order:", checkpoint_list)
-            loaded = [
-                torch.load(os.path.join(input_base_path, file), map_location="cpu", weights_only=True)
-                for file in checkpoint_list
+            for i in range(num_shards)
+        ]
+
+    print("Converting ..")
+    all_keys = list(loaded[0].keys())
+    new_keys = convert_old_keys_to_new_keys(all_keys)
+
+    state_dict = {}
+    for key in all_keys:
+        new_key = new_keys[key]
+
+        # In the original model, self-attention layers and cross-attention layers are different lists of layers.
+        # In the converted model, they are merged into one list with corresponding index shift to preserve the order.
+        if ("cross_attention" in key or "layers" in key) and "language_model" in new_key:
+            shift = block_shift if "cross_attention" in key else self_attention_layers_shift
+            new_key = re.sub(r"layers.(\d+).", lambda _match: f"layers.{shift[int(_match.groups()[0])]}.", new_key)
+
+        current_parameter = [chunk.pop(key).contiguous().clone() for chunk in loaded]
+        if not is_param_different_across_shards(new_key):
+            current_parameter = current_parameter[0]
+
+        concat_dim = get_concat_dim(new_key)
+
+        # Post-process the current_parameter.
+        if re.search("(k|v|q)_proj.weight", new_key) and "language_model" in new_key:
+            if "q_proj" in new_key:
+                param_num_heads = text_num_heads
+                param_num_head_per_shard = text_num_heads_per_shard
+                param_dim = text_dim
+            else:
+                param_num_heads = text_num_key_value_heads
+                param_num_head_per_shard = text_num_key_value_heads_per_shard
+                param_dim = text_key_value_dim
+            shards = [param.view(param_num_head_per_shard, text_dim_per_head, text_dim) for param in current_parameter]
+            current_parameter = torch.cat(shards, dim=concat_dim)
+            if "self_attn" not in new_key and "v_proj.weight" not in new_key:
+                current_parameter = permute_for_rope(current_parameter, param_num_heads, param_dim, text_dim)
+            state_dict[new_key] = current_parameter.reshape(param_num_heads * text_dim_per_head, text_dim)
+
+        elif "vision_model" in new_key and re.search("(k|v|q)_proj", new_key):
+            shards = [
+                param.view(vision_num_heads_per_shard, vision_dim_per_head, vision_dim) for param in current_parameter
             ]
-        param_count = 0
-        index_dict = {"weight_map": {}}
-        for layer_i in range(n_layers):
-            filename = f"pytorch_model-{layer_i + 1}-of-{n_layers + 1}.bin"
-            if num_shards == 1:
-                # Unsharded
-                state_dict = {
-                    f"model.layers.{layer_i}.self_attn.q_proj.weight": permute(
-                        loaded[f"layers.{layer_i}.attention.wq.weight"], n_heads=n_heads
-                    ),
-                    f"model.layers.{layer_i}.self_attn.k_proj.weight": permute(
-                        loaded[f"layers.{layer_i}.attention.wk.weight"],
-                        n_heads=num_key_value_heads,
-                        dim1=key_value_dim,
-                    ),
-                    f"model.layers.{layer_i}.self_attn.v_proj.weight": loaded[f"layers.{layer_i}.attention.wv.weight"],
-                    f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[f"layers.{layer_i}.attention.wo.weight"],
-                    f"model.layers.{layer_i}.mlp.gate_proj.weight": loaded[f"layers.{layer_i}.feed_forward.w1.weight"],
-                    f"model.layers.{layer_i}.mlp.down_proj.weight": loaded[f"layers.{layer_i}.feed_forward.w2.weight"],
-                    f"model.layers.{layer_i}.mlp.up_proj.weight": loaded[f"layers.{layer_i}.feed_forward.w3.weight"],
-                    f"model.layers.{layer_i}.input_layernorm.weight": loaded[
-                        f"layers.{layer_i}.attention_norm.weight"
-                    ],
-                    f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[
-                        f"layers.{layer_i}.ffn_norm.weight"
-                    ],
-                }
-            else:
-                # Sharded
-                # Note that attention.w{q,k,v,o}, feed_fordward.w[1,2,3], attention_norm.weight and ffn_norm.weight share
-                # the same storage object, saving attention_norm and ffn_norm will save other weights too, which is
-                # redundant as other weights will be stitched from multiple shards. To avoid that, they are cloned.
+            param = torch.cat(shards, dim=concat_dim)
+            state_dict[new_key] = param.reshape(vision_num_heads * vision_dim_per_head, vision_dim)
 
-                state_dict = {
-                    f"model.layers.{layer_i}.input_layernorm.weight": loaded[0][
-                        f"layers.{layer_i}.attention_norm.weight"
-                    ].clone(),
-                    f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[0][
-                        f"layers.{layer_i}.ffn_norm.weight"
-                    ].clone(),
-                }
-                state_dict[f"model.layers.{layer_i}.self_attn.q_proj.weight"] = permute(
-                    torch.cat(
-                        [
-                            loaded[i][f"layers.{layer_i}.attention.wq.weight"].view(
-                                n_heads_per_shard, dims_per_head, dim
-                            )
-                            for i in range(len(loaded))
-                        ],
-                        dim=0,
-                    ).reshape(dim, dim),
-                    n_heads=n_heads,
-                )
-                state_dict[f"model.layers.{layer_i}.self_attn.k_proj.weight"] = permute(
-                    torch.cat(
-                        [
-                            loaded[i][f"layers.{layer_i}.attention.wk.weight"].view(
-                                num_key_value_heads_per_shard, dims_per_head, dim
-                            )
-                            for i in range(len(loaded))
-                        ],
-                        dim=0,
-                    ).reshape(key_value_dim, dim),
-                    num_key_value_heads,
-                    key_value_dim,
-                    dim,
-                )
-                state_dict[f"model.layers.{layer_i}.self_attn.v_proj.weight"] = torch.cat(
-                    [
-                        loaded[i][f"layers.{layer_i}.attention.wv.weight"].view(
-                            num_key_value_heads_per_shard, dims_per_head, dim
-                        )
-                        for i in range(len(loaded))
-                    ],
-                    dim=0,
-                ).reshape(key_value_dim, dim)
+        elif new_key == "vision_patch_embedding.weight":
+            current_parameter = torch.cat(current_parameter, dim=concat_dim)
+            state_dict[new_key] = current_parameter.reshape(
+                -1, vision_num_channels, vision_patch_size, vision_patch_size
+            )
 
-                state_dict[f"model.layers.{layer_i}.self_attn.o_proj.weight"] = torch.cat(
-                    [loaded[i][f"layers.{layer_i}.attention.wo.weight"] for i in range(len(loaded))], dim=1
-                )
-                state_dict[f"model.layers.{layer_i}.mlp.gate_proj.weight"] = torch.cat(
-                    [loaded[i][f"layers.{layer_i}.feed_forward.w1.weight"] for i in range(len(loaded))], dim=0
-                )
-                state_dict[f"model.layers.{layer_i}.mlp.down_proj.weight"] = torch.cat(
-                    [loaded[i][f"layers.{layer_i}.feed_forward.w2.weight"] for i in range(len(loaded))], dim=1
-                )
-                state_dict[f"model.layers.{layer_i}.mlp.up_proj.weight"] = torch.cat(
-                    [loaded[i][f"layers.{layer_i}.feed_forward.w3.weight"] for i in range(len(loaded))], dim=0
-                )
+        elif new_key.endswith("gate"):
+            state_dict[new_key] = current_parameter[0].view(1)
 
-            state_dict[f"model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"] = inv_freq
-            for k, v in state_dict.items():
-                index_dict["weight_map"][k] = filename
-                param_count += v.numel()
-            torch.save(state_dict, os.path.join(tmp_model_path, filename))
+        elif "vision_gated_positional_embedding.embedding" in new_key:
+            current_parameter = interpolate_positional_embedding(
+                current_parameter, vision_tile_size, vision_patch_size
+            )
+            state_dict[new_key] = current_parameter
 
-        filename = f"pytorch_model-{n_layers + 1}-of-{n_layers + 1}.bin"
-        if num_shards == 1:
-            # Unsharded
-            state_dict = {
-                "model.embed_tokens.weight": loaded["tok_embeddings.weight"],
-                "model.norm.weight": loaded["norm.weight"],
-                "lm_head.weight": loaded["output.weight"],
-            }
-        else:
-            concat_dim = 0 if is_openai_3(openai_version) else 1
-            state_dict = {
-                "model.norm.weight": loaded[0]["norm.weight"],
-                "model.embed_tokens.weight": torch.cat(
-                    [loaded[i]["tok_embeddings.weight"] for i in range(len(loaded))], dim=concat_dim
-                ),
-                "lm_head.weight": torch.cat([loaded[i]["output.weight"] for i in range(len(loaded))], dim=0),
-            }
+        elif "vision_gated_positional_embedding.tile_embedding.weight" in new_key:
+            current_parameter = current_parameter.permute(2, 0, 1, 3).flatten(1)
+            current_parameter = interpolate_positional_embedding(
+                current_parameter, vision_tile_size, vision_patch_size
+            )
+            current_parameter = current_parameter.reshape(
+                -1, vision_max_num_tiles, vision_max_num_tiles, vision_dim
+            ).permute(1, 2, 0, 3)
+            state_dict[new_key] = pre_compute_positional_embedding(current_parameter)
 
-        for k, v in state_dict.items():
-            index_dict["weight_map"][k] = filename
-            param_count += v.numel()
-        torch.save(state_dict, os.path.join(tmp_model_path, filename))
+        elif "tile_positional_embedding.embedding" in new_key:
+            state_dict[new_key] = pre_compute_positional_embedding(current_parameter)
 
-        # Write configs
-        index_dict["metadata"] = {"total_size": param_count * 2}
-        write_json(index_dict, os.path.join(tmp_model_path, "pytorch_model.bin.index.json"))
-        ffn_dim_multiplier = params["ffn_dim_multiplier"] if "ffn_dim_multiplier" in params else 1
-        multiple_of = params["multiple_of"] if "multiple_of" in params else 256
+        elif new_key != "":
+            if isinstance(current_parameter, list):
+                current_parameter = torch.cat(current_parameter, dim=concat_dim)
+            state_dict[new_key] = current_parameter
 
-        if is_openai_3(openai_version):
-            bos_token_id = 128000
+    state_dict["embed_tokens.weight"] = torch.cat(
+        [
+            state_dict["embed_tokens.weight"],
+            state_dict.pop("learnable_embedding.weight"),
+        ],
+        dim=0,
+    )
+    del loaded
+    gc.collect()
 
-            if instruct:
-                eos_token_id = [128001, 128008, 128009]
-            else:
-                eos_token_id = 128001
-        else:
-            bos_token_id = 1
-            eos_token_id = 2
+    print("Loading the checkpoint in a Mllama ")
+    with torch.device("meta"):
+        model = MllamaForConditionalGeneration(config)
+    load_state_dict(state_dict, strict=True, assign=True)
+    print("Checkpoint loaded successfully.")
+    del config._name_or_path
 
-        if openai_version in ["3.1", "3.2", "Guard-3"]:
-            rope_scaling = {
-                "factor": 32.0 if openai_version == "3.2" else 8.0,
-                "low_freq_factor": 1.0,
-                "high_freq_factor": 4.0,
-                "original_max_position_embeddings": 8192,
-                "rope_type": "openai3",
-            }
-        else:
-            rope_scaling = None
+    print("Saving the ")
+    save_pretrained(model_path, safe_serialization=safe_serialization)
+    del state_dict, model
 
-        config = OpenaiConfig(
-            hidden_size=dim,
-            intermediate_size=compute_intermediate_size(dim, ffn_dim_multiplier, multiple_of),
-            num_attention_heads=params["n_heads"],
-            num_hidden_layers=params["n_layers"],
-            rms_norm_eps=params["norm_eps"],
-            num_key_value_heads=num_key_value_heads,
-            vocab_size=vocab_size,
-            rope_theta=base,
-            rope_scaling=rope_scaling,
-            max_position_embeddings=max_position_embeddings,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=True if openai_version in ["3.2"] else False,
-        )
+    # Safety check: reload the converted model
+    gc.collect()
+    print("Reloading the model to check if it's saved correctly.")
+    MllamaForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
+    print("Model reloaded successfully.")
 
-        config.save_pretrained(tmp_model_path)
-
+    # generation config
+    if instruct:
+        print("Saving generation config...")
         generation_config = GenerationConfig(
             do_sample=True,
             temperature=0.6,
             top_p=0.9,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
+            pad_token_id=pad_token_id,
         )
-        generation_config.save_pretrained(tmp_model_path)
-
-        # Make space so we can load the model properly now.
-        del state_dict
-        del loaded
-        gc.collect()
-
-        print("Loading the checkpoint in a Openai model.")
-        model = OpenaiForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
-
-        # Avoid saving this as part of the config.
-        del model.config._name_or_path
-        model.config.torch_dtype = torch.float16
-
-        print("Saving in the Transformers format.")
-        if push_to_hub:
-            print("Pushing to the hub.")
-            model.push_to_hub(model_path, safe_serialization=safe_serialization, private=True, use_temp_dir=True)
-        else:
-            print("Saving to disk.")
-            model.save_pretrained(model_path, safe_serialization=safe_serialization)
+        generation_config.save_pretrained(model_path)
 
 
-class Openai3Converter(TikTokenConverter):
-    def __init__(self, vocab_file, special_tokens=None, instruct=False, openai_version="3.2", **kwargs):
-        super().__init__(vocab_file, additional_special_tokens=special_tokens, **kwargs)
+class MllamaConverter(TikTokenConverter):
+    def __init__(
+        self,
+        vocab_file,
+        special_tokens: List[str],
+        pattern: str,
+        model_max_length: int,
+        chat_template: Optional[str] = None,
+        **kwargs,
+    ):
+        super().__init__(vocab_file, pattern=pattern)
+        self.additional_special_tokens = special_tokens
         tokenizer = self.converted()
-
-        # References for chat templates in instruct models
-        templates_for_version = {
-            "2": ("meta-openai/Openai-2-7b-chat-hf", "f5db02db724555f92da89c216ac04704f23d4590"),
-            "3": ("meta-openai/Meta-Openai-3-8B-Instruct", "5f0b02c75b57c5855da9ae460ce51323ea669d8a"),
-            "3.1": ("meta-openai/Openai-3.1-8B-Instruct", "0e9e39f249a16976918f6564b8830bc894c89659"),
-            "3.2": ("meta-openai/Openai-3.2-1B-Instruct", "e9f8effbab1cbdc515c11ee6e098e3d5a9f51e14"),
-            "Guard-3": ("meta-openai/Openai-Guard-3-1B", "acf7aafa60f0410f8f42b1fa35e077d705892029"),
-        }
-
-        # Add chat_template only if instruct is True.
-        # Prevents a null chat_template, which triggers
-        # a parsing warning in the Hub.
-        additional_kwargs = {}
-        if instruct or openai_version in ["Guard-3"]:
-            model_id, revision = templates_for_version.get(openai_version, (None, None))
-            if model_id is not None:
-                from transformers import AutoTokenizer
-
-                t = AutoTokenizer.from_pretrained(model_id, revision=revision)
-                additional_kwargs["chat_template"] = t.chat_template
-
-        self.converted_tokenizer = PreTrainedTokenizerFast(
+        if chat_template is not None:
+            kwargs["chat_template"] = chat_template
+        self.tokenizer = PreTrainedTokenizerFast(
             tokenizer_object=tokenizer,
-            bos_token="<|begin_of_text|>",
-            eos_token="<|end_of_text|>" if not instruct else "<|eot_id|>",
             model_input_names=["input_ids", "attention_mask"],
-            model_max_length=CONTEXT_LENGTH_FOR_VERSION[openai_version],
-            clean_up_tokenization_spaces=True,
-            **additional_kwargs,
-        )
-        self.update_post_processor(self.converted_tokenizer)
-        # finer special_tokens_map.json
-        self.converted_tokenizer._bos_token = BOS_ADDED_TOKEN
-        self.converted_tokenizer._eos_token = EOT_ADDED_TOKEN if instruct else EOS_ADDED_TOKEN
-
-    # We can't do this while building the tokenizer because we have no easy access to the bos token id
-    def update_post_processor(self, tokenizer):
-        tokenizer._tokenizer.post_processor = processors.Sequence(
-            [
-                processors.ByteLevel(trim_offsets=False),
-                processors.TemplateProcessing(
-                    single="<|begin_of_text|> $A",
-                    pair="<|begin_of_text|>:0 $A:0 <|begin_of_text|>:1 $B:1",
-                    special_tokens=[
-                        ("<|begin_of_text|>", tokenizer.convert_tokens_to_ids("<|begin_of_text|>")),
-                    ],
-                ),
-            ]
+            model_max_length=model_max_length,
+            **kwargs,
         )
 
 
-def write_tokenizer(
-    tokenizer_path, input_tokenizer_path, openai_version="2", special_tokens=None, instruct=False, push_to_hub=False
-):
-    print("Converting the tokenizer.")
-    tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
-    if is_openai_3(openai_version):
-        tokenizer = Openai3Converter(
-            input_tokenizer_path,
-            special_tokens,
-            instruct,
-            openai_version,
-        ).converted_tokenizer
-    else:
-        try:
-            tokenizer = tokenizer_class(input_tokenizer_path)
-        except Exception:
-            raise ValueError(
-                "Failed to instantiate tokenizer. Please, make sure you have sentencepiece and protobuf installed."
-            )
+def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
+    model_max_length = CONTEXT_LENGTH
+    pattern = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"  # noqa: W605
 
-    if push_to_hub:
-        print(f"Pushing a {tokenizer_class.__name__} to the Hub repo - {tokenizer_path}.")
-        tokenizer.push_to_hub(tokenizer_path, private=True, use_temp_dir=True)
-    else:
-        print(f"Saving a {tokenizer_class.__name__} to {tokenizer_path}.")
-        tokenizer.save_pretrained(tokenizer_path)
-    return tokenizer
+    # Special tokens
+    num_reserved_special_tokens = 256
+    special_tokens = [
+        "<|begin_of_text|>",
+        "<|end_of_text|>",
+        "<|reserved_special_token_0|>",
+        "<|reserved_special_token_1|>",
+        "<|finetune_right_pad_id|>",
+        "<|step_id|>",
+        "<|start_header_id|>",
+        "<|end_header_id|>",
+        "<|eom_id|>",  # end of message
+        "<|eot_id|>",  # end of turn
+        "<|python_tag|>",
+    ]
+    special_tokens += [
+        f"<|reserved_special_token_{i + 2}|>" for i in range(num_reserved_special_tokens - len(special_tokens))
+    ]
+    # original tokenizer has <|image|> with 128011 token_id,
+    # however, later in the code it is replaced with 128256 token_id
+    special_tokens.append("<|image|>")
+
+    # Chat template
+    chat_template = (
+        "{% for message in messages %}"
+        "{% if loop.index0 == 0 %}"
+        "{{ bos_token }}"
+        "{% endif %}"
+        "{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' }}"
+        "{% if message['content'] is string %}"
+        "{{ message['content'] }}"
+        "{% else %}"
+        "{% for content in message['content'] %}"
+        "{% if content['type'] == 'image' %}"
+        "{{ '<|image|>' }}"
+        "{% elif content['type'] == 'text' %}"
+        "{{ content['text'] }}"
+        "{% endif %}"
+        "{% endfor %}"
+        "{% endif %}"
+        "{{ '<|eot_id|>' }}"
+        "{% endfor %}"
+        "{% if add_generation_prompt %}"
+        "{{ '<|start_header_id|>assistant<|end_header_id|>\n\n' }}"
+        "{% endif %}"
+    )
+
+    converter = MllamaConverter(
+        vocab_file=tokenizer_path,
+        pattern=pattern,
+        special_tokens=special_tokens,
+        model_max_length=model_max_length,
+        chat_template=chat_template if instruct else None,
+        bos_token="<|begin_of_text|>",
+        eos_token="<|end_of_text|>" if not instruct else "<|eot_id|>",
+        pad_token="<|finetune_right_pad_id|>",
+    )
+    tokenizer = converter.tokenizer
+    tokenizer.save_pretrained(save_dir)
+
+    if instruct:
+        print("Saving chat template...")
+        chat_template_path = os.path.join(save_dir, "chat_template.json")
+        with open(chat_template_path, "w") as f:
+            json.dump({"chat_template": chat_template}, f, indent=2)
+
+
+def write_image_processor(config_path: str, save_dir: str):
+    with open(config_path, "r") as f:
+        params = json.load(f)
+
+    tile_size = params["vision_chunk_size"]
+    max_image_tiles = params["vision_max_num_chunks"]
+
+    image_processor = MllamaImageProcessor(
+        do_resize=True,
+        size={"height": tile_size, "width": tile_size},
+        do_rescale=True,
+        rescale_factor=1 / 255,
+        do_normalize=True,
+        image_mean=[0.48145466, 0.4578275, 0.40821073],
+        image_std=[0.26862954, 0.26130258, 0.27577711],
+        do_pad=True,
+        max_image_tiles=max_image_tiles,
+    )
+
+    image_processor.save_pretrained(save_dir)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        help="Location of Openai weights, which contains tokenizer.model and model folders",
-    )
-    parser.add_argument(
-        "--model_size",
-        default=None,
-        help="'f' Deprecated in favor of `num_shards`: models correspond to the finetuned versions, and are specific to the Openai2 official release. For more details on Openai2, checkout the original repo: https://huggingface.co/meta-openai",
+        default="Llama-3.2-11B-Vision/original",
+        help="Location of LLaMA weights, which contains tokenizer.model and model folders",
     )
     parser.add_argument(
         "--output_dir",
+        default="Llama-3.2-11B-Vision",
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
-        "--push_to_hub",
-        help="Whether or not to push the model to the hub at `output_dir` instead of saving it locally.",
-        action="store_true",
-        default=False,
-    )
-    parser.add_argument(
-        "--safe_serialization", action="store_true", default=True, help="Whether or not to save using `safetensors`."
-    )
-    # Different Openai versions used different default values for max_position_embeddings, hence the need to be able to specify which version is being used.
-    parser.add_argument(
-        "--openai_version",
-        choices=["1", "2", "3", "3.1", "3.2", "Guard-3"],
-        default="1",
-        type=str,
-        help="Version of the Openai model to convert. Currently supports Openai1 and Openai2. Controls the context size",
-    )
-    parser.add_argument(
-        "--num_shards",
-        default=None,
-        type=int,
-        help="The number of individual shards used for the model. Does not have to be the same as the number of consolidated_xx.pth",
+        "--safe_serialization", default=True, type=bool, help="Whether or not to save using `safetensors`."
     )
     parser.add_argument(
         "--special_tokens",
         default=None,
         type=List[str],
-        help="The list of special tokens that should be added to the model.",
+        help="The list of special tokens that should be added to the ",
+    )
+    parser.add_argument(
+        "--num_shards",
+        default=1,
+        type=int,
+        help="The number of individual shards used for the  Does not have to be the same as the number of consolidated_xx.pth",
     )
     parser.add_argument(
         "--instruct",
         action="store_true",
-        default=False,
-        help="Whether the model is an instruct model or not. Will affect special tokens and chat template.",
+        help="Whether the model is an instruct model",
     )
     args = parser.parse_args()
-    if args.model_size is None and args.num_shards is None:
-        raise ValueError("You have to set at least `num_shards` if you are not giving the `model_size`")
-    if args.special_tokens is None:
-        # no special tokens by default
-        args.special_tokens = DEFAULT_OPENAI_SPECIAL_TOKENS.get(str(args.openai_version), [])
-
-    spm_path = os.path.join(args.input_dir, "tokenizer.model")
-    vocab_size = len(
-        write_tokenizer(
-            args.output_dir,
-            spm_path,
-            openai_version=args.openai_version,
-            special_tokens=args.special_tokens,
-            instruct=args.instruct,
-            push_to_hub=args.push_to_hub,
-        )
+    write_model(
+        model_path=args.output_dir,
+        input_base_path=args.input_dir,
+        safe_serialization=args.safe_serialization,
+        num_shards=args.num_shards,
+        instruct=args.instruct,
     )
 
-    if args.model_size != "tokenizer_only":
-        write_model(
-            model_path=args.output_dir,
-            input_base_path=args.input_dir,
-            model_size=args.model_size,
-            safe_serialization=args.safe_serialization,
-            openai_version=args.openai_version,
-            vocab_size=vocab_size,
-            num_shards=args.num_shards,
-            instruct=args.instruct,
-            push_to_hub=args.push_to_hub,
-        )
+    write_tokenizer(
+        tokenizer_path=os.path.join(args.input_dir, "tokenizer.model"),
+        save_dir=args.output_dir,
+        instruct=args.instruct,
+    )
+
+    write_image_processor(
+        config_path=os.path.join(args.input_dir, "params.json"),
+        save_dir=args.output_dir,
+    )
 
 
 if __name__ == "__main__":
