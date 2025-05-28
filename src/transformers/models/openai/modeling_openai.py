@@ -40,7 +40,7 @@ from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_openai import OpenaiConfig
 from ..llama4.modeling_llama4 import apply_rotary_pos_emb, Llama4TextExperts
-from ..llama.modeling_llama import LlamaRotaryEmbedding, LlamaAttention, LlamaDecoderLayer, LlamaModel, LlamaForCausalLM, LlamaRMSNorm, repeat_kv
+from ..llama.modeling_llama import LlamaRotaryEmbedding, LlamaAttention, LlamaDecoderLayer, LlamaModel, LlamaForCausalLM, LlamaRMSNorm, repeat_kv, LlamaPreTrainedModel
 from ...integrations.flex_attention import flex_attention_forward
 logger = logging.get_logger(__name__)
 
@@ -152,83 +152,23 @@ class OpenaiDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: OpenaiConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-
         self.self_attn = OpenaiAttention(config=config, layer_idx=layer_idx)
-
         self.mlp = OpenaiMLP(config)
         self.input_layernorm = OpenaiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = OpenaiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
 
-        # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_value=past_key_value,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        return outputs
-
-
-@auto_docstring
-# Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel with Llama->Openai
-class OpenaiPreTrainedModel(PreTrainedModel):
+class OpenaiPreTrainedModel(LlamaPreTrainedModel):
     config_class = OpenaiConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["OpenaiDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
     _supports_flex_attn = True
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
 
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, OpenaiRMSNorm):
-            module.weight.data.fill_(1.0)
 
 class OpenaiModel(LlamaModel):
     pass 
