@@ -17,7 +17,6 @@ import unittest
 
 import pytest
 import requests
-from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -286,49 +285,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
-
     def test_resize_embeddings_results_in_successful_loss(self):
         # resizing embeddings should result in successful loss computation
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -394,12 +350,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
     @unittest.skip(reason="AssertionError: Items in the second set but not the first: might be a setting issue")
     def test_model_parallelism(self):
-        pass
-
-    @parameterized.expand([("offloaded",)])
-    @pytest.mark.generate
-    @unittest.skip(reason="Offloaded cache seems to not work with mllama's kv cache type")
-    def test_offloaded_cache_implementation(self, cache_implementation):
         pass
 
     @unittest.skip(

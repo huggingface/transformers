@@ -30,6 +30,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
+    require_read_token,
     require_torch_accelerator,
     slow,
     torch_device,
@@ -414,10 +415,11 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
         return input_ids, position_ids, input_ids_shared_prefix, mask_shared_prefix, position_ids_shared_prefix
 
 
+@require_read_token
 class CsmForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         # TODO: @eustlb, update with correct sesame's repo
-        self.model_checkpoint = "eustlb/csm-1b"
+        self.model_checkpoint = "sesame/csm-1b"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
