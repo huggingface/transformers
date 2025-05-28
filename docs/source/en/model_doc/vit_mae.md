@@ -28,7 +28,7 @@ rendered properly in your Markdown viewer.
 
 [ViTMAE](https://huggingface.co/papers/2111.06377) is a self-supervised vision model that is pretrained by masking large portions of an image (~75%). An encoder processes the visible image patches and a decoder reconstructs the missing pixels from the encoded patches and mask tokens. After pretraining, the encoder can be reused for downstream tasks like image classification or object detection — often outperforming models trained with supervised learning.
 
-You can find all the original ViTMAE checkpoints under the [vit-mae](https://huggingface.co/facebook/vit-mae-base) collection.
+You can find all the original ViTMAE checkpoints under the [AI at Meta](https://huggingface.co/facebook?search_models=vit-mae) organization.
 
 > [!TIP]
 > Click on the ViTMAE models in the right sidebar for more examples of how to apply ViTMAE to different image classification and reconstruction tasks.
