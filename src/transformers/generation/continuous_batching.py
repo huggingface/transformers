@@ -386,13 +386,11 @@ class FIFOScheduler(Scheduler):
     @traced
     def add_waiting_request(self, state: RequestState):
         """Add a request to the waiting list."""
-        if self.retain_cache_on_finish:
-            if state.request_id in self.active_requests:
-                old_state = self.active_requests[state.request_id]
-                state.prompt_ids = state.prompt_ids[len(old_state.full_prompt_ids) - 1:]
-                state.allocated_blocks = old_state.allocated_blocks
-                state.position_offset = old_state.position_offset
-                del self.active_requests[state.request_id]
+        if self.retain_cache_on_finish and state.request_id in self.active_requests:
+            old_state = self.active_requests.pop(state.request_id)
+            state.prompt_ids = state.prompt_ids[len(old_state.full_prompt_ids):]
+            state.allocated_blocks = old_state.allocated_blocks
+            state.position_offset = old_state.position_offset
         self.waiting_requests[state.request_id] = state
         self.waiting_requests_order.append(state.request_id)
 
@@ -507,13 +505,11 @@ class PrefillFirstScheduler(Scheduler):
     @traced
     def add_waiting_request(self, state: RequestState):
         """Add a request to the waiting list."""
-        if self.retain_cache_on_finish:
-            if state.request_id in self.active_requests:
-                old_state = self.active_requests[state.request_id]
-                state.prompt_ids = state.prompt_ids[len(old_state.full_prompt_ids):] # XXX: check for indexing error?
-                state.allocated_blocks = old_state.allocated_blocks
-                state.position_offset = old_state.position_offset
-                del self.active_requests[state.request_id]
+        if self.retain_cache_on_finish and state.request_id in self.active_requests:
+            old_state = self.active_requests.pop(state.request_id)
+            state.prompt_ids = state.prompt_ids[len(old_state.full_prompt_ids):] # XXX: check for indexing error?
+            state.allocated_blocks = old_state.allocated_blocks
+            state.position_offset = old_state.position_offset
         self.waiting_requests[state.request_id] = state
         self.waiting_requests_order.append(state.request_id)
 
