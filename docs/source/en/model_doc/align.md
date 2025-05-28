@@ -150,7 +150,8 @@ for label, score in zip(candidate_labels, probs):
 
 ## AlignConfig
 
-[[autodoc]] AlignConfig - from_text_vision_configs
+[[autodoc]] AlignConfig
+    - from_text_vision_configs
 
 ## AlignTextConfig
 
@@ -166,12 +167,17 @@ for label, score in zip(candidate_labels, probs):
 
 ## AlignModel
 
-[[autodoc]] AlignModel - forward - get_text_features - get_image_features
+[[autodoc]] AlignModel
+    - forward
+    - get_text_features
+    - get_image_features
 
 ## AlignTextModel
 
-[[autodoc]] AlignTextModel - forward
+[[autodoc]] AlignTextModel
+    - forward
 
 ## AlignVisionModel
 
-[[autodoc]] AlignVisionModel - forward
+[[autodoc]] AlignVisionModel
+    - forward
