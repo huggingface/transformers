@@ -4572,6 +4572,7 @@ class ModelTesterMixin:
     def test_flex_attention_with_grads(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config).to(device=torch_device)
 
             # If not all sub-models support flex, skip the test
@@ -4586,34 +4587,51 @@ class ModelTesterMixin:
             if not supports_flex_all_modules:
                 self.skipTest(reason="This model's submodels does not support flex attention")
 
+            def update_config_for_flex(config):
+                # Flex Attention cannot use dropout
+                if hasattr(config, "attention_dropout"):
+                    config.attention_dropout = 0
+                if hasattr(config, "attention_probs_dropout_prob"):
+                    config.attention_probs_dropout_prob = 0
+
+                # Flex attention relies on triton on compilation
+                # However, triton cannot handle hidden dimensions of less than 16
+                # --> forcing at least a hidden dim of 16
+                if hasattr(config, "head_dim") and config.head_dim is not None:
+                    head_dim = config.head_dim
+                    config.head_dim = max(16, config.head_dim)
+
+                if (
+                    getattr(config, "hidden_size", None) is not None
+                    and getattr(config, "num_attention_heads", None) is not None
+                ):
+                    head_dim = config.hidden_size // config.num_attention_heads
+                    config.hidden_size *= max(16 // head_dim, 1)
+
+                if (
+                    getattr(config, "decoder_hidden_size", None) is not None
+                    and getattr(config, "decoder_num_attention_heads", None) is not None
+                ):
+                    decoder_head_dim = config.decoder_hidden_size // config.decoder_num_attention_heads
+                    config.decoder_hidden_size *= max(16 // decoder_head_dim, 1)
+
             # Set default attention to flex and update config values
-            text_config = config.get_text_config(decoder=True)
+            update_config_for_flex(config)
+            for key in config.sub_configs:
+                sub_config = getattr(config, key)
+                update_config_for_flex(sub_config)
+
             config._attn_implementation = "flex_attention"
-            # Flex Attention cannot use dropout
-            if hasattr(text_config, "attention_dropout"):
-                text_config.attention_dropout = 0
-            if hasattr(config, "attention_probs_dropout_prob"):
-                text_config.attention_probs_dropout_prob = 0
-
-            # Flex attention relies on triton on compilation
-            # However, triton cannot handle hidden dimensions of less than 16
-            # --> forcing at least a hidden dim of 16
-            head_dim = (
-                getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
-            )
-            text_config.hidden_size *= max(16 // head_dim, 1)
-            if getattr(text_config, "head_dim", None) is not None:
-                text_config.head_dim = max(16, text_config.head_dim)
-
             model = model_class(config).to(device=torch_device)
             self.assertTrue(model.config._attn_implementation == "flex_attention")
 
             # Elaborate workaround for encoder-decoder models as some do not specify their main input
             dummy_inputs = {model.main_input_name: inputs_dict[model.main_input_name].to(torch_device)}
             for key in getattr(self, "additional_model_inputs", []):
-                dummy_inputs[key] = inputs_dict[key].to(torch_device)
+                if key in inputs_dict:
+                    dummy_inputs[key] = inputs_dict[key].to(torch_device)
 
-            if text_config.is_encoder_decoder or config.is_encoder_decoder:
+            if config.get_text_config(decoder=True).is_encoder_decoder:
                 dummy_inputs["decoder_input_ids"] = inputs_dict["decoder_input_ids"].to(torch_device)
                 dummy_inputs["decoder_attention_mask"] = inputs_dict["decoder_attention_mask"].to(torch_device)
 
