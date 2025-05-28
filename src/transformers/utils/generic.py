@@ -1012,8 +1012,8 @@ class FlashAttentionKwargs(TypedDict, total=False):
             Maximum sequence length for key state.
     """
 
-    cumulative_seqlens_q: Optional[torch.LongTensor]
-    cumulative_seqlens_k: Optional[torch.LongTensor]
+    cumulative_seqlens_q: Optional["torch.LongTensor"]
+    cumulative_seqlens_k: Optional["torch.LongTensor"]
     max_length_q: Optional[int]
     max_length_k: Optional[int]
 
