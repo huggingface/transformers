@@ -31,7 +31,7 @@ rendered properly in your Markdown viewer.
 You can find all the original ViTMAE checkpoints under the [AI at Meta](https://huggingface.co/facebook?search_models=vit-mae) organization.
 
 > [!TIP]
-> Click on the ViTMAE models in the right sidebar for more examples of how to apply ViTMAE to different image classification and reconstruction tasks.
+> Click on the ViTMAE models in the right sidebar for more examples of how to apply ViTMAE to vision tasks.
 
 The example below demonstrates how to use ViTMAE with the [`AutoModel`] class.
 
