@@ -58,7 +58,7 @@ class JanusPreTrainedModel(PreTrainedModel):
     config_class = JanusConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer"]
+    _no_split_modules = ["LlamaDecoderLayer", "JanusVisionEncoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -1054,6 +1054,10 @@ class JanusModel(JanusPreTrainedModel):
     def __init__(self, config: JanusConfig):
         super().__init__(config)
         self.config = config
+
+        # Language model is initialized first to get the correct device map
+        self.language_model = AutoModel.from_config(config=config.text_config)
+
         # This is necessary for backward compatibility, see SiglipModel initialization
         self.vision_model = JanusVisionModel._from_config(config.vision_config)
         self.aligner = JanusVisionAlignerMLP(self.vision_model.config)
@@ -1065,8 +1069,6 @@ class JanusModel(JanusPreTrainedModel):
         self.generation_embeddings = nn.Embedding(self.vqmodel.config.num_embeddings, self.vqmodel.config.embed_dim)
         self.generation_aligner = JanusVQVAEAlignerMLP(self.vqmodel.config)
         self.generation_head = JanusVQVAEHead(self.vqmodel.config)
-
-        self.language_model = AutoModel.from_config(config=config.text_config)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing.
@@ -1133,6 +1135,7 @@ class JanusModel(JanusPreTrainedModel):
             image_features = image_embeds.reshape(-1, embed_dim)
             image_attention_mask = image_attention_mask.unsqueeze(-1).expand(-1, -1, embed_dim)
 
+            image_attention_mask = image_attention_mask.to(inputs_embeds.device)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(image_attention_mask, image_features)
 
@@ -1395,9 +1398,15 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         attention_mask = attention_mask.repeat(2, 1)
         model_kwargs["attention_mask"] = attention_mask
 
+        # Get BOI token ID
+        if hasattr(generation_config, "generation_kwargs"):
+            boi_token_id = generation_config.generation_kwargs.get("boi_token_id", generation_config.bos_token_id)
+        else:
+            boi_token_id = kwargs.get("boi_token_id", generation_config.bos_token_id)
+
         # Mask all the tokens that are neither BOS nor BOI with pad token in the unconditional logits.
         mask = (input_tokens[batch_size:, :] != generation_config.bos_token_id) & (
-            input_tokens[batch_size:, :] != generation_config.generation_kwargs["boi_token_id"]
+            input_tokens[batch_size:, :] != boi_token_id
         )
         input_tokens[batch_size:, :].masked_fill_(mask, generation_config.pad_token_id)
 
