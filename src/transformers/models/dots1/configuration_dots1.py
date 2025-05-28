@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...utils import logging
 
 
@@ -92,6 +92,8 @@ class Dots1Config(PretrainedConfig):
             Size of the sliding window for attention. If not specified, defaults to `4096`.
         max_window_layers (`int`, *optional*, defaults to 62):
             The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
 
     Examples:
         ```python
@@ -164,6 +166,7 @@ class Dots1Config(PretrainedConfig):
         use_sliding_window=False,
         sliding_window=4096,
         max_window_layers=62,
+        layer_types=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -196,6 +199,16 @@ class Dots1Config(PretrainedConfig):
         self.use_sliding_window = use_sliding_window
         self.sliding_window = sliding_window if use_sliding_window else None
         self.max_window_layers = max_window_layers
+
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention"
+                if self.sliding_window is not None and i >= self.max_window_layers
+                else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types)
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,
