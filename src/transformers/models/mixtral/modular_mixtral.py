@@ -436,7 +436,7 @@ class MixtralForCausalLM(MistralForCausalLM):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
-""
+
         aux_loss = None
         if outputs.router_logits is not None:
             aux_loss = load_balancing_loss_func(
