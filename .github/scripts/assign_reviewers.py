@@ -21,6 +21,8 @@ import re
 from collections import Counter
 from pathlib import Path
 
+def test():
+    return 0
 def pattern_to_regex(pattern):
     if pattern.startswith("/"):
         start_anchor = True
