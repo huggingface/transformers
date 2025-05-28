@@ -30,7 +30,7 @@ from ...utils import CONFIG_NAME, logging
 logger = logging.get_logger(__name__)
 
 
-_F = TypeVar("_F", bound=Callable[..., Any])
+_CallableT = TypeVar("_CallableT", bound=Callable[..., Any])
 
 
 CONFIG_MAPPING_NAMES = OrderedDict[str, str](
@@ -1005,7 +1005,9 @@ def _list_model_options(indent, config_to_class=None, use_model_types=True):
     return "\n".join(lines)
 
 
-def replace_list_option_in_docstrings(config_to_class=None, use_model_types: bool = True) -> Callable[[_F], _F]:
+def replace_list_option_in_docstrings(
+    config_to_class=None, use_model_types: bool = True
+) -> Callable[[_CallableT], _CallableT]:
     def docstring_decorator(fn):
         docstrings = fn.__doc__
         if docstrings is None:
