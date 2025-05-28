@@ -569,7 +569,6 @@ class Glm4vVisionTransformerPretrainedModel(Glm4vPreTrainedModel):
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
         seqlens = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
         hidden_states = self.embeddings(hidden_states, seqlens, grid_thw, image_type_ids[:, 0], image_type_ids[:, 1])
-
         for blk in self.blocks:
             if self.gradient_checkpointing and self.training:
                 hidden_states = self._gradient_checkpointing_func(
@@ -984,7 +983,6 @@ class Glm4vSdpaAttention(Glm4vAttention):
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
         is_causal = True if causal_mask is None and q_len > 1 else False
-
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
@@ -1400,14 +1398,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
         """
         pixel_values = pixel_values.type(self.visual.dtype)
         image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
-        if image_embeds.shape[0] == 1250:
-            print("Origin: ========")
-            print(image_embeds)
-            print("New: ========")
-            from safetensors.torch import load_file
-            loaded_data = load_file("/mnt/image_embed.safetensors")
-            image_embeds = loaded_data["image_embeds"]
-            print("loaded:\n", image_embeds)
         return image_embeds
 
     @auto_docstring
@@ -1455,6 +1445,15 @@ class Glm4vModel(Glm4vPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
             if pixel_values is not None:
                 image_embeds = self.get_image_features(pixel_values, image_grid_thw)
+                # if image_embeds.shape[0] == 1250:
+                #     print("Origin: ========")
+                #     print(image_embeds)
+                #     print("New: ========")
+                #     from safetensors.torch import load_file
+                #
+                #     loaded_data = load_file("/mnt/image_embed.safetensors")
+                #     image_embeds = loaded_data["image_embeds"]
+                #     print("loaded:\n", image_embeds)
                 n_image_tokens = (input_ids == self.config.image_token_id).sum()
                 n_image_features = image_embeds.shape[0]
                 if not is_torchdynamo_compiling() and n_image_tokens != n_image_features:
@@ -1828,7 +1827,6 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
             config=self.config,
             past_key_values=past_key_values,
         )
-
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None

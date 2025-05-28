@@ -72,11 +72,29 @@ def merge_qkv(
         q.append(q_.clone())
         k.append(k_.clone())
         v.append(v_.clone())
-
     q = torch.cat(q, dim=0)
     k = torch.cat(k, dim=0)
     v = torch.cat(v, dim=0)
-
+    if not interleaved_qkv:
+        rotary_dim = attention_dim // 2
+        half_rot = rotary_dim // 2
+        perm_rot = torch.empty(rotary_dim, dtype=torch.long)
+        perm_rot[0::2] = torch.arange(0, half_rot)
+        perm_rot[1::2] = torch.arange(half_rot, rotary_dim)
+        if q.dim() == 2:
+            qh = q.view(num_attention_heads, attention_dim, -1)
+            kh = k.view(multi_query_group_num, attention_dim, -1)
+            qh[:, :rotary_dim, :] = qh[:, perm_rot, :]
+            kh[:, :rotary_dim, :] = kh[:, perm_rot, :]
+            q = qh.reshape(-1, q.size(-1))
+            k = kh.reshape(-1, k.size(-1))
+        else:
+            qh = q.view(num_attention_heads, attention_dim)
+            kh = k.view(multi_query_group_num, attention_dim)
+            qh[:, :rotary_dim] = qh[:, perm_rot]
+            kh[:, :rotary_dim] = kh[:, perm_rot]
+            q = qh.reshape(-1)
+            k = kh.reshape(-1)
     return q, k, v
 
 
@@ -417,7 +435,9 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         slice_dim=0,
     )
     complete_state_dict[f"lm_head.weight"] = lm_head.clone()
-    complete_state_dict[f"model.language_model.norm.weight"] = mgt_sd[-1][rank]["model"]["decoder.final_layernorm.weight"].clone()
+    complete_state_dict[f"model.language_model.norm.weight"] = mgt_sd[-1][rank]["model"][
+        "decoder.final_layernorm.weight"
+    ].clone()
     mgt_encoder_tp_0 = dict_access_multi(mgt_sd[0][0], keys)
 
     # VLM
