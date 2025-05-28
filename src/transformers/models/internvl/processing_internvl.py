@@ -18,18 +18,8 @@ from typing import List, Optional, Union
 import numpy as np
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import (
-    ImageInput,
-    concatenate_list,
-    make_flat_list_of_images,
-)
-from ...processing_utils import (
-    ImagesKwargs,
-    MultiModalData,
-    ProcessingKwargs,
-    ProcessorMixin,
-    Unpack,
-)
+from ...image_utils import ImageInput, concatenate_list, make_flat_list_of_images
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...video_utils import VideoInput, VideoMetadata, load_video, make_batched_videos
 
@@ -74,10 +64,6 @@ class InternVLProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer", "video_processor"]
-    valid_kwargs = [
-        "chat_template",
-        "image_seq_length",
-    ]
     image_processor_class = "AutoImageProcessor"
     video_processor_class = "AutoVideoProcessor"
     tokenizer_class = "AutoTokenizer"

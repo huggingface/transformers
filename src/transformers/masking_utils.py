@@ -706,12 +706,12 @@ def create_causal_mask(
     # Allow slight deviations from causal mask
     if or_mask_function is not None:
         if not _is_torch_greater_or_equal_than_2_6:
-            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.5")
+            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
         mask_factory_function = or_masks(mask_factory_function, or_mask_function)
         allow_is_causal_skip = False
     if and_mask_function is not None:
         if not _is_torch_greater_or_equal_than_2_6:
-            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.5")
+            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
         mask_factory_function = and_masks(mask_factory_function, and_mask_function)
         allow_is_causal_skip = False
 
@@ -792,12 +792,12 @@ def create_sliding_window_causal_mask(
     # Allow slight deviations from sliding causal mask
     if or_mask_function is not None:
         if not _is_torch_greater_or_equal_than_2_6:
-            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.5")
+            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
         mask_factory_function = or_masks(mask_factory_function, or_mask_function)
         allow_is_causal_skip = False
     if and_mask_function is not None:
         if not _is_torch_greater_or_equal_than_2_6:
-            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.5")
+            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
         mask_factory_function = and_masks(mask_factory_function, and_mask_function)
         allow_is_causal_skip = False
 
@@ -886,12 +886,12 @@ def create_chunked_causal_mask(
     # Allow slight deviations from chunked causal mask
     if or_mask_function is not None:
         if not _is_torch_greater_or_equal_than_2_6:
-            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.5")
+            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
         mask_factory_function = or_masks(mask_factory_function, or_mask_function)
         allow_is_causal_skip = False
     if and_mask_function is not None:
         if not _is_torch_greater_or_equal_than_2_6:
-            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.5")
+            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
         mask_factory_function = and_masks(mask_factory_function, and_mask_function)
         allow_is_causal_skip = False
 
