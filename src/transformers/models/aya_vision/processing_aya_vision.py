@@ -13,22 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from typing import List, Optional, Union
 
-from transformers.processing_utils import (
-    ImagesKwargs,
-    ProcessingKwargs,
-    ProcessorMixin,
-    Unpack,
-)
-from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
+import numpy as np
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import (
-    ImageInput,
-    make_flat_list_of_images,
-)
+from ...image_utils import ImageInput, make_flat_list_of_images
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 class AyaVisionImagesKwargs(ImagesKwargs, total=False):
@@ -43,6 +35,7 @@ class AyaVisionProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding_side": "left",
             "padding": True,
+            "return_mm_token_type_ids": False,
         },
         "images_kwargs": {
             "crop_to_patches": True,
@@ -85,19 +78,6 @@ class AyaVisionProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = [
-        "chat_template",
-        "image_token",
-        "patch_size",
-        "img_size",
-        "downsample_factor",
-        "start_of_img_token",
-        "end_of_img_token",
-        "img_patch_token",
-        "img_line_break_token",
-        "tile_token",
-        "tile_global_token",
-    ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -121,7 +101,6 @@ class AyaVisionProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
         self.image_token = image_token
-        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.patch_size = patch_size * downsample_factor
         self.img_size = img_size
 
@@ -131,6 +110,10 @@ class AyaVisionProcessor(ProcessorMixin):
         self.img_line_break_token = img_line_break_token
         self.tile_token = tile_token
         self.tile_global_token = tile_global_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.img_patch_token)
+        self.image_ids = tokenizer.convert_tokens_to_ids(
+            [img_patch_token, tile_token, tile_global_token, start_of_img_token, end_of_img_token]
+        )
 
     def _prompt_split_image(self, num_patches):
         """
@@ -226,10 +209,48 @@ class AyaVisionProcessor(ProcessorMixin):
             text = processed_text
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
+
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`List[List[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = AyaVisionProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+
+            token_per_patch = (self.img_size // self.patch_size) ** 2
+            num_image_tokens = [
+                token_per_patch + 3 + sum(token_per_patch + 1 for _ in range(1, num_patches))
+                for num_patches in num_image_patches
+            ]  # Add +3 and +1 for BOI/EOI and image tile tokens
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     def batch_decode(self, *args, **kwargs):
         """

@@ -20,6 +20,8 @@ import pytest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, Glm4Config, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
+    cleanup,
     require_flash_attn,
     require_torch,
     require_torch_large_gpu,
@@ -80,113 +82,142 @@ class Glm4ModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_large_gpu
 class Glm4IntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
-    model_id = "THUDM/glm-4-0414-9b-chat"
-    revision = "refs/pr/15"
+    model_id = "THUDM/GLM-4-9B-0414"
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
 
     def test_model_9b_fp16(self):
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
-            "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
-        ]
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("cuda", 7): [],
+                ("cuda", 8): [
+                    "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
+                    "Hi today I am going to tell you about the most common disease in the world. This disease is called diabetes",
+                ],
+            }
+        )
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
 
         model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16, revision=self.revision
+            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16
         ).to(torch_device)
 
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
-        self.assertEqual(output_text, EXPECTED_TEXTS)
+        self.assertEqual(output_text, EXPECTED_TEXT)
 
     def test_model_9b_bf16(self):
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
-            "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
-        ]
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("cuda", 7): [],
+                ("cuda", 8): [
+                    "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
+                    "Hi today I am going to tell you about the most common disease in the world. This disease is called diabetes",
+                ],
+            }
+        )
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
 
         model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, revision=self.revision
+            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
         ).to(torch_device)
 
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
-        self.assertEqual(output_text, EXPECTED_TEXTS)
+        self.assertEqual(output_text, EXPECTED_TEXT)
 
     def test_model_9b_eager(self):
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
-            "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
-        ]
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("cuda", 7): [],
+                ("cuda", 8): [
+                    "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
+                    "Hi today I am going to tell you about the most common disease in the world. This disease is called diabetes",
+                ],
+            }
+        )
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
             low_cpu_mem_usage=True,
             torch_dtype=torch.bfloat16,
             attn_implementation="eager",
-            revision=self.revision,
         )
         model.to(torch_device)
 
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
-        self.assertEqual(output_text, EXPECTED_TEXTS)
+        self.assertEqual(output_text, EXPECTED_TEXT)
 
     @require_torch_sdpa
     def test_model_9b_sdpa(self):
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
-            "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
-        ]
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("cuda", 7): [],
+                ("cuda", 8): [
+                    "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
+                    "Hi today I am going to tell you about the most common disease in the world. This disease is called diabetes",
+                ],
+            }
+        )
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
             low_cpu_mem_usage=True,
             torch_dtype=torch.bfloat16,
             attn_implementation="sdpa",
-            revision=self.revision,
         )
         model.to(torch_device)
 
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
-        self.assertEqual(output_text, EXPECTED_TEXTS)
+        self.assertEqual(output_text, EXPECTED_TEXT)
 
     @require_flash_attn
     @pytest.mark.flash_attn_test
     def test_model_9b_flash_attn(self):
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
-            "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
-        ]
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("cuda", 7): [],
+                ("cuda", 8): [
+                    "Hello I am doing a project on the history of the internet and I need to know what the first website was and what",
+                    "Hi today I am going to tell you about the most common disease in the world. This disease is called diabetes",
+                ],
+            }
+        )
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
             low_cpu_mem_usage=True,
             torch_dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
-            revision=self.revision,
         )
         model.to(torch_device)
 
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
-        self.assertEqual(output_text, EXPECTED_TEXTS)
+        self.assertEqual(output_text, EXPECTED_TEXT)
