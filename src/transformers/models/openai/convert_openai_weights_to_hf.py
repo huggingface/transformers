@@ -20,7 +20,7 @@ from typing import List, Optional
 
 import regex as re
 import torch
-import tqdm
+from tqdm import tqdm
 from safetensors.torch import load_file as safe_load
 
 from transformers import (
@@ -78,7 +78,6 @@ def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
 def write_model(
     model_path,
     input_base_path,
-    num_shards,
     safe_serialization=True,
     instruct=False,
 ):
@@ -90,11 +89,11 @@ def write_model(
     config = OpenaiConfig.from_pretrained(input_base_path)
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}...")
-
+    print(list(os.listdir(input_base_path)))
     loaded = [
         safe_load(
             file
-            for file in tqdm(os.listdir(model_path), desc="Loading shards", unit="shard")
+            for file in list(os.listdir(input_base_path))
             if file.endswith(".safetensors")
         )
     ]
