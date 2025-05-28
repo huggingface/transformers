@@ -280,6 +280,8 @@ class Glm4vConfig(PretrainedConfig):
         vision_config=None,
         image_token_id=151343,
         video_token_id=151344,
+        vision_start_token_id=151341,
+        vision_end_token_id=151342,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -296,6 +298,8 @@ class Glm4vConfig(PretrainedConfig):
 
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
+        self.vision_start_token_id = vision_start_token_id
+        self.vision_end_token_id = vision_end_token_id
 
 
 __all__ = ["Glm4vConfig", "Glm4vTextConfig"]

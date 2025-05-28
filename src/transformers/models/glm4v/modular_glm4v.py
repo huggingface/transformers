@@ -290,10 +290,13 @@ class Glm4vConfig(Qwen2_5_VLConfig):
         vision_config=None,
         image_token_id=151343,
         video_token_id=151344,
+        vision_start_token_id=151341,
+        vision_end_token_id=151342,
         **kwargs,
     ):
         super().__init__(**kwargs)
-
+        self.vision_start_token_id = vision_start_token_id
+        self.vision_end_token_id = vision_end_token_id
 
 class Glm4vVisionPatchEmbed(Qwen2_5_VisionPatchEmbed):
     def __init__(
