@@ -47,10 +47,7 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     # required for @can_return_tuple decorator to work with torchdynamo
     import torch  # noqa: F401
-
-    from ..modeling_layers import GradientCheckpointingLayer
-    from torch._dynamo import is_compiling, disable
-
+    from torch._dynamo import is_compiling
 
 
 class cached_property(property):
@@ -953,6 +950,7 @@ def register_hook_if_needed(layer, capture_outputs):
         # Eager mode — no need to disable
         return layer.register_forward_hook(capture_outputs)
 
+
 def check_model_inputs(func):
     """
     Decorator to check if the model inputs are valid before calling the function.
@@ -999,6 +997,7 @@ def check_model_inputs(func):
         def make_capture_fn(key, index):
             def capture_fn(module, input, output):
                 collected[key].append(output[index])
+
             return capture_fn
 
         if any(capture_flags.values()):
@@ -1007,7 +1006,6 @@ def check_model_inputs(func):
                     if capture_flags.get(key, False) and isinstance(layer, cls):
                         hook_fn = make_capture_fn(key, idx)
                         hooks.append(register_hook_if_needed(layer, hook_fn))
-
 
         outputs = func(self, *args, **kwargs)
         for h in hooks:

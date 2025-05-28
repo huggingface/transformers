@@ -73,6 +73,7 @@ from .integrations.tensor_parallel import (
     verify_tp_plan,
 )
 from .loss.loss_utils import LOSS_MAPPING
+from .modeling_layers import GradientCheckpointingLayer
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -136,7 +137,7 @@ from .utils.import_utils import (
     is_torchdynamo_compiling,
 )
 from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
-from .modeling_layers import GradientCheckpointingLayer
+
 
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
 XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
@@ -2052,8 +2053,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         self._no_split_modules = self._no_split_modules or []
         self._can_record_outputs = {
-            "attentions": (GradientCheckpointingLayer, 1),
             "hidden_states": (GradientCheckpointingLayer, 0),
+            "attentions": (GradientCheckpointingLayer, 1),
         }
 
     def post_init(self):
