@@ -40,7 +40,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"unembedding.weight":          r"lm_head.weight",
     r"embedding":                   r"embed_tokens",
     # special key, wqkv needs to be split afterwards
-    r"block.(\d+).attn.qkv":        r"layers.\1.self_attn.(k|v|q)_proj",
+    r"block.(\d+).attn.qkv":        r"layers.\1.self_attn.k|v|q_proj",
     r"block.(\d+).attn.out":        r"layers.\1.self_attn.o_proj",
     r"block.(\d+).attn.sinks":      r"layers.\1.self_attn.sinks",
     r"block.(\d+).attn.norm":       r"layers.\1.input_layernorm.weight",
@@ -258,7 +258,6 @@ def main():
         model_path=args.output_dir,
         input_base_path=args.input_dir,
         safe_serialization=args.safe_serialization,
-        num_shards=args.num_shards,
         instruct=args.instruct,
     )
 
