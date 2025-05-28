@@ -733,7 +733,11 @@ def _load_parameter_into_model(model: "PreTrainedModel", param_name: str, tensor
     """Cast a single parameter `param_name` into the `model`, with value `tensor`."""
     module, param_type = get_module_from_name(model, param_name)
     # This will check potential shape mismatch if skipped before
-    module.load_state_dict({param_type: tensor}, strict=False, assign=True)
+    try:
+        module.load_state_dict({param_type: tensor}, strict=False, assign=True)
+        return None
+    except RuntimeError:
+        return f"parameter {re.sub(r'\d+', '.*.', param_name)} has shape {tensor.shape} but the model has {module.state_dict()[param_type].shape}. "
 
 
 @torch.no_grad()
@@ -776,6 +780,7 @@ def _load_state_dict_into_meta_model(
     if is_meta_state_dict:
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
 
+    errors = set()
     for param_name, empty_param in state_dict.items():
         if param_name not in expected_keys:
             continue
@@ -845,7 +850,9 @@ def _load_state_dict_into_meta_model(
                 if is_fsdp_enabled():
                     param_device = "cpu" if is_local_dist_rank_0() else "meta"
 
-                _load_parameter_into_model(model, param_name, param.to(param_device))
+                error = _load_parameter_into_model(model, param_name, param.to(param_device))
+                if error is not None:
+                    errors.add(error)
 
             else:
                 hf_quantizer.create_quantized_param(
@@ -4786,7 +4793,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 device_map_kwargs["offload_buffers"] = True
 
             if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
-                dispatch_model(model, **device_map_kwargs)
+                try:
+                    dispatch_model(model, **device_map_kwargs)
+                except RuntimeError as e:
+                    error_msgs += [str(e)]
 
         if hf_quantizer is not None:
             hf_quantizer.postprocess_model(model, config=config)
