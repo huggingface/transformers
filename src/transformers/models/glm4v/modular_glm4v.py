@@ -131,7 +131,9 @@ class Glm4vVisionConfig(PretrainedConfig):
 class Glm4vTextConfig(Qwen2_5_VLTextConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a
-    GLM-4V-0414 model according to the specified arguments, defining the model architecture.
+    GLM-4V-0414 model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of
+    GLM-4V-9B-0414 [THUDM/GLM-4V-9B-0414](https://huggingface.co/THUDM/GLM-4V-9B-0414).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -247,7 +249,9 @@ class Glm4vTextConfig(Qwen2_5_VLTextConfig):
 class Glm4vConfig(Qwen2_5_VLConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a
-    GLM-4V-0414 model according to the specified arguments, defining the model architecture.
+    GLM-4V-0414 model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of
+    GLM-4V-9B-0414 [THUDM/GLM-4V-9B-0414](https://huggingface.co/THUDM/GLM-4V-9B-0414).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
