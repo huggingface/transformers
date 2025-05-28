@@ -39,7 +39,6 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"norm.weight":                 r"norm.weight",
     r"unembedding.weight":          r"lm_head.weight",
     r"embedding":                   r"embed_tokens",
-    r"rope.freqs":                  None, # meaning we skip it and don't want it
     # special key, wqkv needs to be split afterwards
     r"block.(\d+).attn.qkv":        r"layers.\1.self_attn.(k|v|q)_proj",
     r"block.(\d+).attn.out":        r"layers.\1.self_attn.o_proj",
@@ -55,7 +54,6 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 # fmt: on
 
-CONTEXT_LENGTH = 131072
 
 
 def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
