@@ -1022,7 +1022,7 @@ class SyntheticCacheTest(unittest.TestCase):
             "HybridCache Sliding Scenario 4 failed",
         )
 
-def test_dynamic_cache(self):
+    def test_dynamic_cache(self):
         """Test DynamicCache with manually prefilled states and hardcoded assertions.
         Scenario 1: prefill and update for one layer
         prefill:       [1.0, 2.0]
