@@ -71,10 +71,7 @@ reconstruction = outputs.logits
 
 ## Notes
 - ViTMAE is typically used in two stages. Self-supervised pretraining with [`ViTMAEForPreTraining`], and then discarding the decoder and fine-tuning the encoder. After fine-tuning, the weights can be plugged into a model like [`ViTForImageClassification`].
-- The model reconstructs masked image patches (typically 75%) during pretraining and discards the decoder afterward.
-- Only visible patches are encoded, and learned mask tokens are used in the decoder.
-- Use `ViTImageProcessor` for input preparation.
-- For faster inference on supported hardware, SDPA can be enabled via `attn_implementation="sdpa"`.
+- Use [`ViTImageProcessor`] for input preparation.
 
 ```python
 from transformers import ViTMAEModel
