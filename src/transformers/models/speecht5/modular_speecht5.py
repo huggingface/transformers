@@ -179,8 +179,7 @@ class SpeechT5PreTrainedModel(UniSpeechPreTrainedModel):
 
 class SpeechT5SpeechEncoderPrenet(SpeechT5PreTrainedModel):
     def __init__(self, config):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         self.feature_encoder = SpeechT5FeatureEncoder(config)
         self.feature_projection = SpeechT5FeatureProjection(config)
 
