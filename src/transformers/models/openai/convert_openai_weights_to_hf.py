@@ -119,7 +119,7 @@ def write_model(
         elif re.search("gate_up_proj", new_key) and "bias" not in new_key:
             state_dict[new_key] = final_[key].permute(0,2,1)
         else:
-            state_dict[new_key] = final_[key]
+            state_dict[new_key] = final_[key].to(torch.bfloat16) # TODO slow, let's rmeove
 
     del final_
     gc.collect()
