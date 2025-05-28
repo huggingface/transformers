@@ -41,7 +41,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import auto_docstring, can_return_tuple, logging, LossKwargs
 from ...utils.generic import check_model_inputs
 from .configuration_llama import LlamaConfig
 
@@ -423,6 +423,9 @@ class LlamaModel(LlamaPreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
+
+
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring
