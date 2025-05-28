@@ -23,7 +23,6 @@ from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -35,7 +34,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import FlashAttentionKwargs, auto_docstring, can_return_tuple, logging
 from ..glm.modeling_glm import GlmAttention, GlmRotaryEmbedding, apply_rotary_pos_emb
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaModel, eager_attention_forward
 from ..whisper.modeling_whisper import WhisperModel, shift_tokens_right

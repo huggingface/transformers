@@ -19,9 +19,8 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
-from ...utils import is_torchdynamo_compiling, logging
+from ...utils import FlashAttentionKwargs, is_torchdynamo_compiling, logging
 from ..llava.modeling_llava import (
     KwargsForCausalLM,
     LlavaCausalLMOutputWithPast,

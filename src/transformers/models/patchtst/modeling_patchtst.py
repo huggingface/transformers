@@ -22,12 +22,11 @@ import torch
 from torch import nn
 
 from ...activations import ACT2CLS
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import FlashAttentionKwargs, ModelOutput, auto_docstring, logging
 from .configuration_patchtst import PatchTSTConfig
 
 

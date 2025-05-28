@@ -14,7 +14,7 @@
 
 import inspect
 import os
-from typing import Optional, TypedDict
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -420,24 +420,3 @@ def _flash_attention_forward(
         )
 
     return attn_output
-
-
-class FlashAttentionKwargs(TypedDict, total=False):
-    """
-    Keyword arguments for Flash Attention with Compile.
-
-    Attributes:
-        cumulative_seqlens_q (`torch.LongTensor`, *optional*)
-            Gets cumulative sequence length for query state.
-        cumulative_seqlens_k (`torch.LongTensor`, *optional*)
-            Gets cumulative sequence length for key state.
-        max_length_q (`int`, *optional*):
-            Maximum sequence length for query state.
-        max_length_k (`int`, *optional*):
-            Maximum sequence length for key state.
-    """
-
-    cumulative_seqlens_q: Optional[torch.LongTensor]
-    cumulative_seqlens_k: Optional[torch.LongTensor]
-    max_length_q: Optional[int]
-    max_length_k: Optional[int]

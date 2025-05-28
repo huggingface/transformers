@@ -43,9 +43,9 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
 from ...utils import (
+    FlashAttentionKwargs,
     TensorType,
     auto_docstring,
     can_return_tuple,

@@ -30,11 +30,11 @@ from torch import nn
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
+    FlashAttentionKwargs,
     LossKwargs,
     auto_docstring,
     can_return_tuple,

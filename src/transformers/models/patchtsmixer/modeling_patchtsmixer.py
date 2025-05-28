@@ -24,11 +24,10 @@ import torch.nn as nn
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import ModelOutput
 
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
-from ...utils import auto_docstring, logging
+from ...utils import FlashAttentionKwargs, auto_docstring, logging
 from .configuration_patchtsmixer import PatchTSMixerConfig
 
 

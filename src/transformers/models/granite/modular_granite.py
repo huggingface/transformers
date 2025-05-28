@@ -21,10 +21,9 @@ from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, logging
+from ...utils import FlashAttentionKwargs, KwargsForCausalLM, logging
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
@@ -225,9 +224,6 @@ class GraniteModel(LlamaModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 class GraniteForCausalLM(LlamaForCausalLM):

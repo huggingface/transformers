@@ -32,11 +32,7 @@ from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import (
-    FlashAttentionKwargs,
-    _flash_attention_forward,
-    flash_attn_supports_top_left_mask,
-)
+from ...modeling_flash_attention_utils import _flash_attention_forward, flash_attn_supports_top_left_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -48,7 +44,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import FlashAttentionKwargs, KwargsForCausalLM, LossKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_diffllama import DiffLlamaConfig
 
 
@@ -737,9 +733,6 @@ class DiffLlamaModel(DiffLlamaPreTrainedModel):
         )
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 @auto_docstring
 class DiffLlamaForCausalLM(DiffLlamaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
@@ -980,7 +973,7 @@ class DiffLlamaForQuestionAnswering(DiffLlamaPreTrainedModel):
         end_positions: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        **kwargs,
+        **kwargs: Unpack[LossKwargs],
     ) -> QuestionAnsweringModelOutput:
         outputs: BaseModelOutputWithPast = self.transformer(
             input_ids,
@@ -1049,6 +1042,7 @@ class DiffLlamaForTokenClassification(DiffLlamaPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[LossKwargs],
     ) -> TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1073,7 +1067,7 @@ class DiffLlamaForTokenClassification(DiffLlamaPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.config)
+            loss = self.loss_function(logits, labels, self.config, **kwargs)
 
         return TokenClassifierOutput(
             loss=loss,

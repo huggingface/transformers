@@ -18,11 +18,10 @@ import torch
 import torch.nn as nn
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, logging
+from ...utils import FlashAttentionKwargs, auto_docstring, logging
 from ..clip.modeling_clip import (
     CLIPMLP,
     CLIPAttention,

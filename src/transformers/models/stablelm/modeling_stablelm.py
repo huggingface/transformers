@@ -39,7 +39,8 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
+from ...processing_utils import Unpack
+from ...utils import LossKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from .configuration_stablelm import StableLmConfig
 
 
@@ -1178,6 +1179,7 @@ class StableLmForTokenClassification(StableLmPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        **kwargs: Unpack[LossKwargs],
     ) -> TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1202,7 +1204,7 @@ class StableLmForTokenClassification(StableLmPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.config)
+            loss = self.loss_function(logits, labels, self.config, **kwargs)
 
         return TokenClassifierOutput(
             loss=loss,

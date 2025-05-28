@@ -23,11 +23,10 @@ import torch.nn as nn
 import torch.utils.checkpoint
 
 from ...activations import ACT2FN
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging, torch_int
+from ...utils import FlashAttentionKwargs, auto_docstring, can_return_tuple, logging, torch_int
 from ..clip.modeling_clip import CLIPMLP
 from ..janus.modeling_janus import JanusVisionAttention
 from ..llama.modeling_llama import LlamaRMSNorm

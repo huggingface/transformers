@@ -29,14 +29,13 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...cache_utils import Cache
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
-from ...utils import LossKwargs, logging
+from ...utils import FlashAttentionKwargs, KwargsForCausalLM, logging
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
@@ -294,9 +293,6 @@ class CohereModel(LlamaModel):
         )
         self.rotary_emb = CohereRotaryEmbedding(config=config)
         self.norm = CohereLayerNorm(hidden_size=(config.hidden_size), eps=config.layer_norm_eps)
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 class CohereForCausalLM(LlamaForCausalLM):

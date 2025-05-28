@@ -22,11 +22,10 @@ import torch.nn as nn
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
+from ...utils import FlashAttentionKwargs, ModelOutput, auto_docstring, can_return_tuple, logging
 from ..auto import AutoModel
 from ..llama.modeling_llama import (
     KwargsForCausalLM,

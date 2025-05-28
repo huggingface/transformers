@@ -24,11 +24,10 @@ import torch
 import torch.nn as nn
 
 from ...activations import ACT2FN
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, torch_int
+from ...utils import FlashAttentionKwargs, auto_docstring, can_return_tuple, torch_int
 from .configuration_mlcd import MLCDVisionConfig
 
 

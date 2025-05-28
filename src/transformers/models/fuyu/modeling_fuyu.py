@@ -21,11 +21,10 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...models.auto.modeling_auto import AutoModel
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import FlashAttentionKwargs, LossKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_fuyu import FuyuConfig
 
 

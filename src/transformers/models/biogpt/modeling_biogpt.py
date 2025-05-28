@@ -31,7 +31,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -40,7 +39,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, is_torch_flex_attn_available, logging
+from ...utils import FlashAttentionKwargs, KwargsForCausalLM, auto_docstring, is_torch_flex_attn_available, logging
 from .configuration_biogpt import BioGptConfig
 
 
@@ -702,9 +701,6 @@ class BioGptModel(BioGptPreTrainedModel):
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
         )
-
-
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 @auto_docstring(

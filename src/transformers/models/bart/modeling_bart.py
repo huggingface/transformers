@@ -32,7 +32,6 @@ from ...modeling_attn_mask_utils import (
     _prepare_4d_attention_mask,
     _prepare_4d_attention_mask_for_sdpa,
 )
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -49,6 +48,7 @@ from ...utils import (
     is_torch_flex_attn_available,
     is_torchdynamo_compiling,
     logging,
+    FlashAttentionKwargs,
 )
 from .configuration_bart import BartConfig
 

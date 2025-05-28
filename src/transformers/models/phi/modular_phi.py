@@ -6,13 +6,12 @@ import torch.nn as nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import logging
+from ...utils import FlashAttentionKwargs, logging
 from ..clip.modeling_clip import CLIPMLP
 from ..llama.modeling_llama import (
     LlamaAttention,

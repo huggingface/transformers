@@ -23,10 +23,9 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import logging
+from ...utils import FlashAttentionKwargs, logging
 from ..mistral.modeling_mistral import (
     MistralDecoderLayer,
     MistralForCausalLM,

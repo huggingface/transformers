@@ -28,11 +28,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import FlashAttentionKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_timesfm import TimesFmConfig
 
 
