@@ -98,18 +98,6 @@ class BatchFeature(UserDict):
         if "data" in state:
             self.data = state["data"]
 
-    # Copied from transformers.tokenization_utils_base.BatchEncoding.keys
-    def keys(self):
-        return self.data.keys()
-
-    # Copied from transformers.tokenization_utils_base.BatchEncoding.values
-    def values(self):
-        return self.data.values()
-
-    # Copied from transformers.tokenization_utils_base.BatchEncoding.items
-    def items(self):
-        return self.data.items()
-
     def _get_is_as_tensor_fns(self, tensor_type: Optional[Union[str, TensorType]] = None):
         if tensor_type is None:
             return None, None
