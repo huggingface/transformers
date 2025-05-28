@@ -327,7 +327,7 @@ class Scheduler(ABC):
         return self.active_requests or self.waiting_requests
 
     @abstractmethod
-    def finish_request(self, state: RequestState, evict_from_cache: bool = True):
+    def finish_request(self, request_id: str, evict_from_cache: bool = True):
         """Finish processing a request and free its allocated blocks."""
         pass
 
@@ -452,8 +452,7 @@ class FIFOScheduler(Scheduler):
         return scheduled_requests
 
     @traced
-    def finish_request(self, state: RequestState, evict_from_cache: bool = True):
-        request_id = state.request_id
+    def finish_request(self, request_id: str, evict_from_cache: bool = True):
         if evict_from_cache:
             self.cache.free_blocks(request_id)
             if request_id in self.active_requests:
@@ -574,8 +573,7 @@ class PrefillFirstScheduler(Scheduler):
         return scheduled_requests
 
     @traced
-    def finish_request(self, state: RequestState, evict_from_cache: bool = True):
-        request_id = state.request_id
+    def finish_request(self, request_id: str, evict_from_cache: bool = True):
         if evict_from_cache:
             self.cache.free_blocks(request_id)
             if request_id in self.active_requests:
@@ -734,6 +732,7 @@ class ContinuousBatchProcessor:
         model_dtype: torch.dtype,
         scheduler: Scheduler,
         streaming: bool = False,
+        manual_eviction: bool = False,
     ):
         """Initialize the continuous batch processor.
 
@@ -757,6 +756,7 @@ class ContinuousBatchProcessor:
         self.model_dtype = model_dtype
         self.scheduler = scheduler
         self.streaming = streaming
+        self.manual_eviction = manual_eviction
 
         self.requests_in_batch: List[RequestState] = []
 
@@ -1019,7 +1019,7 @@ class ContinuousBatchProcessor:
                 state.prompt_ids = [token]
                 if state.update_with_token(token):
                     self.metrics.record_request_completion(state.created_time, state.request_id)
-                    self.scheduler.finish_request(state, evict_from_cache=(not self.manual_eviction))
+                    self.scheduler.finish_request(state.request_id, evict_from_cache=(not self.manual_eviction))
                     finished_request_ids.append(req_id)
                 self._maybe_send_output(state, token)
             elif state.status == RequestStatus.PREFILLING_SPLIT:
@@ -1036,7 +1036,7 @@ class ContinuousBatchProcessor:
         failed_reqs = self.requests_in_batch
         for req in failed_reqs:
             self._handle_request_error(error, req)
-            self.scheduler.finish_request(req)
+            self.scheduler.finish_request(req.request_id)
 
     @traced
     def fail_all_requests(self, error):
@@ -1047,7 +1047,7 @@ class ContinuousBatchProcessor:
         """
         for state in self.scheduler.active_requests.values():
             self._handle_request_error(error, state)
-            self.scheduler.finish_request(state)
+            self.scheduler.finish_request(state.request_id)
 
         # Also fail any requests in the waiting queue
         for req_id in list(self.scheduler.waiting_requests.keys()):
@@ -1283,6 +1283,7 @@ class ContinuousBatchingManager:
                 self.model.dtype,
                 scheduler(paged_attention_cache, self.manual_eviction),
                 self.streaming,
+                self.manual_eviction,
             )
             self.batch_processor = batch_processor
             is_first = True
