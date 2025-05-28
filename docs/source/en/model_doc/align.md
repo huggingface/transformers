@@ -97,7 +97,7 @@ for label, score in zip(candidate_labels, probs):
 ## Notes
 
 - ALIGN projects the text and visual features into latent space and the dot product between the projected image and text features is used as the similarity score. The example below demonstrates how to calculate the image-text similarity score with [`AlignProcessor`] and [`AlignModel`].
-- ```py
+    ```py
   # Example of using ALIGN for image-text similarity
   from transformers import AlignProcessor, AlignModel
   import torch
