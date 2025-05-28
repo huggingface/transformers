@@ -4013,19 +4013,21 @@ class ModelTesterMixin:
                 model = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
 
                 sub_models_supporting_fa2 = [
-                    (module._supports_flash_attn_2 or module._supports_attention_backend)
+                    module._supports_flash_attn_2
                     for name, module in model.named_modules()
                     if isinstance(module, PreTrainedModel) and name != ""
                 ]
                 supports_fa2_all_modules = (
                     all(sub_models_supporting_fa2)
                     if len(sub_models_supporting_fa2) > 0
-                    else (model._supports_flash_attn_2 or model._supports_attention_backend)
+                    else model._supports_flash_attn_2
                 )
                 if not supports_fa2_all_modules:
                     with self.assertRaises(ValueError):
                         model_fa2 = model_class.from_pretrained(
-                            tmpdirname, torch_dtype=torch_dtype, attn_implementation="flash_attention_2"
+                            tmpdirname,
+                            torch_dtype=torch_dtype,
+                            attn_implementation="flash_attention_2",
                         )
                 else:
                     model_fa2 = model_class.from_pretrained(
@@ -4569,33 +4571,46 @@ class ModelTesterMixin:
     @require_torch_gpu
     def test_flex_attention_with_grads(self):
         for model_class in self.all_model_classes:
-            # TODO: raushan, fix for composite models after making VLMs support new attn API
-            if not model_class._supports_flex_attn or self._is_composite:
-                self.skipTest(reason="This model does not support flex attention")
-
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config).to(device=torch_device)
+
+            # If not all sub-models support flex, skip the test
+            sub_models_supporting_flex = [
+                module._supports_flex_attn
+                for name, module in model.named_modules()
+                if isinstance(module, PreTrainedModel) and name != ""
+            ]
+            supports_flex_all_modules = (
+                all(sub_models_supporting_flex) and len(sub_models_supporting_flex) > 0
+            ) or model._supports_flex_attn
+            if not supports_flex_all_modules:
+                self.skipTest(reason="This model's submodelsdoes not support flex attention")
+
+            # Set default attention to flex and update config values
+            text_config = config.get_text_config(decoder=True)
             config._attn_implementation = "flex_attention"
             # Flex Attention cannot use dropout
-            if hasattr(config, "attention_dropout"):
-                config.attention_dropout = 0
+            if hasattr(text_config, "attention_dropout"):
+                text_config.attention_dropout = 0
             if hasattr(config, "attention_probs_dropout_prob"):
-                config.attention_probs_dropout_prob = 0
+                text_config.attention_probs_dropout_prob = 0
 
             # Flex attention relies on triton on compilation
             # However, triton cannot handle hidden dimensions of less than 16
             # --> forcing at least a hidden dim of 16
-            config.hidden_size *= max(
-                16 // getattr(config, "head_dim", config.hidden_size // config.num_attention_heads), 1
+            head_dim = (
+                getattr(text_config, "head_dim", None) or text_config.hidden_size // text_config.num_attention_heads
             )
-            if hasattr(config, "head_dim"):
-                config.head_dim = max(16, config.head_dim)
+            text_config.hidden_size *= max(16 // head_dim, 1)
+            if getattr(text_config, "head_dim", None) is not None:
+                text_config.head_dim = max(16, text_config.head_dim)
 
             model = model_class(config).to(device=torch_device)
             self.assertTrue(model.config._attn_implementation == "flex_attention")
 
             # Elaborate workaround for encoder-decoder models as some do not specify their main input
             dummy_inputs = {model.main_input_name: inputs_dict[model.main_input_name].to(torch_device)}
-            if config.is_encoder_decoder:
+            if text_config.is_encoder_decoder:
                 dummy_inputs["decoder_input_ids"] = inputs_dict["decoder_input_ids"].to(torch_device)
                 dummy_inputs["decoder_attention_mask"] = inputs_dict["decoder_attention_mask"].to(torch_device)
 
