@@ -39,6 +39,7 @@ import torch.distributed as dist
 import torch.distributed.checkpoint as dcp
 import torch.nn as nn
 import torch.optim as optim
+import wandb
 from datasets import load_dataset
 from torch.distributed.checkpoint.state_dict import get_state_dict, set_state_dict
 from torch.distributed.checkpoint.stateful import Stateful
@@ -51,7 +52,6 @@ from torch.nn.attention import SDPBackend, sdpa_kernel
 from torch.utils.data import DataLoader, default_collate
 from torch.utils.data.distributed import DistributedSampler
 
-import wandb
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
