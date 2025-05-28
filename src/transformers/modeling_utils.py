@@ -702,7 +702,9 @@ def _load_parameter_into_model(model: "PreTrainedModel", param_name: str, tensor
         module.load_state_dict({param_type: tensor}, strict=False, assign=True)
         return None
     except RuntimeError:
-        return f"parameter {re.sub(r'\d+', '.*.', param_name)} has shape {tensor.shape} but the model has {module.state_dict()[param_type].shape}. "
+        # TODO: why does my py complain again
+        #return f"parameter {re.sub(r'\d+', '.*.', param_name)} has shape {tensor.shape} but the model has {module.state_dict()[param_type].shape}. "
+        return f"parameter {param_name} has shape {tensor.shape} but the model has {module.state_dict()[param_type].shape}. "
 
 
 @torch.no_grad()

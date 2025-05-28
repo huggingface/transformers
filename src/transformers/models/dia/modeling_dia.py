@@ -445,15 +445,15 @@ class DiaCrossAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        query_states = apply_rotary_pos_emb(query_states, position_embeddings).transpose(1, 2)
+        #query_states = apply_rotary_pos_emb(query_states, position_embeddings).transpose(1, 2)
 
         if cross_attention_states is not None:
             cross_shape = (*cross_attention_states.shape[:-1], -1, self.head_dim)
-            key_states = self.k_proj(cross_attention_states).view(cross_shape)
+            key_states = self.k_proj(cross_attention_states).view(cross_shape).transpose(1, 2)
             value_states = self.v_proj(cross_attention_states).view(cross_shape).transpose(1, 2)
-            key_states = apply_rotary_pos_emb(key_states, cross_position_embeddings).transpose(1, 2)
+            #key_states = apply_rotary_pos_emb(key_states, cross_position_embeddings).transpose(1, 2)
             if past_key_values is not None:
                 # TODO: mark layer + general cache fixing
                 key_states, value_states = past_key_values.update(
