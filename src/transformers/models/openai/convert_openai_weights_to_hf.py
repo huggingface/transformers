@@ -36,7 +36,8 @@ from transformers.convert_slow_tokenizer import TikTokenConverter
 # If a weight needs to be split in two or more keys, use `|` to indicate it. ex:
 # r"layers.(\d+).attention.wqkv.weight": r"layers.\1.self_attn.q|k|v|_proj.weight"
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
-    r"norm.scale":                 r"norm.weight",
+    r"norm.weight":                 r"norm.weight",
+    r"^norm.scale":                 r"norm.weight",
     r"unembedding.weight":          r"lm_head.weight",
     r"embedding":                   r"embed_tokens",
     # special key, wqkv needs to be split afterwards
@@ -86,7 +87,7 @@ def write_model(
     eos_token_id = [128001, 128008, 128009] if instruct else 128001
     pad_token_id = 128004
 
-    config = OpenaiConfig.from_pretrained(input_base_path)
+    config = OpenaiConfig()
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}...")
     final_ = {}
@@ -106,13 +107,17 @@ def write_model(
             new_key = "model." + new_key
         print(f"Processing key: {key} -> {new_key}")
         if re.search("qkv_proj", new_key):
-            q, k, v = final_[key].chunk(3, dim=-1)
+            q_len = config.head_dim * config.num_attention_heads
+            k_len = config.head_dim * config.num_key_value_heads
+            q, k, v = final_[key][:q_len, ...], final_[key][q_len:k_len+q_len, ...], final_[key][k_len+q_len:, ...]
             q_key = re.sub(r"qkv_proj", "q_proj", new_key)
-            state_dict[q_key] = q
             k_key = re.sub(r"qkv_proj", "k_proj", new_key)
             v_key = re.sub(r"qkv_proj", "v_proj", new_key)
+            state_dict[q_key] = q
             state_dict[k_key] = k
             state_dict[v_key] = v
+        elif re.search("gate_up_proj", new_key) and "bias" not in new_key:
+            state_dict[new_key] = final_[key].permute(0,2,1)
         else:
             state_dict[new_key] = final_[key]
 
