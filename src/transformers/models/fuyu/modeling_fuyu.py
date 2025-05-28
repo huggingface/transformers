@@ -274,7 +274,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         logits_to_keep: Optional[int] = 0,
-        **kwargs: Unpack[LossKwargs],  # change to ForCausalLMKwargs when FA2 is added
+        **kwargs: Unpack[LossKwargs],  # change to KwargsForCausalLM when FA2 is added
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):

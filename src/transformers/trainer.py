@@ -34,7 +34,7 @@ import warnings
 from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union, get_args, get_origin
 
 
 # Integrations must be imported before ML frameworks:
@@ -71,7 +71,7 @@ from .models.auto.modeling_auto import (
     MODEL_MAPPING_NAMES,
 )
 from .optimization import Adafactor, get_scheduler
-from .processing_utils import ProcessorMixin
+from .processing_utils import ProcessorMixin, Unpack
 from .pytorch_utils import (
     ALL_LAYERNORM_LAYERS,
     is_torch_greater_or_equal_than_2_3,
@@ -145,6 +145,8 @@ from .utils import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     XLA_FSDPV2_MIN_VERSION,
+    KwargsForCausalLM,
+    LossKwargs,
     PushInProgress,
     PushToHubMixin,
     can_return_loss,
@@ -639,13 +641,28 @@ class Trainer:
         forward_params = inspect.signature(model_forward).parameters
 
         # Check if the model has explicit setup for loss kwargs,
-        # if not, check if `**kwargs` are in model.forward
         if hasattr(model, "accepts_loss_kwargs"):
             self.model_accepts_loss_kwargs = model.accepts_loss_kwargs
         else:
-            self.model_accepts_loss_kwargs = any(
-                k.kind == inspect.Parameter.VAR_KEYWORD for k in forward_params.values()
-            )
+            self.model_accepts_loss_kwargs = False
+            for k in forward_params.values():
+                # check for kwargs that are of type unpack[LossKwargs]
+                if k.kind == inspect.Parameter.VAR_KEYWORD and get_origin(k.annotation) is Unpack:
+                    unpacked_type = get_args(k.annotation)[0]
+                    if unpacked_type in [LossKwargs, KwargsForCausalLM]:
+                        self.model_accepts_loss_kwargs = True
+                        break
+            if not self.model_accepts_loss_kwargs:
+                if args.gradient_accumulation_steps >= 1:
+                    logger.info(
+                        "The model forward doesn't take loss kwargs. Hence, since you are using gradient accumulation, "
+                        "the result might might be slightly less accurate. Please open an issue in transformers repo so that we can add support for it."
+                    )
+                elif args.average_tokens_across_devices:
+                    logger.info(
+                        "The model forward doesn't take loss kwargs. Hence, we won't be able to average the tokens even thought you set "
+                        "`average_tokens_across_devices=True`. Please open an issue in transformers repo so that we can add support for it."
+                    )
 
         self.neftune_noise_alpha = args.neftune_noise_alpha
 
