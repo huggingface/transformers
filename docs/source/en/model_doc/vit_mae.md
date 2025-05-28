@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 # ViTMAE
 
-[ViTMAE (Vision Transformer - Masked AutoEncoder)](https://huggingface.co/papers/2111.06377) is a self-supervised vision model that learns by hiding large portions of images and training itself to reconstruct them. It masks around 75% of the input image patches and learns to reconstruct the missing pixels from the remaining visible ones. After pretraining, the encoder can be reused for downstream tasks like image classification or object detection — often outperforming models trained with supervised learning.
+[ViTMAE](https://huggingface.co/papers/2111.06377) is a self-supervised vision model that is pretrained by masking large portions of an image (~75%). An encoder processes the visible image patches and a decoder reconstructs the missing pixels from the encoded patches and mask tokens. After pretraining, the encoder can be reused for downstream tasks like image classification or object detection — often outperforming models trained with supervised learning.
 
 You can find all the original ViTMAE checkpoints under the [vit-mae](https://huggingface.co/facebook/vit-mae-base) collection.
 
