@@ -4584,7 +4584,7 @@ class ModelTesterMixin:
                 all(sub_models_supporting_flex) and len(sub_models_supporting_flex) > 0
             ) or model._supports_flex_attn
             if not supports_flex_all_modules:
-                self.skipTest(reason="This model's submodelsdoes not support flex attention")
+                self.skipTest(reason="This model's submodels does not support flex attention")
 
             # Set default attention to flex and update config values
             text_config = config.get_text_config(decoder=True)
