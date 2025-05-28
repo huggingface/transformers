@@ -2622,7 +2622,7 @@ class LagKVCache(DynamicCache):
     The model will hold the main part of information retrieval capbility during the compression, compared to a completed loss
     of the SinkCache.
 
-    It stores the Key and Value states as a list of tensors, one for each layer. The expected shape for each tensor is 
+    It stores the Key and Value states as a list of tensors, one for each layer. The expected shape for each tensor is
     `[batch_size, num_heads, seq_len, head_dim]`.
 
     For the chunked prefilling, see https://github.com/AI-Lab-China-Merchants-Bank/LagKV.
@@ -2673,7 +2673,7 @@ class LagKVCache(DynamicCache):
         self.score_v_ratio: float = score_v_ratio
         self.skip_layer_idx: List[int] = skip_layer_idx if skip_layer_idx is not None else []
         self._compressed_len: List[int] = []
-    
+
     def update(
         self,
         key_states: torch.Tensor,
@@ -2723,7 +2723,7 @@ class LagKVCache(DynamicCache):
 
             if layer_idx not in self.skip_layer_idx:
                 return self._compress_kv_by_lag(layer_idx)
-                
+
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
     def _get_states_score(self, base_len, in_size, end_idx, value):
@@ -2741,7 +2741,7 @@ class LagKVCache(DynamicCache):
         score = ((v - min_r) / (max_r - min_r)).std(dim=-1).softmax(dim=-1)
 
         return score
-    
+
     def _modify_kv(self, value, base_len, end_idx, selected_idx, tail_len):
         # idx is offset by base_len
         selected_value = torch.gather(value[:, :, base_len:end_idx], -2, selected_idx)
