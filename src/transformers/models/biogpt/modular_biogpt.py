@@ -142,7 +142,7 @@ class BioGptDecoderLayer(BartDecoderLayer):
             output_attentions=output_attentions,
             position_ids=position_ids,
             cache_position=cache_position,
-            **flash_attn_kwargs,
+            **kwargs,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -475,7 +475,7 @@ class BioGptModel(BioGptPreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    partial(decoder_layer.__call__, **flash_attn_kwargs),
+                    partial(decoder_layer.__call__, **kwargs),
                     hidden_states,
                     causal_mask,
                     head_mask[idx] if head_mask is not None else None,
@@ -495,7 +495,7 @@ class BioGptModel(BioGptPreTrainedModel):
                     use_cache=use_cache,
                     position_ids=position_ids,
                     cache_position=cache_position,
-                    **flash_attn_kwargs,
+                    **kwargs,
                 )
 
             hidden_states = layer_outputs[0]

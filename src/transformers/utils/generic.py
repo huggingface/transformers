@@ -1011,7 +1011,7 @@ def check_model_inputs(func):
         else:
             outputs["hidden_states"] = None
         if output_attentions:
-            outputs["attention"] = tuple(collected_attentions)
+            outputs["attentions"] = tuple(collected_attentions)
         else:
             outputs["attentions"] = None
         if return_dict is False:
