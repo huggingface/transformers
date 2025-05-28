@@ -931,10 +931,12 @@ def can_return_tuple(func):
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):
-        return_dict = kwargs.get("return_dict", self.config.use_return_dict)
-        kwargs["return_dict"] = True
+        if "return_dict" in kwargs:
+            return_dict = kwargs.get("return_dict", self.config.use_return_dict)
+            kwargs["return_dict"] = True
         output = func(self, *args, **kwargs)
-        if return_dict is False:
+
+        if "return_dict" in kwargs and return_dict is False:
             output = output.to_tuple()
         return output
 
@@ -955,13 +957,22 @@ def check_model_inputs(func):
         use_cache = kwargs.get("use_cache", self.config.use_cache)
         return_dict = kwargs.pop("return_dict", self.config.use_return_dict)
 
-        kwargs["output_attentions"] = output_attentions
-        kwargs["output_hidden_states"] = output_hidden_states
-        kwargs["use_cache"] = use_cache
-        kwargs["return_dict"] = True
+        # Safely extract common config-backed flags
+        kwargs.setdefault("output_attentions", output_attentions)
+        kwargs.setdefault("output_hidden_states", output_hidden_states)
+        kwargs.setdefault("use_cache", use_cache)
+        kwargs["return_dict"] = kwargs.pop("return_dict", return_dict)
 
-        input_ids = kwargs.get("input_ids", None)
-        inputs_embeds = kwargs.get("inputs_embeds", None)
+        # Use inspect to bind args/kwargs to parameter names
+        sig = inspect.signature(func)
+        bound = sig.bind_partial(self, *args, **kwargs)
+        bound.apply_defaults()
+        all_args = bound.arguments
+
+        # Extract input_ids and inputs_embeds more robustly
+        input_ids = all_args.get("input_ids", None)
+        inputs_embeds = all_args.get("inputs_embeds", None)
+
         use_cache = kwargs["use_cache"]
         past_key_values = kwargs.get("past_key_values", None)
         hooks = []
