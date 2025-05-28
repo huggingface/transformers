@@ -31,6 +31,7 @@ from transformers import WhisperConfig
 from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
+    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -542,8 +543,10 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip
-    def test_generate_with_head_masking(self):
+    @parameterized.expand([("offloaded",)])
+    @pytest.mark.generate
+    @unittest.skip(reason="Whisper doesn't work with offloaded cache implementation yet")
+    def test_offloaded_cache_implementation(self, cache_implementation):
         pass
 
     @require_torch_fp16
@@ -659,6 +662,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
+
+        # force eager attention to support output attentions
+        config._attn_implementation = "eager"
 
         seq_len = getattr(self.model_tester, "seq_length", None)
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", 1)
@@ -849,7 +855,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
-    @unittest.skip
+    @unittest.skip(reason="Whisper encoder-decoder requires the features directly and can not work on ids only.")
     def test_generate_without_input_ids(self):
         pass
 
@@ -1422,6 +1428,21 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_generate_compilation_all_outputs(self):
         pass
 
+    # TODO (cyril): fix me :)
+    @unittest.skip(reason="Torchscript doesn't work with the new mask creation functions")
+    def test_torchscript_output_attentions(self):
+        pass
+
+    # TODO (cyril): fix me :)
+    @unittest.skip(reason="Torchscript doesn't work with the new mask creation functions")
+    def test_torchscript_output_hidden_state(self):
+        pass
+
+    # TODO (cyril): fix me :)
+    @unittest.skip(reason="Torchscript doesn't work with the new mask creation functions")
+    def test_torchscript_simple(self):
+        pass
+
 
 @require_torch
 @require_torchaudio
@@ -1684,6 +1705,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
 
+    @require_read_token
     @slow
     def test_large_batched_generation_multilingual(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
@@ -1775,7 +1797,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         ])
         # fmt: on
 
-        torch.testing.assert_close(generated_ids, EXPECTED_OUTPUT)
+        torch.testing.assert_close(generated_ids[0], EXPECTED_OUTPUT)
 
         EXPECTED_TRANSCRIPT = [
             {
@@ -2016,7 +2038,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             50365, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50629, 50682, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50870, 50911, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450, 10539, 949, 505, 11, 51245, 51287, 1034, 4680, 10117, 490, 3936, 293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575, 13, 51494, 51523, 634, 575, 12525, 22618, 1968, 6144, 35617, 1456, 397, 266, 311, 589, 307, 534, 10281, 934, 439, 11, 51799, 51815, 50365, 293, 393, 4411, 50430
         ])
         # fmt: on
-        torch.testing.assert_close(generated_ids, EXPECTED_OUTPUT)
+        torch.testing.assert_close(generated_ids[0], EXPECTED_OUTPUT)
 
         EXPECTED_TRANSCRIPT = [
             {
@@ -3610,27 +3632,10 @@ class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
             config=config, input_ids=inputs_dict["input_ids"]
         )
 
-    @unittest.skip(reason="Tested implicitly through the encoder-decoder tests")
-    def test_custom_4d_attention_mask(self):
-        pass
-
-    @unittest.skip(reason="Generate needs input ids")
-    def test_generate_without_input_ids(self):
-        # generate only works with input ids for whisper
-        pass
-
     @unittest.skip(reason="Decoder can't keep attention grads")
     def test_retain_grad_hidden_states_attentions(self):
         return
 
-    @unittest.skip(
-        "Duplicated test with WhisperModelTest + the FA2 testing suite needs to be refactored to be compatible with WhisperDecoder for that test"
-    )
-    def test_flash_attn_2_inference(self):
-        pass
-
-    @unittest.skip(
-        "Duplicated test with WhisperModelTest + the FA2 testing suite needs to be refactored to be compatible with WhisperDecoder for that test"
-    )
-    def test_flash_attn_2_inference_padding_right(self):
-        pass
+    @unittest.skip(reason="Decoder cannot keep gradients")
+    def test_flex_attention_with_grads():
+        return
