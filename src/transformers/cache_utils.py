@@ -2637,9 +2637,9 @@ class LagKVCache(DynamicCache):
         lag_size (`int`):
             The size of the partition. The subsequent partion will serve as a reference for the prior one.
         score_v_ratio (`float`):
-            The ratio multiplied to the score of Value states. Default to be 1.
-        skip_layer_idx (`List[int]`):
-            A list of layer indices will skip the compression. Default to be None.
+            The ratio multiplied to the score of Value states.
+        skip_layer_idx (`Optional[List[int]]`):
+            A list of layer indices will skip the compression.
 
     Example:
 
