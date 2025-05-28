@@ -24,7 +24,6 @@ from ...modeling_rope_utils import rope_config_validation
 
 
 class OpenaiConfig(PretrainedConfig):
-    
     model_type = "openai"
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `OpenaiModel`
@@ -55,7 +54,7 @@ class OpenaiConfig(PretrainedConfig):
         num_key_value_heads: int = 8,
         sliding_window: int = 128,
         rope_theta: float = 150000.0,
-        tie_word_embeddings= False,
+        tie_word_embeddings=False,
         hidden_act: str = "silu",
         initializer_range: float = 0.02,
         rms_norm_eps: float = 1e-6,

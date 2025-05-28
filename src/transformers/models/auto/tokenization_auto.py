@@ -297,13 +297,6 @@ else:
                 ),
             ),
             (
-                "openai",
-                (
-                    None,
-                    "PreTrainedTokenizerFast" if is_tokenizers_available() else None,
-                ),
-            ),
-            (
                 "llama4",
                 (
                     "LlamaTokenizer" if is_sentencepiece_available() else None,
@@ -417,6 +410,13 @@ else:
                 ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None),
             ),
             ("oneformer", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "openai",
+                (
+                    None,
+                    "PreTrainedTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             (
                 "openai-gpt",
                 ("OpenAIGPTTokenizer", "OpenAIGPTTokenizerFast" if is_tokenizers_available() else None),

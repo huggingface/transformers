@@ -1,4 +1,3 @@
-
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,15 +15,14 @@
 import argparse
 import gc
 import json
-
 import os
 from typing import List, Optional
 
 import regex as re
 import torch
-import torch.nn.functional as F
 import tqdm
 from safetensors.torch import load_file as safe_load
+
 from transformers import (
     GenerationConfig,
     OpenaiConfig,
@@ -32,6 +30,8 @@ from transformers import (
     PreTrainedTokenizerFast,
 )
 from transformers.convert_slow_tokenizer import TikTokenConverter
+
+
 # fmt: off
 # If a weight needs to be split in two or more keys, use `|` to indicate it. ex:
 # r"layers.(\d+).attention.wqkv.weight": r"layers.\1.self_attn.q|k|v|_proj.weight"
@@ -91,18 +91,21 @@ def write_model(
     instruct=False,
 ):
     os.makedirs(model_path, exist_ok=True)
-    torch_dtype = "bfloat16"
-
     bos_token_id = 128000
     eos_token_id = [128001, 128008, 128009] if instruct else 128001
     pad_token_id = 128004
 
     config = OpenaiConfig.from_pretrained(input_base_path)
 
-   
     print(f"Fetching all parameters from the checkpoint at {input_base_path}...")
 
-    loaded = [safe_load(file for file in tqdm(os.listdir(model_path), desc="Loading shards", unit="shard") if file.endswith(".safetensors"))]
+    loaded = [
+        safe_load(
+            file
+            for file in tqdm(os.listdir(model_path), desc="Loading shards", unit="shard")
+            if file.endswith(".safetensors")
+        )
+    ]
 
     print("Converting ..")
     all_keys = list(loaded[0].keys())
@@ -113,7 +116,7 @@ def write_model(
         # Post-process the current_parameter.
         new_key = new_keys.get(key, key)
         if re.search("(k|v|q)_proj.weight", new_key) and "language_model" in new_key:
-            q, k , v = loaded[0][key].chunk(3, dim=-1)
+            q, k, v = loaded[0][key].chunk(3, dim=-1)
             q_key = re.sub(r"(k|v|q)_proj.weight", "q_proj.weight", new_key)
             state_dict[q_key] = q
             k_key = re.sub(r"(k|v|q)_proj.weight", "k_proj.weight", new_key)
@@ -157,7 +160,7 @@ def write_model(
         generation_config.save_pretrained(model_path)
 
 
-class MllamaConverter(TikTokenConverter):
+class OpenaiConverter(TikTokenConverter):
     def __init__(
         self,
         vocab_file,
@@ -168,6 +171,7 @@ class MllamaConverter(TikTokenConverter):
         **kwargs,
     ):
         super().__init__(vocab_file, pattern=pattern)
+        # TODO 1st donwload the vocabfile!!!
         self.additional_special_tokens = special_tokens
         tokenizer = self.converted()
         if chat_template is not None:
@@ -183,28 +187,7 @@ class MllamaConverter(TikTokenConverter):
 def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
     model_max_length = CONTEXT_LENGTH
     pattern = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"  # noqa: W605
-
-    # Special tokens
-    num_reserved_special_tokens = 256
-    special_tokens = [
-        "<|begin_of_text|>",
-        "<|end_of_text|>",
-        "<|reserved_special_token_0|>",
-        "<|reserved_special_token_1|>",
-        "<|finetune_right_pad_id|>",
-        "<|step_id|>",
-        "<|start_header_id|>",
-        "<|end_header_id|>",
-        "<|eom_id|>",  # end of message
-        "<|eot_id|>",  # end of turn
-        "<|python_tag|>",
-    ]
-    special_tokens += [
-        f"<|reserved_special_token_{i + 2}|>" for i in range(num_reserved_special_tokens - len(special_tokens))
-    ]
-    # original tokenizer has <|image|> with 128011 token_id,
-    # however, later in the code it is replaced with 128256 token_id
-    special_tokens.append("<|image|>")
+    special_tokens = []
 
     # Chat template
     chat_template = (
@@ -231,7 +214,7 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
         "{% endif %}"
     )
 
-    converter = MllamaConverter(
+    converter = OpenaiConverter(
         vocab_file=tokenizer_path,
         pattern=pattern,
         special_tokens=special_tokens,
@@ -251,38 +234,16 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
             json.dump({"chat_template": chat_template}, f, indent=2)
 
 
-def write_image_processor(config_path: str, save_dir: str):
-    with open(config_path, "r") as f:
-        params = json.load(f)
-
-    tile_size = params["vision_chunk_size"]
-    max_image_tiles = params["vision_max_num_chunks"]
-
-    image_processor = MllamaImageProcessor(
-        do_resize=True,
-        size={"height": tile_size, "width": tile_size},
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        do_normalize=True,
-        image_mean=[0.48145466, 0.4578275, 0.40821073],
-        image_std=[0.26862954, 0.26130258, 0.27577711],
-        do_pad=True,
-        max_image_tiles=max_image_tiles,
-    )
-
-    image_processor.save_pretrained(save_dir)
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        default="Llama-3.2-11B-Vision/original",
+        default="/fsx/arthur/oai",
         help="Location of LLaMA weights, which contains tokenizer.model and model folders",
     )
     parser.add_argument(
         "--output_dir",
-        default="Llama-3.2-11B-Vision",
+        default="/fsx/arthur/oai_hf",
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
@@ -294,12 +255,7 @@ def main():
         type=List[str],
         help="The list of special tokens that should be added to the ",
     )
-    parser.add_argument(
-        "--num_shards",
-        default=1,
-        type=int,
-        help="The number of individual shards used for the  Does not have to be the same as the number of consolidated_xx.pth",
-    )
+
     parser.add_argument(
         "--instruct",
         action="store_true",
@@ -318,11 +274,6 @@ def main():
         tokenizer_path=os.path.join(args.input_dir, "tokenizer.model"),
         save_dir=args.output_dir,
         instruct=args.instruct,
-    )
-
-    write_image_processor(
-        config_path=os.path.join(args.input_dir, "params.json"),
-        save_dir=args.output_dir,
     )
 
 

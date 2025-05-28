@@ -600,7 +600,9 @@ class OpenaiIntegrationTest(unittest.TestCase):
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
-        tokenizer = LlamaTokenizer.from_pretrained("meta-openai/Openai-2-7b-hf", pad_token="</s>", padding_side="right")
+        tokenizer = LlamaTokenizer.from_pretrained(
+            "meta-openai/Openai-2-7b-hf", pad_token="</s>", padding_side="right"
+        )
         model = OpenaiForCausalLM.from_pretrained(
             "meta-openai/Openai-2-7b-hf", device_map=torch_device, torch_dtype=torch.float16
         )

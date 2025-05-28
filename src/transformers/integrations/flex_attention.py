@@ -214,6 +214,7 @@ def flex_attention_forward(
     scaling: Optional[float] = None,
     softcap: Optional[float] = None,
     head_mask: Optional[torch.Tensor] = None,
+    score_mod: Optional[callable] = None,
     **kwargs,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     block_mask = None

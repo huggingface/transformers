@@ -17,39 +17,39 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Callable, Optional, Tuple, Union
+from typing import Optional
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
-from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-)
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
-from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
-from .configuration_openai import OpenaiConfig
-from ..llama4.modeling_llama4 import apply_rotary_pos_emb, Llama4TextExperts
-from ..llama.modeling_llama import LlamaRotaryEmbedding, LlamaAttention, LlamaDecoderLayer, LlamaModel, LlamaForCausalLM, LlamaRMSNorm, repeat_kv, LlamaPreTrainedModel
 from ...integrations.flex_attention import flex_attention_forward
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...utils import logging
+from ..llama.modeling_llama import (
+    LlamaAttention,
+    LlamaDecoderLayer,
+    LlamaForCausalLM,
+    LlamaModel,
+    LlamaPreTrainedModel,
+    LlamaRMSNorm,
+    LlamaRotaryEmbedding,
+    repeat_kv,
+)
+from ..llama4.modeling_llama4 import Llama4TextExperts
+from .configuration_openai import OpenaiConfig
+
+
 logger = logging.get_logger(__name__)
 
 
 class OpenaiRMSNorm(LlamaRMSNorm):
     pass
 
+
 class OpenaiExperts(Llama4TextExperts):
     pass
+
 
 class OpenaiMLP(nn.Module):
     def __init__(self, config):
@@ -75,9 +75,9 @@ class OpenaiMLP(nn.Module):
         out.add_(routed_out.reshape(self.num_experts, -1, self.hidden_dim).sum(dim=0))
         return out, router_scores
 
+
 class OpenaiRotaryEmbedding(LlamaRotaryEmbedding):
     pass
-
 
 
 def eager_attention_forward(
@@ -117,6 +117,7 @@ def openai_flex_attention_forward(
     **kwargs,
 ):
     sink = module.sink
+
     def attention_sink(score, b, h, q_idx, kv_idx):
         score = torch.cat([score, sink], dim=-1)
         return score
@@ -134,9 +135,8 @@ def openai_flex_attention_forward(
         **kwargs,
     )
 
-ALL_ATTENTION_FUNCTIONS.register(
-    "openai_flex_attention", openai_flex_attention_forward
-)
+
+ALL_ATTENTION_FUNCTIONS.register("openai_flex_attention", openai_flex_attention_forward)
 
 
 class OpenaiAttention(LlamaAttention):
@@ -166,7 +166,8 @@ class OpenaiPreTrainedModel(LlamaPreTrainedModel):
 
 
 class OpenaiModel(LlamaModel):
-    pass 
+    pass
+
 
 class OpenaiForCausalLM(LlamaForCausalLM):
     pass
