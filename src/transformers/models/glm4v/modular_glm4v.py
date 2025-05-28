@@ -49,8 +49,6 @@ from transformers.models.qwen2_5_vl.processing_qwen2_5_vl import (
     Qwen2_5_VLProcessorKwargs,
 )
 from transformers.models.glm4.modeling_glm4 import Glm4RMSNorm, Glm4MLP
-from transformers.models.qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
-from transformers.models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -946,18 +944,9 @@ class Glm4vProcessorKwargs(Qwen2_5_VLProcessorKwargs):
     }
 
 
-class Glm4vImageProcessor(Qwen2VLImageProcessor):
-    pass
-
-
-class Glm4vVideoProcessor(Qwen2VLVideoProcessor):
-    pass
-
-
 class Glm4vProcessor(Qwen2_5_VLProcessor):
     r"""
     Constructs a GLM-4V processor which wraps a GLM-4V image processor and a GLM-4 tokenizer into a single processor.
-    [`Glm4vProcessor`] offers all the functionalities of [`Glm4vImageProcessor`] and [`PreTrainedTokenizerFast`]. See the
     [`~Glm4vProcessor.__call__`] and [`~Glm4vProcessor.decode`] for more information.
     Args:
         image_processor ([`Glm4vProcessor`], *optional*):
@@ -987,8 +976,7 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the vision inputs, this method forwards the `vision_infos` and `kwrags` arguments to
-        Qwen2VLImageProcessor's [`~Qwen2VLImageProcessor.__call__`] if `vision_infos` is not `None`.
+        the text.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):

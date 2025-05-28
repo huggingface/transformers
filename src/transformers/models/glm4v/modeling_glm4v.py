@@ -43,13 +43,7 @@ from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask,
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    can_return_tuple,
-    is_torch_flex_attn_available,
-    is_torchdynamo_compiling,
-    logging,
-)
+from ...utils import auto_docstring, can_return_tuple, is_torch_flex_attn_available, is_torchdynamo_compiling, logging
 from .configuration_glm4v import Glm4vConfig, Glm4vTextConfig, Glm4vVisionConfig
 
 
@@ -1958,7 +1952,7 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
         self.model = Glm4vModel(config)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.post_init()
 

@@ -28,7 +28,7 @@ from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...video_utils import VideoInput
 
@@ -59,7 +59,6 @@ class Glm4vProcessorKwargs(ProcessingKwargs, total=False):
 class Glm4vProcessor(ProcessorMixin):
     r"""
     Constructs a GLM-4V processor which wraps a GLM-4V image processor and a GLM-4 tokenizer into a single processor.
-    [`Glm4vProcessor`] offers all the functionalities of [`Glm4vImageProcessor`] and [`PreTrainedTokenizerFast`]. See the
     [`~Glm4vProcessor.__call__`] and [`~Glm4vProcessor.decode`] for more information.
     Args:
         image_processor ([`Glm4vProcessor`], *optional*):
@@ -105,8 +104,7 @@ class Glm4vProcessor(ProcessorMixin):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the vision inputs, this method forwards the `vision_infos` and `kwrags` arguments to
-        Qwen2VLImageProcessor's [`~Qwen2VLImageProcessor.__call__`] if `vision_infos` is not `None`.
+        the text.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -200,6 +198,44 @@ class Glm4vProcessor(ProcessorMixin):
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+        Args:
+            image_sizes (`List[List[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (`List[List[int]]`, *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = Glm4vProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [(num_patches // merge_size**2) for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        if video_sizes is not None:
+            videos_kwargs = Glm4vProcessorKwargs._defaults.get("videos_kwargs", {})
+            videos_kwargs.update(kwargs)
+            num_video_patches = [
+                self.video_processor.get_number_of_video_patches(*video_size, videos_kwargs)
+                for video_size in video_sizes
+            ]
+            num_video_tokens = [(num_patches // merge_size**2) for num_patches in num_video_patches]
+            vision_data["num_video_tokens"] = num_video_tokens
+
+        return MultiModalData(**vision_data)
 
     def batch_decode(self, *args, **kwargs):
         """
