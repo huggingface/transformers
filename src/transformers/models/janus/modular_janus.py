@@ -971,6 +971,7 @@ class JanusModel(JanusPreTrainedModel):
             image_features = image_embeds.reshape(-1, embed_dim)
             image_attention_mask = image_attention_mask.unsqueeze(-1).expand(-1, -1, embed_dim)
 
+            image_attention_mask = image_attention_mask.to(inputs_embeds.device)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(image_attention_mask, image_features)
 
