@@ -76,12 +76,12 @@
       title: Prompt engineering
     - local: llm_optims
       title: Optimizing inference
+    - local: cache_explanation
+      title: Caching
     - local: kv_cache
       title: KV cache strategies
     - local: serving
       title: Serving
-    - local: cache_explanation
-      title: Caching
     - local: llm_tutorial_optimization
       title: Getting the most out of LLMs
     - local: perplexity
@@ -386,7 +386,7 @@
       - local: model_doc/bert-japanese
         title: BertJapanese
       - local: model_doc/bertweet
-        title: Bertweet
+        title: BERTweet
       - local: model_doc/big_bird
         title: BigBird
       - local: model_doc/bigbird_pegasus
@@ -542,7 +542,7 @@
       - local: model_doc/mamba
         title: Mamba
       - local: model_doc/mamba2
-        title: mamba2
+        title: Mamba2
       - local: model_doc/marian
         title: MarianMT
       - local: model_doc/markuplm
