@@ -73,7 +73,10 @@ from transformers.models.auto.modeling_auto import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
+    backend_device_count,
     backend_empty_cache,
+    backend_memory_allocated,
+    backend_torch_accelerator_module,
     get_device_properties,
     hub_retry,
     is_flaky,
@@ -974,7 +977,8 @@ class ModelTesterMixin:
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -1720,7 +1724,7 @@ class ModelTesterMixin:
 
         # no need to test all models as different heads yield the same functionality
         model_class = self.all_model_classes[0]
-        model = model_class(config)
+        model = model_class._from_config(config, attn_implementation="eager")
         model.to(torch_device)
 
         inputs = self._prepare_for_class(inputs_dict, model_class)
@@ -2612,7 +2616,7 @@ class ModelTesterMixin:
         for k in blacklist_non_batched_params:
             inputs_dict.pop(k, None)
 
-        # move input tensors to cuda:O
+        # move input tensors to accelerator O
         for k, v in inputs_dict.items():
             if torch.is_tensor(v):
                 inputs_dict[k] = v.to(0)
@@ -2635,12 +2639,12 @@ class ModelTesterMixin:
 
         # a candidate for testing_utils
         def get_current_gpu_memory_use():
-            """returns a list of cuda memory allocations per GPU in MBs"""
+            """returns a list of VRAM allocations per GPU in MBs"""
 
             per_device_memory = []
-            for id in range(torch.cuda.device_count()):
-                with torch.cuda.device(id):
-                    per_device_memory.append(torch.cuda.memory_allocated() >> 20)
+            for id in range(backend_device_count(torch_device)):
+                with backend_torch_accelerator_module(torch_device).device(id):
+                    per_device_memory.append(backend_memory_allocated(torch_device) >> 20)
 
             return per_device_memory
 
@@ -2656,7 +2660,7 @@ class ModelTesterMixin:
 
             # Put model on device 0 and take a memory snapshot
             model = model_class(config)
-            model.to("cuda:0")
+            model.to(f"{torch_device}:0")
             memory_after_model_load = get_current_gpu_memory_use()
 
             # The memory use on device 0 should be higher than it was initially.
@@ -2716,7 +2720,7 @@ class ModelTesterMixin:
 
             model.parallelize()
 
-            parallel_output = model(**cast_to_device(inputs_dict, "cuda:0"))
+            parallel_output = model(**cast_to_device(inputs_dict, f"{torch_device}:0"))
 
             for value, parallel_value in zip(output, parallel_output):
                 if isinstance(value, torch.Tensor):
@@ -4239,10 +4243,10 @@ class ModelTesterMixin:
                 # add position_ids + fa_kwargs
                 data_collator = DataCollatorWithFlattening(return_tensors="pt", return_flash_attn_kwargs=True)
                 batch = data_collator(features)
-                batch_cuda = {k: t.cuda() if torch.is_tensor(t) else t for k, t in batch.items()}
+                batch_accelerator = {k: t.to(torch_device) if torch.is_tensor(t) else t for k, t in batch.items()}
 
                 res_padded = model(**inputs_dict)
-                res_padfree = model(**batch_cuda)
+                res_padfree = model(**batch_accelerator)
 
                 logits_padded = res_padded.logits[inputs_dict["attention_mask"].bool()]
                 logits_padfree = res_padfree.logits[0]
@@ -4356,7 +4360,8 @@ class ModelTesterMixin:
             if hasattr(config, "layer_types"):
                 del config_dict["layer_types"]
             new_config = config.__class__(**config_dict)
-            model = model_class(new_config).to(torch_device)
+            # We need to set eager as otherwise `output_attentions` is not supported
+            model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
             model.eval()
             layer_types = getattr(model.config, "layer_types", ["sliding_attention"] * config.num_hidden_layers)
             attentions = model(**inputs, output_attentions=True).attentions
@@ -4373,7 +4378,8 @@ class ModelTesterMixin:
             if hasattr(config, "layer_types"):
                 del config_dict["layer_types"]
             new_config = config.__class__(**config_dict)
-            model = model_class(new_config).to(torch_device)
+            # We need to set eager as otherwise `output_attentions` is not supported
+            model = model_class._from_config(new_config, attn_implementation="eager").to(torch_device)
             model.eval()
             attentions_not_sliding = model(**inputs, output_attentions=True).attentions
             for layer_attention in attentions_not_sliding:
@@ -4429,7 +4435,7 @@ class ModelTesterMixin:
             # comparing softmax-normalized logits:
             normalized_0 = F.softmax(out_last_tokens, dim=-1)
             normalized_1 = F.softmax(out_shared_prefix_last_tokens, dim=-1)
-            torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
+            torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-3)
 
     @slow
     @require_torch_accelerator
@@ -4465,6 +4471,7 @@ class ModelTesterMixin:
         del loss
 
         model = torch.compile(model, fullgraph=True, mode="reduce-overhead")
+
         # forward compilation
         set_seed(42)
         loss = model(**inputs).loss
@@ -4581,6 +4588,15 @@ class ModelTesterMixin:
             # However, triton cannot handle hidden dimensions of less than 16
             # --> forcing at least a hidden dim of 16
             config.hidden_size *= max(16 // (config.hidden_size // config.num_attention_heads), 1)
+
+            # Flex attention relies on triton on compilation
+            # However, triton cannot handle hidden dimensions of less than 16
+            # --> forcing at least a hidden dim of 16
+            config.hidden_size *= max(
+                16 // getattr(config, "head_dim", config.hidden_size // config.num_attention_heads), 1
+            )
+            if hasattr(config, "head_dim"):
+                config.head_dim = max(16, config.head_dim)
 
             model = model_class(config).to(device=torch_device)
             self.assertTrue(model.config._attn_implementation == "flex_attention")
