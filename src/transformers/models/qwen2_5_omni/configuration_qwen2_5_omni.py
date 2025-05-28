@@ -154,7 +154,7 @@ class Qwen2_5OmniAudioEncoderConfig(PretrainedConfig):
         n_window (`int`, *optional*, defaults to 100):
             The chunk for conv and flash attn in AudioEncoder.
         output_dim (`int`, *optional*, defaults to 3584):
-            The output dimention of AudioEncoder.
+            The output dimension of AudioEncoder.
 
     Example:
 
@@ -372,7 +372,7 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window  # we check `use_sliding_window` in the modeling code
+        self.sliding_window = sliding_window if self.use_sliding_window else None
         self.max_window_layers = max_window_layers
 
         # for backward compatibility
@@ -392,6 +392,7 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
+
         if self.rope_scaling is None:
             self.rope_scaling = {"mrope_section": [16, 24, 24], "rope_type": "default", "type": "default"}
 
@@ -458,6 +459,11 @@ class Qwen2_5OmniThinkerConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_thinker"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+        "video_token_id": "video_token_index",
+        "audio_token_id": "audio_token_index",
+    }
     sub_configs = {
         "audio_config": Qwen2_5OmniAudioEncoderConfig,
         "vision_config": Qwen2_5OmniVisionEncoderConfig,
@@ -662,6 +668,11 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_talker"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+        "video_token_id": "video_token_index",
+        "audio_token_id": "audio_token_index",
+    }
 
     def __init__(
         self,
@@ -969,7 +980,7 @@ class Qwen2_5OmniConfig(PretrainedConfig):
         thinker_config (`dict`, *optional*): Configuration of the underlying thinker sub-model.
         talker_config (`dict`, *optional*): Configuration of the underlying talker sub-model.
         token2wav_config (`dict`, *optional*): Configuration of the underlying codec sub-model.
-        enable_audio_output (`bool`, *optional*, defaults to `True`): Whether enabel audio output and load talker and token2wav module.
+        enable_audio_output (`bool`, *optional*, defaults to `True`): Whether enable audio output and load talker and token2wav module.
 
     Example:
 
@@ -1034,6 +1045,20 @@ class Qwen2_5OmniConfig(PretrainedConfig):
         self.enable_audio_output = enable_audio_output
 
         super().__init__(**kwargs)
+
+    def get_text_config(self, decoder=False) -> "PretrainedConfig":
+        """
+        Returns the config that is meant to be used with text IO. On most models, it is the original config instance
+        itself. On specific composite models, it is under a set of valid names.
+
+        Args:
+            decoder (`Optional[bool]`, *optional*, defaults to `False`):
+                If set to `True`, then only search for decoder config names.
+        """
+        # Overridden for deeply nested config like Qwen2-Omni. We don't have any omni model
+        # except for Qwen yet. This has to be generalized if more deeply nested configs are
+        # added. NOTE: currently method used only by vLLM
+        return self.thinker_config.get_text_config()
 
 
 __all__ = ["Qwen2_5OmniConfig", "Qwen2_5OmniThinkerConfig", "Qwen2_5OmniTalkerConfig", "Qwen2_5OmniToken2WavConfig"]

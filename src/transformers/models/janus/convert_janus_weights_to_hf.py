@@ -25,6 +25,7 @@ import gc
 import json
 import os
 import re
+from typing import Optional
 
 import torch
 from accelerate import init_empty_weights
@@ -167,7 +168,9 @@ def convert_state_dict_to_hf(state_dict):
     return converted_state_dict
 
 
-def ensure_model_downloaded(repo_id: str = None, revision: str = None, local_dir: str = None) -> str:
+def ensure_model_downloaded(
+    repo_id: Optional[str] = None, revision: Optional[str] = None, local_dir: Optional[str] = None
+) -> str:
     """
     Ensures model files are downloaded locally, downloads them if not.
     Returns path to local files.
@@ -390,7 +393,7 @@ def convert_model(
         text_config=text_config,
         vision_config=vision_config,
         vq_config=vq_config,
-        image_token_index=tokenizer.vocab.get("<image_placeholder>"),
+        image_token_id=tokenizer.vocab.get("<image_placeholder>"),
     )
 
     # Save the config

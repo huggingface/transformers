@@ -30,22 +30,11 @@ from ...modeling_outputs import (
     ModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import auto_docstring, logging
 from .configuration_levit import LevitConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "LevitConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "facebook/levit-128S"
-_EXPECTED_OUTPUT_SHAPE = [1, 16, 384]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "facebook/levit-128S"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 @dataclass
@@ -246,7 +235,7 @@ class LevitAttentionSubsample(nn.Module):
         self.out_dim_keys_values = attention_ratio * key_dim * num_attention_heads + key_dim * num_attention_heads
         self.out_dim_projection = attention_ratio * key_dim * num_attention_heads
         self.resolution_out = resolution_out
-        # resolution_in is the intial resolution, resoloution_out is final resolution after downsampling
+        # resolution_in is the initial resolution, resolution_out is final resolution after downsampling
         self.keys_values = MLPLayerWithBN(input_dim, self.out_dim_keys_values)
         self.queries_subsample = LevitSubsample(stride, resolution_in)
         self.queries = MLPLayerWithBN(input_dim, key_dim * num_attention_heads)
@@ -370,7 +359,7 @@ class LevitStage(nn.Module):
         self.layers = []
         self.config = config
         self.resolution_in = resolution_in
-        # resolution_in is the intial resolution, resolution_out is final resolution after downsampling
+        # resolution_in is the initial resolution, resolution_out is final resolution after downsampling
         for _ in range(depths):
             self.layers.append(
                 LevitResidualLayer(
@@ -479,12 +468,8 @@ class LevitClassificationLayer(nn.Module):
         return logits
 
 
+@auto_docstring
 class LevitPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = LevitConfig
     base_model_prefix = "levit"
     main_input_name = "pixel_values"
@@ -503,35 +488,7 @@ class LevitPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-LEVIT_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`LevitConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-LEVIT_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`LevitImageProcessor.__call__`] for details.
-
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare Levit model outputting raw features without any specific head on top.",
-    LEVIT_START_DOCSTRING,
-)
+@auto_docstring
 class LevitModel(LevitPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -541,14 +498,7 @@ class LevitModel(LevitPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(LEVIT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPoolingAndNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -585,12 +535,11 @@ class LevitModel(LevitPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Levit Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
     ImageNet.
-    """,
-    LEVIT_START_DOCSTRING,
+    """
 )
 class LevitForImageClassification(LevitPreTrainedModel):
     def __init__(self, config):
@@ -609,13 +558,7 @@ class LevitForImageClassification(LevitPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(LEVIT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutputWithNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -670,14 +613,13 @@ class LevitForImageClassification(LevitPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     LeViT Model transformer with image classification heads on top (a linear layer on top of the final hidden state and
     a linear layer on top of the final hidden state of the distillation token) e.g. for ImageNet. .. warning::
            This model supports inference-only. Fine-tuning with distillation (i.e. with a teacher) is not yet
            supported.
-    """,
-    LEVIT_START_DOCSTRING,
+    """
 )
 class LevitForImageClassificationWithTeacher(LevitPreTrainedModel):
     def __init__(self, config):
@@ -701,13 +643,7 @@ class LevitForImageClassificationWithTeacher(LevitPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(LEVIT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=LevitForImageClassificationWithTeacherOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,

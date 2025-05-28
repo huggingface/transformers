@@ -56,7 +56,7 @@ def speechlib_mel(sample_rate, n_fft, n_mels, fmin=None, fmax=None):
         fmax = sample_rate / 2
     if fmin is None:
         fmin = 0
-    assert fmin >= 0, "fmin cannot be negtive"
+    assert fmin >= 0, "fmin cannot be negative"
     assert fmin < fmax <= sample_rate / 2, "fmax must be between (fmin, samplerate / 2]"
 
     def mel(f):
@@ -74,7 +74,7 @@ def speechlib_mel(sample_rate, n_fft, n_mels, fmin=None, fmax=None):
 
     khi = max(khi, klo)
 
-    # Spec 2: SpeechLib uses trianges in Mel space
+    # Spec 2: SpeechLib uses triangles in Mel space
     mlo = mel(fmin)
     mhi = mel(fmax)
     m_centers = np.linspace(mlo, mhi, n_mels + 2)
@@ -300,7 +300,7 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
             to_mask_batch_idxs = torch.arange(batch_size)[audio_lengths != audio_lengths.max()]
             if to_mask_batch_idxs.numel() > 0:
                 batch_idxs_down = (audio_lengths[to_mask_batch_idxs] - self.win_length) // self.hop_length + 1
-                batch_idxs_up = audio_lengths[to_mask_batch_idxs] // self.hop_length + 1
+                batch_idxs_up = (audio_lengths[to_mask_batch_idxs] // self.hop_length) - 1
                 offset_idx = batch_idxs_down.min()
                 max_idx = batch_idxs_up.max()
 

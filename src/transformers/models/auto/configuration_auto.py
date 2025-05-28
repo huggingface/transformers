@@ -15,7 +15,6 @@
 """Auto Config class."""
 
 import importlib
-import os
 import re
 import warnings
 from collections import OrderedDict
@@ -50,6 +49,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("bigbird_pegasus", "BigBirdPegasusConfig"),
         ("biogpt", "BioGptConfig"),
         ("bit", "BitConfig"),
+        ("bitnet", "BitNetConfig"),
         ("blenderbot", "BlenderbotConfig"),
         ("blenderbot-small", "BlenderbotSmallConfig"),
         ("blip", "BlipConfig"),
@@ -79,8 +79,10 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("convnext", "ConvNextConfig"),
         ("convnextv2", "ConvNextV2Config"),
         ("cpmant", "CpmAntConfig"),
+        ("csm", "CsmConfig"),
         ("ctrl", "CTRLConfig"),
         ("cvt", "CvtConfig"),
+        ("d_fine", "DFineConfig"),
         ("dab-detr", "DabDetrConfig"),
         ("dac", "DacConfig"),
         ("data2vec-audio", "Data2VecAudioConfig"),
@@ -115,6 +117,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("ernie_m", "ErnieMConfig"),
         ("esm", "EsmConfig"),
         ("falcon", "FalconConfig"),
+        ("falcon_h1", "FalconH1Config"),
         ("falcon_mamba", "FalconMambaConfig"),
         ("fastspeech2_conformer", "FastSpeech2ConformerConfig"),
         ("flaubert", "FlaubertConfig"),
@@ -144,12 +147,14 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("granite", "GraniteConfig"),
         ("granite_speech", "GraniteSpeechConfig"),
         ("granitemoe", "GraniteMoeConfig"),
+        ("granitemoehybrid", "GraniteMoeHybridConfig"),
         ("granitemoeshared", "GraniteMoeSharedConfig"),
         ("granitevision", "LlavaNextConfig"),
         ("graphormer", "GraphormerConfig"),
         ("grounding-dino", "GroundingDinoConfig"),
         ("groupvit", "GroupViTConfig"),
         ("helium", "HeliumConfig"),
+        ("hgnet_v2", "HGNetV2Config"),
         ("hiera", "HieraConfig"),
         ("hubert", "HubertConfig"),
         ("ibert", "IBertConfig"),
@@ -162,6 +167,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("informer", "InformerConfig"),
         ("instructblip", "InstructBlipConfig"),
         ("instructblipvideo", "InstructBlipVideoConfig"),
+        ("internvl", "InternVLConfig"),
+        ("internvl_vision", "InternVLVisionConfig"),
         ("jamba", "JambaConfig"),
         ("janus", "JanusConfig"),
         ("jetmoe", "JetMoeConfig"),
@@ -283,6 +290,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("rt_detr_v2", "RTDetrV2Config"),
         ("rwkv", "RwkvConfig"),
         ("sam", "SamConfig"),
+        ("sam_hq", "SamHQConfig"),
+        ("sam_hq_vision_model", "SamHQVisionConfig"),
         ("sam_vision_model", "SamVisionConfig"),
         ("seamless_m4t", "SeamlessM4TConfig"),
         ("seamless_m4t_v2", "SeamlessM4Tv2Config"),
@@ -396,6 +405,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("bigbird_pegasus", "BigBird-Pegasus"),
         ("biogpt", "BioGpt"),
         ("bit", "BiT"),
+        ("bitnet", "BitNet"),
         ("blenderbot", "Blenderbot"),
         ("blenderbot-small", "BlenderbotSmall"),
         ("blip", "BLIP"),
@@ -428,8 +438,10 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("convnextv2", "ConvNeXTV2"),
         ("cpm", "CPM"),
         ("cpmant", "CPM-Ant"),
+        ("csm", "CSM"),
         ("ctrl", "CTRL"),
         ("cvt", "CvT"),
+        ("d_fine", "D-FINE"),
         ("dab-detr", "DAB-DETR"),
         ("dac", "DAC"),
         ("data2vec-audio", "Data2VecAudio"),
@@ -469,6 +481,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("esm", "ESM"),
         ("falcon", "Falcon"),
         ("falcon3", "Falcon3"),
+        ("falcon_h1", "FalconH1"),
         ("falcon_mamba", "FalconMamba"),
         ("fastspeech2_conformer", "FastSpeech2Conformer"),
         ("flan-t5", "FLAN-T5"),
@@ -500,6 +513,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("granite", "Granite"),
         ("granite_speech", "GraniteSpeech"),
         ("granitemoe", "GraniteMoeMoe"),
+        ("granitemoehybrid", "GraniteMoeHybrid"),
         ("granitemoeshared", "GraniteMoeSharedMoe"),
         ("granitevision", "LLaVA-NeXT"),
         ("graphormer", "Graphormer"),
@@ -507,6 +521,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("groupvit", "GroupViT"),
         ("helium", "Helium"),
         ("herbert", "HerBERT"),
+        ("hgnet_v2", "HGNet-V2"),
         ("hiera", "Hiera"),
         ("hubert", "Hubert"),
         ("ibert", "I-BERT"),
@@ -519,6 +534,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("informer", "Informer"),
         ("instructblip", "InstructBLIP"),
         ("instructblipvideo", "InstructBlipVideo"),
+        ("internvl", "InternVL"),
+        ("internvl_vision", "InternVLVision"),
         ("jamba", "Jamba"),
         ("janus", "Janus"),
         ("jetmoe", "JetMoe"),
@@ -652,6 +669,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("rt_detr_v2", "RT-DETRv2"),
         ("rwkv", "RWKV"),
         ("sam", "SAM"),
+        ("sam_hq", "SAM-HQ"),
+        ("sam_hq_vision_model", "SamHQVisionModel"),
         ("sam_vision_model", "SamVisionModel"),
         ("seamless_m4t", "SeamlessM4T"),
         ("seamless_m4t_v2", "SeamlessM4Tv2"),
@@ -797,9 +816,11 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("chinese_clip_vision_model", "chinese_clip"),
         ("rt_detr_resnet", "rt_detr"),
         ("granitevision", "llava_next"),
+        ("internvl_vision", "internvl"),
         ("qwen2_5_vl_text", "qwen2_5_vl"),
         ("qwen2_vl_text", "qwen2_vl"),
         ("sam_vision_model", "sam"),
+        ("sam_hq_vision_model", "sam_hq"),
         ("llama4_text", "llama4"),
         ("blip_2_qformer", "blip_2"),
     ]
@@ -1133,17 +1154,21 @@ class AutoConfig:
         config_dict, unused_kwargs = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
         has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
-        trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
-        )
+        if has_remote_code:
+            class_ref = config_dict["auto_map"]["AutoConfig"]
+            if "--" in class_ref:
+                upstream_repo = class_ref.split("--")[0]
+            else:
+                upstream_repo = None
+            trust_remote_code = resolve_trust_remote_code(
+                trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
+            )
 
         if has_remote_code and trust_remote_code:
-            class_ref = config_dict["auto_map"]["AutoConfig"]
             config_class = get_class_from_dynamic_module(
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **kwargs
             )
-            if os.path.isdir(pretrained_model_name_or_path):
-                config_class.register_for_auto_class()
+            config_class.register_for_auto_class()
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
             try:

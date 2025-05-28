@@ -19,6 +19,8 @@ from ..utils.import_utils import is_torch_npu_available
 
 
 if is_torch_npu_available():
+    import math
+
     import torch_npu
     from einops import rearrange, repeat
 
@@ -34,6 +36,8 @@ if SPARSE_MODE not in [TOP_LEFT_ALIGNED_CAUSAL_MASK_MODE, DOWN_RIGHT_ALIGNED_CAU
         "Environment variable `NPU_FA2_SPARSE_MODE` can only be set as 2 (top-left aligned causal mask) "
         "or 3 (down-right aligned causal mask)."
     )
+
+ATTN_MASK_NPU = None
 
 
 def is_npu_fa2_top_left_aligned_causal_mask():
@@ -162,11 +166,16 @@ def npu_flash_attn_func(
 ):
     keep_prob = 1.0 - dropout_p
 
+    if softmax_scale is None:
+        softmax_scale = 1.0 / math.sqrt(q.shape[-1])
+
     if not causal:
         head_num = q.shape[2]
         output = torch_npu.npu_fusion_attention(q, k, v, head_num, "BSND", keep_prob=keep_prob, scale=softmax_scale)[0]
     else:
-        attn_mask_npu = torch.triu(torch.ones([2048, 2048]), diagonal=1).bool().to(q.device)
+        global ATTN_MASK_NPU
+        if ATTN_MASK_NPU is None:
+            ATTN_MASK_NPU = torch.triu(torch.ones([2048, 2048], device=q.device), diagonal=1).bool()
         head_num = q.shape[2]
         output = torch_npu.npu_fusion_attention(
             q,
@@ -176,7 +185,7 @@ def npu_flash_attn_func(
             "BSND",
             keep_prob=keep_prob,
             scale=softmax_scale,
-            atten_mask=attn_mask_npu,
+            atten_mask=ATTN_MASK_NPU,
             sparse_mode=SPARSE_MODE,
         )[0]
 
@@ -189,12 +198,17 @@ def npu_flash_attn_varlen_func(
     v,
     cu_seqlens_q,
     cu_seqlens_k,
+    max_seqlen_q=None,  # defined for aligning params order with corresponding function in `flash-attn`
+    max_seqlen_k=None,  # defined for aligning params order with corresponding function in `flash-attn`
     dropout_p=0.0,
     softmax_scale=None,
     causal=False,
     **kwargs,
 ):
     keep_prob = 1.0 - dropout_p
+
+    if softmax_scale is None:
+        softmax_scale = 1.0 / math.sqrt(q.shape[-1])
 
     if not causal:
         head_num = q.shape[1]
@@ -212,7 +226,9 @@ def npu_flash_attn_varlen_func(
             actual_seq_kvlen=tuple(cu_seqlens_k[1:].cpu().numpy().tolist()),
         )[0]
     else:
-        attn_mask_npu = torch.triu(torch.ones([2048, 2048]), diagonal=1).bool().to(q.device)
+        global ATTN_MASK_NPU
+        if ATTN_MASK_NPU is None:
+            ATTN_MASK_NPU = torch.triu(torch.ones([2048, 2048], device=q.device), diagonal=1).bool()
         head_num = q.shape[1]
         output = torch_npu.npu_fusion_attention(
             q,
@@ -221,7 +237,7 @@ def npu_flash_attn_varlen_func(
             head_num,
             pse=None,
             padding_mask=None,
-            atten_mask=attn_mask_npu,
+            atten_mask=ATTN_MASK_NPU,
             scale=softmax_scale,
             keep_prob=keep_prob,
             input_layout="TND",
