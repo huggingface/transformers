@@ -1686,6 +1686,44 @@ class GenerationTesterMixin:
                     self.assertEqual(self_attention_layer_value_cache.shape, all_cache_shapes[i][1])
 
     @pytest.mark.generate
+    def test_generate_from_random_inputs_embeds(self):
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+
+            if config.is_encoder_decoder:
+                continue
+            config.is_decoder = True
+
+            model = model_class(config).to(torch_device).eval()
+            if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
+                continue
+
+            if model_class.main_input_name != "input_ids":
+                print("model_class:", model_class)
+
+            if hasattr(config, "scale_embedding"):
+                config.scale_embedding = False
+
+            generation_kwargs = {
+                "return_dict_in_generate": True,
+                "output_scores": True,
+                "do_sample": False,
+                "max_new_tokens": 5,
+                "min_new_tokens": 5,  # generate exactly 5 tokens
+            }
+
+            input_ids = inputs_dict.pop("input_ids")
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+            outputs_from_embeds = model.generate(input_ids, inputs_embeds=inputs_embeds, **generation_kwargs)
+
+            # If we pass different inputs_embeds, we should get different outputs (the output text may be the
+            # same, but the logits will almost surely be different)
+            random_embeds = torch.rand_like(inputs_embeds)
+            outputs_from_rand_embeds = model.generate(input_ids, inputs_embeds=random_embeds, **generation_kwargs)
+            for i in range(len(outputs_from_rand_embeds.scores)):
+                self.assertFalse(torch.allclose(outputs_from_embeds.scores[i], outputs_from_rand_embeds.scores[i]))
+
+    @pytest.mark.generate
     @parameterized.expand([("greedy", 1), ("beam search", 2)])
     def test_generate_from_inputs_embeds(self, _, num_beams):
         """Tests that we can generate from `inputs_embeds` instead of `input_ids` in LLMs, VLMs, etc"""
@@ -1706,34 +1744,22 @@ class GenerationTesterMixin:
                 continue
 
             # There are a few exception patterns in this test:
-            # 1 - Some models can't generate without `input_ids`, when `inputs_embeds` are passed
-            requires_inputs_ids = any(model_name in model_class.__name__.lower() for model_name in ["idefics"])
-            # 2 - Complex `inputs_embeds` computation, i.e. the correct computation of inputs embeds is more complex
+            # 1 - Complex `inputs_embeds` computation, i.e. the correct computation of inputs embeds is more complex
             # than calling the embedding layer with `input_ids`. Subcases of this exception:
-            #   2.A - Ignore `scale_embedding`, if the model supports it (it is controlled by a model-dependent flag)
+            #   1.A - Ignore `scale_embedding`, if the model supports it (it is controlled by a model-dependent flag)
             if hasattr(config, "scale_embedding"):
                 config.scale_embedding = False
-            #   2.B - Some VLMs assume `inputs_embeds` and `pixel_values` are mutually exclusive AND fall in the
-            #   exception above (complex `inputs_embeds` computation). Popping `pixel_values` allow us to run the
-            #   checks without adding test complexity. Ditto for `pixel_values_videos` and `pixel_values_images`
-            pixel_values_is_mutually_exclusive = any(
-                model_name in model_class.__name__.lower() for model_name in VLM_CLASS_NAMES
-            )
-            if pixel_values_is_mutually_exclusive:
-                inputs_dict.pop("pixel_values", None)
-                inputs_dict.pop("pixel_values_videos", None)
-                inputs_dict.pop("pixel_values_images", None)
             # HACK - in the case of granite speech, input_features and inputs_embeds are mutually exclusive;
             # this is similar to VLMs and should likely be standardized for similar audio models in the future,
             # then made generic here.
             if "granitespeech" in model_class.__name__.lower():
                 inputs_dict.pop("input_features", None)
 
-            #   2.C - No easy fix, let's skip the check that compares the outputs from `input_ids` and `inputs_embeds`
+            #   1.B - No easy fix, let's skip the check that compares the outputs from `input_ids` and `inputs_embeds`
             has_complex_embeds_computation = any(
                 model_name in model_class.__name__.lower() for model_name in ["moshi"]
             )
-            # 3 - `inputs_dict` doesn't contain `attention_mask`. When `attention_mask` is not passed to generate,
+            # 2 - `inputs_dict` doesn't contain `attention_mask`. When `attention_mask` is not passed to generate,
             # we infer it from `input_ids`. The last test case will fail if there is a pad token in the original input.
             missing_attention_mask = "attention_mask" not in inputs_dict
 
@@ -1759,18 +1785,9 @@ class GenerationTesterMixin:
             if not has_complex_embeds_computation:
                 self._check_similar_generate_outputs(outputs_from_ids, outputs_from_embeds)
 
-            # If we pass different inputs_embeds, we should get different outputs (the output text may be the
-            # same, but the logits will almost surely be different)
-            random_embeds = torch.rand_like(inputs_embeds)
-            outputs_from_rand_embeds = model.generate(
-                input_ids, inputs_embeds=random_embeds, **generation_kwargs, **inputs_dict
-            )
-            for i in range(len(outputs_from_rand_embeds.scores)):
-                self.assertFalse(torch.allclose(outputs_from_embeds.scores[i], outputs_from_rand_embeds.scores[i]))
-
             # input_ids is not a required input on most models -- if we don't pass it, the newly generated tokens will
             # be the same
-            if not (requires_inputs_ids or missing_attention_mask):
+            if not missing_attention_mask:
                 outputs_from_embeds_wo_ids = model.generate(
                     inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict
                 )

@@ -152,6 +152,7 @@ class JanusVisionText2TextModelTester:
             text_config=self.text_config,
             vision_config=self.vision_config,
             vq_config=self.get_vq_config(),
+            image_token_id=self.image_token_index,
         )
 
     def prepare_config_and_inputs(self):

@@ -1393,22 +1393,23 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             vision_flat = image_features.view(-1, image_features.size(-1))
             projected_vision_flat = self.multi_modal_projector(vision_flat)
 
-            special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-            final_mask = special_image_mask.to(inputs_embeds.device)
-            inputs_embeds = inputs_embeds.view(-1, inputs_embeds.size(-1))
+            if input_ids is None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                n_image_tokens = (special_image_mask).sum(dim=1).sum(dim=0)[0]
+            else:
+                special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
+                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+                n_image_tokens = (input_ids == self.config.image_token_id).sum()
 
-            final_mask_1d = final_mask[..., 0].reshape(-1)
-            num_tokens_to_fill = final_mask_1d.sum()
-
-            if num_tokens_to_fill != projected_vision_flat.size(0):
+            if n_image_tokens != projected_vision_flat.size(0):
                 raise ValueError(
-                    f"Mismatch: final_mask wants {num_tokens_to_fill} embeddings, "
+                    f"Mismatch: final_mask wants {n_image_tokens} embeddings, "
                     f"but multi_modal_projector returned {projected_vision_flat.size(0)}"
                 )
-
-            expanded_mask = final_mask_1d.unsqueeze(-1).expand(-1, inputs_embeds.size(-1))
-            inputs_embeds = inputs_embeds.masked_scatter(expanded_mask, projected_vision_flat)
-            inputs_embeds = inputs_embeds.view(original_inputs_embeds_shape)
+            projected_vision_flat = projected_vision_flat.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, projected_vision_flat)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
