@@ -900,7 +900,7 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: Optional[dict[str, str]]):
     unused_rules = tp_plan
 
     for key in generic_keys:
-        param_name, _ = key.rsplit(".", 1) if "." in key else key
+        param_name = key.rsplit(".", 1)[0] if "." in key else key
         generic_param_name = re.sub(r"\d+", "*", param_name)
 
         if generic_param_name in tp_plan:
