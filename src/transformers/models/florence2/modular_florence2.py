@@ -1309,7 +1309,9 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
                     image_features, inputs_embeds, attention_mask
                 )
 
-        return self.language_model.generate(input_ids=None, inputs_embeds=inputs_embeds, attention_mask=attention_mask, **kwargs)
+        return self.language_model.generate(
+            input_ids=None, inputs_embeds=inputs_embeds, attention_mask=attention_mask, **kwargs
+        )
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self.language_model.shift_tokens_right(labels)

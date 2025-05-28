@@ -312,7 +312,6 @@ def prepare_img():
 class Florence2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.model_name = "microsoft/Florence-2-base"
-        self.model_name = "/Users/ducviet00/WORK/hf_models/Florence-2-base"
         self.processor = AutoProcessor.from_pretrained(self.model_name)
 
         self.image1 = Image.open(
