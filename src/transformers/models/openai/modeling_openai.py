@@ -163,11 +163,6 @@ class OpenaiPreTrainedModel(LlamaPreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["OpenaiDecoderLayer"]
-    _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
-    _supports_attention_backend = True
 
 
 class OpenaiModel(LlamaModel):
