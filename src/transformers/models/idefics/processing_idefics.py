@@ -211,7 +211,6 @@ class IdeficsProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["image_size", "add_end_of_utterance_token"]
     image_processor_class = "IdeficsImageProcessor"
     tokenizer_class = "LlamaTokenizerFast"
 

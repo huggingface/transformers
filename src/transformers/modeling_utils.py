@@ -1577,7 +1577,8 @@ def _find_mismatched_keys(
                 # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
                 # Without matching with module type or parameter type it seems like a practical way to detect valid 4bit weights.
                 if not (
-                    new_state_dict[key].shape[-1] == 1
+                    is_quantized
+                    and new_state_dict[key].shape[-1] == 1
                     and new_state_dict[key].numel() * 2 == model_state_dict[key].numel()
                 ):
                     mismatched_keys.append(key)
@@ -3652,7 +3653,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             for key, value in state_dict.items():
                 for pattern, replacement in reverse_key_mapping.items():
                     replacement = replacement.lstrip("^")  # strip off un-needed chars and patterns
-                    replacement = re.sub(r"\(.*?\)", "", pattern)
+                    replacement = re.sub(r"\(.*\)", "", replacement)
                     key, n_replace = re.subn(pattern, replacement, key)
                     # Early exit of the loop
                     if n_replace > 0:
@@ -5576,8 +5577,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     def get_parameter_or_buffer(self, target: str):
         """
         Return the parameter or buffer given by `target` if it exists, otherwise throw an error. This combines
-        `get_parameter()` and `get_buffer()` in a single handy function. Note that it only work if `target` is a
-        leaf of the model.
+        `get_parameter()` and `get_buffer()` in a single handy function. If the target is an `_extra_state` attribute,
+        it will return the extra state provided by the module. Note that it only work if `target` is a leaf of the model.
         """
         try:
             return self.get_parameter(target)
@@ -5587,7 +5588,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             return self.get_buffer(target)
         except AttributeError:
             pass
-        raise AttributeError(f"`{target}` is neither a parameter nor a buffer.")
+        module, param_name = get_module_from_name(self, target)
+        if (
+            param_name == "_extra_state"
+            and getattr(module.__class__, "get_extra_state", torch.nn.Module.get_extra_state)
+            is not torch.nn.Module.get_extra_state
+        ):
+            return module.get_extra_state()
+
+        raise AttributeError(f"`{target}` is neither a parameter, buffer, nor extra state.")
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
