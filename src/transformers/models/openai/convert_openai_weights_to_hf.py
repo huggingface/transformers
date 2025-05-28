@@ -89,15 +89,13 @@ def write_model(
     config = OpenaiConfig.from_pretrained(input_base_path)
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}...")
-    loaded = [
-        safe_load(os.path.join(input_base_path,file)) for file in list(os.listdir(input_base_path))
-            if file.endswith(".safetensors")
-
-    ]
+    final_ = {}
+    for file in list(os.listdir(input_base_path)):
+        if file.endswith(".safetensors"):
+            final_.update(safe_load(os.path.join(input_base_path,file)) )
 
     print("Converting ..")
-    weights = torch.cat(loaded, dim=0)
-    all_keys = weights.keys()
+    all_keys = final_.keys()
     new_keys = convert_old_keys_to_new_keys(all_keys)
 
     state_dict = {}
@@ -106,7 +104,7 @@ def write_model(
         new_key = "model." + new_keys.get(key, key)
         print(f"Processing key: {key} -> {new_key}")
         if re.search("qkv_proj.weight", new_key):
-            q, k, v = weights[key].chunk(3, dim=-1)
+            q, k, v = final_[key].chunk(3, dim=-1)
             q_key = re.sub(r"(qkv)_proj.weight", "q", new_key)
             state_dict[q_key] = q
             k_key = re.sub(r"(qkv)_proj.weight", "k", new_key)
@@ -114,9 +112,9 @@ def write_model(
             state_dict[k_key] = k
             state_dict[v_key] = v
         else:
-            state_dict[new_key] = loaded[0][key]
+            state_dict[new_key] = final_[key]
 
-    del loaded
+    del final_
     gc.collect()
 
     print("Loading the checkpoint in a OpenAI ")
