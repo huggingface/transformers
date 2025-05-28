@@ -20,10 +20,6 @@ import pytest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, Glm4Config, is_torch_available
 from transformers.testing_utils import (
-
-
-
-
     Expectations,
     cleanup,
     require_flash_attn,
@@ -33,9 +29,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-
-
-
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
