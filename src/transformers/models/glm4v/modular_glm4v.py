@@ -298,6 +298,7 @@ class Glm4vConfig(Qwen2_5_VLConfig):
         self.vision_start_token_id = vision_start_token_id
         self.vision_end_token_id = vision_end_token_id
 
+
 class Glm4vVisionPatchEmbed(Qwen2_5_VisionPatchEmbed):
     def __init__(
         self,
