@@ -46,12 +46,6 @@ if is_vision_available():
 
 
 class ViTModelTester:
-
-
-
-
-
-
     def __init__(
         self,
         parent,
