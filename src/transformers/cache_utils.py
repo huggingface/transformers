@@ -223,6 +223,7 @@ class Cache:
             for key_states, value_states in _distributed_cache_data:
                 layer = DynamicLayer(key_states, value_states)
                 self.layers.append(layer)
+            return
         else:
             model_config = kwargs.pop("config", None)
         if self.layer_structure == (StaticLayer,):
@@ -235,7 +236,6 @@ class Cache:
                 layer = StaticLayer(model_config, config.batch_size, config.max_cache_len, layer_device, config.dtype)
                 self.layers.append(layer)
         else:
-            pass
             # Initialize first round of layers
             for layer_type in self.layer_structure:
                 self.layers.append(layer_type())
@@ -589,8 +589,12 @@ class StaticCacheConfig(CacheConfig):
         self.batch_size = batch_size
         self.max_cache_len = max_cache_len
         self.device = device
-        self.dtype = dtype
+        self._dtype = str(dtype).split(".")[-1]
         self.layer_device_map = layer_device_map
+
+    @property
+    def dtype(self):
+        return getattr(torch, self._dtype)
 
     def validate(self):
         """Validates if the arguments passed are correct"""
@@ -774,16 +778,16 @@ def _flatten_dynamic_cache(
         )
 
     dictionary = {
-        "key_cache": [layer.key_cache for layer in dynamic_cache.layers if layer is not None],
-        "value_cache": [layer.value_cache for layer in dynamic_cache.layers if layer is not None],
+        "key_cache": [layer.key_cache for layer in dynamic_cache.layers if layer.key_cache is not None],
+        "value_cache": [layer.value_cache for layer in dynamic_cache.layers if layer.value_cache is not None],
     }
     return torch.utils._pytree._dict_flatten(dictionary)
 
 
 def _flatten_with_keys_dynamic_cache(dynamic_cache: DynamicCache):
     dictionary = {
-        "key_cache": [layer.key_cache for layer in dynamic_cache.layers if layer is not None],
-        "value_cache": [layer.value_cache for layer in dynamic_cache.layers if layer is not None],
+        "key_cache": [layer.key_cache for layer in dynamic_cache.layers if layer.key_cache is not None],
+        "value_cache": [layer.value_cache for layer in dynamic_cache.layers if layer.value_cache is not None],
     }
     return torch.utils._pytree._dict_flatten_with_keys(dictionary)
 
@@ -800,14 +804,14 @@ def _unflatten_dynamic_cache(
     for idx in range(max(len(key_list), len(value_list))):
         key = key_list[idx] if idx < len(key_list) else None
         value = value_list[idx] if idx < len(value_list) else None
-        cache.layers.append(DynamicLayer(key, value))
+        cache.update(key, value, idx)
     return cache
 
 
 def _flatten_dynamic_cache_for_fx(cache, spec):
     dictionary = {
-        "key_cache": [layer.key_cache for layer in cache.layers if layer is not None],
-        "value_cache": [layer.value_cache for layer in cache.layers if layer is not None],
+        "key_cache": [layer.key_cache for layer in cache.layers if layer.key_cache is not None],
+        "value_cache": [layer.value_cache for layer in cache.layers if layer.value_cache is not None],
     }
     return torch.utils._pytree.tree_flatten(dictionary)[0]
 
