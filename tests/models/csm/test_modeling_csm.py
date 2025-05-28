@@ -30,9 +30,10 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
+    require_read_token,
     require_torch_accelerator,
     slow,
-    torch_device, require_read_token,
+    torch_device,
 )
 from transformers.utils.import_utils import is_datasets_available
 
