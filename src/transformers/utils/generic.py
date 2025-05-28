@@ -931,18 +931,11 @@ def can_return_tuple(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         return_dict = kwargs.get("return_dict", self.config.use_return_dict)
-        kwargs["return_dict"] = False  # always set return_dict to True for the function call
+        kwargs["return_dict"] = True
         output = func(self, *args, **kwargs)
-        if not return_dict:
-            if not hasattr(self, "_caller_obj"):
-
-                frame = inspect.stack()  # 3 because we're interested in the caller (not the function itself)
-                self._caller_obj = frame[3][0].f_locals.get('self', None)
-
-            if self._caller_obj.__class__ == self.__class__:
-                outputs = outputs.to_tuple()
+        if user_return_dict is False:
+            output = output.to_tuple()
         return output
-
     return wrapper
 
 
@@ -1004,11 +997,8 @@ def check_model_inputs(func):
             outputs.hidden_states = tuple(collected_hidden_states)
         if output_attentions:
             outputs.attentions = tuple(collected_attentions)
-        import inspect
-        frame = inspect.stack()  # 2 because we're interested in the caller (not the function itself)
-        caller_obj = frame[3][0].f_locals.get('self', None)
-        if caller_obj.__class__ == self.__class__ and not return_dict:
-            outputs = outputs.to_tuple()
+        if return_dict is False:
+            output = output.to_tuple()
         return outputs
 
     return wrapper
