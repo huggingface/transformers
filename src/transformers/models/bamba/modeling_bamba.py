@@ -24,7 +24,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Optional, Tuple, TypedDict, Union
+from typing import Any, Callable, Dict, Optional, Tuple, TypedDict, Union
 
 import torch
 from torch import nn
@@ -89,7 +89,6 @@ class BambaFlashAttentionKwargs(TypedDict, total=False):
     seq_idx: torch.IntTensor
 
 
-# Adapted from transformers.models.jamba.modeling_jamba.HybridMambaAttentionDynamicCache for the v2 mixer
 class HybridMambaAttentionDynamicCache(DynamicCache):
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
