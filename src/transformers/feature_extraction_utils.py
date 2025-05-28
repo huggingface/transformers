@@ -218,7 +218,6 @@ class BatchFeature(UserDict):
         requires_backends(self, ["torch"])
         import torch  # noqa
 
-        new_data = {}
         device = kwargs.get("device")
         non_blocking = kwargs.get("non_blocking", False)
         # Check if the args are a device or a dtype
@@ -233,17 +232,19 @@ class BatchFeature(UserDict):
             else:
                 # it's something else
                 raise ValueError(f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported.")
+
         # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
-        for k, v in self.items():
+        def maybe_to(v):
             # check if v is a floating point
             if isinstance(v, torch.Tensor) and torch.is_floating_point(v):
                 # cast and send to device
-                new_data[k] = v.to(*args, **kwargs)
+                return v.to(*args, **kwargs)
             elif isinstance(v, torch.Tensor) and device is not None:
-                new_data[k] = v.to(device=device, non_blocking=non_blocking)
+                return v.to(device=device, non_blocking=non_blocking)
             else:
-                new_data[k] = v
-        self.data = new_data
+                return v
+
+        self.data = {k: maybe_to(v) for k, v in self.items()}
         return self
 
 
