@@ -206,6 +206,7 @@ class Mistral3PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_quantized_cache = True
     _supports_static_cache = True
+    _supports_flex_attn = True
     _supports_attention_backend = True
 
     def _init_weights(self, module):

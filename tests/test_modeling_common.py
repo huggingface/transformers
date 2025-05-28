@@ -4580,9 +4580,9 @@ class ModelTesterMixin:
                 for name, module in model.named_modules()
                 if isinstance(module, PreTrainedModel) and name != ""
             ]
-            supports_flex_all_modules = (
-                all(sub_models_supporting_flex) and len(sub_models_supporting_flex) > 0
-            ) or model._supports_flex_attn
+            supports_flex_all_modules = (all(sub_models_supporting_flex) and len(sub_models_supporting_flex) > 0) or (
+                model._supports_flex_attn and len(sub_models_supporting_flex) == 0
+            )
             if not supports_flex_all_modules:
                 self.skipTest(reason="This model's submodels does not support flex attention")
 
@@ -4610,7 +4610,10 @@ class ModelTesterMixin:
 
             # Elaborate workaround for encoder-decoder models as some do not specify their main input
             dummy_inputs = {model.main_input_name: inputs_dict[model.main_input_name].to(torch_device)}
-            if text_config.is_encoder_decoder:
+            for key in getattr(self, "additional_model_inputs", []):
+                dummy_inputs[key] = inputs_dict[key].to(torch_device)
+
+            if text_config.is_encoder_decoder or config.is_encoder_decoder:
                 dummy_inputs["decoder_input_ids"] = inputs_dict["decoder_input_ids"].to(torch_device)
                 dummy_inputs["decoder_attention_mask"] = inputs_dict["decoder_attention_mask"].to(torch_device)
 

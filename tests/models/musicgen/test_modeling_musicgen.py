@@ -569,6 +569,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     all_generative_model_classes = ()
     greedy_sample_model_classes = (MusicgenForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"text-to-audio": MusicgenForConditionalGeneration} if is_torch_available() else {}
+    additional_model_inputs = ["decoder_input_ids"]
     test_pruning = False  # training is not supported yet for MusicGen
     test_headmasking = False
     test_resize_embeddings = False
