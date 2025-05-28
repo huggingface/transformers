@@ -3746,7 +3746,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     error_names.append(unknown)
 
             if shared_names:
-                error_names.append(set(shared_names))
+                error_names.extend(shared_names)
 
             if len(error_names) > 0:
                 raise RuntimeError(
