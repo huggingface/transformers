@@ -22,6 +22,7 @@ import re
 from collections import Counter
 from pathlib import Path
 
+def test()
 def get_token():
     my_secret = os.environ.get("GITHUB_TOKEN", None)
     if my_secret is None:
