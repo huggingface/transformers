@@ -84,7 +84,6 @@ class Kosmos2Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["num_patch_index_tokens"]
     image_processor_class = ("CLIPImageProcessor", "CLIPImageProcessorFast")
     tokenizer_class = "AutoTokenizer"
 

@@ -60,7 +60,6 @@ class AriaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "size_conversion"]
     image_processor_class = "AriaImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
