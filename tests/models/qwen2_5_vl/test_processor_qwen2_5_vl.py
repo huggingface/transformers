@@ -421,3 +421,35 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         formatted_text = processor.batch_decode(out_dict_with_video["input_ids"], skip_special_tokens=True)[0]
         self.assertTrue("Dummy prompt for preprocess testing" in formatted_text)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 21960)
+
+
+    @require_torch
+    def test_qwen2_tokenizer_empty_string_regression(self):
+        """
+        Tests that Qwen2Tokenizer returns a torch.long tensor with correct shape
+        for an empty string input, serving as a regression test for issue #38417.
+        """
+        model_id = "Qwen/Qwen2-0.5B"
+
+        try:
+            tokenizer = Qwen2Tokenizer.from_pretrained(
+                model_id,
+                trust_remote_code=True
+            )
+        except OSError as e:
+            self.skipTest(f"Could not load tokenizer {model_id} for testing. Error: {e}")
+            return
+
+        text_inputs = tokenizer([""], return_tensors="pt")
+
+        self.assertIn("input_ids", text_inputs, "Key 'input_ids' not found in tokenizer output.")
+        input_ids_tensor = text_inputs["input_ids"]
+        self.assertIsNotNone(input_ids_tensor, "input_ids tensor is None.")
+
+        expected_shape = torch.Size([1, 0])
+        self.assertEqual(input_ids_tensor.shape, expected_shape,
+                         f"Expected shape {expected_shape}, but got {input_ids_tensor.shape}.")
+
+        expected_dtype = torch.long
+        self.assertEqual(input_ids_tensor.dtype, expected_dtype,
+                         f"Expected dtype {expected_dtype}, but got {input_ids_tensor.dtype}.")
