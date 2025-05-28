@@ -54,7 +54,7 @@ image = Image.open(requests.get(url, stream=True).raw)
 processor = ViTImageProcessor.from_pretrained("facebook/vit-mae-base")
 inputs = processor(image, return_tensors="pt").to("cuda")
 
-model = ViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base").to("cuda")
+model = ViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base", attn_implementation="sdpa").to("cuda")
 with torch.no_grad():
     outputs = model(**inputs)
 
