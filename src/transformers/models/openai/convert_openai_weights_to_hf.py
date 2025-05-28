@@ -36,21 +36,21 @@ from transformers.convert_slow_tokenizer import TikTokenConverter
 # If a weight needs to be split in two or more keys, use `|` to indicate it. ex:
 # r"layers.(\d+).attention.wqkv.weight": r"layers.\1.self_attn.q|k|v|_proj.weight"
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
-    r"norm.weight":                 r"norm.weight",
+    r"norm.scale":                 r"norm.weight",
     r"unembedding.weight":          r"lm_head.weight",
     r"embedding":                   r"embed_tokens",
     # special key, wqkv needs to be split afterwards
     r"block.(\d+).attn.qkv":        r"layers.\1.self_attn.qkv_proj",
     r"block.(\d+).attn.out":        r"layers.\1.self_attn.o_proj",
-    r"block.(\d+).attn.sinks":      r"layers.\1.self_attn.sinks",
-    r"block.(\d+).attn.norm":       r"layers.\1.input_layernorm.weight",
+    r"block.(\d+).attn.sdpa.sinks":      r"layers.\1.self_attn.sinks",
+    r"block.(\d+).attn.norm.scale":       r"layers.\1.input_layernorm.weight",
 
-    r"block.(\d+).mlp.mlp1_weight": r"layers.\1.mlp.gate_up_proj.weight",
-    r"block.(\d+).mlp.mlp1_bias":   r"layers.\1.mlp.gate_up_proj.bias",
-    r"block.(\d+).mlp.mlp2_weight": r"layers.\1.mlp.down_proj.weight",
-    r"block.(\d+).mlp.mlp2_bias":   r"layers.\1.mlp.down_proj.bias",
-    r"block.(\d+).mlp.norm":        r"layers.\1.post_attention_layernorm.weight",
-    r"block.(\d+).mlp.gate":        r"layers.\1.mlp.router.weight",
+    r"block.(\d+).mlp.mlp1_weight": r"layers.\1.mlp.experts.gate_up_proj",
+    r"block.(\d+).mlp.mlp1_bias":   r"layers.\1.mlp.experts.gate_up_proj_bias",
+    r"block.(\d+).mlp.mlp2_weight": r"layers.\1.mlp.experts.down_proj",
+    r"block.(\d+).mlp.mlp2_bias":   r"layers.\1.mlp.experts.down_proj_bias",
+    r"block.(\d+).mlp.norm.scale":        r"layers.\1.post_attention_layernorm.weight",
+    r"block.(\d+).mlp.gate":        r"layers.\1.mlp.router",
 }
 # fmt: on
 
@@ -101,14 +101,16 @@ def write_model(
     state_dict = {}
     for key in all_keys:
         # Post-process the current_parameter.
-        new_key = "model." + new_keys.get(key, key)
+        new_key = new_keys.get(key, key)
+        if "lm_head" not in new_key:
+            new_key = "model." + new_key
         print(f"Processing key: {key} -> {new_key}")
-        if re.search("qkv_proj.weight", new_key):
+        if re.search("qkv_proj", new_key):
             q, k, v = final_[key].chunk(3, dim=-1)
-            q_key = re.sub(r"(qkv)_proj.weight", "q", new_key)
+            q_key = re.sub(r"qkv_proj", "q_proj", new_key)
             state_dict[q_key] = q
-            k_key = re.sub(r"(qkv)_proj.weight", "k", new_key)
-            v_key = re.sub(r"(qkv)_proj.weight", "v", new_key)
+            k_key = re.sub(r"qkv_proj", "k_proj", new_key)
+            v_key = re.sub(r"qkv_proj", "v_proj", new_key)
             state_dict[k_key] = k
             state_dict[v_key] = v
         else:

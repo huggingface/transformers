@@ -22,7 +22,7 @@ from typing import Optional
 import torch
 import torch.utils.checkpoint
 from torch import nn
-
+from ...activations import ACT2FN
 from ...integrations.flex_attention import flex_attention_forward
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import logging
@@ -36,7 +36,6 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
     repeat_kv,
 )
-from ..llama4.modeling_llama4 import Llama4TextExperts
 from .configuration_openai import OpenaiConfig
 
 
@@ -47,8 +46,38 @@ class OpenaiRMSNorm(LlamaRMSNorm):
     pass
 
 
-class OpenaiExperts(Llama4TextExperts):
-    pass
+class OpenaiExperts(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.num_experts = config.num_local_experts
+        self.intermediate_size = config.intermediate_size
+        self.hidden_size = config.hidden_size
+        self.expert_dim = self.intermediate_size
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_size, 2 * self.expert_dim))
+        self.gate_up_proj_bias = nn.Parameter(torch.empty(self.num_experts, 2 * self.expert_dim))
+        self.down_proj = nn.Parameter(torch.empty((self.num_experts, self.expert_dim, self.hidden_size)))
+        self.down_proj_bias = nn.Parameter(torch.empty(self.num_experts, self.expert_dim))
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """
+        This should really not be run on a single machine, as we are reaching compute bound:
+        - the inputs are expected to be "sorted" per expert already.
+        - the weights are viewed with another dim, to match num_expert, 1, shape * num_tokens, shape
+
+        Args:
+            hidden_states (torch.Tensor): (batch_size * token_num, hidden_size)
+            selected_experts (torch.Tensor): (batch_size * token_num, top_k)
+            routing_weights (torch.Tensor): (batch_size * token_num, top_k)
+        Returns:
+            torch.Tensor
+        """
+        hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
+        gate_up = torch.bmm(hidden_states, self.gate_up_proj) + self.gate_up_proj_bias.unsqueeze(1)
+        gate, up = gate_up.chunk(2, dim=-1)  # not supported for DTensors
+        next_states = torch.bmm((up * self.act_fn(gate)), self.down_proj) + self.down_proj_bias.unsqueeze(1)
+        next_states = next_states.view(-1, self.hidden_size)
+        return next_states
 
 
 class OpenaiMLP(nn.Module):
@@ -58,7 +87,7 @@ class OpenaiMLP(nn.Module):
         self.hidden_dim = config.hidden_size
         self.num_local_experts = config.num_local_experts
         self.experts = OpenaiExperts(config)
-        self.router = nn.Linear(config.hidden_size, config.num_local_experts, bias=False)
+        self.router = nn.Linear(config.hidden_size, config.num_local_experts, bias=True)
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
@@ -142,7 +171,7 @@ ALL_ATTENTION_FUNCTIONS.register("openai_flex_attention", openai_flex_attention_
 class OpenaiAttention(LlamaAttention):
     def __init__(self, config: OpenaiConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.sinks = torch.empty(config.num_attention_heads)
+        self.register_buffer("sinks", torch.empty(config.num_attention_heads), persistent=True)
 
 class OpenaiDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: OpenaiConfig, layer_idx: int):
