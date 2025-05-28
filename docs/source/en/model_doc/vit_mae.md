@@ -77,7 +77,9 @@ reconstruction = outputs.logits
 from transformers import ViTMAEModel
 model = ViTMAEModel.from_pretrained("facebook/vit-mae-base", attn_implementation="sdpa", torch_dtype=torch.float16)
 ...
-```
+## Resources
+
+- Refer to this [notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/ViTMAE/ViT_MAE_visualization_demo.ipynb) to learn how to visualize the reconstructed pixels from [`ViTMAEForPreTraining`].
 
 ## ViTMAEConfig
 
