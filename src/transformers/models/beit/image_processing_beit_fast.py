@@ -137,12 +137,22 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return processed_images
 
+    def _preprocess_images(
+        self,
+        images,
+        **kwargs,
+    ):
+        """Preprocesses images."""
+        kwargs["do_reduce_labels"] = False
+        processed_images = self._preprocess(images=images, **kwargs)
+        return processed_images
+
     def _preprocess_segmentation_maps(
         self,
         segmentation_maps,
         **kwargs,
     ):
-        """Preprocesses a single segmentation map."""
+        """Preprocesses segmentation maps."""
         processed_segmentation_maps = []
         for segmentation_map in segmentation_maps:
             segmentation_map = self._process_image(
@@ -215,7 +225,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         kwargs.pop("default_to_square")
         kwargs.pop("data_format")
 
-        images = self._preprocess(
+        images = self._preprocess_images(
             images=images,
             **kwargs,
         )
