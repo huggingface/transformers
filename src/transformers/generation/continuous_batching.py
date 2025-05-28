@@ -72,6 +72,7 @@ class GenerationOutput:
     error: Optional[str] = None
     status: RequestStatus = RequestStatus.PENDING
     created_time: float = field(default_factory=time.time)
+    next_token: Optional[int] = None  # Used for streaming generation
 
 
 @dataclass
@@ -96,6 +97,7 @@ class RequestState:
     eos_token_id: int = -1
     created_time: float = field(default_factory=time.time)
     error: Optional[str] = None
+    next_token: Optional[int] = None  # Used for streaming generation
 
     def current_len(self) -> int:
         """Get the current length of the sequence (prompt + generated tokens)."""
@@ -139,6 +141,7 @@ class RequestState:
             generated_tokens=self.static_outputs,
             logprobs=[],
             error=self.error,
+            next_token=self.next_token,
         )
 
 
