@@ -357,6 +357,7 @@ else:
         "EncoderDecoderCache",
         "HQQQuantizedCache",
         "HybridCache",
+        "LagKVCache",
         "MambaCache",
         "OffloadedCache",
         "OffloadedStaticCache",
@@ -364,7 +365,6 @@ else:
         "QuantizedCacheConfig",
         "QuantoQuantizedCache",
         "SinkCache",
-        "LagKVCache",
         "SlidingWindowCache",
         "StaticCache",
     ]
@@ -838,6 +838,7 @@ if TYPE_CHECKING:
             EncoderDecoderCache,
             HQQQuantizedCache,
             HybridCache,
+            LagKVCache,
             MambaCache,
             OffloadedCache,
             OffloadedStaticCache,
@@ -845,7 +846,6 @@ if TYPE_CHECKING:
             QuantizedCacheConfig,
             QuantoQuantizedCache,
             SinkCache,
-            LagKVCache,
             SlidingWindowCache,
             StaticCache,
         )

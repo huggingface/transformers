@@ -34,7 +34,7 @@ from torch.fx._symbolic_trace import is_fx_tracing
 from torch.fx.proxy import ParameterProxy
 
 from .. import logging
-from ..cache_utils import Cache, DynamicCache, SinkCache, LagKVCache, StaticCache
+from ..cache_utils import Cache, DynamicCache, LagKVCache, SinkCache, StaticCache
 from ..modeling_utils import PretrainedConfig, PreTrainedModel
 from ..models.auto import get_values
 from ..models.auto.modeling_auto import (
@@ -832,17 +832,17 @@ ProxyableDynamicCache = HFProxyableClassMeta(
     {},
     proxy_factory_fn=create_cache_proxy_factory_fn(DynamicCache),
 )
-ProxyableSinkCache = HFProxyableClassMeta(
-    "ProxyableSinkCache",
-    (SinkCache,),
-    {},
-    proxy_factory_fn=create_cache_proxy_factory_fn(SinkCache),
-)
 ProxyableLagKVCache = HFProxyableClassMeta(
     "ProxyableLagKVCache",
     (LagKVCache,),
     {},
     proxy_factory_fn=create_cache_proxy_factory_fn(LagKVCache),
+)
+ProxyableSinkCache = HFProxyableClassMeta(
+    "ProxyableSinkCache",
+    (SinkCache,),
+    {},
+    proxy_factory_fn=create_cache_proxy_factory_fn(SinkCache),
 )
 ProxyableStaticCache = HFProxyableClassMeta(
     "ProxyableStaticCache",
@@ -886,8 +886,8 @@ class HFTracer(Tracer):
     _CLASSES_TO_PATCH = {
         Cache: ProxyableCache,
         DynamicCache: ProxyableDynamicCache,
-        SinkCache: ProxyableSinkCache,
         LagKVCache: ProxyableLagKVCache,
+        SinkCache: ProxyableSinkCache,
         StaticCache: ProxyableStaticCache,
     }
 
