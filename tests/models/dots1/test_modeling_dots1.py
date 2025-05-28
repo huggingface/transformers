@@ -60,8 +60,8 @@ class Dots1ModelTester(CausalLMModelTester):
         super().__init__(parent=parent, num_experts_per_tok=num_experts_per_tok)
         self.n_routed_experts = n_routed_experts
         self.n_shared_experts = n_shared_experts
-        self.n_group = 1
-        self.topk_group = 1
+        self.n_group = n_group
+        self.topk_group = topk_group
 
 
 @require_torch
