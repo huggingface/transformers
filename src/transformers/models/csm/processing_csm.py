@@ -31,10 +31,7 @@ if is_soundfile_available():
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import (
-    PreTokenizedInput,
-    TextInput,
-)
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 class CsmAudioKwargs(AudioKwargs, total=False):
@@ -99,7 +96,6 @@ class CsmProcessor(ProcessorMixin):
     """
 
     attributes = ["feature_extractor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
     feature_extractor_class = "EncodecFeatureExtractor"
     tokenizer_class = "PreTrainedTokenizerFast"
 
