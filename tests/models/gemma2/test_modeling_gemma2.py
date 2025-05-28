@@ -33,7 +33,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...models.gemma.test_modeling_gemma import GemmaModelTest, GemmaModelTester
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_configuration_common import ConfigTester
 
 
@@ -48,17 +48,28 @@ if is_torch_available():
     )
 
 
-class Gemma2ModelTester(GemmaModelTester):
+class Gemma2ModelTester(CausalLMModelTester):
     if is_torch_available():
         config_class = Gemma2Config
-        model_class = Gemma2Model
-        for_causal_lm_class = Gemma2ForCausalLM
-        for_sequence_class = Gemma2ForSequenceClassification
-        for_token_class = Gemma2ForTokenClassification
+        base_model_class = Gemma2Model
+        causal_lm_class = Gemma2ForCausalLM
+        sequence_class = Gemma2ForSequenceClassification
+        token_class = Gemma2ForTokenClassification
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": Gemma2Model,
+            "text-classification": Gemma2ForSequenceClassification,
+            "token-classification": Gemma2ForTokenClassification,
+            "text-generation": Gemma2ForCausalLM,
+            "zero-shot": Gemma2ForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
 
 @require_torch
-class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
+class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
         (Gemma2Model, Gemma2ForCausalLM, Gemma2ForSequenceClassification, Gemma2ForTokenClassification)
         if is_torch_available()
@@ -75,10 +86,12 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
+
     test_headmasking = False
     test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
+    model_tester_class = Gemma2ModelTester
 
     def setUp(self):
         self.model_tester = Gemma2ModelTester(self)
@@ -143,13 +156,9 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
-    @unittest.skip("Gemma2's eager attn/sdpa attn outputs are expected to be different")
-    def test_sdpa_equivalence(self):
-        pass
-
     @unittest.skip(
         reason="HybridCache can't be gathered because it is not iterable. Adding a simple iter and dumping `distributed_iterator`"
-        " as in Dynamic Cache doesnt work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
+        " as in Dynamic Cache doesn't work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
     )
     def test_multi_gpu_data_parallel_forward(self):
         pass
@@ -158,20 +167,15 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_eager_matches_fa2_generate(self):
         pass
 
+    @unittest.skip("Gemma2 eager/FA2 attention outputs are expected to be different")
+    def test_flash_attn_2_equivalence(self):
+        pass
+
 
 @slow
 @require_torch_accelerator
 class Gemma2IntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
-
-    @classmethod
-    def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     @tooslow
     @require_read_token
@@ -336,6 +340,44 @@ class Gemma2IntegrationTest(unittest.TestCase):
         )
         ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
+
+    @slow
+    @require_read_token
+    def test_export_hybrid_cache(self):
+        from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
+        from transformers.pytorch_utils import is_torch_greater_or_equal
+
+        if not is_torch_greater_or_equal("2.6.0"):
+            self.skipTest(reason="This test requires torch >= 2.6 to run.")
+
+        model_id = "google/gemma-2-2b"
+        model = AutoModelForCausalLM.from_pretrained(model_id)
+        self.assertEqual(model.config.cache_implementation, "hybrid")
+
+        # Export + HybridCache
+        model.eval()
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
+        exported_program = exportable_module.export()
+
+        # Test generation with the exported model
+        prompt = "What is the capital of France?"
+        max_new_tokens_to_generate = 20
+        # Generate text with the exported model
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        export_generated_text = TorchExportableModuleForDecoderOnlyLM.generate(
+            exported_program, tokenizer, prompt, max_new_tokens=max_new_tokens_to_generate
+        )
+
+        input_text = tokenizer(prompt, return_tensors="pt")
+        with torch.no_grad():
+            eager_outputs = model.generate(
+                **input_text,
+                max_new_tokens=max_new_tokens_to_generate,
+                do_sample=False,  # Use greedy decoding to match the exported model
+            )
+
+        eager_generated_text = tokenizer.decode(eager_outputs[0], skip_special_tokens=True)
+        self.assertEqual(export_generated_text, eager_generated_text)
 
     @require_read_token
     @tooslow

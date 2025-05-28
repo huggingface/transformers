@@ -57,8 +57,8 @@ else:
     IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
             ("align", ("EfficientNetImageProcessor", "EfficientNetImageProcessorFast")),
-            ("aria", ("AriaImageProcessor",)),
-            ("beit", ("BeitImageProcessor",)),
+            ("aria", ("AriaImageProcessor")),
+            ("beit", ("BeitImageProcessor", "BeitImageProcessorFast")),
             ("bit", ("BitImageProcessor", "BitImageProcessorFast")),
             ("blip", ("BlipImageProcessor", "BlipImageProcessorFast")),
             ("blip-2", ("BlipImageProcessor", "BlipImageProcessorFast")),
@@ -71,7 +71,7 @@ else:
             ("convnext", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("convnextv2", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("cvt", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
-            ("data2vec-vision", ("BeitImageProcessor",)),
+            ("data2vec-vision", ("BeitImageProcessor", "BeitImageProcessorFast")),
             ("deformable_detr", ("DeformableDetrImageProcessor", "DeformableDetrImageProcessorFast")),
             ("deit", ("DeiTImageProcessor", "DeiTImageProcessorFast")),
             ("depth_anything", ("DPTImageProcessor",)),
@@ -117,7 +117,7 @@ else:
             ("mistral3", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("mlcd", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("mllama", ("MllamaImageProcessor",)),
-            ("mobilenet_v1", ("MobileNetV1ImageProcessor",)),
+            ("mobilenet_v1", ("MobileNetV1ImageProcessor", "MobileNetV1ImageProcessorFast")),
             ("mobilenet_v2", ("MobileNetV2ImageProcessor", "MobileNetV2ImageProcessorFast")),
             ("mobilevit", ("MobileViTImageProcessor",)),
             ("mobilevitv2", ("MobileViTImageProcessor",)),
@@ -128,19 +128,20 @@ else:
             ("owlvit", ("OwlViTImageProcessor", "OwlViTImageProcessorFast")),
             ("paligemma", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("perceiver", ("PerceiverImageProcessor", "PerceiverImageProcessorFast")),
-            ("phi4_multimodal", "Phi4MultimodalImageProcessorFast"),
+            ("phi4_multimodal", ("Phi4MultimodalImageProcessorFast",)),
             ("pix2struct", ("Pix2StructImageProcessor",)),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
-            ("poolformer", ("PoolFormerImageProcessor",)),
+            ("poolformer", ("PoolFormerImageProcessor", "PoolFormerImageProcessorFast")),
             ("prompt_depth_anything", ("PromptDepthAnythingImageProcessor",)),
-            ("pvt", ("PvtImageProcessor",)),
-            ("pvt_v2", ("PvtImageProcessor",)),
+            ("pvt", ("PvtImageProcessor", "PvtImageProcessorFast")),
+            ("pvt_v2", ("PvtImageProcessor", "PvtImageProcessorFast")),
             ("qwen2_5_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("qwen2_vl", ("Qwen2VLImageProcessor", "Qwen2VLImageProcessorFast")),
             ("regnet", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("resnet", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("rt_detr", ("RTDetrImageProcessor", "RTDetrImageProcessorFast")),
             ("sam", ("SamImageProcessor",)),
+            ("sam_hq", ("SamImageProcessor",)),
             ("segformer", ("SegformerImageProcessor",)),
             ("seggpt", ("SegGptImageProcessor",)),
             ("shieldgemma2", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
@@ -149,7 +150,7 @@ else:
             ("superglue", ("SuperGlueImageProcessor",)),
             ("swiftformer", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("swin", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("swin2sr", ("Swin2SRImageProcessor",)),
+            ("swin2sr", ("Swin2SRImageProcessor", "Swin2SRImageProcessorFast")),
             ("swinv2", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("table-transformer", ("DetrImageProcessor",)),
             ("timesformer", ("VideoMAEImageProcessor",)),
@@ -160,13 +161,13 @@ else:
             ("upernet", ("SegformerImageProcessor",)),
             ("van", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("videomae", ("VideoMAEImageProcessor",)),
-            ("vilt", ("ViltImageProcessor",)),
+            ("vilt", ("ViltImageProcessor", "ViltImageProcessorFast")),
             ("vipllava", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("vit", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("vit_hybrid", ("ViTHybridImageProcessor",)),
             ("vit_mae", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("vit_msn", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("vitmatte", ("VitMatteImageProcessor",)),
+            ("vitmatte", ("VitMatteImageProcessor", "VitMatteImageProcessorFast")),
             ("xclip", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("yolos", ("YolosImageProcessor", "YolosImageProcessorFast")),
             ("zoedepth", ("ZoeDepthImageProcessor",)),
@@ -538,26 +539,29 @@ class AutoImageProcessor:
 
         has_remote_code = image_processor_auto_map is not None
         has_local_code = image_processor_class is not None or type(config) in IMAGE_PROCESSOR_MAPPING
-        trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
-        )
-
-        if image_processor_auto_map is not None and not isinstance(image_processor_auto_map, tuple):
-            # In some configs, only the slow image processor class is stored
-            image_processor_auto_map = (image_processor_auto_map, None)
+        if has_remote_code:
+            if image_processor_auto_map is not None and not isinstance(image_processor_auto_map, tuple):
+                # In some configs, only the slow image processor class is stored
+                image_processor_auto_map = (image_processor_auto_map, None)
+            if use_fast and image_processor_auto_map[1] is not None:
+                class_ref = image_processor_auto_map[1]
+            else:
+                class_ref = image_processor_auto_map[0]
+            if "--" in class_ref:
+                upstream_repo = class_ref.split("--")[0]
+            else:
+                upstream_repo = None
+            trust_remote_code = resolve_trust_remote_code(
+                trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
+            )
 
         if has_remote_code and trust_remote_code:
             if not use_fast and image_processor_auto_map[1] is not None:
                 _warning_fast_image_processor_available(image_processor_auto_map[1])
 
-            if use_fast and image_processor_auto_map[1] is not None:
-                class_ref = image_processor_auto_map[1]
-            else:
-                class_ref = image_processor_auto_map[0]
             image_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
-            if os.path.isdir(pretrained_model_name_or_path):
-                image_processor_class.register_for_auto_class()
+            image_processor_class.register_for_auto_class()
             return image_processor_class.from_dict(config_dict, **kwargs)
         elif image_processor_class is not None:
             return image_processor_class.from_dict(config_dict, **kwargs)

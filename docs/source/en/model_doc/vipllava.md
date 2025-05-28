@@ -101,6 +101,10 @@ A chat between a curious human and an artificial intelligence assistant. The ass
 
 [[autodoc]] VipLlavaConfig
 
+## VipLlavaModel
+
+[[autodoc]] VipLlavaModel
+
 ## VipLlavaForConditionalGeneration
 
 [[autodoc]] VipLlavaForConditionalGeneration

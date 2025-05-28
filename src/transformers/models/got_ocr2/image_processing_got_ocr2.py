@@ -172,7 +172,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         crop_to_patches: bool = False,
         min_patches: int = 1,
         max_patches: int = 12,
@@ -419,7 +419,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         min_patches: int,
         max_patches: int,
         use_thumbnail: bool = True,
-        patch_size: Union[Tuple, int, dict] = None,
+        patch_size: Optional[Union[Tuple, int, dict]] = None,
         data_format: ChannelDimension = None,
     ):
         """
@@ -490,6 +490,34 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
             processed_images.append(thumbnail_img)
 
         return processed_images
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of patches per image.
+        """
+        min_patches = images_kwargs.get("min_patches", None) or self.min_patches
+        max_patches = images_kwargs.get("max_patches", None) or self.max_patches
+        patch_size = images_kwargs.get("size", None) or self.size
+        crop_to_patches = images_kwargs.get("crop_to_patches", None) or self.crop_to_patches
+
+        num_patches = 1
+        if crop_to_patches and max_patches > 1:
+            num_columns, num_rows = get_optimal_tiled_canvas(
+                (height, width), (patch_size["height"], patch_size["width"]), min_patches, max_patches
+            )
+            num_patches += num_columns * num_rows
+
+        return num_patches
 
 
 __all__ = ["GotOcr2ImageProcessor"]
