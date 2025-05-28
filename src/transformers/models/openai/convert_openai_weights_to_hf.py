@@ -96,15 +96,17 @@ def write_model(
     ]
 
     print("Converting ..")
-    all_keys = list(loaded[0].keys())
+    weights = torch.cat(loaded, dim=0)
+    all_keys = weights.keys()
     new_keys = convert_old_keys_to_new_keys(all_keys)
 
     state_dict = {}
     for key in all_keys:
         # Post-process the current_parameter.
         new_key = "model." + new_keys.get(key, key)
+        print(f"Processing key: {key} -> {new_key}")
         if re.search("qkv_proj.weight", new_key):
-            q, k, v = loaded[0][key].chunk(3, dim=-1)
+            q, k, v = weights[key].chunk(3, dim=-1)
             q_key = re.sub(r"(qkv)_proj.weight", "q", new_key)
             state_dict[q_key] = q
             k_key = re.sub(r"(qkv)_proj.weight", "k", new_key)
