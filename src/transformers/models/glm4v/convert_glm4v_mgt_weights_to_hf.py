@@ -270,7 +270,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         num_heads = model_config.get("num_attention_heads", 32)
         num_kv_heads = model_config.get("num_query_groups", 2)
         hidden_size = model_config.get("hidden_size", 4096)
-        head_dim = hidden_size // num_heads
+        head_dim = model_config.get("attention_dim", hidden_size // num_heads)
 
     print(
         f"Model parameters: num_layers={num_layers}, vision_num_layers={vision_num_layers}, "
@@ -585,7 +585,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         "max_window_layers": model_config.get("num_layers", 40),
         "num_attention_heads": model_config.get("num_attention_heads", 32),
         "num_hidden_layers": model_config.get("num_layers", 40),
-        "num_key_value_heads": model_config.get("num_query_groups", 2),
+        "num_key_value_heads": model_config.get("multi_query_group_num", 2),
         "rms_norm_eps": model_config.get("layernorm_epsilon", 1e-05),
         "rope_theta": model_config.get("rotary_base", 10000.0),
         "tie_word_embeddings": False,
@@ -608,9 +608,9 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
             "in_chans": 3,
             "hidden_size": model_config["vision_config"].get("hidden_size", 1536),
             "intermediate_size": model_config.get("ffn_hidden_size", 13696),
-            "patch_size": model_config["vision_config"].get("patch_size", 14)[-1],
+            "patch_size": model_config["vision_config"].get("patch_size", 14),
             "spatial_merge_size": model_config["vision_config"].get("downsample_ratio", 2),
-            "temporal_patch_size": model_config["vision_config"].get("patch_size", 1)[0],
+            "temporal_patch_size": model_config["vision_config"].get("patch_size", 1),
         }
         hf_config["vision_config"] = vision_config
 

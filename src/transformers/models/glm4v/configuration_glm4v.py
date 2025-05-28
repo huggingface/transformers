@@ -256,6 +256,10 @@ class Glm4vConfig(PretrainedConfig):
             The image token index to encode the image prompt.
         video_token_id (`int`, *optional*, defaults to 151344):
             The video token index to encode the image prompt.
+        vision_start_token_id (`int`, *optional*, defaults to 151341):
+            The vision start token index to encode the start of vision.
+        vision_end_token_id (`int`, *optional*, defaults to 151342):
+            The vision end token index to encode the end of vision.
 
     ```python
     >>> from transformers import Glm4vForConditionalGeneration, Glm4vConfig
