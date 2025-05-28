@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_moshi_asr import *
     from .modeling_moshi_asr import *
+    from .processing_moshi_asr import *
 else:
     import sys
 
