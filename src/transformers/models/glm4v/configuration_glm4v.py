@@ -106,13 +106,13 @@ class Glm4vTextConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
+        rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         use_sliding_window (`bool`, *optional*, defaults to `False`):
             Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 4096):
             Sliding window attention (SWA) window size. If not specified, will default to `4096`.
-        max_window_layers (`int`, *optional*, defaults to 80):
+        max_window_layers (`int`, *optional*, defaults to 40):
             The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
@@ -248,9 +248,9 @@ class Glm4vConfig(PretrainedConfig):
             The config object or dictionary of the text backbone.
         vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Glm4vVisionConfig`):
             The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to 151655):
+        image_token_id (`int`, *optional*, defaults to 151343):
             The image token index to encode the image prompt.
-        video_token_id (`int`, *optional*, defaults to 151656):
+        video_token_id (`int`, *optional*, defaults to 151344):
             The video token index to encode the image prompt.
 
     ```python
