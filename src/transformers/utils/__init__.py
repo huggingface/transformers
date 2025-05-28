@@ -178,6 +178,7 @@ from .import_utils import (
     is_librosa_available,
     is_liger_kernel_available,
     is_lomo_available,
+    is_matplotlib_available,
     is_mlx_available,
     is_natten_available,
     is_ninja_available,
