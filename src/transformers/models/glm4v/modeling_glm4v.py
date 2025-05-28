@@ -300,9 +300,9 @@ class Glm4vVisionFlashAttention2(nn.Module):
 
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
-    x1 = x[..., 0::2]
-    x2 = x[..., 1::2]
-    return torch.stack((-x2, x1), dim=-1).flatten(-2)
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
 
 
 def apply_rotary_pos_emb_vision(
@@ -569,6 +569,7 @@ class Glm4vVisionTransformerPretrainedModel(Glm4vPreTrainedModel):
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
         seqlens = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
         hidden_states = self.embeddings(hidden_states, seqlens, grid_thw, image_type_ids[:, 0], image_type_ids[:, 1])
+
         for blk in self.blocks:
             if self.gradient_checkpointing and self.training:
                 hidden_states = self._gradient_checkpointing_func(
@@ -672,8 +673,8 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
 
     # Apply rotary embeddings on the first half or full tensor
-    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
-    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
+    q_embed = (q_rot * cos) + (rotate_half_llm(q_rot) * sin)
+    k_embed = (k_rot * cos) + (rotate_half_llm(k_rot) * sin)
 
     # Concatenate back to full shape
     q_embed = torch.cat([q_embed, q_pass], dim=-1)
@@ -692,6 +693,13 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
         return hidden_states
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def rotate_half_llm(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., 0::2]
+    x2 = x[..., 1::2]
+    return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
 class Glm4vAttention(nn.Module):
@@ -983,6 +991,7 @@ class Glm4vSdpaAttention(Glm4vAttention):
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
         is_causal = True if causal_mask is None and q_len > 1 else False
+
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
@@ -1445,15 +1454,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
             if pixel_values is not None:
                 image_embeds = self.get_image_features(pixel_values, image_grid_thw)
-                # if image_embeds.shape[0] == 1250:
-                #     print("Origin: ========")
-                #     print(image_embeds)
-                #     print("New: ========")
-                #     from safetensors.torch import load_file
-                #
-                #     loaded_data = load_file("/mnt/image_embed.safetensors")
-                #     image_embeds = loaded_data["image_embeds"]
-                #     print("loaded:\n", image_embeds)
                 n_image_tokens = (input_ids == self.config.image_token_id).sum()
                 n_image_features = image_embeds.shape[0]
                 if not is_torchdynamo_compiling() and n_image_tokens != n_image_features:
@@ -1827,6 +1827,7 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
             config=self.config,
             past_key_values=past_key_values,
         )
+
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None

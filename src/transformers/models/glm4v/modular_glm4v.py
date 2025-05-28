@@ -48,8 +48,7 @@ from transformers.models.qwen2_5_vl.processing_qwen2_5_vl import (
     Qwen2_5_VLVideosProcessorKwargs,
     Qwen2_5_VLProcessorKwargs,
 )
-from transformers.models.glm4.modeling_glm4 import Glm4RMSNorm, Glm4MLP, rotate_half
-
+from transformers.models.glm4.modeling_glm4 import Glm4RMSNorm, Glm4MLP
 from transformers.models.qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
 from transformers.models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ...activations import ACT2FN
@@ -390,6 +389,13 @@ class Glm4vVisionEmbeddings(nn.Module):
         return embeddings
 
 
+def rotate_half_llm(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., 0::2]
+    x2 = x[..., 1::2]
+    return torch.stack((-x2, x1), dim=-1).flatten(-2)
+
+
 def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim=1):
     """Applies Rotary Position Embedding with Multimodal Sections to the query and key tensors (https://qwenlm.github.io/blog/qwen2-vl/).
 
@@ -437,8 +443,8 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
 
     # Apply rotary embeddings on the first half or full tensor
-    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
-    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
+    q_embed = (q_rot * cos) + (rotate_half_llm(q_rot) * sin)
+    k_embed = (k_rot * cos) + (rotate_half_llm(k_rot) * sin)
 
     # Concatenate back to full shape
     q_embed = torch.cat([q_embed, q_pass], dim=-1)
