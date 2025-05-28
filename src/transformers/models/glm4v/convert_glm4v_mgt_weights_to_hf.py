@@ -13,15 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
+import json
 import os
 import pickle
 import re
-import torch
-import json
-import argparse
 from pathlib import Path
+from typing import Callable, Dict, List, Optional
+
+import torch
 from safetensors.torch import save_file
-from typing import List, Optional, Dict, Callable
 
 
 # Avoid Using Megatron Lib
@@ -425,7 +426,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         current_tp=0,
         slice_dim=0,
     )
-    complete_state_dict[f"model.language_model.embed_tokens.weight"] = embed_tokens.clone()
+    complete_state_dict["model.language_model.embed_tokens.weight"] = embed_tokens.clone()
     lm_head = merge_tensors(
         tp_sd=mgt_sd[-1],
         keys=["model", "output_layer.weight"],
@@ -434,8 +435,8 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         current_tp=0,
         slice_dim=0,
     )
-    complete_state_dict[f"lm_head.weight"] = lm_head.clone()
-    complete_state_dict[f"model.language_model.norm.weight"] = mgt_sd[-1][rank]["model"][
+    complete_state_dict["lm_head.weight"] = lm_head.clone()
+    complete_state_dict["model.language_model.norm.weight"] = mgt_sd[-1][rank]["model"][
         "decoder.final_layernorm.weight"
     ].clone()
     mgt_encoder_tp_0 = dict_access_multi(mgt_sd[0][0], keys)

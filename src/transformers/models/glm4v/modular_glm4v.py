@@ -18,45 +18,47 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Union, Tuple
-
 import itertools
+from typing import List, Optional, Tuple, Union
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch.nn import LayerNorm
 
+from transformers.models.glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm
 from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLTextConfig
 from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
-    Qwen2_5_VLForConditionalGeneration,
     Qwen2_5_VisionPatchEmbed,
-    Qwen2_5_VLModel,
-    Qwen2_5_VLVisionAttention,
     Qwen2_5_VisionRotaryEmbedding,
-    Qwen2_5_VLVisionSdpaAttention,
-    Qwen2_5_VLVisionFlashAttention2,
-    Qwen2_5_VLMLP,
     Qwen2_5_VLDecoderLayer,
-    Qwen2_5_VLVisionBlock,
-    Qwen2_5_VLTextModel,
+    Qwen2_5_VLForConditionalGeneration,
+    Qwen2_5_VLMLP,
+    Qwen2_5_VLModel,
     Qwen2_5_VLPreTrainedModel,
+    Qwen2_5_VLTextModel,
+    Qwen2_5_VLVisionAttention,
+    Qwen2_5_VLVisionBlock,
+    Qwen2_5_VLVisionFlashAttention2,
+    Qwen2_5_VLVisionSdpaAttention,
 )
 from transformers.models.qwen2_5_vl.processing_qwen2_5_vl import (
     Qwen2_5_VLImagesKwargs,
     Qwen2_5_VLProcessor,
-    Qwen2_5_VLVideosProcessorKwargs,
     Qwen2_5_VLProcessorKwargs,
+    Qwen2_5_VLVideosProcessorKwargs,
 )
-from transformers.models.glm4.modeling_glm4 import Glm4RMSNorm, Glm4MLP
+
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...feature_extraction_utils import BatchFeature
+from ...utils import logging
 from ...video_utils import VideoInput
+
 
 logger = logging.get_logger(__name__)
 
