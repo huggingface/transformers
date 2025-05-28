@@ -3,7 +3,7 @@ import torch
 from transformers.models.qwen2.tokenization_qwen2 import Qwen2Tokenizer
 
 tokenizer = Qwen2Tokenizer.from_pretrained(
-    "./local_models/Qwen2.5-0.5B", trust_remote_code=False, local_files_only=True
+    "Qwen/Qwen2.5-0.5B", trust_remote_code=True
 )
 
 text_inputs = tokenizer([""], return_tensors="pt")
