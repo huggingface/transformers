@@ -388,7 +388,7 @@ class FIFOScheduler(Scheduler):
         """Add a request to the waiting list."""
         if self.retain_cache_on_finish and state.request_id in self.active_requests:
             old_state = self.active_requests.pop(state.request_id)
-            state.prompt_ids = state.prompt_ids[len(old_state.full_prompt_ids):]
+            state.prompt_ids = state.prompt_ids[len(old_state.full_prompt_ids) :]
             state.allocated_blocks = old_state.allocated_blocks
             state.position_offset = old_state.position_offset
         self.waiting_requests[state.request_id] = state
@@ -507,7 +507,7 @@ class PrefillFirstScheduler(Scheduler):
         """Add a request to the waiting list."""
         if self.retain_cache_on_finish and state.request_id in self.active_requests:
             old_state = self.active_requests.pop(state.request_id)
-            state.prompt_ids = state.prompt_ids[len(old_state.full_prompt_ids):] # XXX: check for indexing error?
+            state.prompt_ids = state.prompt_ids[len(old_state.full_prompt_ids) :]  # XXX: check for indexing error?
             state.allocated_blocks = old_state.allocated_blocks
             state.position_offset = old_state.position_offset
         self.waiting_requests[state.request_id] = state
@@ -1069,7 +1069,14 @@ class ContinuousBatchingManager:
     retrieving results, and managing the background generation thread.
     """
 
-    def __init__(self, model, generation_config: GenerationConfig, manual_eviction: bool = False, max_queue_size=0, streaming: bool = True):
+    def __init__(
+        self,
+        model,
+        generation_config: GenerationConfig,
+        manual_eviction: bool = False,
+        max_queue_size=0,
+        streaming: bool = True,
+    ):
         """Initialize the continuous batching manager.
 
         Args:
@@ -1405,7 +1412,11 @@ class ContinuousMixin:
 
         # Create and return the manager
         return ContinuousBatchingManager(
-            model=self, generation_config=gen_config, manual_eviction=manual_eviction, max_queue_size=max_queue_size, streaming=streaming
+            model=self,
+            generation_config=gen_config,
+            manual_eviction=manual_eviction,
+            max_queue_size=max_queue_size,
+            streaming=streaming,
         )
 
     @traced
