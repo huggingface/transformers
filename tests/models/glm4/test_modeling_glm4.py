@@ -80,8 +80,6 @@ class Glm4ModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_large_gpu
 class Glm4IntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
-    model_id = "THUDM/GLM-4-9B-0414"
-    revision = "refs/pr/15"
 
     def test_model_9b_fp16(self):
         EXPECTED_TEXTS = [
@@ -90,10 +88,10 @@ class Glm4IntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16, revision=self.revision
+            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16
         ).to(torch_device)
 
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -108,10 +106,10 @@ class Glm4IntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, revision=self.revision
+            self.model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
         ).to(torch_device)
 
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -134,7 +132,7 @@ class Glm4IntegrationTest(unittest.TestCase):
         )
         model.to(torch_device)
 
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -158,7 +156,7 @@ class Glm4IntegrationTest(unittest.TestCase):
         )
         model.to(torch_device)
 
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -183,7 +181,7 @@ class Glm4IntegrationTest(unittest.TestCase):
         )
         model.to(torch_device)
 
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
