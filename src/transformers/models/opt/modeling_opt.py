@@ -793,6 +793,7 @@ class OPTModel(OPTPreTrainedModel):
             attentions=decoder_outputs.attentions,
         )
 
+
 class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 

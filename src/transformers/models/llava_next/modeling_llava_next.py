@@ -536,6 +536,7 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
             image_hidden_states=image_features if pixel_values is not None else None,
         )
 
+
 @auto_docstring(
     custom_intro="""
     The LLAVA-NeXT model which consists of a vision backbone and a language model.

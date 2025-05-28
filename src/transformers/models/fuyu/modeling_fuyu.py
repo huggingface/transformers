@@ -31,6 +31,7 @@ from .configuration_fuyu import FuyuConfig
 
 logger = logging.get_logger(__name__)
 
+
 @auto_docstring
 class FuyuPreTrainedModel(PreTrainedModel):
     config_class = FuyuConfig
@@ -53,6 +54,7 @@ class FuyuPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
 
 @auto_docstring(
     custom_intro="""
@@ -272,7 +274,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         logits_to_keep: Optional[int] = 0,
-        **kwargs: Unpack[LossKwargs], # change to ForCausalLMKwargs when FA2 is added
+        **kwargs: Unpack[LossKwargs],  # change to ForCausalLMKwargs when FA2 is added
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):

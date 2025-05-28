@@ -960,6 +960,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
         elif isinstance(module, IdeficsPerceiverResampler):
             module.latents.data.normal_()
 
+
 @auto_docstring
 class IdeficsModel(IdeficsPreTrainedModel):
     """

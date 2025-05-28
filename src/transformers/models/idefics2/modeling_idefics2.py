@@ -1132,6 +1132,7 @@ class Idefics2Model(Idefics2PreTrainedModel):
             image_hidden_states=image_hidden_states,
         )
 
+
 @auto_docstring(
     custom_intro="""
     The Idefics2 Model with a language modeling head. It is made up a SigLIP vision encoder, with a language modeling head on top.

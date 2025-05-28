@@ -1463,6 +1463,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
             attentions=all_self_attns,
         )
 
+
 @auto_docstring(
     custom_intro="""
     The Mllama Text Model with a language modeling head on top.

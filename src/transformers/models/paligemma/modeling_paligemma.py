@@ -387,6 +387,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
             image_hidden_states=image_features if pixel_values is not None else None,
         )
 
+
 @auto_docstring(
     custom_intro="""
     The Base Paligemma model which consists of a vision backbone and a language model without language modeling head.,

@@ -1267,6 +1267,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
+
 @auto_docstring(
     custom_intro="""
     BLIP-2 Model for generating text and image features. The model consists of a vision encoder, Querying Transformer

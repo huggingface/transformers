@@ -1397,7 +1397,6 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
         )
 
 
-
 @auto_docstring(
     custom_intro="""
     The text model from KOSMOS-2 with a language modeling head on top (linear layer with weights tied to the input

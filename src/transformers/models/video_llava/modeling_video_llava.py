@@ -412,6 +412,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             video_hidden_states=video_features if pixel_values_videos is not None else None,
         )
 
+
 @auto_docstring(
     custom_intro="""
     The VideoLlava model which consists of a vision backbone and a language model.
