@@ -89,13 +89,10 @@ def write_model(
     config = OpenaiConfig.from_pretrained(input_base_path)
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}...")
-    print(list(os.listdir(input_base_path)))
     loaded = [
-        safe_load(
-            file
-            for file in list(os.listdir(input_base_path))
+        safe_load(os.path.join(input_base_path,file)) for file in list(os.listdir(input_base_path))
             if file.endswith(".safetensors")
-        )
+
     ]
 
     print("Converting ..")
