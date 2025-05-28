@@ -583,6 +583,7 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         Overwriting as the base hidden size is big enough for compile.
         Manipulation of dims causes issues due to other constraints not being satisfied anymore.
         """
+        torch_device = "cuda"
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config._attn_implementation = "flex_attention"
