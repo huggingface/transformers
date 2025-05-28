@@ -587,8 +587,7 @@ class YolosModel(YolosPreTrainedModel):
         self,
         pixel_values: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

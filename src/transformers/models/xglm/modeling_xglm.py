@@ -444,8 +444,7 @@ class XGLMModel(XGLMPreTrainedModel):
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         r"""
@@ -651,8 +650,7 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:

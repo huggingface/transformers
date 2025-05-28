@@ -1552,8 +1552,7 @@ class UdopModel(UdopPreTrainedModel):
         decoder_head_mask: Optional[Tensor] = None,
         cross_attn_head_mask: Optional[Tensor] = None,
         use_cache=True,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> tuple[Tensor, ...]:
@@ -1757,8 +1756,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         decoder_head_mask: Optional[Tensor] = None,
         cross_attn_head_mask: Optional[Tensor] = None,
         use_cache=True,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         labels: Optional[Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -1986,8 +1984,7 @@ class UdopEncoderModel(UdopPreTrainedModel):
         visual_bbox: Optional[dict[str, Any]] = None,
         head_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.FloatTensor], BaseModelOutputWithAttentionMask]:
         r"""

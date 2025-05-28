@@ -1520,8 +1520,7 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         tasks_attention_mask: torch.LongTensor,
         classes_structure: torch.LongTensor,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.FloatTensor], OmDetTurboObjectDetectionOutput]:
         r"""

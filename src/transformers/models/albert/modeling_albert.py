@@ -663,8 +663,7 @@ class AlbertModel(AlbertPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[BaseModelOutputWithPooling, tuple]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -781,8 +780,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         sentence_order_label: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[AlbertForPreTrainingOutput, tuple]:
         r"""
@@ -926,8 +924,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[MaskedLMOutput, tuple]:
         r"""
@@ -1028,8 +1025,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[SequenceClassifierOutput, tuple]:
         r"""
@@ -1120,8 +1116,7 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[TokenClassifierOutput, tuple]:
         r"""
@@ -1187,8 +1182,7 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[AlbertForPreTrainingOutput, tuple]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1264,8 +1258,7 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[AlbertForPreTrainingOutput, tuple]:
         r"""

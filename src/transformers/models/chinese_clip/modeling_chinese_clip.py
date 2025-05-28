@@ -888,8 +888,7 @@ class ChineseCLIPVisionEncoder(nn.Module):
     def forward(
         self,
         inputs_embeds,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
@@ -962,8 +961,7 @@ class ChineseCLIPVisionTransformer(nn.Module):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
@@ -1065,8 +1063,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1187,8 +1184,7 @@ class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
@@ -1266,8 +1262,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
@@ -1313,8 +1308,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
@@ -1370,8 +1364,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         return_loss: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ChineseCLIPOutput]:

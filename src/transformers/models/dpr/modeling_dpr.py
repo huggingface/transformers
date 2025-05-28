@@ -325,8 +325,7 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         attention_mask: Optional[Tensor] = None,
         token_type_ids: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[DPRContextEncoderOutput, tuple[Tensor, ...]]:
         r"""
@@ -430,8 +429,7 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         attention_mask: Optional[Tensor] = None,
         token_type_ids: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[DPRQuestionEncoderOutput, tuple[Tensor, ...]]:
         r"""
@@ -535,8 +533,7 @@ class DPRReader(DPRPretrainedReader):
         input_ids: Optional[Tensor] = None,
         attention_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[DPRReaderOutput, tuple[Tensor, ...]]:
         r"""

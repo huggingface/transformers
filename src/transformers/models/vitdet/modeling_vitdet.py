@@ -681,8 +681,7 @@ class VitDetModel(VitDetPreTrainedModel):
         self,
         pixel_values: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutput]:
         r"""

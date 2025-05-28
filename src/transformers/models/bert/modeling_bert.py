@@ -910,8 +910,7 @@ class BertModel(BertPreTrainedModel):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1077,8 +1076,7 @@ class BertForPreTraining(BertPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         next_sentence_label: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], BertForPreTrainingOutput]:
         r"""
@@ -1187,8 +1185,7 @@ class BertLMHeadModel(BertPreTrainedModel, GenerationMixin):
         labels: Optional[torch.Tensor] = None,
         past_key_values: Optional[list[torch.Tensor]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **loss_kwargs,
     ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
@@ -1285,8 +1282,7 @@ class BertForMaskedLM(BertPreTrainedModel):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], MaskedLMOutput]:
         r"""
@@ -1381,8 +1377,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple[torch.Tensor], NextSentencePredictorOutput]:
@@ -1488,8 +1483,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
@@ -1576,8 +1570,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], MultipleChoiceModelOutput]:
         r"""
@@ -1684,8 +1677,7 @@ class BertForTokenClassification(BertPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
@@ -1751,8 +1743,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], QuestionAnsweringModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

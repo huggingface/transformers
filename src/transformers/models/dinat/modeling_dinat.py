@@ -662,8 +662,7 @@ class DinatModel(DinatPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, DinatModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -734,8 +733,7 @@ class DinatForImageClassification(DinatPreTrainedModel):
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, DinatImageClassifierOutput]:
         r"""

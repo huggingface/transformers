@@ -808,8 +808,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1035,8 +1034,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ImageSuperResolutionOutput]:
         r"""

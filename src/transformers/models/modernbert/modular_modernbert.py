@@ -920,8 +920,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
         max_seqlen: Optional[int] = None,
         batch_size: Optional[int] = None,
         seq_len: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor, ...], BaseModelOutput]:
         r"""
@@ -1131,8 +1130,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         max_seqlen: Optional[int] = None,
         batch_size: Optional[int] = None,
         seq_len: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple[torch.Tensor], MaskedLMOutput]:
@@ -1263,8 +1261,7 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         max_seqlen: Optional[int] = None,
         batch_size: Optional[int] = None,
         seq_len: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
@@ -1386,8 +1383,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         max_seqlen: Optional[int] = None,
         batch_size: Optional[int] = None,
         seq_len: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
@@ -1476,8 +1472,7 @@ class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
         max_seqlen: Optional[int] = None,
         batch_size: Optional[int] = None,
         seq_len: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple[torch.Tensor], QuestionAnsweringModelOutput]:

@@ -511,8 +511,7 @@ class BloomModel(BloomPreTrainedModel):
         head_mask: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **deprecated_arguments,
@@ -879,8 +878,7 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **deprecated_arguments,
@@ -1014,8 +1012,7 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **deprecated_arguments,
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutputWithPast]:
@@ -1150,8 +1147,7 @@ class BloomForTokenClassification(BloomPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **deprecated_arguments,
     ) -> Union[tuple[torch.Tensor], TokenClassifierOutput]:
@@ -1242,8 +1238,7 @@ class BloomForQuestionAnswering(BloomPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""

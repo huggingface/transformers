@@ -874,8 +874,7 @@ class BambaModel(BambaPreTrainedModel):
         past_key_values: Optional[HybridMambaAttentionDynamicCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[BambaFlashAttentionKwargs],
     ) -> BaseModelOutputWithPast:
@@ -1109,8 +1108,7 @@ class BambaForCausalLM(LlamaForCausalLM):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,

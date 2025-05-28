@@ -616,8 +616,7 @@ class ViltModel(ViltPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
         image_token_type_idx: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[BaseModelOutputWithPooling, tuple[torch.FloatTensor]]:
         r"""
@@ -775,8 +774,7 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[MaskedLMOutput, tuple[torch.FloatTensor]]:
         r"""
@@ -953,8 +951,7 @@ class ViltForQuestionAnswering(ViltPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[SequenceClassifierOutput, tuple[torch.FloatTensor]]:
         r"""
@@ -1059,8 +1056,7 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[SequenceClassifierOutput, tuple[torch.FloatTensor]]:
         r"""
@@ -1164,8 +1160,7 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[ViltForImagesAndTextClassificationOutput, tuple[torch.FloatTensor]]:
         r"""
@@ -1294,8 +1289,7 @@ class ViltForTokenClassification(ViltPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[TokenClassifierOutput, tuple[torch.FloatTensor]]:
         r"""

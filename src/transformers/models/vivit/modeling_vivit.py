@@ -517,8 +517,7 @@ class VivitModel(VivitPreTrainedModel):
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.FloatTensor], BaseModelOutputWithPooling]:
@@ -664,8 +663,7 @@ class VivitForVideoClassification(VivitPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.FloatTensor], ImageClassifierOutput]:

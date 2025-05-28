@@ -775,8 +775,7 @@ class TapasModel(TapasPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
@@ -922,8 +921,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple, MaskedLMOutput]:
@@ -1063,8 +1061,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         float_answer: Optional[torch.FloatTensor] = None,
         numeric_values: Optional[torch.FloatTensor] = None,
         numeric_values_scale: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, TableQuestionAnsweringOutput]:
         r"""
@@ -1386,8 +1383,7 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""

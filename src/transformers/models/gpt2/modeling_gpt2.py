@@ -785,8 +785,7 @@ class GPT2Model(GPT2PreTrainedModel):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
@@ -1182,8 +1181,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
@@ -1335,8 +1333,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
         labels: Optional[torch.LongTensor] = None,
         mc_labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple, GPT2DoubleHeadsModelOutput]:
@@ -1499,8 +1496,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, SequenceClassifierOutputWithPast]:
         r"""
@@ -1632,8 +1628,7 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, TokenClassifierOutput]:
         r"""
@@ -1718,8 +1713,7 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""

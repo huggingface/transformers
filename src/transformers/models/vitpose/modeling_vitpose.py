@@ -222,8 +222,7 @@ class VitPoseForPoseEstimation(VitPosePreTrainedModel):
         dataset_index: Optional[torch.Tensor] = None,
         flip_pairs: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, VitPoseEstimatorOutput]:
         r"""

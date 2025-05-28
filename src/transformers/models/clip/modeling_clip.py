@@ -531,8 +531,7 @@ class CLIPEncoder(nn.Module):
         inputs_embeds,
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
     ) -> BaseModelOutput:
         r"""
         Args:
@@ -628,8 +627,7 @@ class CLIPTextTransformer(nn.Module):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
     ) -> BaseModelOutputWithPooling:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -725,8 +723,7 @@ class CLIPTextModel(CLIPPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
     ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
@@ -769,8 +766,7 @@ class CLIPVisionTransformer(nn.Module):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: Optional[bool] = False,
     ) -> BaseModelOutputWithPooling:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -826,8 +822,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -905,8 +900,7 @@ class CLIPModel(CLIPPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -947,8 +941,7 @@ class CLIPModel(CLIPPreTrainedModel):
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
     ) -> torch.FloatTensor:
         r"""
@@ -1000,8 +993,7 @@ class CLIPModel(CLIPPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         return_loss: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
     ) -> CLIPOutput:
         r"""
@@ -1111,8 +1103,7 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
     ) -> CLIPTextModelOutput:
         r"""
         Examples:
@@ -1171,8 +1162,7 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
     ) -> CLIPVisionModelOutput:
         r"""
@@ -1242,8 +1232,7 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
         self,
         pixel_values: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
     ) -> ImageClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

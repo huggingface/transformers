@@ -519,8 +519,7 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         flattened_patches: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
@@ -1105,8 +1104,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         labels: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -1525,8 +1523,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
         labels: Optional[torch.LongTensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqModelOutput]:

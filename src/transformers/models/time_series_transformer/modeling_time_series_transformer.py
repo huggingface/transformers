@@ -784,8 +784,7 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
@@ -927,8 +926,7 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
@@ -1772,8 +1770,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         past_observed_mask: Optional[torch.Tensor] = None,
         static_categorical_features: Optional[torch.Tensor] = None,
         static_real_features: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
     ) -> SampleTSPredictionOutput:
         r"""
         Greedily generate sequences of sample predictions from a model with a probability distribution head.

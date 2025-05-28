@@ -932,8 +932,7 @@ class JanusModel(JanusPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ):
@@ -1045,8 +1044,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
     ):

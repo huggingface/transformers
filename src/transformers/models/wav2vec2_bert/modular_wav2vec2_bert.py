@@ -710,8 +710,7 @@ class Wav2Vec2BertModel(Wav2Vec2Model, Wav2Vec2BertPreTrainedModel):
         input_features: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         mask_time_indices: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, Wav2Vec2BertBaseModelOutput]:
         r"""
@@ -780,8 +779,7 @@ class Wav2Vec2BertForCTC(Wav2Vec2ConformerForCTC):
         self,
         input_features: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
     ) -> Union[tuple, CausalLMOutput]:
@@ -876,8 +874,7 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2ForSequenceClassification):
         self,
         input_features: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
     ) -> Union[tuple, SequenceClassifierOutput]:
@@ -952,8 +949,7 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2ConformerForAudioFrameClas
         input_features: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, TokenClassifierOutput]:
         r"""
@@ -1017,8 +1013,7 @@ class Wav2Vec2BertForXVector(Wav2Vec2ConformerForXVector):
         self,
         input_features: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
     ) -> Union[tuple, XVectorOutput]:

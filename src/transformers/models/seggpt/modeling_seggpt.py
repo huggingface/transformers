@@ -681,8 +681,7 @@ class SegGptModel(SegGptPreTrainedModel):
         feature_ensemble: Optional[bool] = None,
         embedding_type: Optional[str] = None,
         labels: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, SegGptEncoderOutput]:
         r"""
@@ -877,8 +876,7 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
         feature_ensemble: Optional[bool] = None,
         embedding_type: Optional[str] = None,
         labels: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, SegGptImageSegmentationOutput]:
         r"""

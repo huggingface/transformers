@@ -948,8 +948,7 @@ class FSMTModel(PretrainedFSMTModel):
         encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
         past_key_values: Optional[tuple[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         return_dict: Optional[bool] = None,
@@ -1095,8 +1094,7 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel, GenerationMixin):
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], Seq2SeqLMOutput]:
         r"""

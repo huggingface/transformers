@@ -440,8 +440,7 @@ class RagModel(RagPreTrainedModel):
         context_input_ids: Optional[torch.LongTensor] = None,
         context_attention_mask: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         output_retrieved: Optional[bool] = None,
         n_docs: Optional[int] = None,
     ) -> Union[tuple[torch.Tensor], RetrievAugLMOutput]:
@@ -714,8 +713,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         context_attention_mask: Optional[torch.LongTensor] = None,
         doc_scores: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         output_retrieved: Optional[bool] = None,
         exclude_bos_score: Optional[bool] = None,
         reduce_loss: Optional[bool] = None,
@@ -1224,8 +1222,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         context_attention_mask: Optional[torch.LongTensor] = None,
         doc_scores: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         output_retrieved: Optional[bool] = None,
         do_marginalize: Optional[bool] = None,
         reduce_loss: Optional[bool] = None,

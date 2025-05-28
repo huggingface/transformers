@@ -645,8 +645,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         forecast_context_len: Optional[int] = None,
         return_forecast_on_context: bool = False,
         truncate_negative: bool = False,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
     ) -> TimesFmOutputForPrediction:
         r"""
         window_size (`int`, *optional*):

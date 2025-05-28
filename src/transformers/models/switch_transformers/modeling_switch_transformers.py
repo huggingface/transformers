@@ -1325,8 +1325,7 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -1547,8 +1546,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         output_router_logits: Optional[bool] = True,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -1846,8 +1844,7 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         output_router_logits: Optional[bool] = True,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.FloatTensor], MoEModelOutput]:

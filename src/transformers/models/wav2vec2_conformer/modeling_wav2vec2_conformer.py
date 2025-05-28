@@ -1165,8 +1165,7 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
         input_values: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         mask_time_indices: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, Wav2Vec2ConformerBaseModelOutput]:
         r"""
@@ -1278,8 +1277,7 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         mask_time_indices: Optional[torch.BoolTensor] = None,
         sampled_negative_indices: Optional[torch.BoolTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, Wav2Vec2ConformerForPreTrainingOutput]:
         r"""
@@ -1481,8 +1479,7 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
         self,
         input_values: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
     ) -> Union[tuple, CausalLMOutput]:
@@ -1592,8 +1589,7 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ConformerPreTrainedMode
         self,
         input_values: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
     ) -> Union[tuple, SequenceClassifierOutput]:
@@ -1695,8 +1691,7 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
         input_values: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, TokenClassifierOutput]:
         r"""
@@ -1864,8 +1859,7 @@ class Wav2Vec2ConformerForXVector(Wav2Vec2ConformerPreTrainedModel):
         self,
         input_values: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
     ) -> Union[tuple, XVectorOutput]:

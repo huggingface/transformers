@@ -113,8 +113,7 @@ class VipLlavaModel(LlavaModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         vision_feature_layers: Optional[Union[int, list[int]]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **lm_kwargs,
@@ -200,8 +199,7 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
         vision_feature_layers: Optional[Union[int, list[int]]] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,

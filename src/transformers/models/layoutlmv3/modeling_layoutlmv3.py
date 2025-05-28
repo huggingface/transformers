@@ -690,8 +690,7 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
@@ -938,8 +937,7 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         pixel_values: Optional[torch.LongTensor] = None,
     ) -> Union[tuple, TokenClassifierOutput]:
@@ -1039,8 +1037,7 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         bbox: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.LongTensor] = None,
@@ -1159,8 +1156,7 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         bbox: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.LongTensor] = None,

@@ -815,8 +815,7 @@ class Data2VecVisionModel(Data2VecVisionPreTrainedModel):
         pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, Data2VecVisionModelOutputWithPooling]:
@@ -911,8 +910,7 @@ class Data2VecVisionForImageClassification(Data2VecVisionPreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ImageClassifierOutput]:
@@ -1276,8 +1274,7 @@ class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, SemanticSegmenterOutput]:

@@ -578,8 +578,7 @@ class SplinterModel(SplinterPreTrainedModel):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
@@ -763,8 +762,7 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         question_positions: Optional[torch.LongTensor] = None,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
@@ -916,8 +914,7 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         question_positions: Optional[torch.LongTensor] = None,
     ) -> Union[tuple, SplinterForPreTrainingOutput]:

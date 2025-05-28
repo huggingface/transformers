@@ -1113,8 +1113,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
         past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
@@ -1275,8 +1274,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel, Generation
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""

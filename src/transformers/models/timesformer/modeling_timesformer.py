@@ -509,8 +509,7 @@ class TimesformerModel(TimesformerPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.FloatTensor], BaseModelOutput]:
         r"""
@@ -639,8 +638,7 @@ class TimesformerForVideoClassification(TimesformerPreTrainedModel):
         self,
         pixel_values: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ImageClassifierOutput]:
         r"""

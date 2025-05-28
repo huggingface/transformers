@@ -1234,8 +1234,7 @@ class XLNetModel(XLNetPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         use_mems: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,  # delete after depreciation warning is removed
     ) -> Union[tuple, XLNetModelOutput]:
@@ -1562,8 +1561,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_mems: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,  # delete when `use_cache` is removed in XLNetModel
     ) -> Union[tuple, XLNetLMHeadModelOutput]:
@@ -1747,8 +1745,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_mems: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,  # delete when `use_cache` is removed in XLNetModel
     ) -> Union[tuple, XLNetForSequenceClassificationOutput]:
@@ -1875,8 +1872,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_mems: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,  # delete when `use_cache` is removed in XLNetModel
     ) -> Union[tuple, XLNetForTokenClassificationOutput]:
@@ -1985,8 +1981,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_mems: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,  # delete when `use_cache` is removed in XLNetModel
     ) -> Union[tuple, XLNetForMultipleChoiceOutput]:
@@ -2132,8 +2127,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
         use_mems: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,  # delete when `use_cache` is removed in XLNetModel
     ) -> Union[tuple, XLNetForQuestionAnsweringSimpleOutput]:
@@ -2261,8 +2255,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         cls_index: Optional[torch.Tensor] = None,
         p_mask: Optional[torch.Tensor] = None,
         use_mems: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,  # delete when `use_cache` is removed in XLNetModel
     ) -> Union[tuple, XLNetForQuestionAnsweringOutput]:

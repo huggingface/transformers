@@ -714,8 +714,7 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.Tensor] = None,
         past_key_values: Optional[list[tuple[torch.Tensor, torch.Tensor]]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
         attention_mask: Optional[torch.Tensor] = None,  # dummy parameter for text-generation pipeline

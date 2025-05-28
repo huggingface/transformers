@@ -1598,8 +1598,7 @@ class ClapAudioModel(ClapPreTrainedModel):
         self,
         input_features: Optional[torch.FloatTensor] = None,
         is_longer: Optional[torch.BoolTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
@@ -1694,8 +1693,7 @@ class ClapTextModel(ClapPreTrainedModel):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1835,8 +1833,7 @@ class ClapModel(ClapPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
@@ -1883,8 +1880,7 @@ class ClapModel(ClapPreTrainedModel):
         input_features: Optional[torch.Tensor] = None,
         is_longer: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
@@ -1939,8 +1935,7 @@ class ClapModel(ClapPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         return_loss: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ClapOutput]:
         r"""
@@ -2057,8 +2052,7 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ClapTextModelOutput]:
         r"""
@@ -2122,8 +2116,7 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
         self,
         input_features: Optional[torch.FloatTensor] = None,
         is_longer: Optional[torch.BoolTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ClapAudioModelOutput]:
         r"""

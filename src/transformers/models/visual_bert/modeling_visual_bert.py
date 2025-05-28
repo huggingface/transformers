@@ -609,8 +609,7 @@ class VisualBertModel(VisualBertPreTrainedModel):
         visual_attention_mask: Optional[torch.LongTensor] = None,
         visual_token_type_ids: Optional[torch.LongTensor] = None,
         image_text_alignment: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPooling]:
         r"""
@@ -798,8 +797,7 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         visual_attention_mask: Optional[torch.LongTensor] = None,
         visual_token_type_ids: Optional[torch.LongTensor] = None,
         image_text_alignment: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
         sentence_image_labels: Optional[torch.LongTensor] = None,
@@ -943,8 +941,7 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
         visual_attention_mask: Optional[torch.LongTensor] = None,
         visual_token_type_ids: Optional[torch.LongTensor] = None,
         image_text_alignment: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[tuple[torch.Tensor], MultipleChoiceModelOutput]:
@@ -1131,8 +1128,7 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         visual_attention_mask: Optional[torch.LongTensor] = None,
         visual_token_type_ids: Optional[torch.LongTensor] = None,
         image_text_alignment: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
@@ -1269,8 +1265,7 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
         visual_attention_mask: Optional[torch.LongTensor] = None,
         visual_token_type_ids: Optional[torch.LongTensor] = None,
         image_text_alignment: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
@@ -1443,8 +1438,7 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         visual_attention_mask: Optional[torch.LongTensor] = None,
         visual_token_type_ids: Optional[torch.LongTensor] = None,
         image_text_alignment: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         region_to_phrase_position: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,

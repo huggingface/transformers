@@ -660,8 +660,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,  # NOOP kwargs, for now
     ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
@@ -810,8 +809,7 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
         labels: Optional[torch.Tensor] = None,
         past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:

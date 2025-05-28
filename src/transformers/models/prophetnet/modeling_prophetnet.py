@@ -1124,8 +1124,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
@@ -1267,8 +1266,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ProphetNetDecoderModelOutput]:
         r"""
@@ -1615,8 +1613,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ProphetNetSeq2SeqModelOutput]:
         r"""
@@ -1756,8 +1753,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ProphetNetSeq2SeqLMOutput]:
         r"""
@@ -1975,8 +1971,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ProphetNetDecoderLMOutput]:
         r"""

@@ -1268,8 +1268,7 @@ class PegasusModel(PegasusPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
     ) -> Union[tuple, Seq2SeqModelOutput]:
@@ -1455,8 +1454,7 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel, GenerationMixin):
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.Tensor] = None,
     ) -> Union[tuple, Seq2SeqLMOutput]:
@@ -1658,8 +1656,7 @@ class PegasusForCausalLM(PegasusPreTrainedModel, GenerationMixin):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:

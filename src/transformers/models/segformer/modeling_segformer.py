@@ -472,8 +472,7 @@ class SegformerModel(SegformerPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -524,8 +523,7 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, SegFormerImageClassifierOutput]:
         r"""
@@ -683,8 +681,7 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, SemanticSegmenterOutput]:
         r"""

@@ -225,8 +225,7 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
         input_values: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         mask_time_indices: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutput]:
         r"""

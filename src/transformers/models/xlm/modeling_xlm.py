@@ -790,8 +790,7 @@ class XLMModel(XLMPreTrainedModel):
         cache: Optional[dict[str, torch.Tensor]] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,  # Dummy kwargs for now
     ) -> Union[tuple, BaseModelOutput]:
@@ -1031,8 +1030,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple, MaskedLMOutput]:
@@ -1124,8 +1122,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
@@ -1238,8 +1235,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
@@ -1345,8 +1341,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
         is_impossible: Optional[torch.Tensor] = None,
         cls_index: Optional[torch.Tensor] = None,
         p_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, XLMForQuestionAnsweringOutput]:
         r"""
@@ -1466,8 +1461,7 @@ class XLMForTokenClassification(XLMPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, TokenClassifierOutput]:
         r"""
@@ -1557,8 +1551,7 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, MultipleChoiceModelOutput]:
         r"""

@@ -346,8 +346,7 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], DepthEstimatorOutput]:
         r"""

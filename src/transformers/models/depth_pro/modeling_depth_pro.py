@@ -670,8 +670,7 @@ class DepthProModel(DepthProPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, DepthProOutput]:
         r"""
@@ -1057,8 +1056,7 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         pixel_values: torch.FloatTensor,
         head_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], DepthProDepthEstimatorOutput]:
         r"""

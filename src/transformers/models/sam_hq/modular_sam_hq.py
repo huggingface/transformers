@@ -130,8 +130,7 @@ class SamHQVisionEncoder(SamVisionEncoder):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, SamHQVisionEncoderOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -451,8 +450,7 @@ class SamHQModel(SamModel):
     def get_image_embeddings(
         self,
         pixel_values,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ):
         r"""
@@ -492,8 +490,7 @@ class SamHQModel(SamModel):
         hq_token_only: bool = False,
         attention_similarity: Optional[torch.FloatTensor] = None,
         target_embedding: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         intermediate_embeddings: Optional[list[torch.FloatTensor]] = None,
         **kwargs,

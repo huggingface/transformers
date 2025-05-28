@@ -1025,8 +1025,7 @@ class Swinv2Model(Swinv2PreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, Swinv2ModelOutput]:
@@ -1122,8 +1121,7 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, Swinv2MaskedImageModelingOutput]:
@@ -1238,8 +1236,7 @@ class Swinv2ForImageClassification(Swinv2PreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, Swinv2ImageClassifierOutput]:
@@ -1305,8 +1302,7 @@ class Swinv2Backbone(Swinv2PreTrainedModel, BackboneMixin):
     def forward(
         self,
         pixel_values: Tensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
         r"""

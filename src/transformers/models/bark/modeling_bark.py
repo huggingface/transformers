@@ -513,8 +513,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         labels: Optional[torch.LongTensor] = None,
         input_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], CausalLMOutputWithPast]:
         r"""
@@ -1176,8 +1175,7 @@ class BarkFineModel(BarkPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         input_embeds: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], MaskedLMOutput]:
         r"""

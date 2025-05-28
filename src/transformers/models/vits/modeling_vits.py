@@ -1119,8 +1119,7 @@ class VitsEncoder(nn.Module):
         hidden_states: torch.FloatTensor,
         padding_mask: torch.FloatTensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
@@ -1206,8 +1205,7 @@ class VitsTextEncoder(nn.Module):
         input_ids: torch.Tensor,
         padding_mask: torch.FloatTensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = True,
     ) -> Union[tuple[torch.Tensor], VitsTextEncoderOutput]:
         hidden_states = self.embed_tokens(input_ids) * math.sqrt(self.config.hidden_size)
@@ -1307,8 +1305,7 @@ class VitsModel(VitsPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         speaker_id: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         labels: Optional[torch.FloatTensor] = None,
     ) -> Union[tuple[Any], VitsModelOutput]:

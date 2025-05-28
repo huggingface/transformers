@@ -1123,8 +1123,7 @@ class SamVisionEncoder(nn.Module):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
     ) -> SamVisionEncoderOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1221,8 +1220,7 @@ class SamVisionModel(SamPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, SamVisionEncoderOutput]:
         return self.vision_encoder(
@@ -1278,8 +1276,7 @@ class SamModel(SamPreTrainedModel):
     def get_image_embeddings(
         self,
         pixel_values,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
     ):
         r"""
         Returns the image embeddings by passing the pixel values through the vision encoder.
@@ -1346,8 +1343,7 @@ class SamModel(SamPreTrainedModel):
         multimask_output: bool = True,
         attention_similarity: Optional[torch.FloatTensor] = None,
         target_embedding: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         **kwargs,
     ) -> SamImageSegmentationOutput:
         r"""

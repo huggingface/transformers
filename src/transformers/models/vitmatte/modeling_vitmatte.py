@@ -231,8 +231,7 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
     ):

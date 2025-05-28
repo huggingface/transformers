@@ -450,8 +450,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
         self,
         pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
     ) -> Union[tuple, InternVLVisionModelOutputWithPooling]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):

@@ -936,8 +936,7 @@ class DonutSwinModel(DonutSwinPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, DonutSwinModelOutput]:
@@ -1031,8 +1030,7 @@ class DonutSwinForImageClassification(DonutSwinPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, DonutSwinImageClassifierOutput]:

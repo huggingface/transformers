@@ -461,8 +461,7 @@ class VitPoseBackbone(VitPoseBackbonePreTrainedModel, BackboneMixin):
         pixel_values: torch.Tensor,
         dataset_index: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ):
         r"""

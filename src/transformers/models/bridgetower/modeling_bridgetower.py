@@ -1060,8 +1060,7 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1239,8 +1238,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
         image_token_type_idx: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
         interpolate_pos_encoding: bool = False,
@@ -1548,8 +1546,7 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[MaskedLMOutput, tuple[torch.FloatTensor]]:
@@ -1650,8 +1647,7 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[SequenceClassifierOutput, tuple[torch.FloatTensor]]:

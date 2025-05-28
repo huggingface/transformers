@@ -616,8 +616,7 @@ class Owlv2Encoder(nn.Module):
         inputs_embeds,
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutput]:
         r"""
@@ -702,8 +701,7 @@ class Owlv2TextTransformer(nn.Module):
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
@@ -784,8 +782,7 @@ class Owlv2TextModel(Owlv2PreTrainedModel):
         self,
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
@@ -833,8 +830,7 @@ class Owlv2VisionTransformer(nn.Module):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
@@ -892,8 +888,7 @@ class Owlv2VisionModel(Owlv2PreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
@@ -966,8 +961,7 @@ class Owlv2Model(Owlv2PreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
@@ -1005,8 +999,7 @@ class Owlv2Model(Owlv2PreTrainedModel):
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
@@ -1055,8 +1048,7 @@ class Owlv2Model(Owlv2PreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         return_loss: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
         return_base_image_embeds: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1345,8 +1337,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         input_ids: torch.Tensor,
         pixel_values: torch.FloatTensor,
         attention_mask: torch.Tensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
     ) -> tuple[torch.FloatTensor]:
         # Encode text and image
@@ -1395,8 +1386,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
     def image_embedder(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
     ) -> tuple[torch.FloatTensor]:
         # Get Owlv2Model vision embeddings (same as CLIP)
@@ -1484,8 +1474,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         query_pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Owlv2ImageGuidedObjectDetectionOutput:
@@ -1603,8 +1592,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         input_ids: torch.Tensor,
         pixel_values: torch.FloatTensor,
         attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Owlv2ObjectDetectionOutput:

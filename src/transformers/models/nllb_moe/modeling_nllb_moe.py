@@ -922,8 +922,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
@@ -1139,8 +1138,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
@@ -1499,8 +1497,7 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], Seq2SeqMoEModelOutput]:
@@ -1648,8 +1645,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.Tensor], Seq2SeqMoEOutput]:

@@ -538,8 +538,7 @@ class RwkvModel(RwkvPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         state: Optional[list[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, RwkvOutput]:
         r"""
@@ -736,8 +735,7 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
         state: Optional[list[torch.FloatTensor]] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple, RwkvCausalLMOutput]:
