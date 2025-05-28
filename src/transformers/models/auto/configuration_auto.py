@@ -30,7 +30,7 @@ from ...utils import CONFIG_NAME, logging
 logger = logging.get_logger(__name__)
 
 
-_F = TypeVar("_F", bound=Callable[..., Any])
+_CallableT = TypeVar("_CallableT", bound=Callable[..., Any])
 
 
 CONFIG_MAPPING_NAMES = OrderedDict[str, str](
