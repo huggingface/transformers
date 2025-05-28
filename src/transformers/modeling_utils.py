@@ -136,7 +136,7 @@ from .utils.import_utils import (
     is_torchdynamo_compiling,
 )
 from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
-
+from .modeling_layers import GradientCheckpointingLayer
 
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
 XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
@@ -2001,6 +2001,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     # In practice, it means that they support attention interface functions, fully pass the kwargs
     # through all modules up to the Attention layer, can slice logits with Tensor, and have a default TP plan
     _supports_attention_backend = False
+    _can_record_outputs = None
 
     @property
     def dummy_inputs(self) -> dict[str, torch.Tensor]:
@@ -2050,6 +2051,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         self._keep_in_fp32_modules = copy.copy(self.__class__._keep_in_fp32_modules)
 
         self._no_split_modules = self._no_split_modules or []
+        self._can_record_outputs = {
+            "attentions": (GradientCheckpointingLayer, 1),
+            "hidden_states": (GradientCheckpointingLayer, 0),
+        }
 
     def post_init(self):
         """
