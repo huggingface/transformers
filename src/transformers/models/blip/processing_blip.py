@@ -55,7 +55,6 @@ class BlipProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = []
     image_processor_class = ("BlipImageProcessor", "BlipImageProcessorFast")
     tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
 

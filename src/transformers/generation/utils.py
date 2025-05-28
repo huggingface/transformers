@@ -636,7 +636,7 @@ class GenerationMixin(ContinuousMixin):
             and attention_mask is not None
             and attention_mask.ndim == 2
         ):
-            if model_inputs["inputs_embeds"] is not None:
+            if not self.config.is_encoder_decoder and model_inputs["inputs_embeds"] is not None:
                 batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
             else:
                 batch_size, sequence_length = model_inputs[input_ids_key].shape[:2]

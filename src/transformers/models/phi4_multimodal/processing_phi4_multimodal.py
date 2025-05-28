@@ -62,7 +62,6 @@ class Phi4MultimodalProcessor(ProcessorMixin):
     tokenizer_class = "GPT2TokenizerFast"
     image_processor_class = "Phi4MultimodalImageProcessorFast"
     audio_processor_class = "Phi4MultimodalFeatureExtractor"
-    valid_kwargs = ["chat_template"]
 
     def __init__(
         self,

@@ -90,14 +90,6 @@ class PixtralProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = [
-        "chat_template",
-        "patch_size",
-        "spatial_merge_size",
-        "image_token",
-        "image_break_token",
-        "image_end_token",
-    ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 

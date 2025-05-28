@@ -60,7 +60,6 @@ class Qwen2AudioProcessor(ProcessorMixin):
     """
 
     attributes = ["feature_extractor", "tokenizer"]
-    valid_kwargs = ["chat_template", "audio_token", "audio_bos_token", "audio_eos_token"]
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
 

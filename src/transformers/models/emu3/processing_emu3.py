@@ -71,7 +71,6 @@ class Emu3Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
     tokenizer_class = ("GPT2Tokenizer", "GPT2TokenizerFast")
     image_processor_class = "Emu3ImageProcessor"
 
