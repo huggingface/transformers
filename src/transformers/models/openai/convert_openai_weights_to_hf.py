@@ -36,22 +36,22 @@ from transformers.convert_slow_tokenizer import TikTokenConverter
 # If a weight needs to be split in two or more keys, use `|` to indicate it. ex:
 # r"layers.(\d+).attention.wqkv.weight": r"layers.\1.self_attn.q|k|v|_proj.weight"
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
-    r"norm.weight":                                                                  r"norm.weight",
-    r"unembedding.weight":                                                                r"lm_head.weight",
-    r"embedding":                                                               r"embed_tokens",
-    r"rope.freqs":                                                                   None, # meaning we skip it and don't want it
+    r"norm.weight":                 r"norm.weight",
+    r"unembedding.weight":          r"lm_head.weight",
+    r"embedding":                   r"embed_tokens",
+    r"rope.freqs":                  None, # meaning we skip it and don't want it
     # special key, wqkv needs to be split afterwards
-    r"block.(\d+).attn.qkv":                              r"layers.\1.self_attn.(k|v|q)_proj",
-    r"block.(\d+).attn.out":                                     r"layers.\1.self_attn.\2_proj",
-    r"block.(\d+).attn.sinks":                            r"layers.\1.self_attn.sinks",
-    r"block.(\d+).attn.norm":                               r"layers.\1.input_layernorm.weight",
+    r"block.(\d+).attn.qkv":        r"layers.\1.self_attn.(k|v|q)_proj",
+    r"block.(\d+).attn.out":        r"layers.\1.self_attn.\2_proj",
+    r"block.(\d+).attn.sinks":      r"layers.\1.self_attn.sinks",
+    r"block.(\d+).attn.norm":       r"layers.\1.input_layernorm.weight",
 
-    r"block.(\d+).mlp.mlp1_weight":                          r"layers.\1.mlp.gate_up_proj.weight",
-    r"block.(\d+).mlp.mlp1_bias":                          r"layers.\1.mlp.gate_up_proj.bias",
-    r"block.(\d+).mlp.mlp2_weight":                          r"layers.\1.mlp.down_proj.weight",
-    r"block.(\d+).mlp.mlp2_bias":                          r"layers.\1.mlp.down_proj.bias",
-    r"block.(\d+).mlp.norm":                                 r"layers.\1.post_attention_layernorm.weight",
-    r"block.(\d+).mlp.gate":                                 r"layers.\1.mlp.router.weight",
+    r"block.(\d+).mlp.mlp1_weight": r"layers.\1.mlp.gate_up_proj.weight",
+    r"block.(\d+).mlp.mlp1_bias":   r"layers.\1.mlp.gate_up_proj.bias",
+    r"block.(\d+).mlp.mlp2_weight": r"layers.\1.mlp.down_proj.weight",
+    r"block.(\d+).mlp.mlp2_bias":   r"layers.\1.mlp.down_proj.bias",
+    r"block.(\d+).mlp.norm":        r"layers.\1.post_attention_layernorm.weight",
+    r"block.(\d+).mlp.gate":        r"layers.\1.mlp.router.weight",
 }
 # fmt: on
 
@@ -75,12 +75,6 @@ def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
         output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
     return output_dict
 
-
-def compute_intermediate_size(hidden_dim, multiple_of=1024, ffn_dim_multiplier=1.3):
-    hidden_dim = 4 * int(2 * hidden_dim / 3)
-    hidden_dim = int(ffn_dim_multiplier * hidden_dim)
-    hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
-    return hidden_dim
 
 
 def write_model(
