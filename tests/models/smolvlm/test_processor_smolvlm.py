@@ -12,12 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
 import shutil
 import tempfile
 import unittest
 from io import BytesIO
-from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -357,7 +355,6 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     {"type": "text", "text": "What do these images show?"},
                     {"type": "image"},
                     {"type": "image"},
-                    "What do these images show?",
                 ],
             },
             {
@@ -599,37 +596,3 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @unittest.skip("SmolVLM cannot accept image URL as video frames, because it needs to know video fps and duration")
     def test_apply_chat_template_video_1(self):
         pass
-
-    def test_chat_template_save_loading(self):
-        processor = self.processor_class.from_pretrained(self.tmpdirname)
-        signature = inspect.signature(processor.__init__)
-        if "chat_template" not in {*signature.parameters.keys()}:
-            self.skipTest("Processor doesn't accept chat templates at input")
-
-        existing_tokenizer_template = getattr(processor.tokenizer, "chat_template", None)
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            processor.save_pretrained(tmpdirname, save_jinja_files=False)
-            self.assertTrue(Path(tmpdirname, "chat_template.json").is_file())
-            self.assertFalse(Path(tmpdirname, "chat_template.jinja").is_file())
-            reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
-            self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
-            # When we don't use single-file chat template saving, processor and tokenizer chat templates
-            # should remain separate
-            self.assertEqual(getattr(reloaded_processor.tokenizer, "chat_template", None), existing_tokenizer_template)
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            processor.save_pretrained(tmpdirname)
-            self.assertTrue(Path(tmpdirname, "chat_template.jinja").is_file())
-            self.assertFalse(Path(tmpdirname, "chat_template.json").is_file())
-            self.assertFalse(Path(tmpdirname, "additional_chat_templates").is_dir())
-            reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
-            self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
-            # When we save as single files, tokenizers and processors share a chat template, which means
-            # the reloaded tokenizer should get the chat template as well
-            self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)
-
-        with self.assertRaises(ValueError):
-            # Saving multiple templates in the legacy format is not permitted
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                processor.chat_template = {"default": "a", "secondary": "b"}
-                processor.save_pretrained(tmpdirname, save_jinja_files=False)

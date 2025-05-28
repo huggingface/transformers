@@ -91,6 +91,8 @@ class InternVLVideoProcessor(BaseVideoProcessor):
                 Metadata of the video containing information about total duration, fps and total number of frames.
             num_frames (`int`, *optional*):
                 Maximum number of frames to sample. Defaults to `self.num_frames`.
+            fps (`int`, *optional*):
+                Target frames to sample per second. Defaults to `self.fps`.
             initial_shift (`bool`, `float` or `int`, defaults to `self.initial_shift`):
                 The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
 

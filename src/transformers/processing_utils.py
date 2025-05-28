@@ -1385,11 +1385,6 @@ class ProcessorMixin(PushToHubMixin):
                 The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
                 chat template is used.
         """
-
-        # Try to use deprecated kwarg is passed. TODO; remove deprecated after v4.58
-        if "video_fps" in kwargs and "fps" not in kwargs:
-            kwargs["fps"] = kwargs.pop("video_fps")
-
         if chat_template is None:
             if isinstance(self.chat_template, dict) and "default" in self.chat_template:
                 chat_template = self.chat_template["default"]
