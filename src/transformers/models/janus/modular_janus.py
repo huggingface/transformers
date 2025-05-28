@@ -892,6 +892,10 @@ class JanusModel(JanusPreTrainedModel):
     def __init__(self, config: JanusConfig):
         super().__init__(config)
         self.config = config
+
+        # Language model is initialized first to get the correct device map
+        self.language_model = AutoModel.from_config(config=config.text_config)
+
         # This is necessary for backward compatibility, see SiglipModel initialization
         self.vision_model = JanusVisionModel._from_config(config.vision_config)
         self.aligner = JanusVisionAlignerMLP(self.vision_model.config)
@@ -903,8 +907,6 @@ class JanusModel(JanusPreTrainedModel):
         self.generation_embeddings = nn.Embedding(self.vqmodel.config.num_embeddings, self.vqmodel.config.embed_dim)
         self.generation_aligner = JanusVQVAEAlignerMLP(self.vqmodel.config)
         self.generation_head = JanusVQVAEHead(self.vqmodel.config)
-
-        self.language_model = AutoModel.from_config(config=config.text_config)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing.
