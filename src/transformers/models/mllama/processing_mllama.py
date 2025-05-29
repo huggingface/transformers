@@ -22,10 +22,7 @@ import numpy as np
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import (
-    PreTokenizedInput,
-    TextInput,
-)
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 class MllamaImagesKwargs(ImagesKwargs, total=False):
@@ -208,7 +205,6 @@ class MllamaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
     image_processor_class = "MllamaImageProcessor"
     tokenizer_class = "PreTrainedTokenizerFast"
 

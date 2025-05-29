@@ -1206,7 +1206,7 @@ ENCODE_KWARGS_DOCSTRING = r"""
                 Activates and controls padding. Accepts the following values:
 
                 - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
+                  sequence is provided).
                 - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
                   acceptable input length for the model if that argument is not provided.
                 - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
