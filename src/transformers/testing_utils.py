@@ -23,7 +23,6 @@ import inspect
 import logging
 import multiprocessing
 import os
-import psutil
 import re
 import shlex
 import shutil
@@ -45,6 +44,7 @@ from unittest import mock
 from unittest.mock import patch
 
 import huggingface_hub.utils
+import psutil
 import requests
 import urllib3
 from huggingface_hub import delete_repo

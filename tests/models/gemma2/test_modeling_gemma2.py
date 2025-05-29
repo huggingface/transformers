@@ -23,6 +23,7 @@ from pytest import mark
 from transformers import AutoModelForCausalLM, AutoTokenizer, Gemma2Config, is_torch_available, pipeline
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     is_flash_attn_2_available,
     require_flash_attn,
@@ -31,9 +32,11 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
+    require_torch_large_accelerator,
+    run_test_using_subprocess,
     slow,
     tooslow,
-    torch_device, Expectations, require_torch_large_accelerator, run_test_using_subprocess,
+    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -255,7 +258,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         EXPECTED_BATCH_TEXTS = Expectations(
             {
                 ("cuda", 8): [
-                    'Hello I am doing a project on the 1960s and I am trying to find out what the average',
+                    "Hello I am doing a project on the 1960s and I am trying to find out what the average",
                     "Hi today I'm going to be talking about the 10 most powerful characters in the Naruto series.",
                 ]
             }
@@ -312,10 +315,13 @@ class Gemma2IntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b", pad_token="</s>", padding_side="right")
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {
-                ("cuda", 7): ['Hello I am doing a project for my school and I need to know how to make a program that will take a number'],
-                ("cuda", 8): ['Hello I am doing a project for my class and I am having trouble with the code. I am trying to make a'],
+                ("cuda", 7): [
+                    "Hello I am doing a project for my school and I need to know how to make a program that will take a number"
+                ],
+                ("cuda", 8): [
+                    "Hello I am doing a project for my class and I am having trouble with the code. I am trying to make a"
+                ],
             }
-
         )
         EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
         max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
