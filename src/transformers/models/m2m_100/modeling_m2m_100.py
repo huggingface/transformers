@@ -530,8 +530,7 @@ class M2M100PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["M2M100EncoderLayer", "M2M100DecoderLayer"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    # Compile issues
-    _supports_flex_attn = False
+    _supports_flex_attn = True
     _supports_cache_class = True
     # Doesn't support `compile` (dynamic control flow). Can be fixed but low usage model
     _supports_static_cache = False

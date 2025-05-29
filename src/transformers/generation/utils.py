@@ -636,7 +636,7 @@ class GenerationMixin(ContinuousMixin):
             and attention_mask is not None
             and attention_mask.ndim == 2
         ):
-            if model_inputs["inputs_embeds"] is not None:
+            if not self.config.is_encoder_decoder and model_inputs["inputs_embeds"] is not None:
                 batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
             else:
                 batch_size, sequence_length = model_inputs[input_ids_key].shape[:2]
@@ -655,7 +655,6 @@ class GenerationMixin(ContinuousMixin):
 
             # If it's not defined, it means the model uses the new general mask API
             if causal_mask_creation_function is None:  # can't be found
-                output_attentions = kwargs.get("output_attentions", False)
                 token_type_ids = getattr(model_input, "token_type_ids", None)
                 # Some models may overwrite the general one
                 causal_mask_creation_function = getattr(self, "create_masks_for_generate", create_masks_for_generate)
@@ -666,7 +665,6 @@ class GenerationMixin(ContinuousMixin):
                     attention_mask=attention_mask,
                     cache_position=cache_position,
                     past_key_values=past_key_values,
-                    output_attentions=output_attentions,
                     token_type_ids=token_type_ids,
                 )
             else:
@@ -2347,9 +2345,15 @@ class GenerationMixin(ContinuousMixin):
         if custom_generate is not None:
             trust_remote_code = kwargs.pop("trust_remote_code", None)
             # Get all `generate` arguments in a single variable. Custom functions are responsible for handling them:
-            # they receive the same inputs as `generate`, only with `model` instead of `self`. They can access to
-            # methods from `GenerationMixin` through `model`.
-            global_keys_to_exclude = {"self", "kwargs"}
+            # they receive the same inputs as `generate`, with `model` instead of `self` and excluding the arguments to
+            # trigger the custom generation. They can access to methods from `GenerationMixin` through `model`.
+            global_keys_to_exclude = {
+                "self",
+                "kwargs",
+                "global_keys_to_exclude",
+                "trust_remote_code",
+                "custom_generate",
+            }
             generate_arguments = {key: value for key, value in locals().items() if key not in global_keys_to_exclude}
             generate_arguments.update(kwargs)
 

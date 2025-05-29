@@ -130,7 +130,7 @@ class FuyuModel(FuyuPreTrainedModel):
             )
         return output_embeddings
 
-    def get_image_features(self, pixel_values: torch.FloatTensor):
+    def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs):
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
 
