@@ -807,7 +807,7 @@ def replace_state_dict_local_with_dtensor(
     return state_dict
 
 
-def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, current_module_plan, device_mesh):
+def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, current_module_plan, device_mesh, parameter_name=None):
     """
     Add hooks to the module holding the layer. Meaning:
     ```
@@ -839,10 +839,16 @@ def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, curr
 
     # 2. We add hooks to the parent module if needed
     if "." in layer_name and current_module_plan != "replicate":
-        parent_layer_name = layer_name.rsplit(".", 1)[0]
+        parent_layer_name = parameter_name.rsplit(".", 1)[0]
         generic_name = re.sub(r"\d+", "*", parent_layer_name)
         # The module itself needs hooks
-        if module_plan := tp_plan.get(generic_name, False):
+        if module_plan := tp_plan.get(generic_name, False) and not module._hf_tp_plan:
+            tp_layer = ALL_PARALLEL_STYLES[module_plan]
+            module_to_tp_ = model.get_submodule(parent_layer_name)
+            tp_layer.prepare_module_tp(module_to_tp_, device_mesh)
+            module_to_tp_._hf_tp_plan = current_module_plan
+            module_to_tp_.__repr__ = lambda: f"{module_to_tp_.__repr__()}\nTP Plan: {current_module_plan}"
+        elif module_plan := tp_plan.get(re.sub(r"\d+", "*", layer_name.rsplit(".", 1)[0]), False)and not module._hf_tp_plan:
             tp_layer = ALL_PARALLEL_STYLES[module_plan]
             module_to_tp_ = model.get_submodule(parent_layer_name)
             tp_layer.prepare_module_tp(module_to_tp_, device_mesh)
@@ -867,24 +873,24 @@ def shard_and_distribute_module(
     module_to_tp = model.get_submodule(param_name)
     rank = int(rank)
 
-    current_module_plan = _get_parameter_tp_plan(parameter_name, tp_plan)
+    current_shard_plan = _get_parameter_tp_plan(parameter_name, tp_plan)
 
-    if current_module_plan is None:
-        # current_module_plan = "replicate" -> mega breaking for now as it seems OpenaiAttention gets some hoooks
+    if current_shard_plan is None:
         if dist.get_rank() == 0:
-            logger.info(f"Tensor parallel plan for {param_name} not found, using default 'replicate' plan.")
+            logger.info(f"Tensor sharding plan for {param_name} not found, using default 'replicate' plan.")
     else:
         if dist.get_rank() == 0:
-            logger.info(f"Tensor parallel plan for {param_name}: {current_module_plan}")
+            logger.info(f"Tensor sharding plan for {param_name}: {current_shard_plan}")
 
     # Add hooks to the module if not done yet
     # add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
     if not getattr(module_to_tp, "_is_hooked", False):
-        add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
+        add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_shard_plan, device_mesh, parameter_name)
         module_to_tp._is_hooked = True
-    if current_module_plan is not None:
+
+    if current_shard_plan is not None:
         try:
-            tp_layer = ALL_PARALLEL_STYLES[current_module_plan]
+            tp_layer = ALL_PARALLEL_STYLES[current_shard_plan]
             param = tp_layer.partition_tensor(
                 param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
             )
