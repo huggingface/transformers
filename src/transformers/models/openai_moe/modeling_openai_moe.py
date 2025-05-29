@@ -62,17 +62,10 @@ class OpenaiRMSNorm(nn.Module):
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
+        return (self.weight * hidden_states).to(input_dtype)
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-def swiglu(x, sigmoid_bias, alpha: float = 1.702):
-    # Note we add an extra bias of 1 to the linear layer
-    x_glu, x_linear = torch.chunk(x, 2, dim=-1)
-    out_glu = x_glu * torch.sigmoid((alpha * x_glu) + sigmoid_bias.view(x_glu.shape))
-    return out_glu * (x_linear + 1)
 
 
 class OpenaiExperts(nn.Module):
@@ -86,9 +79,10 @@ class OpenaiExperts(nn.Module):
         self.gate_up_proj_bias = nn.Parameter(torch.empty(self.num_experts, 2 * self.expert_dim))
         self.down_proj = nn.Parameter(torch.empty((self.num_experts, self.expert_dim, self.hidden_size)))
         self.down_proj_bias = nn.Parameter(torch.empty(self.num_experts, self.expert_dim))
-        self.act_fn = ACT2FN[config.hidden_act]
+        self.act_fn = torch.nn.Sigmoid()
+        self.alpha =  1.702
 
-    def forward(self, hidden_states: torch.Tensor, sigmoid_bias: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """
         This should really not be run on a single machine, as we are reaching compute bound:
         - the inputs are expected to be "sorted" per expert already.
@@ -102,10 +96,12 @@ class OpenaiExperts(nn.Module):
             torch.Tensor
         """
         hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
-        gate_up = torch.bmm(hidden_states, self.gate_up_proj) + self.gate_up_proj_bias[:, None, :]
-        swiglu_ = swiglu(gate_up, sigmoid_bias)
-        next_states = torch.bmm(swiglu_, self.down_proj) + self.down_proj_bias[:, None, :]
+        gate_up = torch.bmm(hidden_states, self.gate_up_proj) + self.gate_up_proj_bias[...,None, :]
+        gate, up = gate_up.chunk(2, dim=-1)  # not supported for DTensors
+        next_states = torch.bmm(((up + 1) * self.act_fn(gate * self.alpha)), self.down_proj) + self.down_proj_bias[..., None, :]
+        next_states = next_states.view(-1, self.hidden_size)
         return next_states
+
 
 
 class OpenaiMLP(nn.Module):
@@ -121,46 +117,23 @@ class OpenaiMLP(nn.Module):
         # we don't slice weight as its not compile compatible
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = self.router(hidden_states)
-        return alternative(self, hidden_states, router_logits)
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)
+        router_top_value = torch.nn.functional.softmax(router_top_value, dim=1)
         router_scores = (
             torch.full_like(router_logits, float(0)).scatter_(1, router_indices, router_top_value).transpose(0, 1)
         )
-
         routed_in = hidden_states.repeat(self.num_local_experts, 1)
-        sigmoid_bias = (
-            torch.full_like(routed_in, float("-inf")).scatter_(1, router_indices, torch.full_like(routed_in, 0.0))
-        ).contiguous()
-
-        routed_out = self.experts(routed_in, sigmoid_bias)
-        routed_out = routed_out * router_scores.view(self.num_local_experts, -1, 1)
+        routed_out = self.experts(routed_in)
+        routed_out = routed_out.view(self.num_local_experts, -1, self.hidden_dim) * router_scores[..., None]
         output_states = routed_out.sum(dim=0)[None, ...]
         return output_states, router_scores
+""""
 
-
-
-def swiglu2(x, alpha: float = 1.702):
-    # Note we add an extra bias of 1 to the linear layer
-    x_glu, x_linear = torch.chunk(x, 2, dim=-1)
-    out_glu = x_glu * torch.sigmoid(alpha * x_glu)
-    return out_glu * (x_linear + 1)
-
-
-def alternative(self, hidden_states, router_logits):
-    experts = torch.topk(router_logits, k=4, dim=-1, sorted=True)
-    expert_weights = torch.nn.functional.softmax(experts.values, dim=1)
-    expert_indices = experts.indices
-    mlp1_weight = self.experts.gate_up_proj[expert_indices, ...]
-    mlp1_bias = self.experts.gate_up_proj_bias[expert_indices, ...]
-    t = torch.einsum("beck,bk->bec", mlp1_weight.permute(0,1,3,2), hidden_states) + mlp1_bias
-    t = swiglu2(t)
-    mlp2_weight = self.experts.down_proj[expert_indices, ...]
-    mlp2_bias = self.experts.down_proj_bias[expert_indices, ...]
-    t = torch.einsum("beck,bek->bec", mlp2_weight.permute(0,1,3,2), t)
-    t += mlp2_bias
-    t = torch.einsum("bec,be->bc", t, expert_weights)
-    return t, router_logits
-
+tensor([[  7.9688,   0.8750,  -0.3535,  ...,   3.9219,   9.1875,  -2.8906],
+        [  2.2500, -15.9375,  -2.7500,  ...,  18.5000,  -1.5312, -18.1250],
+        [-13.5000,  -6.1562,  13.5625,  ..., -22.1250, -30.3750,  23.6250],
+        [  6.0000,   2.5469,   3.6094,  ...,  -7.9375,   4.2500,  -7.7812]],
+"""
 
 class OpenaiRotaryEmbedding(nn.Module):
     rope_type = "default"
@@ -185,6 +158,7 @@ class OpenaiRotaryEmbedding(nn.Module):
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
+            emb = freqs
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
 
@@ -198,11 +172,23 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+def _apply_rotary_emb(
+    x: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+) -> torch.Tensor:
+    # cos = cos.unsqueeze(-2).to(x.dtype)
+    # sin = sin.unsqueeze(-2).to(x.dtype)
+    x1, x2 = torch.chunk(x, 2, dim=-1)
+    o1 = x1 * cos - x2 * sin
+    o2 = x2 * cos + x1 * sin
+    return torch.cat((o1, o2), dim=-1)
+
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
+    q_embed = _apply_rotary_emb(q, cos, sin)
+    k_embed = _apply_rotary_emb(k, cos, sin)
     return q_embed, k_embed
 
 
@@ -231,7 +217,7 @@ def eager_attention_forward(
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
     sinks = module.sinks.view(1, -1, 1, 1).expand(-1, -1, query.shape[-2], -1) # TODO make sure the sink is like a new token
-
+    sinks.zero_()
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
