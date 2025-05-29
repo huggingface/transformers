@@ -176,16 +176,12 @@ class SmolVLMModel(Idefics3Model):
         _, patch_size, _ = image_hidden_states.shape
 
         if input_ids is None:
-            image_mask = (
-                inputs_embeds
-                == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )[..., 0]
+            image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
+            image_mask = image_mask[..., 0]  # slice off the hidden dim
         else:
             image_mask = input_ids == self.config.image_token_id
-        # inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_hidden_states)
-        # image_mask = input_ids == self.image_token_id
 
         num_image_tokens = image_mask.sum(dim=1)
         if not torch.all(num_image_tokens % patch_size == 0):
