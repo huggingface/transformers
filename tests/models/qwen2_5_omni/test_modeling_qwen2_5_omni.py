@@ -22,7 +22,6 @@ from urllib.request import urlopen
 
 import librosa
 import requests
-from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -336,11 +335,6 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
 
-    @parameterized.expand([("greedy", 1), ("beam search", 2)])
-    @unittest.skip("Cannot generate from inputs embeds")
-    def test_generate_from_inputs_embeds(self):
-        pass
-
     @unittest.skip("Cannot do contrastive generation, has custom `generate()`")
     def test_contrastive_generate(self):
         pass
@@ -361,7 +355,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     def test_dola_decoding_sample(self):
         pass
 
-    @unittest.skip("Cannot generate from inputs embeds")
+    @unittest.skip("Cannot handle 4D attention mask")
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
