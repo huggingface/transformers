@@ -679,7 +679,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
                 else:
                     video_mask = (input_ids == self.config.video_token_id).unsqueeze(-1)
                     video_mask = video_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-                    n_video_tokens = (input_ids == self.config.image_token_id).sum()
+                    n_video_tokens = (input_ids == self.config.video_token_id).sum()
 
                 n_video_features = video_embeds.shape[0]
                 if not is_torchdynamo_compiling() and n_video_tokens != n_video_features:
