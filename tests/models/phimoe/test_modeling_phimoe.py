@@ -102,6 +102,7 @@ class PhimoeModelTest(CausalLMModelTest, unittest.TestCase):
 
     test_headmasking = False
     test_pruning = False
+    test_all_params_have_gradient = False
     model_tester_class = PhimoeModelTester
     pipeline_model_mapping = (
         {

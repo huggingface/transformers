@@ -17,8 +17,11 @@
 import copy
 import importlib
 import json
+import os
 import warnings
 from collections import OrderedDict
+from collections.abc import Iterator
+from typing import Any, TypeVar, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
@@ -42,6 +45,9 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
+_T = TypeVar("_T")
+# Tokenizers will depend on packages installed, too much variance and there are no common base or Protocol
+_LazyAutoMappingValue = tuple[Union[type[Any], None], Union[type[Any], None]]
 
 CLASS_DOCSTRING = """
     This is a generic model class that will be instantiated as one of the model classes of the library when created
@@ -408,7 +414,7 @@ class _BaseAutoModelClass:
     # Base class for auto models.
     _model_mapping = None
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         raise EnvironmentError(
             f"{self.__class__.__name__} is designed to be instantiated "
             f"using the `{self.__class__.__name__}.from_pretrained(pretrained_model_name_or_path)` or "
@@ -456,7 +462,7 @@ class _BaseAutoModelClass:
         return config
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike[str]], *model_args, **kwargs):
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.get("trust_remote_code", None)
         kwargs["_from_auto"] = True
@@ -592,7 +598,7 @@ class _BaseAutoModelClass:
         )
 
     @classmethod
-    def register(cls, config_class, model_class, exist_ok=False):
+    def register(cls, config_class, model_class, exist_ok=False) -> None:
         """
         Register a new model for this class.
 
@@ -650,7 +656,7 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
 
-def insert_head_doc(docstring, head_doc=""):
+def insert_head_doc(docstring, head_doc: str = ""):
     if len(head_doc) > 0:
         return docstring.replace(
             "one of the model classes of the library ",
@@ -661,7 +667,7 @@ def insert_head_doc(docstring, head_doc=""):
     )
 
 
-def auto_class_update(cls, checkpoint_for_example="google-bert/bert-base-cased", head_doc=""):
+def auto_class_update(cls, checkpoint_for_example: str = "google-bert/bert-base-cased", head_doc: str = ""):
     # Create a new class with the right name from the base class
     model_mapping = cls._model_mapping
     name = cls.__name__
@@ -759,7 +765,7 @@ def add_generation_mixin_to_remote_model(model_class):
     return model_class
 
 
-class _LazyAutoMapping(OrderedDict):
+class _LazyAutoMapping(OrderedDict[type[PretrainedConfig], _LazyAutoMappingValue]):
     """
     " A mapping config to object (model or tokenizer for instance) that will load keys and values when it is accessed.
 
@@ -768,7 +774,7 @@ class _LazyAutoMapping(OrderedDict):
         - model_mapping: The map model type to model (or tokenizer) class
     """
 
-    def __init__(self, config_mapping, model_mapping):
+    def __init__(self, config_mapping, model_mapping) -> None:
         self._config_mapping = config_mapping
         self._reverse_config_mapping = {v: k for k, v in config_mapping.items()}
         self._model_mapping = model_mapping
@@ -776,11 +782,11 @@ class _LazyAutoMapping(OrderedDict):
         self._extra_content = {}
         self._modules = {}
 
-    def __len__(self):
+    def __len__(self) -> int:
         common_keys = set(self._config_mapping.keys()).intersection(self._model_mapping.keys())
         return len(common_keys) + len(self._extra_content)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: type[PretrainedConfig]) -> _LazyAutoMappingValue:
         if key in self._extra_content:
             return self._extra_content[key]
         model_type = self._reverse_config_mapping[key.__name__]
@@ -802,7 +808,7 @@ class _LazyAutoMapping(OrderedDict):
             self._modules[module_name] = importlib.import_module(f".{module_name}", "transformers.models")
         return getattribute_from_module(self._modules[module_name], attr)
 
-    def keys(self):
+    def keys(self) -> list[type[PretrainedConfig]]:
         mapping_keys = [
             self._load_attr_from_module(key, name)
             for key, name in self._config_mapping.items()
@@ -810,16 +816,16 @@ class _LazyAutoMapping(OrderedDict):
         ]
         return mapping_keys + list(self._extra_content.keys())
 
-    def get(self, key, default):
+    def get(self, key: type[PretrainedConfig], default: _T) -> Union[_LazyAutoMappingValue, _T]:
         try:
             return self.__getitem__(key)
         except KeyError:
             return default
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self.keys())
 
-    def values(self):
+    def values(self) -> list[_LazyAutoMappingValue]:
         mapping_values = [
             self._load_attr_from_module(key, name)
             for key, name in self._model_mapping.items()
@@ -827,7 +833,7 @@ class _LazyAutoMapping(OrderedDict):
         ]
         return mapping_values + list(self._extra_content.values())
 
-    def items(self):
+    def items(self) -> list[tuple[type[PretrainedConfig], _LazyAutoMappingValue]]:
         mapping_items = [
             (
                 self._load_attr_from_module(key, self._config_mapping[key]),
@@ -838,10 +844,10 @@ class _LazyAutoMapping(OrderedDict):
         ]
         return mapping_items + list(self._extra_content.items())
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[type[PretrainedConfig]]:
         return iter(self.keys())
 
-    def __contains__(self, item):
+    def __contains__(self, item: type) -> bool:
         if item in self._extra_content:
             return True
         if not hasattr(item, "__name__") or item.__name__ not in self._reverse_config_mapping:
@@ -849,7 +855,7 @@ class _LazyAutoMapping(OrderedDict):
         model_type = self._reverse_config_mapping[item.__name__]
         return model_type in self._model_mapping
 
-    def register(self, key, value, exist_ok=False):
+    def register(self, key: type[PretrainedConfig], value: _LazyAutoMappingValue, exist_ok=False) -> None:
         """
         Register a new model in this mapping.
         """
