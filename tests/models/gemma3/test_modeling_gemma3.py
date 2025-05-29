@@ -621,7 +621,6 @@ class Gemma3IntegrationTest(unittest.TestCase):
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
-        breakpoint()
         self.assertEqual(output_text, EXPECTED_TEXT)
 
     # TODO: raushan FA2 generates gibberish for no reason, check later
