@@ -19,6 +19,7 @@ import unittest
 from transformers import BioGptConfig, is_sacremoses_available, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -37,7 +38,14 @@ if is_torch_available():
     )
 
 
-class BioGptModelTester:
+class BioGptModelTester(CausalLMModelTester):
+    # Set the model classes
+    config_class = BioGptConfig
+    base_model_class = BioGptModel
+    causal_lm_class = BioGptForCausalLM
+    sequence_classification_class = BioGptForSequenceClassification
+    token_classification_class = BioGptForTokenClassification
+    
     def __init__(
         self,
         parent,
@@ -63,77 +71,33 @@ class BioGptModelTester:
         num_choices=4,
         scope=None,
     ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = scope
-
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
-        if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
-
-        config = self.get_config()
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-
-    def get_config(self):
-        return BioGptConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
+        # Call parent class __init__
+        super().__init__(
+            parent=parent,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            is_training=is_training,
+            use_input_mask=use_input_mask,
+            use_token_type_ids=use_token_type_ids,
+            use_labels=use_labels,
+            vocab_size=vocab_size,
+            hidden_size=hidden_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            intermediate_size=intermediate_size,
+            hidden_act=hidden_act,
+            hidden_dropout_prob=hidden_dropout_prob,
+            attention_probs_dropout_prob=attention_probs_dropout_prob,
+            max_position_embeddings=max_position_embeddings,
+            type_vocab_size=type_vocab_size,
+            type_sequence_label_size=type_sequence_label_size,
+            initializer_range=initializer_range,
+            num_labels=num_labels,
+            num_choices=num_choices,
+            scope=scope,
         )
 
-    def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = BioGptModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+
 
     def create_and_check_biogpt_model_attention_mask_past(self, config, input_ids, input_mask, token_type_ids, *args):
         model = BioGptModel(config=config)
@@ -237,23 +201,11 @@ class BioGptModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
-        return config, inputs_dict
+
 
 
 @require_torch
-class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class BioGptModelTest(CausalLMModelTest, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (BioGptModel, BioGptForCausalLM, BioGptForSequenceClassification, BioGptForTokenClassification)
         if is_torch_available()
@@ -275,13 +227,6 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def setUp(self):
         self.model_tester = BioGptModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BioGptConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -305,9 +250,7 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_biogpt_weight_initialization(*config_and_inputs)
 
-    def test_biogpt_token_classification_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_biogpt_for_token_classification(*config_and_inputs)
+
 
     @slow
     def test_batch_generation(self):
@@ -361,34 +304,7 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         model = BioGptModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    # Copied from tests.models.opt.test_modeling_opt.OPTModelTest.test_opt_sequence_classification_model with OPT->BioGpt,opt->biogpt,prepare_config_and_inputs->prepare_config_and_inputs_for_common
-    def test_biogpt_sequence_classification_model(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = BioGptForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    # Copied from tests.models.opt.test_modeling_opt.OPTModelTest.test_opt_sequence_classification_model_for_multi_label with OPT->BioGpt,opt->biogpt,prepare_config_and_inputs->prepare_config_and_inputs_for_common
-    def test_biogpt_sequence_classification_model_for_multi_label(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.problem_type = "multi_label_classification"
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor(
-            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
-        ).to(torch.float)
-        model = BioGptForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
 
 @require_torch

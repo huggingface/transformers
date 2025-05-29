@@ -25,6 +25,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
@@ -38,11 +39,13 @@ if is_torch_available():
 
 
 # Copied from transformers.tests.models.llama.LlamaModelTester with Llama->Cohere
-class CohereModelTester:
+class CohereModelTester(CausalLMModelTester):
     config_class = CohereConfig
     if is_torch_available():
         model_class = CohereModel
         for_causal_lm_class = CohereForCausalLM
+        base_model_class = CohereModel
+        causal_lm_class = CohereForCausalLM
 
     def __init__(
         self,
@@ -70,52 +73,33 @@ class CohereModelTester:
         pad_token_id=0,
         scope=None,
     ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.pad_token_id = pad_token_id
-        self.scope = scope
+        super().__init__(
+            parent=parent,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            is_training=is_training,
+            use_input_mask=use_input_mask,
+            use_token_type_ids=use_token_type_ids,
+            use_labels=use_labels,
+            vocab_size=vocab_size,
+            hidden_size=hidden_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            intermediate_size=intermediate_size,
+            hidden_act=hidden_act,
+            hidden_dropout_prob=hidden_dropout_prob,
+            attention_probs_dropout_prob=attention_probs_dropout_prob,
+            max_position_embeddings=max_position_embeddings,
+            type_vocab_size=type_vocab_size,
+            type_sequence_label_size=type_sequence_label_size,
+            initializer_range=initializer_range,
+            num_labels=num_labels,
+            num_choices=num_choices,
+            pad_token_id=pad_token_id,
+            scope=scope,
+        )
 
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
-
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
-        if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
-
-        config = self.get_config()
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     # Ignore copy
     def get_config(self):
@@ -145,23 +129,9 @@ class CohereModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
-        return config, inputs_dict
-
 
 @require_torch
-class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class CohereModelTest(CausalLMModelTest, ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CohereModel, CohereForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {

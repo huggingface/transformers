@@ -38,10 +38,9 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_modeling_common import _config_zero_init, ids_tensor
 
 
 if is_torch_available():
@@ -56,11 +55,12 @@ if is_torch_available():
     )
 
 
-class BambaModelTester:
+@require_torch
+class BambaModelTester(CausalLMModelTester):
     config_class = BambaConfig
     if is_torch_available():
-        model_class = BambaModel
-        for_causal_lm_class = BambaForCausalLM
+        base_model_class = BambaModel
+        causal_lm_class = BambaForCausalLM
 
     def __init__(
         self,
@@ -93,51 +93,49 @@ class BambaModelTester:
         mamba_chunk_size=16,
         scope=None,
     ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
+        # Bamba-specific attributes
         self.attention_dropout = attention_dropout
         self.attn_layer_indices = attn_layer_indices
         self.attn_rotary_emb = attn_rotary_emb
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.pad_token_id = pad_token_id
-        self.scope = scope
-        self.mamba_n_groups = mamba_n_groups
-        self.mamba_n_heads = mamba_n_heads
-        self.mamba_d_state = mamba_d_state
-        self.mamba_d_conv = mamba_d_conv
-        self.mamba_expand = mamba_expand
-        self.mamba_chunk_size = mamba_chunk_size
+        
+        # Call parent class __init__
+        super().__init__(
+            parent=parent,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            is_training=is_training,
+            use_input_mask=use_input_mask,
+            use_labels=use_labels,
+            vocab_size=vocab_size,
+            hidden_size=hidden_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            num_key_value_heads=num_key_value_heads,
+            intermediate_size=intermediate_size,
+            hidden_act=hidden_act,
+            hidden_dropout_prob=0.1,
+            attention_probs_dropout_prob=0.1,
+            max_position_embeddings=max_position_embeddings,
+            type_vocab_size=type_vocab_size,
+            initializer_range=initializer_range,
+            num_labels=num_labels,
+            pad_token_id=pad_token_id,
+            scope=scope,
+            mamba_n_groups=mamba_n_groups,
+            mamba_n_heads=mamba_n_heads,
+            mamba_d_state=mamba_d_state,
+            mamba_d_conv=mamba_d_conv,
+            mamba_expand=mamba_expand,
+            mamba_chunk_size=mamba_chunk_size,
+        )
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
-
-        token_labels = None
-        if self.use_labels:
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-
         self._update_layer_configs()
-        config = self.get_config()
-
+        config_and_inputs = super().prepare_config_and_inputs()
+        # Bamba doesn't use token_type_ids, sequence_labels, or choice_labels
+        config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels = config_and_inputs
         return config, input_ids, input_mask, token_labels
-
+    
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -162,59 +160,26 @@ class BambaModelTester:
             d = d[-1]  # get the largest divisor
             self.attn_layer_indices = [x + 1 for x in range(0, self.num_hidden_layers, d)]
 
-    def get_config(self, **kwargs):
-        return self.config_class(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            attention_dropout=self.attention_dropout,
-            attn_layer_indices=self.attn_layer_indices,
-            attn_rotary_emb=self.attn_rotary_emb,
-            max_position_embeddings=self.max_position_embeddings,
-            initializer_range=self.initializer_range,
-            pad_token_id=self.pad_token_id,
-            mamba_n_groups=self.mamba_n_groups,
-            mamba_n_heads=self.mamba_n_heads,
-            mamba_d_state=self.mamba_d_state,
-            mamba_d_conv=self.mamba_d_conv,
-            mamba_expand=self.mamba_expand,
-            mamba_chunk_size=self.mamba_chunk_size,
-            **kwargs,
-        )
-
+    def get_config(self):
+        config = super().get_config()
+        # Add Bamba-specific config parameters
+        config.attention_dropout = self.attention_dropout
+        config.attn_layer_indices = self.attn_layer_indices
+        config.attn_rotary_emb = self.attn_rotary_emb
+        return config
+    
     def create_and_check_model(
-        self,
-        config,
-        input_ids,
-        input_mask,
-        token_labels,
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = self.model_class(config=config)
+        # Bamba doesn't use token_type_ids, sequence_labels, or choice_labels
+        model = self.base_model_class(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        input_mask,
-        token_labels,
-    ):
-        model = self.for_causal_lm_class(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        result = model(input_ids, attention_mask=input_mask)
-        result = model(input_ids, labels=token_labels)
-        result = model(input_ids)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -225,7 +190,7 @@ class BambaModelTester:
     ):
         # config.is_decoder = True
         # config.add_cross_attention = True
-        model = self.for_causal_lm_class(config=config)
+        model = self.causal_lm_class(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -277,7 +242,7 @@ class BambaModelTester:
 
 
 @require_torch
-class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class BambaModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = BambaModelTester
     all_model_classes = (BambaModel, BambaForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
@@ -296,24 +261,15 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
 
-    def setUp(self):
-        self.model_tester = self.model_tester_class(self)
-        self.config_tester = ConfigTester(self, config_class=self.model_tester.config_class, hidden_size=64)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_for_casual_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
-
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+    
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        # Expand to match the expected signature
+        config, input_ids, input_mask, token_labels = config_and_inputs
+        self.model_tester.create_and_check_model(config, input_ids, None, input_mask, None, token_labels, None)
 
     def test_initialization(self):
         r"""
