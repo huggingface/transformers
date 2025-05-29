@@ -62,7 +62,7 @@ class OpenaiConfig(PretrainedConfig):
         tie_word_embeddings=False,
         hidden_act: str = "silu",
         initializer_range: float = 0.02,
-        rms_norm_eps: float = 1e-6,
+        rms_norm_eps: float = 1e-5,
         pad_token_id: int = 0,
         bos_token_id: int = 1,
         eos_token_id: int = 2,
