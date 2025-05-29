@@ -294,15 +294,6 @@ class BatchEncoding(UserDict):
         if "encodings" in state:
             self._encodings = state["encodings"]
 
-    def keys(self):
-        return self.data.keys()
-
-    def values(self):
-        return self.data.values()
-
-    def items(self):
-        return self.data.items()
-
     # After this point:
     # Extended properties and methods only available for fast (Rust-based) tokenizers
     # provided by HuggingFace tokenizers library.
