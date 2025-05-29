@@ -46,27 +46,27 @@ This model was contributed by [Manal El Aidouni](https://huggingface.co/Manel).
 Here is a quick example of how to encode and decode an audio using this model:
 
 ```python 
->>> from datasets import load_dataset, Audio
->>> from transformers import XCodecModel, AutoFeatureExtractor
->>> dummy_dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+from datasets import load_dataset, Audio
+from transformers import XcodecModel, AutoFeatureExtractor
+dummy_dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
->>> # load model and feature extractor
->>> model = XCodecModel.from_pretrained("Manel/X-Codec")
->>> feature_extractor = AutoFeatureExtractor.from_pretrained("Manel/X-Codec")
->>> # load audio sample
->>> dummy_dataset = dummy_dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
->>> audio_sample = dummy_dataset[-1]["audio"]["array"]
->>> inputs = feature_extractor(raw_audio=audio_sample, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
+# load model and feature extractor
+model = XcodecModel.from_pretrained("Manel/X-Codec")
+feature_extractor = AutoFeatureExtractor.from_pretrained("Manel/X-Codec")
+# load audio sample
+dummy_dataset = dummy_dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
+audio_sample = dummy_dataset[-1]["audio"]["array"]
+inputs = feature_extractor(raw_audio=audio_sample, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
 
->>> encoder_outputs = model.encode(inputs["input_values"])
->>> audio_codes = encoder_outputs.audio_codes
->>> decoder_outputs = model.decode(audio_codes)
->>> audio_values = decoder_outputs.audio_values
+encoder_outputs = model.encode(inputs["input_values"])
+audio_codes = encoder_outputs.audio_codes
+decoder_outputs = model.decode(audio_codes)
+audio_values = decoder_outputs.audio_values
 
->>> # or the equivalent with a forward pass
->>> outputs = model(inputs["input_values"])
->>> audio_codes = outputs.audio_codes
->>> audio_values = outputs.audio_values
+# or the equivalent with a forward pass
+outputs = model(inputs["input_values"])
+audio_codes = outputs.audio_codes
+audio_values = outputs.audio_values
 ```
 
 ## XcodecConfig

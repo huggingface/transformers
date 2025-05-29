@@ -15,7 +15,7 @@
 """Xcodec model configuration"""
 
 import math
-from typing import List, Union
+from typing import List, Optional, Union
 
 import numpy as np
 
@@ -107,7 +107,7 @@ class XcodecConfig(PretrainedConfig):
 
     def __init__(
         self,
-        target_bandwidths: List[float] = [0.5, 1, 1.5, 2, 4],
+        target_bandwidths: Optional[List[float]] = None,
         audio_channels: int = 1,
         sample_rate: int = 16000,
         input_channels: int = 768,
@@ -152,6 +152,9 @@ class XcodecConfig(PretrainedConfig):
         elif isinstance(semantic_model_config, HubertConfig):
             self.semantic_model_config = semantic_model_config
 
+        if target_bandwidths is None:
+            target_bandwidths = [0.5, 1, 1.5, 2, 4]
+
         self.target_bandwidths = target_bandwidths
         self.audio_channels = audio_channels
         self.sample_rate = sample_rate
@@ -171,24 +174,6 @@ class XcodecConfig(PretrainedConfig):
         self.hidden_dim = hidden_dim
         self.intermediate_dim = intermediate_dim
         self.output_dim = output_dim
-
-    @classmethod
-    def from_sub_models_config(cls, acoustic_model_config: DacConfig, semantic_model_config: HubertConfig, **kwargs):
-        """
-        Instantiate a [`XcodecConfig`] from acoustic model and semantic model.
-
-        Returns:
-            [`XcodecConfig`]: The instantiated configuration.
-        """
-        return cls(
-            acoustic_model_config=acoustic_model_config.to_dict()
-            if hasattr(acoustic_model_config, "to_dict")
-            else acoustic_model_config,
-            semantic_model_config=semantic_model_config.to_dict()
-            if hasattr(semantic_model_config, "to_dict")
-            else semantic_model_config,
-            **kwargs,
-        )
 
     @property
     def frame_rate(self) -> int:
