@@ -36,7 +36,7 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
     repeat_kv,
 )
-from .configuration_openai import OpenaiConfig
+from .configuration_openai_moe import OpenaiConfig
 
 
 logger = logging.get_logger(__name__)
