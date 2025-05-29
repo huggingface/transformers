@@ -257,7 +257,7 @@ class PixtralProcessor(ProcessorMixin):
             num_image_tokens = []
             for height, width in image_sizes:
                 resized_height, resized_width = get_resize_output_image_size(
-                    image=np.zeros((height, width, 3)),
+                    np.zeros((height, width, 3)),
                     size=(size["longest_edge"], size["longest_edge"]),
                     patch_size=(patch_size, patch_size),
                 )

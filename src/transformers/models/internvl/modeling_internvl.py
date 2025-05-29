@@ -627,8 +627,8 @@ class InternVLModel(InternVLPreTrainedModel):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: Union[int, List[int]],
-        vision_feature_select_strategy: str,
+        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_select_strategy: Optional[str] = None,
         **kwargs,
     ):
         """
@@ -642,6 +642,15 @@ class InternVLModel(InternVLPreTrainedModel):
         Returns:
             vision_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`.
         """
+        vision_feature_layer = (
+            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
+        )
+        vision_feature_select_strategy = (
+            vision_feature_select_strategy
+            if vision_feature_select_strategy is not None
+            else self.config.vision_feature_select_strategy
+        )
+
         downsample_ratio = self.config.downsample_ratio
         if vision_feature_layer == -1:
             vision_features = self.vision_tower(pixel_values=pixel_values).last_hidden_state
@@ -666,7 +675,6 @@ class InternVLModel(InternVLPreTrainedModel):
 
         # Project features through multi-modal projector
         vision_features = self.multi_modal_projector(vision_features)
-
         return vision_features
 
     @can_return_tuple
@@ -686,7 +694,6 @@ class InternVLModel(InternVLPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        image_sizes: torch.Tensor = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, InternVLModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -714,7 +721,6 @@ class InternVLModel(InternVLPreTrainedModel):
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
-                image_sizes=image_sizes,
             )
 
             if input_ids is None:
