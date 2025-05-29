@@ -1,5 +1,0 @@
-#version: 0.2
-Ġ l
-Ġl o
-Ġlo w
-e r

@@ -1,2 +1,0 @@
-git+https://github.com/huggingface/transformers.git@main # install main or adjust it with vX.X.X for installing version specific transforms
-datasets==1.8.0

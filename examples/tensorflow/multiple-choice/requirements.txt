@@ -1,3 +1,0 @@
-sentencepiece != 0.1.92
-protobuf
-tensorflow >= 2.3
