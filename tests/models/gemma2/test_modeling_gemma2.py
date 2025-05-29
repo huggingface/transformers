@@ -183,7 +183,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device)
 
-    @tooslow
+    @require_torch_large_accelerator
     @require_read_token
     def test_model_9b_bf16(self):
         model_id = "google/gemma-2-9b"
@@ -204,7 +204,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @tooslow
+    @require_torch_large_accelerator
     @require_read_token
     def test_model_9b_fp16(self):
         model_id = "google/gemma-2-9b"
@@ -226,7 +226,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_read_token
-    @tooslow
+    @require_torch_large_accelerator
     def test_model_9b_pipeline_bf16(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
         model_id = "google/gemma-2-9b"
