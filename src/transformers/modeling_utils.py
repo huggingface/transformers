@@ -3954,8 +3954,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         if getattr(self, "quantization_method", None) == QuantizationMethod.HQQ:
             from hqq.core.quantize import HQQLinear
 
-            # HQQLinear stores some tensors under the 'meta' device; therefore, we must
-            # explicitly call `cuda` on each HQQLinear layer after `to`.
+            # Since HQQLinear stores some tensors in the 'meta' attribute, we must
+            # explicitly move the parameters to the target device for each HQQLinear layer after `to`.
             self = super().to(*args, **kwargs)
             for module in self.modules():
                 if isinstance(module, HQQLinear):
