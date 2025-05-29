@@ -678,7 +678,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
                     n_video_tokens = (video_mask).sum(dim=1).sum(dim=0)[0]
                 else:
                     video_mask = (input_ids == self.config.video_token_id).unsqueeze(-1)
-                    video_mask = video_mask.expand_as(video_token_id).to(inputs_embeds.device)
+                    video_mask = video_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
                     n_video_tokens = (input_ids == self.config.image_token_id).sum()
 
                 n_video_features = video_embeds.shape[0]
