@@ -124,16 +124,17 @@ def eager_attention_forward(
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
+    sinks = module.sinks.view(1, -1, 1, 1).expand(-1, -1, query.shape[-2], -1)
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
-    attn_weights = torch.cat([attn_weights, module.sinks], dim=-1)
+    attn_weights = torch.cat([attn_weights, sinks], dim=-1)
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = torch.matmul(attn_weights[...,:-1], value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
 
@@ -148,12 +149,12 @@ def openai_flex_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
-    sinks = module.sinks
+    sinks = module.sinks.view(1, -1, 1, 1).expand(-1, -1, key.shape[-2],-1)
 
     def attention_sink(score, b, h, q_idx, kv_idx):
         score = torch.cat([score, sinks], dim=-1)
         return score
-
+    # TODO I need to remove the -1 sinks
     return flex_attention_forward(
         module,
         query,
