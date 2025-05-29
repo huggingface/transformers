@@ -20,7 +20,6 @@
 from typing import Optional, Tuple
 from ...cache_utils import Cache
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from ...activations import ACT2FN
 from ...integrations.flex_attention import flex_attention_forward
@@ -29,8 +28,6 @@ from ...utils import logging
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
-    LlamaForCausalLM,
-    LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,

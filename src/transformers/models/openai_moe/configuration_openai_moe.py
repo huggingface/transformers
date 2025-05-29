@@ -64,6 +64,8 @@ class OpenaiConfig(PretrainedConfig):
         rope_scaling=None,
         attention_dropout: float = 0.0,
         num_experts_per_tok=4,
+        router_aux_loss_coef: float = 0.9,
+        output_router_logits=False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -95,7 +97,8 @@ class OpenaiConfig(PretrainedConfig):
         self.attention_bias = True 
         self.mlp_bias = False
         self.max_position_embeddings = 8192
-
+        self.router_aux_loss_coef = router_aux_loss_coef
+        self.output_router_logits = output_router_logits
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
