@@ -172,7 +172,7 @@ _deps = [
     "sagemaker>=2.31.0",
     "schedulefree>=1.2.6",
     "scikit-learn",
-    "scipy<1.13.0",  # SciPy >= 1.13.0 is not supported with the current jax pin (`jax>=0.4.1,<=0.4.13`)
+    "scipy<1.13.0,>=1.12.0",  # SciPy >= 1.13.0 is not supported with the current jax pin (`jax>=0.4.1,<=0.4.13`)
     "sentencepiece>=0.1.91,!=0.1.92",
     "sigopt",
     "starlette",
