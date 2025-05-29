@@ -33,7 +33,8 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_read_token,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
+    require_torch_large_accelerator,
     slow,
     torch_device,
 )
@@ -369,7 +370,7 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 @require_read_token
 class Gemma3IntegrationTest(unittest.TestCase):
     def setUp(self):
@@ -418,6 +419,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         breakpoint()
         self.assertEqual(output_text, EXPECTED_TEXT)
 
+    @require_torch_large_accelerator
     def test_model_4b_batch(self):
         model_id = "google/gemma-3-4b-it"
 
@@ -465,6 +467,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         self.assertEqual(output_text, EXPECTED_TEXT)
 
+    @require_torch_large_accelerator
     def test_model_4b_crops(self):
         model_id = "google/gemma-3-4b-it"
 
@@ -504,6 +507,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         self.assertEqual(len(inputs["pixel_values"]), EXPECTED_NUM_IMAGES)
         self.assertEqual(output_text, EXPECTED_TEXT)
 
+    @require_torch_large_accelerator
     def test_model_4b_batch_crops(self):
         model_id = "google/gemma-3-4b-it"
 
@@ -559,6 +563,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         self.assertEqual(len(inputs["pixel_values"]), EXPECTED_NUM_IMAGES)
         self.assertEqual(output_text, EXPECTED_TEXT)
 
+    @require_torch_large_accelerator
     def test_model_4b_multiimage(self):
         model_id = "google/gemma-3-4b-it"
 
@@ -621,7 +626,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
 
     # TODO: raushan FA2 generates gibberish for no reason, check later
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_large_accelerator
     @pytest.mark.flash_attn_test
     def test_model_4b_flash_attn(self):
         model_id = "google/gemma-3-4b-it"
