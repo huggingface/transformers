@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
+import io
 import re
 from typing import Dict
 
@@ -29,6 +30,8 @@ from transformers import (
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
+
+torch.serialization.add_safe_globals([io.BytesIO])
 
 MAPPING_ACOUSTIC_ENCODER = {
     r"^block\.0": ["conv1"],
@@ -70,6 +73,14 @@ MAPPING_QUANTIZER = {
     "quantizer.vq.layers": "quantizer.quantizers",
     "._codebook.": ".codebook.",
 }
+
+
+def safe_load(path: str) -> Dict[str, torch.Tensor]:
+    """
+    Load only the tensor objects from a checkpoint, skipping any BytesIO
+    """
+    shard = torch.load(path, map_location="cpu", weights_only=True)
+    return {k: v for k, v in shard.items() if not isinstance(v, io.BytesIO)}
 
 
 def _rewrite_weight_norm(key: str) -> str:
@@ -175,11 +186,12 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
     else:
         config = XcodecConfig()
 
-    model = XcodecModel(config)
+    with torch.device("meta"):
+        model = XcodecModel(config)
 
     logger.info("Loading original checkpoint ...")
 
-    state_dict = torch.load(checkpoint_path)
+    state_dict = safe_load(checkpoint_path)
 
     # the original checkpoint has weight norm applied
     model.apply_weight_norm()
@@ -188,7 +200,7 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=No
 
     new_state_dict = convert_old_keys_to_new_keys(state_dict)
 
-    missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
+    missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=True, assign=True)  # strict=False)
 
     if len(unexpected_keys) != 0:
         raise ValueError(f"Unexpected keys: {unexpected_keys}")
