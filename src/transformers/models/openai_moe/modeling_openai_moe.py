@@ -82,7 +82,7 @@ class OpenaiExperts(nn.Module):
         self.act_fn = torch.nn.Sigmoid()
         self.alpha =  1.702
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, router_indices = None, routing_weights=None) -> torch.Tensor:
         """
         This should really not be run on a single machine, as we are reaching compute bound:
         - the inputs are expected to be "sorted" per expert already.
@@ -95,11 +95,33 @@ class OpenaiExperts(nn.Module):
         Returns:
             torch.Tensor
         """
-        hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
-        gate_up = torch.bmm(hidden_states, self.gate_up_proj) + self.gate_up_proj_bias[...,None, :]
+        # hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
+        final_hidden_states = torch.zeros_like(
+            hidden_states, dtype=hidden_states.dtype, device=hidden_states.device
+        )
+
+        # One hot encode the selected experts to create an expert mask
+        # this will be used to easily index which expert is going to be sollicitated
+        expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=self.num_experts).permute(2, 1, 0)
+
+        expert_hitted = (expert_mask.sum(dim=(-1, -2)) > 0).nonzero(as_tuple=True)[0].tolist()
+        for expert_idx in expert_hitted:
+            idx, top_x = torch.where(expert_mask[expert_idx])  # idx: top-1/top-2 indicator, top_x: token indices
+            current_state = hidden_states[top_x]  # (num_tokens, hidden_dim)
+            gate_up = current_state @ self.gate_up_proj[expert_idx] + self.gate_up_proj_bias[expert_idx]  # (num_tokens, 2 * interm_dim)
+            gate, up = gate_up.chunk(2, dim=-1)  # (num_tokens, interm_dim)
+            glu = gate * self.act_fn(gate * self.alpha)  # (num_tokens, interm_dim)
+            gated_output = (up + 1) * glu  # (num_tokens, interm_dim)
+            out = gated_output @ self.down_proj[expert_idx] + self.down_proj_bias[expert_idx]  # (num_tokens, hidden_dim)
+            weighted_output = out * routing_weights[top_x, idx].unsqueeze(-1)  # (num_tokens, hidden_dim)
+            final_hidden_states.index_add_(0, top_x, weighted_output.to(hidden_states.dtype))
+        return final_hidden_states
+    
+
+        gate_up = torch.bmm(hidden_states, self.gate_up_proj[router_indices, ...]) + self.gate_up_proj_bias[router_indices, ...,None, :]
         gate, up = gate_up.chunk(2, dim=-1)  # not supported for DTensors
         glu = gate * self.act_fn(gate * self.alpha)
-        next_states = torch.bmm(((up + 1) * glu), self.down_proj) + self.down_proj_bias[..., None, :]
+        next_states = torch.bmm(((up + 1) * glu), self.down_proj[router_indices, ...]) + self.down_proj_bias[router_indices, ..., None, :]
         next_states = next_states.view(-1, self.hidden_size)
         return next_states
 
@@ -124,11 +146,12 @@ class OpenaiMLP(nn.Module):
         router_scores = (
             torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value).transpose(0, 1)
         )
-        routed_in = hidden_states.repeat(self.num_local_experts, 1)
-        routed_out = self.experts(routed_in)
-        routed_out = routed_out.view(self.num_local_experts, -1, self.hidden_dim) * router_scores[..., None]
-        output_states = routed_out.view(self.num_local_experts, batch_size, -1, self.hidden_dim).sum(dim=0)
-        return output_states, router_scores
+        # routed_in = hidden_states.repeat(self.num_local_experts, 1)
+        routed_out = self.experts(hidden_states, router_indices, router_top_value)
+        routed_out = routed_out.view(batch_size, -1, self.hidden_dim)
+        # routed_out = routed_out.view(self.num_local_experts, -1, self.hidden_dim) * router_scores[..., None]
+        # output_states = routed_out.view(self.num_local_experts, batch_size, -1, self.hidden_dim).sum(dim=0)
+        return routed_out, router_scores
 
 
 class OpenaiRotaryEmbedding(nn.Module):
@@ -266,8 +289,8 @@ class OpenaiAttention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
-        # if self.config._attn_implementation != "eager":
-        #     attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
