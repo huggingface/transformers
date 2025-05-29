@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import DbrxConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -94,7 +94,7 @@ class DbrxModelTester(CausalLMModelTester):
         self.tie_word_embeddings = tie_word_embeddings
         self.torch_dtype = torch_dtype
         self.use_cache = use_cache
-        
+
         # Call parent init
         super().__init__(
             parent=parent,
