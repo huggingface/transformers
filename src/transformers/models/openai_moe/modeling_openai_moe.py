@@ -121,7 +121,7 @@ class OpenaiMLP(nn.Module):
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)
         router_top_value = torch.nn.functional.softmax(router_top_value, dim=1)
         router_scores = (
-            torch.full_like(router_logits, float(0)).scatter_(1, router_indices, router_top_value).transpose(0, 1)
+            torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value).transpose(0, 1)
         )
         routed_in = hidden_states.repeat(self.num_local_experts, 1)
         routed_out = self.experts(routed_in)
@@ -146,38 +146,28 @@ class OpenaiRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
+        self.inv_freq = 1.0 / (self.config.rope_theta ** ( torch.arange(0, self.config.head_dim, 2, dtype=torch.float32, device=x.device)/ self.config.head_dim))
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
             emb = freqs
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
+ 
+        return cos.to(x.dtype), sin.to(x.dtype)
 
 def _apply_rotary_emb(
     x: torch.Tensor,
     cos: torch.Tensor,
     sin: torch.Tensor,
 ) -> torch.Tensor:
-    # cos = cos.unsqueeze(-2).to(x.dtype)
-    # sin = sin.unsqueeze(-2).to(x.dtype)
-    x1, x2 = torch.chunk(x, 2, dim=-1)
-    o1 = x1 * cos - x2 * sin
-    o2 = x2 * cos + x1 * sin
-    return torch.cat((o1, o2), dim=-1)
+    first_half, second_half = torch.chunk(x, 2, dim=-1)
+    first_ = first_half * cos - second_half * sin
+    second_ = second_half * cos + first_half * sin
+    return torch.cat((first_, second_), dim=-1)
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
@@ -185,7 +175,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     q_embed = _apply_rotary_emb(q, cos, sin)
     k_embed = _apply_rotary_emb(k, cos, sin)
     return q_embed, k_embed
-
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
@@ -219,7 +208,7 @@ def eager_attention_forward(
         attn_weights = attn_weights + causal_mask
 
     attn_weights = torch.cat([attn_weights, sinks], dim=-1)
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1).to(query.dtype)
+    attn_weights = torch.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights[...,:-1], value_states) # ignore the sinks
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -356,6 +345,7 @@ class OpenaiPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["OpenaiDecoderLayer"]
+    _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
