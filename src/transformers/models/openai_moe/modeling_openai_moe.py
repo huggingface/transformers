@@ -80,8 +80,8 @@ class OpenaiExperts(nn.Module):
         """
         hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
         gate_up = torch.bmm(hidden_states, self.gate_up_proj) + self.gate_up_proj_bias[:, None, :]
-        swiglu = swiglu(gate_up, alpha=1.702)
-        next_states = torch.bmm(swiglu, self.down_proj) + self.down_proj_bias[:,None,:]
+        swiglu_ = swiglu(gate_up)
+        next_states = torch.bmm(swiglu_, self.down_proj) + self.down_proj_bias[:,None,:]
         return next_states
 
 
