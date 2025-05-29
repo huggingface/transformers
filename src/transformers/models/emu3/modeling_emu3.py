@@ -1528,7 +1528,7 @@ class Emu3Model(Emu3PreTrainedModel):
             )
 
         if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
+            inputs_embeds = self.embed_tokens(input_ids)
 
         if pixel_values is not None:
             image_tokens = self.get_image_features(pixel_values, image_sizes)
@@ -1541,8 +1541,8 @@ class Emu3Model(Emu3PreTrainedModel):
                 special_image_mask = (input_ids == self.vocabulary_mapping.image_token_id).unsqueeze(-1)
                 special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
 
-            image_tokens = self.get_image_features(pixel_values, image_sizes=image_sizes)
-            image_embeds = self.get_input_embeddings()(image_tokens).to(inputs_embeds.device, inputs_embeds.dtype)
+            image_tokens = self.get_image_features(pixel_values)
+            image_embeds = self.embed_tokens(image_tokens).to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_embeds)
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
