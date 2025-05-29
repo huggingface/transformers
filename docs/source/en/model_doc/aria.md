@@ -14,73 +14,115 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Aria
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-## Overview
+# Aria
 
-The Aria model was proposed in [Aria: An Open Multimodal Native Mixture-of-Experts Model](https://huggingface.co/papers/2410.05993) by Li et al. from the Rhymes.AI team.
+[Aria](https://huggingface.co/papers/2410.05993) is Rhymes AI’s from-scratch, open-source multimodal model—natively integrating text, images, video and code without forcing visuals through text-only bottlenecks.
 
-Aria is an open multimodal-native model with best-in-class performance across a wide range of multimodal, language, and coding tasks. It has a Mixture-of-Experts architecture, with respectively 3.9B and 3.5B activated parameters per visual token and text token. 
+Its Mixture-of-Experts design activates just 3.9 billion parameters per visual token (3.5 billion per text token), cutting compute while preserving each modality’s unique spatial and hierarchical structure. This efficient, native architecture outperforms other models of similar size on multimodal, language and coding benchmarks.
 
-The abstract from the paper is the following:
+You can find all the original Aria checkpoints under the [Aria](https://huggingface.co/rhymes-ai/Aria) collection.
 
-*Information comes in diverse modalities. Multimodal native AI models are essential to integrate real-world information and deliver comprehensive understanding. While proprietary multimodal native models exist, their lack of openness imposes obstacles for adoptions, let alone adaptations. To fill this gap, we introduce Aria, an open multimodal native model with best-in-class performance across a wide range of multimodal, language, and coding tasks. Aria is a mixture-of-expert model with 3.9B and 3.5B activated parameters per visual token and text token, respectively. It outperforms Pixtral-12B and Llama3.2-11B, and is competitive against the best proprietary models on various multimodal tasks. We pre-train Aria from scratch following a 4-stage pipeline, which progressively equips the model with strong capabilities in language understanding, multimodal understanding, long context window, and instruction following. We open-source the model weights along with a codebase that facilitates easy adoptions and adaptations of Aria in real-world applications.*
+> [!TIP]
+> Click on the Aria models in the right sidebar for more examples of how to apply Aria to different multimodal tasks.
 
-This model was contributed by [m-ric](https://huggingface.co/m-ric).
-The original code can be found [here](https://github.com/rhymes-ai/Aria).
+The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
-## Usage tips
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-Here's how to use the model for vision tasks:
 ```python
-import requests
-import torch
+from transformers import pipeline
 from PIL import Image
+import requests
 
-from transformers import AriaProcessor, AriaForConditionalGeneration
+# Initialize pipeline for multimodal tasks
+aria_pipe = pipeline("image-to-text", model="rhymes-ai/Aria")
 
-model_id_or_path = "rhymes-ai/Aria"
+# Process image and text query
+image_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(image_url, stream=True).raw)
 
-model = AriaForConditionalGeneration.from_pretrained(
-    model_id_or_path, device_map="auto"
+response = aria_pipe(
+    image,
+    prompt="what is the image?",
+    max_new_tokens=500,
+    temperature=0.9
 )
 
-processor = AriaProcessor.from_pretrained(model_id_or_path)
-
-image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-
-messages = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "image"},
-            {"text": "what is the image?", "type": "text"},
-        ],
-    }
-]
-
-text = processor.apply_chat_template(messages, add_generation_prompt=True)
-inputs = processor(text=text, images=image, return_tensors="pt")
-inputs.to(model.device)
-
-output = model.generate(
-    **inputs,
-    max_new_tokens=15,
-    stop_strings=["<|im_end|>"],
-    tokenizer=processor.tokenizer,
-    do_sample=True,
-    temperature=0.9,
-)
-output_ids = output[0][inputs["input_ids"].shape[1]:]
-response = processor.decode(output_ids, skip_special_tokens=True)
+print(response[0]['generated_text'])
 ```
 
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoProcessor
+from PIL import Image
+import requests
+
+# Load model with precision control
+model = AutoModelForCausalLM.from_pretrained(
+    "rhymes-ai/Aria",
+    device_map="auto",
+    torch_dtype=torch.bfloat16,
+    trust_remote_code=True
+)
+
+processor = AutoProcessor.from_pretrained("rhymes-ai/Aria", trust_remote_code=True)
+
+# Prepare multimodal input
+image = Image.open(requests.get("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/cat.png", stream=True).raw)
+messages = [{
+    "role": "user",
+    "content": [
+        {"type": "image"},
+        {"text": "Describe this image", "type": "text"}
+    ]
+}]
+
+# Process and generate
+text = processor.apply_chat_template(messages, add_generation_prompt=True)
+inputs = processor(text=text, images=image, return_tensors="pt")
+inputs = {k: v.to(model.device).to(model.dtype) for k, v in inputs.items()}
+
+with torch.inference_mode():
+    outputs = model.generate(
+        **inputs,
+        max_new_tokens=500,
+        do_sample=True,
+        temperature=0.9,
+        pad_token_id=processor.tokenizer.eos_token_id
+    )
+
+response = processor.decode(outputs[0], skip_special_tokens=True)
+print(response)
+```
+
+</hfoption>
+</hfoptions>
+
+## Quantization
+
+The original Aria model uses a custom grouped-gemm implementation, which is not compatible with standard quantization tools. To make quantization feasible, the community provides the [rhymes-ai/Aria-sequential_mlp](https://huggingface.co/rhymes-ai/Aria-sequential_mlp) fork, which replaces grouped-gemm with standard `nn.Linear` layers, enabling successful 4-bit and 8-bit quantization using libraries like bitsandbytes and TorchAO. We suggest you to use quantization-friendly fork or other pre-quantized weights(listed below) to run Aria efficiently on GPUs with limited memory, as the original model architecture does not natively support standard quantization workflows.
+
+**Pre-quantized versions:**
+
+- [FP8 dynamic quantization (llm-compressor)](https://huggingface.co/leon-se/Aria-sequential_mlp-FP8-dynamic) – ~30GB VRAM.
+- [4-bit NF4 quantization (bitsandbytes)](https://huggingface.co/leon-se/Aria-sequential_mlp-bnb_nf4) – ~15.5GB VRAM.
+- [int8 quantization (TorchAO, official)](https://huggingface.co/rhymes-ai/Aria-torchao-int8wo) – ~30GB VRAM.
+
+## Notes
+
+- Context window: 64,000 tokens for long multimodal documents.
 
 ## AriaImageProcessor
 
@@ -112,5 +154,4 @@ response = processor.decode(output_ids, skip_special_tokens=True)
 
 ## AriaForConditionalGeneration
 
-[[autodoc]] AriaForConditionalGeneration
-    - forward
+[[autodoc]] AriaForConditionalGeneration - forward
