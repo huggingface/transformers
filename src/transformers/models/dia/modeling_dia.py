@@ -813,50 +813,10 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
         model_kwargs["max_delay_pattern"] = model_kwargs["delay_pattern"].max().item()
         model_kwargs["num_channels"] = self.config.decoder_config.num_channels
 
+        # eos countdown
+        model_kwargs["eos_countdown"] = torch.full((batch_size,), -1, dtype=torch.long, device=self.device)
+
         return generation_config, model_kwargs
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids: torch.LongTensor,
-        past_key_values: Optional[Cache] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **model_kwargs,
-    ) -> Dict[str, Any]:
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids, past_key_values, attention_mask, inputs_embeds, cache_position, **model_kwargs
-        )
-
-        batch_size = input_ids.shape[0]  # This is the batch_size for the decoder input_ids
-        # For CFG, the actual batch_size going into the model is doubled (cond + uncond).
-        # However, eos_detected and eos_countdown should be per original batch item.
-        # The `GenerationMixin` handles the expansion for `input_ids` for CFG.
-        # We assume `batch_size` here refers to the original, undoubled batch size.
-
-        # Initialize EOS states if not already present (first step)
-        eos_detected_Bx = model_kwargs.get("eos_detected_Bx")
-        eos_countdown_Bx = model_kwargs.get("eos_countdown_Bx")
-
-        if eos_detected_Bx is None:
-            eos_detected_Bx = torch.zeros((batch_size,), dtype=torch.bool, device=input_ids.device)
-        if eos_countdown_Bx is None:
-            # Initialize with -1 to indicate countdown hasn't started.
-            eos_countdown_Bx = torch.full((batch_size,), -1, dtype=torch.long, device=input_ids.device)
-
-        model_inputs["eos_detected_Bx"] = eos_detected_Bx
-        model_inputs["eos_countdown_Bx"] = eos_countdown_Bx
-
-        # Pass other necessary kwargs from model_kwargs that might have been set in _prepare_generation_config
-        model_inputs["delay_pattern"] = model_kwargs["delay_pattern"]
-        model_inputs["max_delay_pattern"] = model_kwargs["max_delay_pattern"]
-        model_inputs["audio_eos_value"] = model_kwargs["audio_eos_value"]
-        model_inputs["audio_pad_value"] = model_kwargs["audio_pad_value"]
-        model_inputs["num_channels"] = model_kwargs["num_channels"]
-        model_inputs["cfg_scale"] = model_kwargs["cfg_scale"]  # Pass CFG scale for use in forward
-        model_inputs["cfg_filter_top_k"] = model_kwargs["cfg_filter_top_k"]
-
-        return model_inputs
 
     def _update_model_kwargs_for_generation(
         self,
@@ -870,65 +830,17 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
         )
         model_kwargs["encoder_outputs"] = outputs.encoder_last_hidden_state
 
-        # Update EOS countdown state based on the newly generated tokens.
-        # `outputs.logits` are the channel 0 logits from Dia's forward pass, which include
-        # CFG, Dia's custom filtering (including strong EOS forcing/biasing for channel 0).
-        # `torch.argmax(outputs.logits, dim=-1)` will therefore reliably indicate if the EOS
-        # token was selected for channel 0 according to Dia's internal logic. This is mostly
-        # independent of GenerationMixin's subsequent sampling (temp, top-k) for the EOS token itself,
-        # though sampling still applies to non-EOS tokens.
         if outputs.logits is not None:
-            last_generated_tokens_Bx = torch.argmax(outputs.logits, dim=-1)  # Shape [B_orig]
+            last_generated_tokens = torch.argmax(outputs.logits, dim=-1)  # Shape [B_orig]
 
-            # Get initial states from model_kwargs for this step's calculation
-            initial_eos_detected_Bx = model_kwargs["eos_detected_Bx"].clone().to(last_generated_tokens_Bx.device)
-            initial_eos_countdown_Bx = model_kwargs["eos_countdown_Bx"].clone().to(last_generated_tokens_Bx.device)
-
+            eos_countdown = model_kwargs["eos_countdown"]
             audio_eos_value = model_kwargs["audio_eos_value"]
             max_delay_pattern = model_kwargs["max_delay_pattern"]
-            max_length_cfg = model_kwargs.get("max_length")
 
-            cur_len = 0
-            past_kv = model_kwargs.get("past_key_values")
-            cache_pos = model_kwargs.get("cache_position")
+            eos_countdown[last_generated_tokens == audio_eos_value] = max_delay_pattern
+            eos_countdown[eos_countdown > 0] -= 1
 
-            if cache_pos is not None and torch.is_tensor(cache_pos):
-                cur_len = cache_pos.max().item() + 1
-            elif (
-                past_kv is not None and hasattr(past_kv, "get_seq_length") and past_kv.self_attention_cache is not None
-            ):
-                cur_len = past_kv.self_attention_cache.get_seq_length() + 1
-            # Fallback for cur_len if needed, or ensure it's handled if 0 by subsequent logic
-
-            # 1. Determine current trigger based on this step's generation and initial_eos_detected_Bx
-            is_eos_token_triggered_this_step = (~initial_eos_detected_Bx.bool()) & (
-                last_generated_tokens_Bx == audio_eos_value
-            )
-            is_max_len_triggered_this_step = torch.tensor(False, device=initial_eos_detected_Bx.device)
-            if max_length_cfg is not None and cur_len > 0:
-                is_max_len_triggered_this_step = cur_len >= max_length_cfg - max_delay_pattern
-            current_eos_trigger_this_step = is_eos_token_triggered_this_step | is_max_len_triggered_this_step
-
-            # 2. Update eos_detected_Bx for the *next* iteration's check
-            eos_detected_Bx_for_next_step = initial_eos_detected_Bx | current_eos_trigger_this_step
-
-            # 3. Start countdown if newly triggered AND countdown was not previously started (<0)
-            needs_to_start_countdown_mask = current_eos_trigger_this_step & (initial_eos_countdown_Bx < 0)
-            eos_countdown_after_start_check = initial_eos_countdown_Bx.clone()
-            eos_countdown_after_start_check[needs_to_start_countdown_mask] = max_delay_pattern
-
-            # 4. Decrement active countdowns
-            # An active countdown is one that is > 0 (either from previous step or just started)
-            should_decrement_mask = eos_countdown_after_start_check > 0
-            eos_countdown_final = eos_countdown_after_start_check.clone()
-            eos_countdown_final[should_decrement_mask] -= 1
-
-            # 5. Store updated states back to model_kwargs
-            model_kwargs["eos_detected_Bx"] = eos_detected_Bx_for_next_step
-            model_kwargs["eos_countdown_Bx"] = eos_countdown_final
-        else:
-            # Logits are None, cannot determine last token. EOS state remains unchanged.
-            pass
+            model_kwargs["eos_countdown"] = eos_countdown
 
         return model_kwargs
 
@@ -945,8 +857,7 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        eos_detected_Bx: Optional[torch.Tensor] = None,
-        eos_countdown_Bx: Optional[torch.Tensor] = None,
+        eos_countdown: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         cfg_scale: float = 3.0,
         cfg_filter_top_k: int = 50,
@@ -1024,13 +935,13 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
         logits = logits_flat.view(logits.shape)
 
         # EOS countdown and delay pattern application
-        active_countdown_mask_Bx = eos_countdown_Bx > 0
+        active_countdown_mask_Bx = eos_countdown > 0
 
         if active_countdown_mask_Bx.any():
             # Logits for active items: [num_active, C, V]
             logits_active = logits[active_countdown_mask_Bx]
             # Countdown values for active items: [num_active]
-            eos_countdown_active_Bx = eos_countdown_Bx[active_countdown_mask_Bx]
+            eos_countdown_active_Bx = eos_countdown[active_countdown_mask_Bx]
             # Delay steps for active items: [num_active]
             current_delay_steps_active_Bx = max_delay_pattern - eos_countdown_active_Bx
 
@@ -1043,67 +954,32 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
             # Mask for forcing PAD: [num_active, C]
             force_pad_mask_BxC = current_delay_steps_active_BxC > delay_pattern_Cx
 
-            # Create masks for logit modification [num_active, C, V]
-            eos_logit_mask = torch.ones_like(logits_active, dtype=torch.bool)
-            pad_logit_mask = torch.ones_like(logits_active, dtype=torch.bool)
+            # Efficiently apply forced EOS and PAD logits
+            vocab_size = logits_active.shape[-1]  # logits_active is logits[active_countdown_mask_Bx]
 
-            # For EOS forcing: allow only audio_eos_value
-            eos_logit_mask[force_eos_mask_BxC, :audio_eos_value] = False
-            eos_logit_mask[force_eos_mask_BxC, audio_eos_value + 1 :] = False
+            # Create template rows for forced EOS and PAD
+            eos_row = torch.full((vocab_size,), -torch.inf, device=logits.device, dtype=logits_active.dtype)
+            eos_row[audio_eos_value] = 0.0
+            pad_row = torch.full((vocab_size,), -torch.inf, device=logits.device, dtype=logits_active.dtype)
+            pad_row[audio_pad_value] = 0.0
 
-            # For PAD forcing: allow only audio_pad_value
-            pad_logit_mask[force_pad_mask_BxC, :audio_pad_value] = False
-            pad_logit_mask[force_pad_mask_BxC, audio_pad_value + 1 :] = False
+            # Clone the active slice to modify it
+            final_modified_slice = logits_active.clone()
+            final_modified_slice[force_eos_mask_BxC] = eos_row
+            final_modified_slice[force_pad_mask_BxC] = pad_row
 
-            # Apply masks: set disallowed tokens to -inf, target token to 0
-            # Note: scatter might be more efficient if only one token is allowed per channel
-            logits_active_eos_forced = logits_active.masked_fill(~eos_logit_mask, -torch.inf)
-            logits_active_eos_forced[force_eos_mask_BxC.unsqueeze(-1).expand_as(logits_active_eos_forced)] = (
-                torch.where(
-                    force_eos_mask_BxC.unsqueeze(-1),
-                    torch.full_like(logits_active_eos_forced, -torch.inf).scatter_(
-                        -1,
-                        torch.tensor(audio_eos_value, device=logits.device).expand(
-                            force_eos_mask_BxC.sum(), num_channels, 1
-                        ),
-                        0.0,
-                    ),
-                    logits_active_eos_forced,
-                )
-            )
-
-            logits_active_pad_forced = logits_active_eos_forced.masked_fill(~pad_logit_mask, -torch.inf)
-            logits_active_pad_forced[force_pad_mask_BxC.unsqueeze(-1).expand_as(logits_active_pad_forced)] = (
-                torch.where(
-                    force_pad_mask_BxC.unsqueeze(-1),
-                    torch.full_like(logits_active_pad_forced, -torch.inf).scatter_(
-                        -1,
-                        torch.tensor(audio_pad_value, device=logits.device).expand(
-                            force_pad_mask_BxC.sum(), num_channels, 1
-                        ),
-                        0.0,
-                    ),
-                    logits_active_pad_forced,
-                )
-            )
-
-            # Update the original logits tensor
-            logits[active_countdown_mask_Bx] = logits_active_pad_forced
-
-        # The GenerationMixin will use logits[:, 0, :] for sampling the next token if not specified otherwise
-        # or if the model is not specifically tailored for multi-channel logits output for generation.
-        # For Dia, we want the GenerationMixin to act on channel 0's (potentially modified) logits.
-        final_logits_for_generation = logits[:, 0, :]  # Shape: [B, vocab_size]
+            # Update the original logits tensor with the modified slice
+            logits[active_countdown_mask_Bx] = final_modified_slice
 
         if not return_dict:
             # When not returning a dict, the first element is usually logits, then past_kv, then other outputs.
             # The GenerationMixin expects the logits it will sample from as the first element.
-            output = (final_logits_for_generation,) + outputs[1:]  # Ensure correct logits are passed
+            output = (logits,) + outputs[1:]  # Ensure correct logits are passed
             return ((loss,) + output) if loss is not None else output
 
         return Seq2SeqLMOutput(
             loss=loss,
-            logits=final_logits_for_generation,  # Pass channel 0's logits for GenerationMixin
+            logits=logits,  # Pass channel 0's logits for GenerationMixin
             past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,

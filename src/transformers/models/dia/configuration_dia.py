@@ -131,6 +131,7 @@ class DiaConfig(PretrainedConfig):
         self.decoder_config = decoder_config if decoder_config is not None else DiaDecoderConfig()
         self.norm_eps = norm_eps
         self.delay_pattern = delay_pattern if delay_pattern is not None else [0, 8, 9, 10, 11, 12, 13, 14, 15]
+        self.is_encoder_decoder = True
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
