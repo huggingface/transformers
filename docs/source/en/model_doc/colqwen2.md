@@ -50,7 +50,7 @@ model = ColQwen2ForRetrieval.from_pretrained(
     model_name,
     torch_dtype=torch.bfloat16,
     device_map="auto",  # "cpu", "cuda", or "mps" for Apple Silicon
-    attn_implementation="flash_attention_2" if is_flash_attn_2_available() else "sdpa",
+    attn_implementation="flash_attention_2" if is_flash_attn_2_available() else None,
 )
 
 processor = ColQwen2Processor.from_pretrained(model_name)
