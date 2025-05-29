@@ -1,0 +1,83 @@
+name: Doctest job
+
+on:
+  workflow_call:
+    inputs:
+      job_splits:
+        required: true
+        type: string
+      split_keys:
+        required: true
+        type: string
+
+env:
+  HF_HOME: /mnt/cache
+  TRANSFORMERS_IS_CI: yes
+  RUN_SLOW: yes
+  OMP_NUM_THREADS: 16
+  MKL_NUM_THREADS: 16
+  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
+  TF_FORCE_GPU_ALLOW_GROWTH: true
+
+jobs:
+  run_doctests:
+    name: " "
+    strategy:
+      max-parallel: 8  # 8 jobs at a time
+      fail-fast: false
+      matrix:
+        split_keys: ${{ fromJson(inputs.split_keys) }}
+    runs-on: 
+      group: aws-g4dn-2xlarge-cache
+    container:
+      image: huggingface/transformers-all-latest-gpu
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[flax]
+
+      - name: GPU visibility
+        working-directory: /transformers
+        run: |
+          python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        run: pip freeze
+
+      - name: Get doctest files
+        working-directory: /transformers
+        run: |
+          echo "${{ toJson(fromJson(inputs.job_splits)[matrix.split_keys]) }}" > doc_tests.txt
+          cat doc_tests.txt
+
+      - name: Set `split_keys`
+        shell: bash
+        run: |
+          echo "${{ matrix.split_keys }}"
+          split_keys=${{ matrix.split_keys }}
+          split_keys=${split_keys//'/'/'_'}
+          echo "split_keys"
+          echo "split_keys=$split_keys" >> $GITHUB_ENV
+
+      - name: Run doctests
+        working-directory: /transformers
+        run: |
+          cat doc_tests.txt
+          python3 -m pytest -v --make-reports doc_tests_gpu_${{ env.split_keys }} --doctest-modules $(cat doc_tests.txt) -sv --doctest-continue-on-failure --doctest-glob="*.md"
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat /transformers/reports/doc_tests_gpu_${{ env.split_keys }}/failures_short.txt
+
+      - name: "Test suite reports artifacts: doc_tests_gpu_test_reports_${{ env.split_keys }}"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: doc_tests_gpu_test_reports_${{ env.split_keys }}
+          path: /transformers/reports/doc_tests_gpu_${{ env.split_keys }}

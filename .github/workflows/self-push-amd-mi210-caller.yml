@@ -1,0 +1,25 @@
+name: Self-hosted runner (AMD mi210 CI caller)
+
+on:
+  #workflow_run:
+  #  workflows: ["Self-hosted runner (push-caller)"]
+  #  branches: ["main"]
+  #  types: [completed]
+  push:
+    branches:
+      - run_amd_push_ci_caller*
+    paths:
+      - "src/**"
+      - "tests/**"
+      - ".github/**"
+      - "templates/**"
+      - "utils/**"
+
+jobs:
+  run_amd_ci:
+    name: AMD mi210
+    if: (cancelled() != true) && ((github.event_name == 'workflow_run') || ((github.event_name == 'push') && startsWith(github.ref_name, 'run_amd_push_ci_caller')))
+    uses: ./.github/workflows/self-push-amd.yml
+    with:
+      gpu_flavor: mi210
+    secrets: inherit

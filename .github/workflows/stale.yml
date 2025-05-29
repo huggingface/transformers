@@ -1,0 +1,29 @@
+name: Stale Bot
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+
+jobs:
+  close_stale_issues:
+    name: Close Stale Issues
+    if: github.repository == 'huggingface/transformers'
+    runs-on: ubuntu-22.04
+    permissions:
+      issues: write
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: 3.8
+
+    - name: Install requirements
+      run: |
+        pip install PyGithub
+    - name: Close stale issues
+      run: |
+        python scripts/stale.py
