@@ -127,7 +127,7 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         if return_tensors is not None:
             processed_images = torch.stack(processed_images, dim=0)
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return processed_images
 
     def _preprocess_segmentation_maps(
         self,
@@ -202,20 +202,19 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         kwargs.pop("default_to_square")
         kwargs.pop("data_format")
 
-        images = self._preprocess_images(
+        images = self._preprocess(
             images=images,
             **kwargs,
         )
-        data = {"pixel_values": images}
 
         if segmentation_maps is not None:
             segmentation_maps = self._preprocess_segmentation_maps(
                 segmentation_maps=segmentation_maps,
                 **kwargs,
             )
-            data["labels"] = segmentation_maps
+            return BatchFeature(data={"pixel_values": images, "labels": segmentation_maps})
 
-        return BatchFeature(data=data)
+        return BatchFeature(data={"pixel_values": images})
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
         logits = outputs.logits
