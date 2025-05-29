@@ -31,10 +31,7 @@ if is_soundfile_available():
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import (
-    PreTokenizedInput,
-    TextInput,
-)
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 class CsmAudioKwargs(AudioKwargs, total=False):
@@ -76,7 +73,7 @@ class CsmProcessor(ProcessorMixin):
         ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
         audio = ds[0]["audio"]["array"]
 
-        processor = CsmProcessor.from_pretrained("eustlb/csm-1b")
+        processor = CsmProcessor.from_pretrained("sesame/csm-1b")
 
         processor(
             text=["<|begin_of_text|>[0]What are you working on?<|end_of_text|><|AUDIO|><|audio_eos|><|begin_of_text|>[1]I'm figuring out my budget.<|end_of_text|>"],
@@ -99,7 +96,6 @@ class CsmProcessor(ProcessorMixin):
     """
 
     attributes = ["feature_extractor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
     feature_extractor_class = "EncodecFeatureExtractor"
     tokenizer_class = "PreTrainedTokenizerFast"
 
@@ -353,7 +349,11 @@ class CsmProcessor(ProcessorMixin):
             else:
                 skip_frames_idxs = audio_frame_idxs
 
-            labels = torch.where(data["input_ids"] == self.audio_token_id, data["input_ids"], -100)
+            labels = torch.where(
+                (data["input_ids"] == self.audio_token_id) | (data["input_ids"] == self.audio_eos_token_id),
+                data["input_ids"],
+                -100,
+            )
             labels[skip_frames_idxs[:, 0], skip_frames_idxs[:, 1]] = -101
 
             data["labels"] = labels

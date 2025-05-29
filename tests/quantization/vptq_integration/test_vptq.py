@@ -18,6 +18,7 @@ import unittest
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, VptqConfig
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_accelerate,
     require_torch_gpu,
     require_torch_multi_gpu,
@@ -74,7 +75,7 @@ class VptqTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_quantized_model(self):
