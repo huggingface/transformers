@@ -98,7 +98,8 @@ class OpenaiExperts(nn.Module):
         hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
         gate_up = torch.bmm(hidden_states, self.gate_up_proj) + self.gate_up_proj_bias[...,None, :]
         gate, up = gate_up.chunk(2, dim=-1)  # not supported for DTensors
-        next_states = torch.bmm(((up + 1) * self.act_fn(gate * self.alpha)), self.down_proj) + self.down_proj_bias[..., None, :]
+        glu = gate * self.act_fn(gate * self.alpha)
+        next_states = torch.bmm(((up + 1) * glu), self.down_proj) + self.down_proj_bias[..., None, :]
         next_states = next_states.view(-1, self.hidden_size)
         return next_states
 
@@ -127,13 +128,7 @@ class OpenaiMLP(nn.Module):
         routed_out = routed_out.view(self.num_local_experts, -1, self.hidden_dim) * router_scores[..., None]
         output_states = routed_out.sum(dim=0)[None, ...]
         return output_states, router_scores
-""""
 
-tensor([[  7.9688,   0.8750,  -0.3535,  ...,   3.9219,   9.1875,  -2.8906],
-        [  2.2500, -15.9375,  -2.7500,  ...,  18.5000,  -1.5312, -18.1250],
-        [-13.5000,  -6.1562,  13.5625,  ..., -22.1250, -30.3750,  23.6250],
-        [  6.0000,   2.5469,   3.6094,  ...,  -7.9375,   4.2500,  -7.7812]],
-"""
 
 class OpenaiRotaryEmbedding(nn.Module):
     rope_type = "default"
@@ -305,6 +300,7 @@ class OpenaiAttention(nn.Module):
 class OpenaiDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: OpenaiConfig, layer_idx: int):
         super().__init__()
+        self.layer_idx = layer_idx
         self.hidden_size = config.hidden_size
         self.self_attn = OpenaiAttention(config=config, layer_idx=layer_idx)
         self.mlp = OpenaiMLP(config)
@@ -483,35 +479,20 @@ class OpenaiModel(OpenaiPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    partial(decoder_layer.__call__, **flash_attn_kwargs),
-                    hidden_states,
-                    causal_mask,
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    output_router_logits,
-                    use_cache,
-                    cache_position,
-                    position_embeddings,
-                )
-            else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    output_router_logits=output_router_logits,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    position_embeddings=position_embeddings,
-                    **flash_attn_kwargs,
-                )
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                output_router_logits=output_router_logits,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                **flash_attn_kwargs,
+            )
 
             hidden_states = layer_outputs[0]
-
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
