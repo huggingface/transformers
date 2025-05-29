@@ -1684,13 +1684,13 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
 
                 if input_ids is None:
                     video_mask = inputs_embeds == self.get_input_embeddings()(
-                        torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                        torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
                     )
                     n_video_tokens = (video_mask).sum(dim=1).sum(dim=0)[0]
                 else:
-                    video_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
+                    video_mask = (input_ids == self.config.video_token_id).unsqueeze(-1)
                     video_mask = video_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-                    n_video_tokens = (input_ids == self.config.image_token_id).sum()
+                    n_video_tokens = (input_ids == self.config.video_token_id).sum()
 
                 n_video_features = video_embeds.shape[0]
                 if not is_torchdynamo_compiling() and n_video_tokens != n_video_features:
