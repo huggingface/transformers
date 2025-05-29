@@ -369,8 +369,6 @@
     title: Main Classes
   - sections:
     - sections:
-      - local: model_doc/aimv2
-        title: Aimv2
       - local: model_doc/albert
         title: ALBERT
       - local: model_doc/bamba
@@ -695,6 +693,8 @@
         title: Zamba2
       title: Text models
     - sections:
+      - local: model_doc/aimv2
+        title: Aimv2
       - local: model_doc/beit
         title: BEiT
       - local: model_doc/bit
