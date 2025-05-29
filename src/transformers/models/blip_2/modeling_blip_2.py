@@ -1282,9 +1282,6 @@ class Blip2Model(Blip2PreTrainedModel):
     config_class = Blip2Config
     main_input_name = "pixel_values"
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
-    _supports_flash_attn_2 = False  # Qformer doesn't supports any
-    _supports_sdpa = False
-    _supports_flex_attn = False
 
     def __init__(self, config: Blip2Config):
         super().__init__(config)
@@ -1876,9 +1873,6 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
     _supports_cache_class = True
     _supports_static_cache = True
     _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
-    _supports_flash_attn_2 = False  # Qformer doesn't supports any
-    _supports_sdpa = False
-    _supports_flex_attn = False
 
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
 
