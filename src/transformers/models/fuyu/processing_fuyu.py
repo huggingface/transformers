@@ -350,7 +350,6 @@ class FuyuProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = []
     image_processor_class = "FuyuImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -621,12 +620,16 @@ class FuyuProcessor(ProcessorMixin):
                 width_scale_factor = padded_width / image_size[1]
                 optimal_scale_factor = min(height_scale_factor, width_scale_factor)
 
-                # We can use torch here because Fuyu processor has hard dependency on torch
+                image_unpadded_h = min(int(image_size[0] * optimal_scale_factor), image_size[0])
+                image_unpadded_w = min(int(image_size[0] * optimal_scale_factor), image_size[0])
+
+                # We can use torch here because Fuyu processor has hard dependency on torch. NOTE: Fuyu can't do multi-image
+                # thus the below (1, 1, 1) is hardcoded. Same as when calling the processor
                 model_image_input = self.image_processor.preprocess_with_tokenizer_info(
                     image_input=torch.zeros(1, 1, 3, padded_height, padded_width),
                     image_present=torch.ones(1, 1, 1),
-                    image_unpadded_h=torch.tensor([[int(image_size[0] * optimal_scale_factor)]]),
-                    image_unpadded_w=torch.tensor([[int(image_size[1] * optimal_scale_factor)]]),
+                    image_unpadded_h=torch.tensor([[image_unpadded_h]]),
+                    image_unpadded_w=torch.tensor([[image_unpadded_w]]),
                     image_placeholder_id=0,  # dummy ids, we can be sure `id=0` is never out-of-range
                     image_newline_id=0,
                     variable_sized=True,

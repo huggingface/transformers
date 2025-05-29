@@ -90,14 +90,6 @@ class PixtralProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = [
-        "chat_template",
-        "patch_size",
-        "spatial_merge_size",
-        "image_token",
-        "image_break_token",
-        "image_end_token",
-    ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -265,7 +257,7 @@ class PixtralProcessor(ProcessorMixin):
             num_image_tokens = []
             for height, width in image_sizes:
                 resized_height, resized_width = get_resize_output_image_size(
-                    image=np.zeros((height, width, 3)),
+                    np.zeros((height, width, 3)),
                     size=(size["longest_edge"], size["longest_edge"]),
                     patch_size=(patch_size, patch_size),
                 )

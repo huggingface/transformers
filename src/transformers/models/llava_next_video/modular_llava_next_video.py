@@ -315,6 +315,13 @@ class LlavaNextVideoModel(LlavaNextModel):
             selected_image_feature = selected_image_feature
         image_features = self.multi_modal_projector(selected_image_feature)
         image_features = torch.split(image_features, image_num_patches, dim=0)
+
+        image_features, feature_lens = self.pack_image_features(
+            image_features,
+            image_sizes,
+            vision_feature_select_strategy,
+            image_newline=self.image_newline,
+        )
         return image_features
 
     def get_video_features(
@@ -424,12 +431,7 @@ class LlavaNextVideoModel(LlavaNextModel):
                 vision_feature_layer=self.vision_feature_layer,
                 vision_feature_select_strategy=self.vision_feature_select_strategy,
             )
-            image_features, feature_lens = self.pack_image_features(
-                image_features,
-                image_sizes,
-                self.vision_feature_select_strategy,
-                image_newline=self.image_newline,
-            )
+            image_features = torch.cat(image_features, dim=0)
 
             if input_ids is None:
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(

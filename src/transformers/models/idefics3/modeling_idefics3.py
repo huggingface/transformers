@@ -743,7 +743,6 @@ class Idefics3Model(Idefics3PreTrainedModel):
 
         # Modality projection & resampling
         image_hidden_states = self.connector(image_hidden_states.last_hidden_state)
-        image_hidden_states = image_hidden_states.view(-1, image_hidden_states.shape[-1])
         return image_hidden_states
 
     @can_return_tuple
