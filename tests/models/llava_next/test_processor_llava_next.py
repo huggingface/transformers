@@ -11,13 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import json
+import shutil
 import tempfile
 import unittest
 
 import torch
 
-from transformers import AutoProcessor, LlamaTokenizerFast, LlavaNextProcessor
+from transformers import LlamaTokenizerFast, LlavaNextProcessor
 from transformers.testing_utils import (
     require_vision,
 )
@@ -52,6 +54,10 @@ class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return LlavaNextProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+
     @staticmethod
     def prepare_processor_dict():
         return {
@@ -73,13 +79,16 @@ class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
 
     def test_image_token_filling(self):
-        processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-vicuna-7b-hf")
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
         processor.patch_size = 14
         processor.vision_feature_select_strategy = "default"
+        processor.image_processor.crop_size = {"height": 336, "width": 336}
+        processor.image_processor.size = {"shortest_edge": 336}
+        processor.image_processor.image_grid_pinpoints = [[672, 336]]
         # Important to check with non square image
-        image = torch.randint(0, 2, (3, 500, 316))
-        expected_image_tokens = 1526
-        image_token_index = 32000
+        image = torch.randint(0, 2, (3, 503, 316))
+        expected_image_tokens = 1525
+        image_token_index = processor.image_token_id
 
         messages = [
             {

@@ -1340,7 +1340,6 @@ class BigBirdAttention(nn.Module):
         attn_weights.value = self.self.value
         attn_weights.key = self.self.key
         self.self = attn_weights
-        self.attention_type = value
         if not self.training:
             self.self.eval()
 

@@ -353,3 +353,7 @@ This example showcases how to handle a batch of chat conversations with interlea
 ## InternVLProcessor
 
 [[autodoc]] InternVLProcessor
+
+## InternVLVideoProcessor
+
+[[autodoc]] InternVLVideoProcessor

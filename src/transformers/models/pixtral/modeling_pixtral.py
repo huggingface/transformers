@@ -211,6 +211,11 @@ class PixtralAttention(nn.Module):
             else:
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
+        # Since we use packing, if flash_attention_2 is selected we rely on position_ids
+        if self.config._attn_implementation == "flash_attention_2":
+            kwargs["position_ids"] = kwargs["position_ids"].to(hidden_states.device, non_blocking=True)
+            attention_mask = None
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
