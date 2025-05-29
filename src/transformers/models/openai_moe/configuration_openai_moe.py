@@ -33,6 +33,11 @@ class OpenaiConfig(PretrainedConfig):
     # Default tensor parallel plan for base model `OpenaiModel`
     # a bit special, but this seems to work alright
     base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.sinks": "local_rowwise",
         "layers.*.mlp.experts.gate_up_proj": "local_packed_rowwise",
         "layers.*.mlp.experts.gate_up_proj_bias": "local_rowwise",
         "layers.*.mlp.experts.down_proj": "local_colwise",

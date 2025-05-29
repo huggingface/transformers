@@ -834,26 +834,19 @@ def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, curr
             print(
                 f"Trying to prepare {layer_name}, but it's not supported. Corresponding module: {module} Fix it's TP plan: {e}"
             )
-        module._hf_tp_plan = current_module_plan
-        module.__repr__ = lambda: f"{module.__repr__()}\nTP Plan: {current_module_plan}"
 
     # 2. We add hooks to the parent module if needed
     if "." in layer_name and current_module_plan != "replicate":
         parent_layer_name = parameter_name.rsplit(".", 1)[0]
         generic_name = re.sub(r"\d+", "*", parent_layer_name)
         # The module itself needs hooks
-        if module_plan := tp_plan.get(generic_name, False) and not module._hf_tp_plan:
+        if module_plan := tp_plan.get(generic_name, False):
             tp_layer = ALL_PARALLEL_STYLES[module_plan]
             module_to_tp_ = model.get_submodule(parent_layer_name)
-            tp_layer.prepare_module_tp(module_to_tp_, device_mesh)
-            module_to_tp_._hf_tp_plan = current_module_plan
-            module_to_tp_.__repr__ = lambda: f"{module_to_tp_.__repr__()}\nTP Plan: {current_module_plan}"
-        elif module_plan := tp_plan.get(re.sub(r"\d+", "*", layer_name.rsplit(".", 1)[0]), False)and not module._hf_tp_plan:
-            tp_layer = ALL_PARALLEL_STYLES[module_plan]
-            module_to_tp_ = model.get_submodule(parent_layer_name)
-            tp_layer.prepare_module_tp(module_to_tp_, device_mesh)
-            module_to_tp_._hf_tp_plan = current_module_plan
-            module_to_tp_.__repr__ = lambda: f"{module_to_tp_.__repr__()}\nTP Plan: {current_module_plan}"
+            if not getattr(module_to_tp_, "_hf_tp_plan", False):
+                tp_layer.prepare_module_tp(module_to_tp_, device_mesh)
+                module_to_tp_._hf_tp_plan = current_module_plan
+                module_to_tp_.__repr__ = lambda: f"{module_to_tp_.__repr__()}\nTP Plan: {current_module_plan}"
 
 
 def shard_and_distribute_module(
