@@ -408,6 +408,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear turquoise water and a blue sky in the background. It looks like']  # fmt: skip
+        breakpoint()
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_4b_batch(self):
@@ -448,6 +449,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
             'user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear turquoise water and a blue sky in the background. It looks like',
             "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, these images are not identical. \n\nHere's a breakdown of the differences:\n\n*   **Image 1:** Shows a cow"
         ]  # fmt: skip
+        breakpoint()
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_4b_crops(self):
@@ -480,6 +482,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
 
         EXPECTED_NUM_IMAGES = 3  # one for the origin image and two crops of images
         EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a beach with a turquoise ocean and blue sky in the background. It looks like the cow is enjoying the beach']  # fmt: skip
+        breakpoint()
         self.assertEqual(len(inputs["pixel_values"]), EXPECTED_NUM_IMAGES)
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -529,6 +532,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
             "user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a beach with a turquoise ocean and blue sky in the background. It looks like the cow is enjoying the beach",
             "user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nWhile they all feature a brown cow in the foreground and a similar background (including the stop signs and",
         ]  # fmt: skip
+        breakpoint()
         self.assertEqual(len(inputs["pixel_values"]), EXPECTED_NUM_IMAGES)
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -563,6 +567,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_TEXTS = ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Overall Scene:**\n\nIt looks like a street scene in a vibrant,"]  # fmt: skip
+        breakpoint()
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_1b_text_only(self):
@@ -578,6 +583,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_TEXTS = ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a river deep,\nWith patterns hidden, secrets sleep.\nA neural net, a watchful eye,\nLearning']  # fmt: skip
+        breakpoint()
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     # TODO: raushan FA2 generates gibberish for no reason, check later
@@ -603,6 +609,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
         EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. It looks like a very sunny and']  # fmt: skip
+        breakpoint()
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @parameterized.expand([("flash_attention_2",), ("sdpa",), ("eager",)])
@@ -632,6 +639,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(out)
 
         EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
+        breakpoint()
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
     def test_export_text_only_with_hybrid_cache(self):
@@ -671,4 +679,5 @@ class Gemma3IntegrationTest(unittest.TestCase):
         eager_generated_text = tokenizer.decode(eager_outputs[0], skip_special_tokens=True)
         logging.info(f"\nEager generated texts: '{eager_generated_text}'")
 
+        breakpoint()
         self.assertEqual(export_generated_text, eager_generated_text)
