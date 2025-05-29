@@ -203,10 +203,6 @@ class Glm4vTextConfig(Qwen2_5_VLTextConfig):
             Token index used as placeholder for image embeddings.
         video_token_id (`int`, *optional*):
             Token index used as placeholder for video embeddings.
-        vision_start_token_id (`int`, *optional*, defaults to 151341):
-            The vision start token index to encode the start of vision.
-        vision_end_token_id (`int`, *optional*, defaults to 151342):
-            The vision end token index to encode the end of vision.
 
     ```python
     >>> from transformers import Glm4vTextModel, Glm4vConfig
@@ -270,6 +266,10 @@ class Glm4vConfig(Qwen2_5_VLConfig):
             The image token index to encode the image prompt.
         video_token_id (`int`, *optional*, defaults to 151344):
             The video token index to encode the image prompt.
+        vision_start_token_id (`int`, *optional*, defaults to 151341):
+            The vision start token index to encode the start of vision.
+        vision_end_token_id (`int`, *optional*, defaults to 151342):
+            The vision end token index to encode the end of vision.
 
     ```python
     >>> from transformers import Glm4vForConditionalGeneration, Glm4vConfig

@@ -600,7 +600,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
     if "vision_config" in model_config:
         vision_config = {
             "image_size": model_config["vision_config"].get("image_size", 336),
-            "depth": model_config["vision_config"].get("num_hidden_layers", 24),
+            "depth": model_config["vision_config"].get("num_layers", 24),
             "out_hidden_size": model_config.get("hidden_size", 4096),
             "hidden_act": model_config["vision_config"].get("hidden_act", "silu"),
             "rms_norm_eps": model_config["vision_config"].get("layernorm_epsilon", 1e-05),
@@ -630,7 +630,7 @@ def parse_args():
         "--model_path",
         type=str,
         required=True,
-        help="Path to Megatron model directory containing mp_rank_xx subdirectories",
+        help="Path to Megatron model directory",
     )
     parser.add_argument("--output_path", type=str, required=True, help="Output path for HuggingFace model directory")
     parser.add_argument(
