@@ -5183,7 +5183,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
             # not part of the state_dict (persistent=False)
             for buffer in model.buffers():
-                if buffer.device != tp_device:
+                if buffer.device != tp_device and buffer.device != torch.device('meta'):
                     buffer.data = buffer.to(tp_device)
 
             # In this case, the top-most task module weights were not moved to device and parallelized as they
