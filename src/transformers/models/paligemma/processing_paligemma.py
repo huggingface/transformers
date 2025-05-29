@@ -31,11 +31,7 @@ from ...processing_utils import (
     Unpack,
     _validate_images_text_input_order,
 )
-from ...tokenization_utils_base import (
-    AddedToken,
-    PreTokenizedInput,
-    TextInput,
-)
+from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import logging
 
 
@@ -120,7 +116,6 @@ class PaliGemmaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
     image_processor_class = ("SiglipImageProcessor", "SiglipImageProcessorFast")
     tokenizer_class = ("GemmaTokenizer", "GemmaTokenizerFast")
 
