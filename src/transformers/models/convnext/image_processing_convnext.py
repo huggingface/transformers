@@ -26,8 +26,8 @@ from ...image_transforms import (
     to_channel_dimension_format,
 )
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -66,9 +66,9 @@ class ConvNextImageProcessor(BaseImageProcessor):
             be overridden by `size` in the `preprocess` method.
         crop_pct (`float` *optional*, defaults to 224 / 256):
             Percentage of the image to crop. Only has an effect if `do_resize` is `True` and size < 384. Can be
-            overridden by `crop_pct` in the `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
-            Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
+            overriden by `crop_pct` in the `preprocess` method.
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
+            Resampling filter to use if resizing the image. Can be overriden by `resample` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
             the `preprocess` method.
@@ -78,10 +78,10 @@ class ConvNextImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
     """
@@ -93,7 +93,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
         do_resize: bool = True,
         size: Optional[Dict[str, int]] = None,
         crop_pct: Optional[float] = None,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -113,8 +113,8 @@ class ConvNextImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
+        self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
     def resize(
         self,

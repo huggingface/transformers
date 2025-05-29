@@ -25,8 +25,8 @@ from ...image_processing_utils_fast import (
 )
 from ...image_transforms import get_resize_output_image_size
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -63,9 +63,9 @@ class ConvNextFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
 
 @auto_docstring
 class ConvNextImageProcessorFast(BaseImageProcessorFast):
-    resample = PILImageResampling.BILINEAR
-    image_mean = IMAGENET_STANDARD_MEAN
-    image_std = IMAGENET_STANDARD_STD
+    resample = PILImageResampling.BICUBIC
+    image_mean = IMAGENET_DEFAULT_MEAN
+    image_std = IMAGENET_DEFAULT_STD
     size = {"shortest_edge": 384}
     default_to_square = False
     do_resize = True
