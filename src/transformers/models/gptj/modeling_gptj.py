@@ -355,11 +355,7 @@ class GPTJFlashAttention2(GPTJAttention):
         # in fp32. (LlamaRMSNorm handles it correctly)
 
         input_dtype = query.dtype
-        device_type = (
-            query.device.type
-            if isinstance(query.device.type, str) and query.device.type != "mps"
-            else "cpu"
-        )
+        device_type = query.device.type if isinstance(query.device.type, str) and query.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
                 target_dtype = (

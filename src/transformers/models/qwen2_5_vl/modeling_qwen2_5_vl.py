@@ -850,7 +850,7 @@ class Qwen2_5_VLFlashAttention2(Qwen2_5_VLAttention):
         )
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
-                target_dtype =  (
+                target_dtype = (
                     torch.get_autocast_dtype(device_type)
                     if hasattr(torch, "get_autocast_dtype")
                     else torch.get_autocast_gpu_dtype()

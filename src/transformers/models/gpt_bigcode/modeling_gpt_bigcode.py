@@ -343,11 +343,7 @@ class GPTBigCodeFlashAttention2(GPTBigCodeAttention):
         # therefore the input hidden states gets silently casted in float32. Hence, we need
         # cast them back in float16 just to be sure everything works as expected.
         input_dtype = query.dtype
-        device_type = (
-            query.device.type
-            if isinstance(query.device.type, str) and query.device.type != "mps"
-            else "cpu"
-        )
+        device_type = query.device.type if isinstance(query.device.type, str) and query.device.type != "mps" else "cpu"
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled():
                 target_dtype = (
