@@ -795,6 +795,18 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
         _channel = self.config.decoder_config.num_channels
         generation_config._eos_token_tensor = torch.tensor([_pad for _ in range(_channel - 1)] + [_eos])
 
+        # cfg scale
+        if model_kwargs.get("cfg_scale", None) is None:
+            model_kwargs["cfg_scale"] = 3.0
+
+        # cfg filter top k
+        if model_kwargs.get("cfg_filter_top_k", None) is None:
+            model_kwargs["cfg_filter_top_k"] = 50
+
+        # audio eos value
+        model_kwargs["audio_eos_value"] = _eos
+        model_kwargs["audio_pad_value"] = _pad
+
         return generation_config, model_kwargs
 
     def prepare_inputs_for_generation(
@@ -838,6 +850,7 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
         model_kwargs = super()._update_model_kwargs_for_generation(
             outputs, model_kwargs, is_encoder_decoder, num_new_tokens
         )
+        model_kwargs["encoder_outputs"] = outputs.encoder_last_hidden_state
         return model_kwargs
 
     def forward(
@@ -853,7 +866,15 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-    ):
+        eos_detected_Bx: Optional[torch.Tensor] = None,
+        eos_countdown_Bx: Optional[torch.Tensor] = None,
+        finished_step_Bx: Optional[torch.Tensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        cfg_scale: float = 3.0,
+        cfg_filter_top_k: int = 50,
+        audio_eos_value: int = 1024,
+        audio_pad_value: int = 1025,
+    ) -> Seq2SeqLMOutput:
         """
         Forward method for DiaForConditionalGeneration, following WhisperForConditionalGeneration style.
         """
@@ -872,13 +893,50 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
             cache_position=cache_position,
         )
 
-        lm_logits = outputs.last_hidden_state
+        lm_logits: torch.Tensor = outputs.last_hidden_state
 
         loss = None
-        if labels is not None:
-            loss_fct = nn.CrossEntropyLoss()
-            labels = labels.to(lm_logits.device)  # ty: ignore[invalid-assignment]
-            loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.reshape(-1))
+        # TODO: add loss
+        # if labels is not None:
+        #     loss_fct = nn.CrossEntropyLoss()
+        #     labels = labels.to(lm_logits.device)  # ty: ignore[invalid-assignment]
+        #     loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.reshape(-1))
+
+        # cfg
+        logits_last = lm_logits[:, -1].view(lm_logits.shape[0] // 2, 2, *lm_logits.shape[1:])
+        uncond_logits = logits_last[:, 0, :]
+        cond_logits = logits_last[:, 1, :]
+        logits = cond_logits + cfg_scale * (cond_logits - uncond_logits)
+
+        # cfg filter top k
+        _, top_k_indices = torch.topk(logits, k=cfg_filter_top_k, dim=-1)
+        mask = torch.ones_like(logits, dtype=torch.bool)
+        mask = mask.scatter(dim=-1, index=top_k_indices, value=False)
+        logits = logits.masked_fill(mask, -torch.inf)
+
+        # eos filter
+        logits[:, :, audio_eos_value + 1 :] = torch.full_like(
+            logits[:, :, audio_eos_value + 1 :],
+            fill_value=-torch.inf,
+        )
+        logits[:, 1:, audio_eos_value:] = torch.full_like(
+            logits[:, 1:, audio_eos_value:],
+            fill_value=-torch.inf,
+        )
+        logits[:, 0, audio_eos_value] *= torch.tensor(0.8, device=self.device)
+        logits_flat = logits.view(-1, logits.shape[-1])
+
+        top_logit_indices = torch.argmax(logits_flat, dim=-1)
+        eos_not_highest_mask = top_logit_indices != audio_eos_value
+        mask_eos_unless_highest = torch.zeros_like(logits_flat, dtype=torch.bool)
+        mask_eos_unless_highest[eos_not_highest_mask, audio_eos_value] = True
+        logits_flat = logits_flat.masked_fill(mask_eos_unless_highest, -torch.inf)
+        eos_highest_mask = top_logit_indices == audio_eos_value
+        mask_eos_highest = torch.zeros_like(logits_flat, dtype=torch.bool)
+        mask_eos_highest[eos_highest_mask, :audio_eos_value] = True
+        logits_flat = logits_flat.masked_fill(mask_eos_highest, -torch.inf)
+
+        logits = logits_flat.view(logits.shape)
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
