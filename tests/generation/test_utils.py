@@ -1780,6 +1780,7 @@ class GenerationTesterMixin:
                 "do_sample": False,
                 "max_new_tokens": 5,
                 "min_new_tokens": 5,  # generate exactly 5 tokens
+                "use_cache": True,
             }
             outputs_from_ids = model.generate(input_ids=input_ids, **generation_kwargs, **inputs_dict)
             self.assertEqual(outputs_from_ids.sequences.shape[:2], (input_ids.shape[0], input_ids.shape[1] + 5))

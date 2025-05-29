@@ -1934,6 +1934,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
     def _get_image_nums_and_video_nums(
         self,
         input_ids: Optional[torch.LongTensor],
+        inputs_embeds: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Get the number of images and videos for each sample to calculate the separation length of the sample tensor.
@@ -1951,10 +1952,31 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
         video_token_id = self.config.video_token_id
         vision_start_token_id = self.config.vision_start_token_id
 
-        vision_start_mask = input_ids == vision_start_token_id
+        if inputs_embeds is not None:
+            vision_start_mask = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.tensor(vision_start_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+            image_mask = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.tensor(image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+            video_mask = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.tensor(video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+        else:
+            vision_start_mask = input_ids == vision_start_token_id
+            image_mask = input_ids == image_token_id
+            video_mask = input_ids == video_token_id
+
         vision_first_mask = torch.roll(vision_start_mask, shifts=1, dims=1)
-        image_mask = input_ids == image_token_id
-        video_mask = input_ids == video_token_id
         image_nums = torch.sum(vision_first_mask & image_mask, dim=1)
         video_nums = torch.sum(vision_first_mask & video_mask, dim=1)
 
@@ -1980,7 +2002,9 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
         def _expand_dict_for_generation_visual(dict_to_expand):
             image_grid_thw = model_kwargs.get("image_grid_thw", None)
             video_grid_thw = model_kwargs.get("video_grid_thw", None)
-            image_nums, video_nums = self._get_image_nums_and_video_nums(input_ids)
+            image_nums, video_nums = self._get_image_nums_and_video_nums(
+                input_ids, inputs_embeds=model_kwargs.get("inputs_embeds", None)
+            )
 
             def _repeat_interleave_samples(x, lengths, repeat_times):
                 samples = torch.split(x, lengths)
@@ -2036,10 +2060,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
                     dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
             return dict_to_expand
 
-        # input_ids is required for expanding visual inputs
-        # If input_ids is unavailable, visual inputs will not be used; therefore, there is no need to expand visual inputs.
-        if input_ids is not None and input_ids.numel() != 0:
-            model_kwargs = _expand_dict_for_generation_visual(model_kwargs)
+        model_kwargs = _expand_dict_for_generation_visual(model_kwargs)
 
         if input_ids is not None:
             input_ids = input_ids.repeat_interleave(expand_size, dim=0)
