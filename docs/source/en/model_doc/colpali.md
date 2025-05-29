@@ -40,6 +40,7 @@ from PIL import Image
 from transformers import ColPaliForRetrieval, ColPaliProcessor
 
 
+# Load the model and the processor
 model_name = "vidore/colpali-v1.3-hf"
 
 model = ColPaliForRetrieval.from_pretrained(
@@ -47,7 +48,6 @@ model = ColPaliForRetrieval.from_pretrained(
     torch_dtype=torch.bfloat16,
     device_map="auto",  # "cpu", "cuda", or "mps" for Apple Silicon
 )
-
 processor = ColPaliProcessor.from_pretrained(model_name)
 
 # The document page screenshots from your corpus
