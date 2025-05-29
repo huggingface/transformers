@@ -411,7 +411,7 @@ else:
             ),
             ("oneformer", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             (
-                "openai",
+                "openai-moe",
                 (
                     None,
                     "PreTrainedTokenizerFast" if is_tokenizers_available() else None,

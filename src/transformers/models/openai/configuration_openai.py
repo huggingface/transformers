@@ -24,7 +24,7 @@ from ...modeling_rope_utils import rope_config_validation
 
 
 class OpenaiConfig(PretrainedConfig):
-    model_type = "openai"
+    model_type = "openai-moe"
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `OpenaiModel`
     base_model_tp_plan = {

@@ -155,7 +155,58 @@ def write_model(
         generation_config.save_pretrained(model_path)
 
 
+# Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
+def bytes_to_unicode():
+    """
+    Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
+    characters the bpe code barfs on.
+
+    The reversible bpe codes work on unicode strings. This means you need a large # of unicode characters in your vocab
+    if you want to avoid UNKs. When you're at something like a 10B token dataset you end up needing around 5K for
+    decent coverage. This is a significant percentage of your normal, say, 32K bpe vocab. To avoid that, we want lookup
+    tables between utf-8 bytes and unicode strings.
+    """
+    bs = (
+        list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
+    )
+    cs = bs[:]
+    n = 0
+    for b in range(2**8):
+        if b not in bs:
+            bs.append(b)
+            cs.append(2**8 + n)
+            n += 1
+    cs = [chr(n) for n in cs]
+    return dict(zip(bs, cs))
+
+import tiktoken
 class OpenaiConverter(TikTokenConverter):
+    def extract_vocab_merges_from_model(self, tiktoken_url: str):
+        tokenizer = tiktoken.get_encoding(tiktoken_url)
+
+        bpe_ranks = tokenizer._mergeable_ranks
+        byte_encoder = bytes_to_unicode()
+
+        def token_bytes_to_string(b):
+            return "".join([byte_encoder[ord(char)] for char in b.decode("latin-1")])
+
+        merges = []
+        vocab = {}
+        for token, rank in bpe_ranks.items():
+            vocab[token_bytes_to_string(token)] = rank
+            if len(token) == 1:
+                continue
+            local = []
+            for index in range(1, len(token)):
+                piece_l, piece_r = token[:index], token[index:]
+                if piece_l in bpe_ranks and piece_r in bpe_ranks and (piece_l + piece_r) in bpe_ranks:
+                    local.append((piece_l, piece_r, rank))
+            local = sorted(local, key=lambda x: (bpe_ranks[x[0]], bpe_ranks[x[1]]), reverse=False)
+            merges.extend(local)
+        merges = sorted(merges, key=lambda val: val[2], reverse=False)
+        merges = [(token_bytes_to_string(val[0]), token_bytes_to_string(val[1])) for val in merges]
+        return vocab, merges
+
     def __init__(
         self,
         vocab_file,
@@ -166,8 +217,16 @@ class OpenaiConverter(TikTokenConverter):
         **kwargs,
     ):
         super().__init__(vocab_file, pattern=pattern)
+
         # TODO 1st donwload the vocabfile!!!
-        self.additional_special_tokens = special_tokens
+        tokenizer = tiktoken.get_encoding(vocab_file)
+        special_tokens = tokenizer._special_tokens.keys()
+
+        self.additional_special_tokens = {'<|endoftext|>': 199999, '<|endofprompt|>': 200018}
+        for k in range(200000, 200018):
+            self.additional_special_tokens[f"<|reserved_{k}|>"] = k
+        sorted_list = sorted(self.additional_special_tokens.items(), key=lambda x: x[1])
+        self.additional_special_tokens = [k[0] for k in sorted_list]
         tokenizer = self.converted()
         if chat_template is not None:
             kwargs["chat_template"] = chat_template
@@ -180,7 +239,6 @@ class OpenaiConverter(TikTokenConverter):
 
 
 def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
-    model_max_length = CONTEXT_LENGTH
     pattern = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"  # noqa: W605
     special_tokens = []
 
@@ -213,7 +271,7 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
         vocab_file=tokenizer_path,
         pattern=pattern,
         special_tokens=special_tokens,
-        model_max_length=model_max_length,
+        model_max_length=None,
         chat_template=chat_template if instruct else None,
         bos_token="<|begin_of_text|>",
         eos_token="<|end_of_text|>" if not instruct else "<|eot_id|>",
@@ -257,15 +315,15 @@ def main():
         help="Whether the model is an instruct model",
     )
     args = parser.parse_args()
-    write_model(
-        model_path=args.output_dir,
-        input_base_path=args.input_dir,
-        safe_serialization=args.safe_serialization,
-        instruct=args.instruct,
-    )
+    # write_model(
+    #     model_path=args.output_dir,
+    #     input_base_path=args.input_dir,
+    #     safe_serialization=args.safe_serialization,
+    #     instruct=args.instruct,
+    # )
 
     write_tokenizer(
-        tokenizer_path=os.path.join(args.input_dir, "tokenizer.model"),
+        tokenizer_path="o200k_base",
         save_dir=args.output_dir,
         instruct=args.instruct,
     )
