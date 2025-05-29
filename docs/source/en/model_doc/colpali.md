@@ -81,6 +81,15 @@ print("Retrieval scores (query x image):")
 print(scores)
 ```
 
+If you have issue with loading the images with PIL, you can use the following code to create dummy images:
+
+```python
+images = [
+    Image.new("RGB", (128, 128), color="white"),
+    Image.new("RGB", (64, 32), color="black"),
+]
+```
+
 </hfoption>
 </hfoptions>
 
