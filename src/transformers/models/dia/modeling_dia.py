@@ -816,6 +816,11 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
         # eos countdown
         model_kwargs["eos_countdown"] = torch.full((batch_size,), -1, dtype=torch.long, device=self.device)
 
+        # step
+        model_kwargs["step"] = 0
+        if model_kwargs.get("max_step", None) is None:
+            model_kwargs["max_step"] = self.config.decoder_config.max_length
+
         return generation_config, model_kwargs
 
     def _update_model_kwargs_for_generation(
@@ -828,19 +833,25 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
         model_kwargs = super()._update_model_kwargs_for_generation(
             outputs, model_kwargs, is_encoder_decoder, num_new_tokens
         )
+
+        eos_countdown = model_kwargs["eos_countdown"]
+        audio_eos_value = model_kwargs["audio_eos_value"]
+        max_delay_pattern = model_kwargs["max_delay_pattern"]
+        step = model_kwargs["step"]
+        max_step = model_kwargs["max_step"]
+
+        last_generated_tokens = torch.argmax(outputs.logits, dim=-1)  # Shape [B_orig]
+
+        eos_start_mask = last_generated_tokens == audio_eos_value
+        eos_start_mask |= step - max_delay_pattern == max_step
+        eos_start_mask &= eos_countdown < 0
+
+        eos_countdown[eos_start_mask] = max_delay_pattern
+        eos_countdown[eos_countdown > 0] -= 1
+
+        model_kwargs["step"] = step + 1
+        model_kwargs["eos_countdown"] = eos_countdown
         model_kwargs["encoder_outputs"] = outputs.encoder_last_hidden_state
-
-        if outputs.logits is not None:
-            last_generated_tokens = torch.argmax(outputs.logits, dim=-1)  # Shape [B_orig]
-
-            eos_countdown = model_kwargs["eos_countdown"]
-            audio_eos_value = model_kwargs["audio_eos_value"]
-            max_delay_pattern = model_kwargs["max_delay_pattern"]
-
-            eos_countdown[last_generated_tokens == audio_eos_value] = max_delay_pattern
-            eos_countdown[eos_countdown > 0] -= 1
-
-            model_kwargs["eos_countdown"] = eos_countdown
 
         return model_kwargs
 
