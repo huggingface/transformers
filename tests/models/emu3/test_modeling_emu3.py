@@ -403,6 +403,7 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     def test_generate_with_static_cache(self):
         pass
 
+
 @require_torch
 class Emu3IntegrationTest(unittest.TestCase):
     @slow
