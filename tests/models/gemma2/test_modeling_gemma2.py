@@ -23,6 +23,7 @@ from pytest import mark
 from transformers import AutoModelForCausalLM, AutoTokenizer, Gemma2Config, is_torch_available, pipeline
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
+    cleanup,
     is_flash_attn_2_available,
     require_flash_attn,
     require_large_cpu_ram,
@@ -178,6 +179,9 @@ class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 class Gemma2IntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
+
+    def tearDown(self):
+        cleanup()
 
     @tooslow
     @require_read_token
