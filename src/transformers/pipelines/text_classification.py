@@ -1,6 +1,6 @@
 import inspect
 import warnings
-from typing import Dict
+from typing import Any, Dict, List, Union
 
 import numpy as np
 
@@ -120,7 +120,11 @@ class TextClassificationPipeline(Pipeline):
             postprocess_params["function_to_apply"] = function_to_apply
         return preprocess_params, {}, postprocess_params
 
-    def __call__(self, inputs, **kwargs):
+    def __call__(
+        self,
+        inputs: Union[str, List[str], Dict[str, str], List[Dict[str, str]]],
+        **kwargs: Any,
+    ) -> List[Dict[str, Any]]:
         """
         Classify the text(s) given as inputs.
 
@@ -148,7 +152,7 @@ class TextClassificationPipeline(Pipeline):
                 - `"none"`: Does not apply any function on the output.
 
         Return:
-            A list or a list of list of `dict`: Each result comes as list of dictionaries with the following keys:
+            A list of `dict`: Each result comes as list of dictionaries with the following keys:
 
             - **label** (`str`) -- The label predicted.
             - **score** (`float`) -- The corresponding probability.
