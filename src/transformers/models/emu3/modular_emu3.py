@@ -1031,6 +1031,7 @@ class Emu3Model(Emu3PreTrainedModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_sizes)
+            image_embeds = torch.cat(image_embeds, dim=0)
 
             if input_ids is None:
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(

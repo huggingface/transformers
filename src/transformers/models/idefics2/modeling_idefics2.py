@@ -967,9 +967,6 @@ class Idefics2Model(Idefics2PreTrainedModel):
             )
         else:
             special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
-
-        if image_hidden_states.shape[0] != special_image_mask[..., 0].sum():
-            raise ValueError((special_image_mask[..., 0].sum(-1), image_hidden_states.shape))
         inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_hidden_states)
         return inputs_embeds
 
