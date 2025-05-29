@@ -137,7 +137,7 @@ def main():
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
         logger.info(f"Set pad_token to eos_token: {tokenizer.pad_token}")
-
+    print(f"TP MESH: {tp_mesh}")
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         device_mesh=tp_mesh if dist.is_initialized() else None,
@@ -200,7 +200,7 @@ def main():
         batched=True,
         remove_columns=tokenized_dataset.column_names,
         batch_size=1000,  # Process in batches for efficiency
-        num_proc=60,
+        # num_proc=60,
     )
     logger.info(f"Dataset packed. New size: {len(packed_dataset)}")
 

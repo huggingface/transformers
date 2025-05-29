@@ -116,6 +116,7 @@ class OpenaiMLP(nn.Module):
 
     def forward(self, hidden_states):
         # we don't slice weight as its not compile compatible
+        batch_size = hidden_states.shape[0]
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = self.router(hidden_states)
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)
@@ -126,7 +127,7 @@ class OpenaiMLP(nn.Module):
         routed_in = hidden_states.repeat(self.num_local_experts, 1)
         routed_out = self.experts(routed_in)
         routed_out = routed_out.view(self.num_local_experts, -1, self.hidden_dim) * router_scores[..., None]
-        output_states = routed_out.sum(dim=0)[None, ...]
+        output_states = routed_out.view(self.num_local_experts, batch_size, -1, self.hidden_dim).sum(dim=0)
         return output_states, router_scores
 
 
@@ -200,13 +201,14 @@ def eager_attention_forward(
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
-    sinks = module.sinks.view(1, -1, 1, 1).expand(-1, -1, query.shape[-2], -1) # TODO make sure the sink is like a new token
-    sinks.zero_()
+    sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1) # TODO make sure the sink is like a new token
+    # sinks.zero_()
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
-
+    print("attn_weights", attn_weights.shape, attn_weights.dtype)
+    print("sinks", sinks.shape, sinks.dtype)
     attn_weights = torch.cat([attn_weights, sinks], dim=-1)
     attn_weights = torch.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
@@ -452,7 +454,6 @@ class OpenaiModel(OpenaiPreTrainedModel):
             attention_mask=attention_mask,
             cache_position=cache_position,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
         )
 
         hidden_states = inputs_embeds
