@@ -390,9 +390,9 @@ class PretrainedConfig(PushToHubMixin):
             for token_name in ["pad_token_id", "bos_token_id", "eos_token_id"]:
                 token_id = getattr(text_config, token_name, None)
                 if token_id is not None and not 0 <= token_id < vocab_size:
-                    raise ValueError(
-                        f"{token_name} must be `None` or an integer within the vocabulary, "
-                        f"i.e. between 0 and {vocab_size - 1}, got {token_id}."
+                    logger.warning_once(
+                        f"{token_name} must be `None` or an integer within the vocabulary (between 0 and "
+                        f"{vocab_size - 1}), got {token_id}. This may lead to unexpected behavior."
                     )
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
