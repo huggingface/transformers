@@ -2105,6 +2105,7 @@ __all__ = [
     "AutoModelForTableQuestionAnswering",
     "AutoModelForTextToSpectrogram",
     "AutoModelForTextToWaveform",
+    "AutoModelForTimeSeriesPrediction",
     "AutoModelForTokenClassification",
     "AutoModelForUniversalSegmentation",
     "AutoModelForVideoClassification",

@@ -22,7 +22,13 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
+from ...processing_utils import (
+    MultiModalData,
+    ProcessingKwargs,
+    ProcessorMixin,
+    Unpack,
+    _validate_images_text_input_order,
+)
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torch_available, logging, requires_backends
 from ...utils.import_utils import requires
@@ -64,6 +70,7 @@ class FuyuProcessorKwargs(ProcessingKwargs, total=False):
             "return_token_type_ids": False,
             "return_length": False,
             "verbose": True,
+            "return_mm_token_type_ids": False,
         },
         "images_kwargs": {},
     }
@@ -343,7 +350,6 @@ class FuyuProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = []
     image_processor_class = "FuyuImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -355,6 +361,8 @@ class FuyuProcessor(ProcessorMixin):
         self.max_position_embeddings = 16384  # TODO Can't derive this from model files: where to set it?
         self.pad_token_id = 0
         self.dummy_image_index = -1
+        self.image_token_id = tokenizer.encode("|SPEAKER|", add_special_tokens=False)[1]
+        self.image_newline_id = tokenizer.encode("|NEWLINE|", add_special_tokens=False)[1]
 
     def _left_pad_inputs_with_attention_mask(self, model_inputs: List[Dict], return_attention_mask: bool):
         max_length_input_ids = max(entry["input_ids"].shape[1] for entry in model_inputs)
@@ -402,6 +410,11 @@ class FuyuProcessor(ProcessorMixin):
             batched_keys.append("attention_mask")
         for key in batched_keys:
             batched_inputs[key] = torch.cat(batched_inputs[key], dim=0)
+
+        # Cast images to tensor as well, if only one image passed and no padding needed
+        # NOTE: vLLM expects all processor outputs to be a tensor
+        if len(batched_inputs["image_patches"]) == 1:
+            batched_inputs["image_patches"] = torch.cat(batched_inputs["image_patches"], dim=0)
 
         return batched_inputs
 
@@ -517,6 +530,7 @@ class FuyuProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
 
         if not output_kwargs["text_kwargs"].setdefault("return_attention_mask", True):
             raise ValueError("`return_attention_mask=False` is not supported for this model.")
@@ -550,8 +564,6 @@ class FuyuProcessor(ProcessorMixin):
 
         # --- Use self.tokenizer to get the ids of special tokens to insert into image ids ---
 
-        image_placeholder_id = self.tokenizer("|SPEAKER|", add_special_tokens=False)["input_ids"][1]
-        image_newline_id = self.tokenizer("|NEWLINE|", add_special_tokens=False)["input_ids"][1]
         tensor_batch_images = torch.stack([img[0] for img in batch_images]).unsqueeze(1)
 
         # --- Use self.image_processor again to obtain the full token ids and batch inputs ---
@@ -565,15 +577,66 @@ class FuyuProcessor(ProcessorMixin):
                 scale_factors=[scale_factor],
                 image_unpadded_heights=torch.tensor([image_unpadded_height]),
                 image_unpadded_widths=torch.tensor([image_unpadded_width]),
-                image_placeholder_id=image_placeholder_id,
-                image_newline_id=image_newline_id,
+                image_placeholder_id=self.image_token_id,
+                image_newline_id=self.image_newline_id,
                 tensor_batch_images=tensor_batch_image.unsqueeze(0),
             )
             all_encodings.append(sample_encoding)
+
         batch_encoding = self._left_pad_inputs_with_attention_mask(
             model_inputs=all_encodings, return_attention_mask=True
         )
+        if return_mm_token_type_ids:
+            input_ids = batch_encoding["input_ids"]
+            mm_token_type_ids = torch.zeros_like(input_ids)
+            mm_token_type_ids[input_ids == self.image_token_id] = 1
+            mm_token_type_ids[input_ids == self.image_newline_id] = 1
+            batch_encoding["mm_token_type_ids"] = mm_token_type_ids
+
         return FuyuBatchFeature(data=batch_encoding)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`List[List[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            size = kwargs.get("size", None) or self.image_processor.size
+            padded_height, padded_width = size["height"], size["width"]
+
+            num_image_tokens = []
+            num_image_patches = [1] * len(image_sizes)
+            for image_size in image_sizes:
+                height_scale_factor = padded_height / image_size[0]
+                width_scale_factor = padded_width / image_size[1]
+                optimal_scale_factor = min(height_scale_factor, width_scale_factor)
+
+                image_unpadded_h = min(int(image_size[0] * optimal_scale_factor), image_size[0])
+                image_unpadded_w = min(int(image_size[0] * optimal_scale_factor), image_size[0])
+
+                # We can use torch here because Fuyu processor has hard dependency on torch. NOTE: Fuyu can't do multi-image
+                # thus the below (1, 1, 1) is hardcoded. Same as when calling the processor
+                model_image_input = self.image_processor.preprocess_with_tokenizer_info(
+                    image_input=torch.zeros(1, 1, 3, padded_height, padded_width),
+                    image_present=torch.ones(1, 1, 1),
+                    image_unpadded_h=torch.tensor([[image_unpadded_h]]),
+                    image_unpadded_w=torch.tensor([[image_unpadded_w]]),
+                    image_placeholder_id=0,  # dummy ids, we can be sure `id=0` is never out-of-range
+                    image_newline_id=0,
+                    variable_sized=True,
+                )
+                num_image_tokens.append(model_image_input["image_input_ids"][0][0].shape[-1])
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+        return MultiModalData(**vision_data)
 
     def post_process_box_coordinates(self, outputs, target_sizes=None):
         """

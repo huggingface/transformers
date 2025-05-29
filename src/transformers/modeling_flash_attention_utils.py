@@ -427,9 +427,9 @@ class FlashAttentionKwargs(TypedDict, total=False):
     Keyword arguments for Flash Attention with Compile.
 
     Attributes:
-        cu_seq_lens_q (`torch.LongTensor`, *optional*)
+        cumulative_seqlens_q (`torch.LongTensor`, *optional*)
             Gets cumulative sequence length for query state.
-        cu_seq_lens_k (`torch.LongTensor`, *optional*)
+        cumulative_seqlens_k (`torch.LongTensor`, *optional*)
             Gets cumulative sequence length for key state.
         max_length_q (`int`, *optional*):
             Maximum sequence length for query state.
@@ -437,7 +437,7 @@ class FlashAttentionKwargs(TypedDict, total=False):
             Maximum sequence length for key state.
     """
 
-    cu_seq_lens_q: Optional[torch.LongTensor]
-    cu_seq_lens_k: Optional[torch.LongTensor]
+    cumulative_seqlens_q: Optional[torch.LongTensor]
+    cumulative_seqlens_k: Optional[torch.LongTensor]
     max_length_q: Optional[int]
     max_length_k: Optional[int]

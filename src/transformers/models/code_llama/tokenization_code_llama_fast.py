@@ -168,10 +168,6 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         self._eot_token = eot_token
         self.fill_token = fill_token
 
-    @property
-    def can_save_slow_tokenizer(self) -> bool:
-        return os.path.isfile(self.vocab_file) if self.vocab_file else False
-
     # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.update_post_processor
     def update_post_processor(self):
         """
