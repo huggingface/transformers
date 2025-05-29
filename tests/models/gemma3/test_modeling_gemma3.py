@@ -646,9 +646,14 @@ class Gemma3IntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         output_text = self.processor.batch_decode(output, skip_special_tokens=True)
 
-        EXPECTED_TEXTS = ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. It looks like a very sunny and']  # fmt: skip
-        breakpoint()
-        self.assertEqual(output_text, EXPECTED_TEXTS)
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("cuda", 7): [],
+                ("cuda", 8): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach with turquoise water and a distant island in the background. It looks like a sunny day'],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
+        self.assertEqual(output_text, EXPECTED_TEXT)
 
     @parameterized.expand([("flash_attention_2",), ("sdpa",), ("eager",)])
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
@@ -719,5 +724,4 @@ class Gemma3IntegrationTest(unittest.TestCase):
         eager_generated_text = tokenizer.decode(eager_outputs[0], skip_special_tokens=True)
         logging.info(f"\nEager generated texts: '{eager_generated_text}'")
 
-        breakpoint()
         self.assertEqual(export_generated_text, eager_generated_text)
