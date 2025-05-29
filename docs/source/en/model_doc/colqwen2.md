@@ -50,11 +50,12 @@ model = ColQwen2ForRetrieval.from_pretrained(
     model_name,
     torch_dtype=torch.bfloat16,
     device_map="auto",  # "cpu", "cuda", or "mps" for Apple Silicon
-    attn_implementation="flash_attention_2" if is_flash_attn_2_available() else None,
+    attn_implementation="flash_attention_2" if is_flash_attn_2_available() else "sdpa",
 )
 
 processor = ColQwen2Processor.from_pretrained(model_name)
 
+# The document page screenshots from your corpus
 url1 = "https://upload.wikimedia.org/wikipedia/commons/8/89/US-original-Declaration-1776.jpg"
 url2 = "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Romeoandjuliet1597.jpg/500px-Romeoandjuliet1597.jpg"
 
@@ -63,6 +64,7 @@ images = [
     Image.open(requests.get(url2, stream=True).raw),
 ]
 
+# The queries you want to retrieve documents for
 queries = [
     "When was the United States Declaration of Independence proclaimed?",
     "Who printed the edition of Romeo and Juliet?",
