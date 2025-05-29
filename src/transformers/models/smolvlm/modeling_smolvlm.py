@@ -1018,7 +1018,7 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        if image_hidden_states is not None:
+        if image_hidden_states is not None or cache_position[0] != 0:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_attention_mask"] = None
 
