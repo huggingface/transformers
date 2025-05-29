@@ -72,7 +72,7 @@ def interval(
     max = max or float("inf")
 
     @as_validated_field
-    def _inner(value: int | float):
+    def _inner(value: Union[int, float]):
         min_valid = min <= value if not exclude_min else min < value
         max_valid = value <= max if not exclude_max else value < max
         if not (min_valid and max_valid):
