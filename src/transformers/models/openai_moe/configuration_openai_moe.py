@@ -24,6 +24,11 @@ from ...modeling_rope_utils import rope_config_validation
 
 
 class OpenaiConfig(PretrainedConfig):
+    r"""
+    This will yield a configuration to that of the BERT
+    [google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased) architecture.
+
+    """
     model_type = "openai-moe"
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `OpenaiModel`

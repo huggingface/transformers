@@ -231,7 +231,7 @@ def eager_attention_forward(
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
-    attn_weights = torch.cat([attn_weights, module.sink], dim=-1)
+    attn_weights = torch.cat([attn_weights, module.sinks], dim=-1)
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
@@ -642,13 +642,12 @@ class OpenaiForCausalLM(OpenaiPreTrainedModel, GenerationMixin):
 
     def __init__(self, config: OpenaiConfig):
         super().__init__(config)
-        # self.model = OpenaiModel(config)
+        self.model = OpenaiModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.router_aux_loss_coef = config.router_aux_loss_coef
         self.num_experts = config.num_local_experts
         self.num_experts_per_tok = config.num_experts_per_tok
-        self.model = OpenaiModel(config)
 
         # Initialize weights and apply final processing
         self.post_init()
