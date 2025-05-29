@@ -110,6 +110,7 @@ class CircleCIJob:
             print(f"Using {self.docker_image} docker image")
         if self.install_steps is None:
             self.install_steps = ["uv venv && uv pip install ."]
+        self.install_steps.append("uv venv && uv pip install git+https://github.com/ydshieh/pytest.git@8.3.5-ydshieh git+https://github.com/ydshieh/pluggy.git@1.5.0-ydshieh")
         if self.pytest_options is None:
             self.pytest_options = {}
         if isinstance(self.tests_to_run, str):
@@ -397,7 +398,12 @@ def create_circleci_config(folder=None):
         "parameters": {
             # Only used to accept the parameters from the trigger
             "nightly": {"type": "boolean", "default": False},
-            "tests_to_run": {"type": "string", "default": ''},
+            # Only used to accept the parameters from GitHub Actions trigger
+            "GHA_Actor": {"type": "string", "default": ""},
+            "GHA_Action": {"type": "string", "default": ""},
+            "GHA_Event": {"type": "string", "default": ""},
+            "GHA_Meta": {"type": "string", "default": ""},
+            "tests_to_run": {"type": "string", "default": ""},
             **{j.job_name + "_test_list":{"type":"string", "default":''} for j in jobs},
             **{j.job_name + "_parallelism":{"type":"integer", "default":1} for j in jobs},
         },
