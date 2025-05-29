@@ -76,23 +76,21 @@ class XcodecDecoderOutput(ModelOutput):
 class ResidualUnit(nn.Module):
     """Residual block for SemanticEncoder and SemanticDecoder used in Xcodec."""
 
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int = 3,
-        dilation: int = 1,
-        stride: int = 1,
-        bias: bool = False,
-        padding: int = -1,
-        groups: int = 1,
-    ):
+    def __init__(self, config: XcodecConfig, in_channels: int, out_channels: int, dilation: int):
         super().__init__()
         self.activation = nn.ELU()
-        if padding < 0:
-            padding = ((kernel_size - 1) // 2) * dilation
-        self.conv1 = nn.Conv1d(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
-        self.conv2 = nn.Conv1d(in_channels=out_channels, out_channels=out_channels, kernel_size=1, bias=bias)
+        padding = ((config.unit_kernel_size - 1) // 2) * dilation
+        self.conv1 = nn.Conv1d(
+            in_channels,
+            out_channels,
+            config.unit_kernel_size,
+            stride=1,
+            padding=padding,
+            dilation=dilation,
+            groups=1,
+            bias=False,
+        )
+        self.conv2 = nn.Conv1d(in_channels=out_channels, out_channels=out_channels, kernel_size=1, bias=False)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         output_tensor = self.activation(hidden_state)
@@ -103,21 +101,10 @@ class ResidualUnit(nn.Module):
 
 
 class SemanticEncoderBlock(nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        stride: int,
-        dilations: tuple,
-        unit_kernel_size: int = 3,
-        bias: bool = False,
-    ):
+    def __init__(self, config: XcodecConfig, in_channels: int, out_channels: int, stride: int):
         super().__init__()
         self.res_units = nn.ModuleList(
-            [
-                ResidualUnit(in_channels, in_channels, unit_kernel_size, dilation=dilation, bias=bias)
-                for dilation in dilations
-            ]
+            [ResidualUnit(config, in_channels, in_channels, dilation) for dilation in config.block_dilations]
         )
 
         # special case: stride=1, do not use kernel=2
@@ -146,11 +133,7 @@ class SemanticEncoder(nn.Module):
         conv_blocks = []
         for i, stride in enumerate(config.strides):
             out_channels = int(config.encoder_channels * config.channel_ratios[i])
-            conv_blocks += [
-                SemanticEncoderBlock(
-                    in_channels, out_channels, stride, config.block_dilations, config.unit_kernel_size, bias=False
-                )
-            ]
+            conv_blocks += [SemanticEncoderBlock(config, in_channels, out_channels, stride)]
             in_channels = out_channels
 
         self.conv_blocks = nn.ModuleList(conv_blocks)
@@ -163,15 +146,7 @@ class SemanticEncoder(nn.Module):
 
 
 class SemanticDecoderBlock(nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        stride: int,
-        dilations: tuple,
-        unit_kernel_size: int = 3,
-        bias: bool = False,
-    ):
+    def __init__(self, config: XcodecConfig, in_channels: int, out_channels: int, stride: int):
         super().__init__()
         if stride == 1:
             self.conv = nn.Conv1d(
@@ -191,16 +166,7 @@ class SemanticDecoderBlock(nn.Module):
             )
 
         self.res_units = nn.ModuleList(
-            [
-                ResidualUnit(
-                    in_channels=out_channels,
-                    out_channels=out_channels,
-                    kernel_size=unit_kernel_size,
-                    dilation=dilation,
-                    bias=bias,
-                )
-                for dilation in dilations
-            ]
+            [ResidualUnit(config, out_channels, out_channels, dilation) for dilation in config.block_dilations]
         )
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
@@ -222,7 +188,7 @@ class SemanticDecoder(nn.Module):
             bias=False,
         )
         conv_blocks = []
-        for i in range(len(config.strides)):
+        for i, stride in enumerate(config.strides):
             in_channels = int(config.decoder_channels * config.channel_ratios[i])
 
             if i < (len(config.channel_ratios) - 1):
@@ -230,16 +196,7 @@ class SemanticDecoder(nn.Module):
             else:
                 out_channels = config.decoder_channels
 
-            conv_blocks += [
-                SemanticDecoderBlock(
-                    in_channels,
-                    out_channels,
-                    config.strides[i],
-                    dilations=config.block_dilations,
-                    unit_kernel_size=config.unit_kernel_size,
-                    bias=False,
-                )
-            ]
+            conv_blocks += [SemanticDecoderBlock(config, in_channels, out_channels, stride)]
 
         self.conv_blocks = nn.ModuleList(conv_blocks)
         self.conv2 = nn.Conv1d(
