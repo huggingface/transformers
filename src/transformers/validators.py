@@ -21,7 +21,13 @@ from typing import Callable, Optional
 
 from huggingface_hub.dataclasses import as_validated_field
 
-from .activations import ACT2CLS
+from .utils import is_torch_available
+
+
+if is_torch_available():
+    from .activations import ACT2FN
+else:
+    ACT2FN = {}
 
 
 # Numerical validators
@@ -82,25 +88,19 @@ def probability(value: float):
         raise ValueError(f"Value must be a probability between 0.0 and 1.0, got {value}.")
 
 
-@as_validated_field
-def token(value: Optional[int]):
-    """Ensures that `value` is a potential token. A token, when set, must be a non-negative integer."""
-    if value is not None and value < 0:
-        raise ValueError(f"A token, when set, must be a non-negative integer, got {value}.")
-
-
 # String validators
 
 
 @as_validated_field
 def activation_fn_key(value: str):
     """Ensures that `value` is a string corresponding to an activation function."""
-    # TODO (joao): in python 3.11+, we can build a Literal type from the keys of ACT2CLS
-    if value not in ACT2CLS:
-        raise ValueError(
-            f"Value must be one of {list(ACT2CLS.keys())}, got {value}. "
-            "Make sure to use a string that corresponds to an activation function."
-        )
+    # TODO (joao): in python 3.11+, we can build a Literal type from the keys of ACT2FN
+    if len(ACT2FN) > 0:  # don't validate if we can't import ACT2FN
+        if value not in ACT2FN:
+            raise ValueError(
+                f"Value must be one of {list(ACT2FN.keys())}, got {value}. "
+                "Make sure to use a string that corresponds to an activation function."
+            )
 
 
-__all__ = ["interval", "probability", "token", "activation_fn_key"]
+__all__ = ["interval", "probability", "activation_fn_key"]

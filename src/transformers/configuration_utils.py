@@ -390,9 +390,11 @@ class PretrainedConfig(PushToHubMixin):
             for token_name in ["pad_token_id", "bos_token_id", "eos_token_id"]:
                 token_id = getattr(text_config, token_name, None)
                 if token_id is not None and not 0 <= token_id < vocab_size:
+                    # Can't be an exception until we can load configs that fail validation: several configs on the Hub
+                    # store invalid special tokens, e.g. `pad_token_id=-1`
                     logger.warning_once(
-                        f"{token_name} must be `None` or an integer within the vocabulary (between 0 and "
-                        f"{vocab_size - 1}), got {token_id}. This may lead to unexpected behavior."
+                        f"Model config: {token_name} must be `None` or an integer within the vocabulary (between 0 "
+                        f"and {vocab_size - 1}), got {token_id}. This may result in unexpected behavior."
                     )
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
@@ -426,6 +428,10 @@ class PretrainedConfig(PushToHubMixin):
                 f"\nNon-default generation parameters: {str(non_default_generation_parameters)}",
                 UserWarning,
             )
+
+        # Strict validation at save-time: prevent bad patterns from propagating
+        if hasattr(self, "validate"):
+            self.validate()
 
         os.makedirs(save_directory, exist_ok=True)
 

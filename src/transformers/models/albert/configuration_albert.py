@@ -17,13 +17,13 @@
 
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Literal, Mapping, Optional
+from typing import Literal, Mapping, Optional, Union
 
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
-from ...validators import activation_fn_key, interval, probability, token
+from ...validators import activation_fn_key, interval, probability
 
 
 @strict(accept_kwargs=True)
@@ -118,17 +118,17 @@ class AlbertConfig(PretrainedConfig):
     intermediate_size: int = interval(min=1)(default=16384)
     inner_group_num: int = interval(min=0)(default=1)
     hidden_act: str = activation_fn_key(default="gelu_new")
-    hidden_dropout_prob: float = probability(default=0.0)
-    attention_probs_dropout_prob: float = probability(default=0.0)
+    hidden_dropout_prob: Union[float, int] = probability(default=0.0)
+    attention_probs_dropout_prob: Union[float, int] = probability(default=0.0)
     max_position_embeddings: int = interval(min=0)(default=512)
     type_vocab_size: int = interval(min=1)(default=2)
     initializer_range: float = interval(min=0.0)(default=0.02)
     layer_norm_eps: float = interval(min=0.0)(default=1e-12)
     classifier_dropout_prob: float = probability(default=0.1)
     position_embedding_type: Literal["absolute", "relative_key", "relative_key_query"] = "absolute"
-    pad_token_id: Optional[int] = token(default=0)
-    bos_token_id: Optional[int] = token(default=2)
-    eos_token_id: Optional[int] = token(default=3)
+    pad_token_id: Optional[int] = 0
+    bos_token_id: Optional[int] = 2
+    eos_token_id: Optional[int] = 3
 
     # Not part of __init__
     model_type = "albert"
@@ -138,7 +138,7 @@ class AlbertConfig(PretrainedConfig):
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({self.num_attention_heads}"
+                f"heads ({self.num_attention_heads})."
             )
 
 

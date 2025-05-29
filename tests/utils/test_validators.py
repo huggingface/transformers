@@ -11,9 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import tempfile
 import unittest
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Union
 
 from huggingface_hub.dataclasses import (
     StrictDataclassClassValidationError,
@@ -21,8 +22,9 @@ from huggingface_hub.dataclasses import (
     strict,
 )
 
-from transformers import AlbertConfig
-from transformers.validators import activation_fn_key, interval, probability, token
+from transformers import AlbertConfig, logging
+from transformers.testing_utils import CaptureLogger
+from transformers.validators import activation_fn_key, interval, probability
 
 
 class ValidatorsTests(unittest.TestCase):
@@ -86,25 +88,6 @@ class ValidatorsTests(unittest.TestCase):
         with self.assertRaises(StrictDataclassFieldValidationError):
             TestProbability(-0.1)  # less than 0
 
-    def test_token(self):
-        # Setup test dataclasses
-        @strict
-        @dataclass
-        class TestToken:
-            data: Optional[int] = token()
-
-        # valid
-        TestToken(None)
-        TestToken(0)
-        TestToken(1)
-        TestToken(999999999)
-
-        # invalid
-        with self.assertRaises(StrictDataclassFieldValidationError):
-            TestToken(-1)  # less than 0
-        with self.assertRaises(StrictDataclassFieldValidationError):
-            TestToken("<eos>")  # different type: must be the token id, not its string counterpart
-
     def test_activation_fn_key(self):
         # Setup test dataclasses
         @strict
@@ -140,11 +123,10 @@ class ValidatorsIntegrationTests(unittest.TestCase):
         self.assertEqual(config.foo, "bar")
 
         # 2 - Manual specification, traveling through an invalid config, should be allowed
-        config.eos_token_id = 99  # vocab_size = 30000, eos_token_id = 99 -> valid
-        config.vocab_size = 10  # vocab_size = 10, eos_token_id = 99 -> invalid (but only throws error in `validate()`)
+        config.hidden_size = 65  # breaks class-wide validation, see `AlbertConfig.validate_architecture`
         with self.assertRaises(StrictDataclassClassValidationError):
             config.validate()
-        config.eos_token_id = 9  # vocab_size = 10, eos_token_id = 9 -> valid
+        config.num_attention_heads = 5  # 65 % 5 = 0 -> valid
         config.validate()
 
         # 3 - These cases should raise an error
@@ -161,15 +143,13 @@ class ValidatorsIntegrationTests(unittest.TestCase):
         with self.assertRaises(StrictDataclassFieldValidationError):
             config = AlbertConfig(position_embedding_type="foo")
 
-        # eos_token_id is a token, and must be non-negative
-        with self.assertRaises(StrictDataclassFieldValidationError):
-            config = AlbertConfig(eos_token_id=-1)
-
         # `@strict` calls `validate()` in `__post_init__`, i.e. after `__init__`. All functions defined as
         # `validate_XXX(self)` will be called as part of the validation process. In this case, a special token must
         # be in the vocabulary, and the validation function is defined in the base config class.
-        with self.assertRaises(StrictDataclassClassValidationError):
+        logger = logging.get_logger("transformers.configuration_utils")
+        with CaptureLogger(logger) as captured_logs:
             config = AlbertConfig(vocab_size=10, eos_token_id=99)
+        self.assertIn("eos_token_id must be `None` or an integer within the vocabulary", captured_logs.out)
 
         # Similar to the previous case, but the validation function is defined in the model config class. The hidden
         # size must be divisible by the number of attention heads.
@@ -180,3 +160,17 @@ class ValidatorsIntegrationTests(unittest.TestCase):
         with self.assertRaises(StrictDataclassFieldValidationError):
             config = AlbertConfig()
             config.vocab_size = "foo"
+
+    def test_bad_config_cant_be_saved(self):
+        """Test that a bad config can't be saved"""
+        # 1 - create a good config, modify it so it fails class-wide validation
+        config = AlbertConfig()
+        config.validate()
+        config.hidden_size = 65  # breaks class-wide validation, see `AlbertConfig.validate_architecture`
+
+        # 2 - try to save it, and check that the error message is correct
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaises(StrictDataclassClassValidationError) as exc:
+                config.save_pretrained(tmp_dir)
+            # start of the message in `AlbertConfig.validate_architecture`
+            self.assertTrue("The hidden size " in str(exc.exception))
