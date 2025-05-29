@@ -51,9 +51,6 @@ class GotOcr2VisionText2TextModelTester:
         num_channels=3,
         ignore_index=-100,
         image_size=64,
-        bos_token_id=0,
-        eos_token_id=0,
-        pad_token_id=0,
         image_token_index=1,
         model_type="got_ocr2",
         is_training=True,
@@ -71,6 +68,9 @@ class GotOcr2VisionText2TextModelTester:
             "rope_theta": 10000,
             "mlp_ratio": 4,
             "tie_word_embeddings": True,
+            "bos_token_id": 2,
+            "eos_token_id": 3,
+            "pad_token_id": 4,
         },
         vision_config={
             "num_hidden_layers": 2,
@@ -85,9 +85,9 @@ class GotOcr2VisionText2TextModelTester:
     ):
         self.parent = parent
         self.ignore_index = ignore_index
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
+        self.bos_token_id = text_config["bos_token_id"]
+        self.eos_token_id = text_config["eos_token_id"]
+        self.pad_token_id = text_config["pad_token_id"]
         self.image_token_index = image_token_index
         self.model_type = model_type
         self.text_config = text_config
@@ -109,9 +109,6 @@ class GotOcr2VisionText2TextModelTester:
             text_config=self.text_config,
             vision_config=self.vision_config,
             model_type=self.model_type,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
-            pad_token_id=self.pad_token_id,
             image_token_index=self.image_token_index,
         )
 
@@ -127,7 +124,6 @@ class GotOcr2VisionText2TextModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
 
-        # input_ids[:, -1] = self.pad_token_id
         input_ids[input_ids == self.image_token_index] = self.pad_token_id
         input_ids[:, : self.num_image_tokens] = self.image_token_index
 

@@ -86,7 +86,7 @@ class LlavaNextVideoVisionText2TextModelTester:
             "initializer_range": 0.02,
             "num_labels": 3,
             "num_choices": 4,
-            "pad_token_id": 2,
+            "pad_token_id": 3,
         },
         is_training=True,
         vision_config={
