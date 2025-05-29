@@ -42,7 +42,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_openai_moe import OpenaiConfig
-
+import math
 
 logger = logging.get_logger(__name__)
 
@@ -68,10 +68,10 @@ class OpenaiRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-def swiglu(x, alpha: float = 1.702):
+def swiglu(x, sigmoid_bias, alpha: float = 1.702):
     # Note we add an extra bias of 1 to the linear layer
     x_glu, x_linear = torch.chunk(x, 2, dim=-1)
-    out_glu = x_glu * torch.sigmoid(alpha * x_glu)
+    out_glu = x_glu * torch.sigmoid((alpha * x_glu) + sigmoid_bias.view(x_glu.shape))
     return out_glu * (x_linear + 1)
 
 
@@ -88,7 +88,7 @@ class OpenaiExperts(nn.Module):
         self.down_proj_bias = nn.Parameter(torch.empty(self.num_experts, self.expert_dim))
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, sigmoid_bias: torch.Tensor) -> torch.Tensor:
         """
         This should really not be run on a single machine, as we are reaching compute bound:
         - the inputs are expected to be "sorted" per expert already.
@@ -103,7 +103,7 @@ class OpenaiExperts(nn.Module):
         """
         hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
         gate_up = torch.bmm(hidden_states, self.gate_up_proj) + self.gate_up_proj_bias[:, None, :]
-        swiglu_ = swiglu(gate_up)
+        swiglu_ = swiglu(gate_up, sigmoid_bias)
         next_states = torch.bmm(swiglu_, self.down_proj) + self.down_proj_bias[:, None, :]
         return next_states
 
@@ -121,33 +121,38 @@ class OpenaiMLP(nn.Module):
         # we don't slice weight as its not compile compatible
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = self.router(hidden_states)
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1, sorted=True)
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)
         router_scores = (
             torch.full_like(router_logits, float(0)).scatter_(1, router_indices, router_top_value).transpose(0, 1)
         )
 
         routed_in = hidden_states.repeat(self.num_local_experts, 1)
-        routed_out = self.experts(routed_in)
+        sigmoid_bias = (
+            torch.full_like(routed_in, float("-inf")).scatter_(1, router_indices, router_top_value)
+        ).contiguous()
+
+        routed_out = self.experts(routed_in, sigmoid_bias)
         routed_out = routed_out * router_scores.reshape(self.num_local_experts, -1, 1)
         hidden_states = routed_out.sum(dim=0)[None, ...]
         return hidden_states, router_scores
 
 
 class OpenaiRotaryEmbedding(nn.Module):
+    rope_type = "default"
     def __init__(self, config: OpenaiConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+            self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         else:
-            self.rope_type = "default"
+            self.attention_scaling = 1.0
+            inv_freq = 1.0 / (config.rope_theta ** ( torch.arange(0, config.head_dim, 2, dtype=torch.float32)/ config.head_dim))
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.config = config        
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
@@ -249,7 +254,7 @@ class OpenaiAttention(nn.Module):
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
+        self.scaling =  1 / math.sqrt(self.head_dim)
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 

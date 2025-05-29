@@ -96,7 +96,7 @@ class OpenaiMLP(nn.Module):
         # we don't slice weight as its not compile compatible
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = self.router(hidden_states)
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1, sorted=True)
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)
         router_scores = (
             torch.full_like(router_logits, float(0)).scatter_(1, router_indices, router_top_value).transpose(0, 1)
         )
