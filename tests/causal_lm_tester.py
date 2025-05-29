@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,40 +11,69 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch GraniteMoeShared model."""
 
-import unittest
+import tempfile
+from inspect import signature
 
+import pytest
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, GraniteMoeSharedConfig, is_torch_available, set_seed
+from transformers import set_seed
 from transformers.testing_utils import (
-    Expectations,
-    require_read_token,
-    require_torch,
-    require_torch_accelerator,
+    is_flaky,
+    require_flash_attn,
+    require_torch_gpu,
     slow,
-    torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from .test_configuration_common import ConfigTester
+from .test_modeling_common import (
+    GenerationTesterMixin,
+    ModelTesterMixin,
+    ids_tensor,
+    is_torch_available,
+    require_torch,
+    torch_device,
+)
+from .test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        GraniteMoeSharedForCausalLM,
-        GraniteMoeSharedModel,
-    )
-    from transformers.models.granitemoeshared.modeling_granitemoeshared import (
-        GraniteMoeSharedRotaryEmbedding,
-    )
 
+class CausalLMModelTester:
+    _required_attributes = ("base_model_class", "config_class", "causal_lm_class")
+    forced_config_args = [
+        "pad_token_id"
+    ]  # Arguments that should be passed to the config class even if not in its signature
+    config_class = None
+    base_model_class = None
+    causal_lm_class = None
+    sequence_classification_class = None
+    token_classification_class = None
+    question_answering_class = None
 
-class GraniteMoeSharedModelTester:
+    def _verify_model_attributes(self):
+        for required_attribute in self._required_attributes:
+            if getattr(self, required_attribute) is None:
+                raise ValueError(
+                    f"You have inherited from CausalLMModelTester but did not set the {required_attribute} attribute."
+                )
+
+    @property
+    def all_model_classes(self):
+        return [
+            model_class
+            for model_class in (
+                self.base_model_class,
+                self.causal_lm_class,
+                self.sequence_classification_class,
+                self.token_classification_class,
+            )
+            if model_class is not None
+        ]
+
     def __init__(
         self,
         parent,
@@ -57,9 +86,9 @@ class GraniteMoeSharedModelTester:
         vocab_size=99,
         hidden_size=32,
         num_hidden_layers=2,
-        num_attention_heads=4,
+        num_attention_heads=2,
+        num_key_value_heads=2,
         intermediate_size=37,
-        shared_intermediate_size=174,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -70,8 +99,24 @@ class GraniteMoeSharedModelTester:
         num_labels=3,
         num_choices=4,
         pad_token_id=0,
+        bos_token_id=1,
+        eos_token_id=2,
+        is_decoder=False,
         scope=None,
+        expert_interval=1,
+        moe_intermediate_size=12,
+        shared_expert_intermediate_size=36,
+        shared_expert_gate=True,
+        num_experts_per_tok=2,
+        num_experts=8,
+        mamba_n_groups=1,
+        mamba_n_heads=16,
+        mamba_d_state=16,
+        mamba_d_conv=4,
+        mamba_expand=2,
+        mamba_chunk_size=16,
     ):
+        self._verify_model_attributes()
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
@@ -83,8 +128,8 @@ class GraniteMoeSharedModelTester:
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
         self.intermediate_size = intermediate_size
-        self.shared_intermediate_size = shared_intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
@@ -95,7 +140,23 @@ class GraniteMoeSharedModelTester:
         self.num_labels = num_labels
         self.num_choices = num_choices
         self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.scope = scope
+        self.head_dim = self.hidden_size // self.num_attention_heads
+        self.is_decoder = is_decoder
+        self.expert_interval = expert_interval
+        self.moe_intermediate_size = moe_intermediate_size
+        self.shared_expert_intermediate_size = shared_expert_intermediate_size
+        self.shared_expert_gate = shared_expert_gate
+        self.num_experts_per_tok = num_experts_per_tok
+        self.num_experts = num_experts
+        self.mamba_n_groups = mamba_n_groups
+        self.mamba_n_heads = mamba_n_heads
+        self.mamba_d_state = mamba_d_state
+        self.mamba_d_conv = mamba_d_conv
+        self.mamba_expand = mamba_expand
+        self.mamba_chunk_size = mamba_chunk_size
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -121,27 +182,16 @@ class GraniteMoeSharedModelTester:
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return GraniteMoeSharedConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
-            pad_token_id=self.pad_token_id,
-            shared_intermediate_size=self.shared_intermediate_size,
-        )
+        kwarg_names = list(signature(self.config_class.__init__).parameters.keys())
+        kwargs = {
+            k: getattr(self, k) for k in kwarg_names + self.forced_config_args if hasattr(self, k) and k != "self"
+        }
+        return self.config_class(**kwargs)
 
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = GraniteMoeSharedModel(config=config)
+        model = self.base_model_class(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -164,34 +214,27 @@ class GraniteMoeSharedModelTester:
 
 
 @require_torch
-class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            GraniteMoeSharedModel,
-            GraniteMoeSharedForCausalLM,
-        )
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": GraniteMoeSharedModel,
-            "text-generation": GraniteMoeSharedForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
+class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin):
     test_headmasking = False
     test_pruning = False
-    fx_compatible = False
-
-    # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
-    # This is because we are hitting edge cases with the causal_mask buffer
-    model_split_percents = [0.5, 0.7, 0.8]
+    model_tester_class = None
+    all_model_classes = None
+    rotary_embedding_layer = None  # Enables RoPE tests if set
+    pipeline_model_mapping = None
 
     def setUp(self):
-        self.model_tester = GraniteMoeSharedModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GraniteMoeSharedConfig, hidden_size=37)
+        if self.model_tester_class is None:
+            raise ValueError(
+                "You have inherited from CausalLMModelTest but did not set the model_tester_class attribute."
+            )
+        self.model_tester = self.model_tester_class(self)
+        self.config_tester = ConfigTester(self, config_class=self.model_tester.config_class)
+        if self.all_model_classes is None:
+            self.all_model_classes = self.model_tester.all_model_classes
+        if self.pipeline_model_mapping is None:
+            raise ValueError(
+                "You have inherited from CausalLMModelTest but did not set the pipeline_model_mapping attribute."
+            )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -200,20 +243,79 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
+    def test_sequence_classification_model(self):
+        if self.model_tester.sequence_classification_class is None:
+            self.skipTest("Model does not support sequence classification")
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        model = self.model_tester.sequence_classification_class(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    @parameterized.expand([("linear",), ("dynamic",)])
+    def test_sequence_classification_model_for_single_label(self):
+        if self.model_tester.sequence_classification_class is None:
+            self.skipTest("Model does not support sequence classification")
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        config.problem_type = "single_label_classification"
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        model = self.model_tester.sequence_classification_class(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    def test_sequence_classification_model_for_multi_label(self):
+        if self.model_tester.sequence_classification_class is None:
+            self.skipTest("Model does not support sequence classification")
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        config.problem_type = "multi_label_classification"
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
+        ).to(torch.float)
+        model = self.model_tester.sequence_classification_class(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    def test_token_classification_model(self):
+        if self.model_tester.token_classification_class is None:
+            self.skipTest("Model does not support token classification")
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
+        model = self.model_tester.token_classification_class(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
+        )
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
+        if self.rotary_embedding_layer is None:
+            self.skipTest("Rotary embedding layer not set")
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = GraniteMoeSharedModel(config)
+        original_model = self.model_tester_class.base_model_class(config)
         original_model.to(torch_device)
         original_model.eval()
         original_short_output = original_model(short_input).last_hidden_state
@@ -221,7 +323,7 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
         config.rope_scaling = {"type": scaling_type, "factor": 10.0}
-        scaled_model = GraniteMoeSharedModel(config)
+        scaled_model = self.model_tester_class.base_model_class(config)
         scaled_model.to(torch_device)
         scaled_model.eval()
         scaled_short_output = scaled_model(short_input).last_hidden_state
@@ -238,6 +340,8 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
     def test_model_rope_scaling(self):
+        if self.rotary_embedding_layer is None:
+            self.skipTest("Rotary embedding layer not set")
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         scaling_factor = 10
         short_input_length = 10
@@ -253,7 +357,7 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         position_ids_long = position_ids_long.unsqueeze(0)
 
         # Sanity check original RoPE
-        original_rope = GraniteMoeSharedRotaryEmbedding(config=config).to(torch_device)
+        original_rope = self.rotary_embedding_layer(config=config).to(torch_device)
         original_cos_short, original_sin_short = original_rope(x, position_ids_short)
         original_cos_long, original_sin_long = original_rope(x, position_ids_long)
         torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
@@ -262,7 +366,7 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
         config.rope_scaling = {"type": "linear", "factor": scaling_factor}
-        linear_scaling_rope = GraniteMoeSharedRotaryEmbedding(config=config).to(torch_device)
+        linear_scaling_rope = self.rotary_embedding_layer(config=config).to(torch_device)
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
@@ -276,7 +380,7 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
         # with scaling_factor (or that `inv_freq` decreases)
         config.rope_scaling = {"type": "dynamic", "factor": scaling_factor}
-        ntk_scaling_rope = GraniteMoeSharedRotaryEmbedding(config=config).to(torch_device)
+        ntk_scaling_rope = self.rotary_embedding_layer(config=config).to(torch_device)
         ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
         ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(ntk_cos_short, original_cos_short)
@@ -290,7 +394,7 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         # Sanity check Yarn RoPE scaling
         # Scaling should be over the entire input
         config.rope_scaling = {"type": "yarn", "factor": scaling_factor}
-        yarn_scaling_rope = GraniteMoeSharedRotaryEmbedding(config=config).to(torch_device)
+        yarn_scaling_rope = self.rotary_embedding_layer(config=config).to(torch_device)
         yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short)
         yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
@@ -304,84 +408,37 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
-
-@require_torch_accelerator
-class GraniteMoeSharedIntegrationTest(unittest.TestCase):
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @is_flaky()
     @slow
-    @require_read_token
-    def test_model_3b_logits(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
+    def test_flash_attn_2_equivalence(self):
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(reason="Model does not support Flash Attention 2")
 
-        model = GraniteMoeSharedForCausalLM.from_pretrained("ibm/PowerMoE-3b", device_map="auto")
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
 
-        with torch.no_grad():
-            out = model(torch.tensor([input_ids]).to(torch_device))
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_fa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
+                )
+                model_fa.to(torch_device)
 
-        # fmt: off
-        # Expected mean on dim = -1
-        EXPECTED_MEANS = Expectations(
-            {
-                ("xpu", 3): torch.tensor([[-4.4005, -3.6689, -3.6187, -2.8308, -3.9871, -3.1001, -2.8738, -2.8063]]),
-                ("cuda", 7): torch.tensor([[-2.2122, -1.6632, -2.9269, -2.3344, -2.0143, -3.0146, -2.6839, -2.5610]]),
-                ("cuda", 8): torch.tensor([[-4.4005, -3.6689, -3.6187, -2.8308, -3.9871, -3.1001, -2.8738, -2.8063]]),
-            }
-        )
+                model = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="eager"
+                )
+                model.to(torch_device)
 
-        EXPECTED_MEAN = EXPECTED_MEANS.get_expectation()
-        torch.testing.assert_close(EXPECTED_MEAN.to(torch_device), out.logits.float().mean(-1), rtol=1e-2, atol=1e-2)
+                dummy_input = inputs_dict[model_class.main_input_name]
+                dummy_input = dummy_input.to(torch_device)
+                outputs = model(dummy_input, output_hidden_states=True)
+                outputs_fa = model_fa(dummy_input, output_hidden_states=True)
 
-        # slicing logits[0, 0, 0:15]
-        EXPECTED_SLICES = Expectations(
-            {
-                ("xpu", 3): torch.tensor([[2.5479, -9.2123, -9.2121, -9.2175, -9.2122, -1.5024, -9.2121, -9.2122, -9.2161, -9.2122, -6.3100, -3.6223, -3.6377, -5.2542, -5.2523]]),
-                ("cuda", 7): torch.tensor([[4.8785, -2.2890, -2.2892, -2.2885, -2.2890, -3.5007, -2.2897, -2.2892, -2.2895, -2.2891, -2.2887, -2.2882, -2.2889, -2.2898, -2.2892]]),
-                ("cuda", 8): torch.tensor([[2.5479, -9.2123, -9.2121, -9.2175, -9.2122, -1.5024, -9.2121, -9.2122, -9.2161, -9.2122, -6.3100, -3.6223, -3.6377, -5.2542, -5.2523]]),
-            }
-        )
-        EXPECTED_SLICE = EXPECTED_SLICES.get_expectation()
-        # fmt: on
+                logits = outputs.hidden_states[-1]
+                logits_fa = outputs_fa.hidden_states[-1]
 
-        self.assertTrue(
-            torch.allclose(
-                EXPECTED_SLICE.to(torch_device),
-                out.logits[0, 0, :15].float(),
-                atol=1e-3,
-                rtol=1e-3,
-            )
-        )
-
-    @slow
-    def test_model_3b_generation(self):
-        # ground truth text generated with dola_layers="low", repetition_penalty=1.2
-        # fmt: off
-        EXPECTED_TEXT_COMPLETIONS = Expectations(
-            {
-                ("xpu", 3): (
-                    "Simply put, the theory of relativity states that 1) the speed of light is constant, and 2) the speed of light is the same for all observers.\n\n"
-                    "The first part is easy to understand. The second part is a little more difficult.\n\n"
-                    "The second part of the theory of relativity is a little more difficult to understand.\n"
-                ),
-                ("cuda", 7): (
-                    "Simply put, the theory of relativity states that \n$$\n\\frac{d^2x^\\mu}{d\\tau^2} = "
-                    "\\frac{1}{c^2}\\frac{d^2x^\\mu}{dt^2}\n$$\nwhere $x^\\mu$ is a four-vector, $\\tau$ is the proper time"
-                ),
-                ("cuda", 8): (
-                    "Simply put, the theory of relativity states that 1) the speed of light is constant, and 2) the speed of light is the same for all observers.\n\n"
-                    "The first part is easy to understand. The second part is a little more difficult.\n\n"
-                    "The second part of the theory of relativity is a little more difficult to understand.\n"
-                ),
-            }
-        )
-        # fmt: on
-        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
-
-        prompt = "Simply put, the theory of relativity states that "
-        tokenizer = AutoTokenizer.from_pretrained("ibm/PowerMoE-3b")
-        model = GraniteMoeSharedForCausalLM.from_pretrained("ibm/PowerMoE-3b", device_map="auto")
-        model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-
-        # greedy generation outputs
-        generated_ids = model.generate(**model_inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+                assert torch.allclose(logits_fa, logits, atol=2e-3)

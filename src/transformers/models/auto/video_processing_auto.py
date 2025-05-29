@@ -339,8 +339,7 @@ class AutoVideoProcessor:
             class_ref = video_processor_auto_map
             video_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
-            if os.path.isdir(pretrained_model_name_or_path):
-                video_processor_class.register_for_auto_class()
+            video_processor_class.register_for_auto_class()
             return video_processor_class.from_dict(config_dict, **kwargs)
         elif video_processor_class is not None:
             return video_processor_class.from_dict(config_dict, **kwargs)
