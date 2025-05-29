@@ -15,10 +15,12 @@
 """Auto Config class."""
 
 import importlib
+import os
 import re
 import warnings
 from collections import OrderedDict
-from typing import List, Union
+from collections.abc import Callable, Iterator, KeysView, ValuesView
+from typing import Any, TypeVar, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
@@ -28,7 +30,10 @@ from ...utils import CONFIG_NAME, logging
 logger = logging.get_logger(__name__)
 
 
-CONFIG_MAPPING_NAMES = OrderedDict(
+_CallableT = TypeVar("_CallableT", bound=Callable[..., Any])
+
+
+CONFIG_MAPPING_NAMES = OrderedDict[str, str](
     [
         # Add configs here
         ("aimv2", "Aimv2Config"),
@@ -382,7 +387,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 )
 
 
-MODEL_NAMES_MAPPING = OrderedDict(
+MODEL_NAMES_MAPPING = OrderedDict[str, str](
     [
         # Add full (and cased) model names here
         ("aimv2", "AIMv2"),
@@ -799,7 +804,7 @@ DEPRECATED_MODELS = [
     "xlm_prophetnet",
 ]
 
-SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
+SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
     [
         ("openai-gpt", "openai"),
         ("data2vec-audio", "data2vec"),
@@ -832,7 +837,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
 )
 
 
-def model_type_to_module_name(key):
+def model_type_to_module_name(key) -> str:
     """Converts a config key to the corresponding module."""
     # Special treatment
     if key in SPECIAL_MODEL_TYPE_TO_MODULE_NAME:
@@ -849,7 +854,7 @@ def model_type_to_module_name(key):
     return key
 
 
-def config_class_to_model_type(config):
+def config_class_to_model_type(config) -> Union[str, None]:
     """Converts a config class name to the corresponding model type"""
     for key, cls in CONFIG_MAPPING_NAMES.items():
         if cls == config:
@@ -861,17 +866,17 @@ def config_class_to_model_type(config):
     return None
 
 
-class _LazyConfigMapping(OrderedDict):
+class _LazyConfigMapping(OrderedDict[str, type[PretrainedConfig]]):
     """
     A dictionary that lazily load its values when they are requested.
     """
 
-    def __init__(self, mapping):
+    def __init__(self, mapping) -> None:
         self._mapping = mapping
         self._extra_content = {}
         self._modules = {}
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> type[PretrainedConfig]:
         if key in self._extra_content:
             return self._extra_content[key]
         if key not in self._mapping:
@@ -888,22 +893,22 @@ class _LazyConfigMapping(OrderedDict):
         transformers_module = importlib.import_module("transformers")
         return getattr(transformers_module, value)
 
-    def keys(self):
+    def keys(self) -> list[str]:
         return list(self._mapping.keys()) + list(self._extra_content.keys())
 
-    def values(self):
+    def values(self) -> list[type[PretrainedConfig]]:
         return [self[k] for k in self._mapping.keys()] + list(self._extra_content.values())
 
-    def items(self):
+    def items(self) -> list[tuple[str, type[PretrainedConfig]]]:
         return [(k, self[k]) for k in self._mapping.keys()] + list(self._extra_content.items())
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         return iter(list(self._mapping.keys()) + list(self._extra_content.keys()))
 
-    def __contains__(self, item):
+    def __contains__(self, item: object) -> bool:
         return item in self._mapping or item in self._extra_content
 
-    def register(self, key, value, exist_ok=False):
+    def register(self, key: str, value: type[PretrainedConfig], exist_ok=False) -> None:
         """
         Register a new configuration in this mapping.
         """
@@ -915,7 +920,7 @@ class _LazyConfigMapping(OrderedDict):
 CONFIG_MAPPING = _LazyConfigMapping(CONFIG_MAPPING_NAMES)
 
 
-class _LazyLoadAllMappings(OrderedDict):
+class _LazyLoadAllMappings(OrderedDict[str, str]):
     """
     A mapping that will load all pairs of key values at the first access (either by indexing, requestions keys, values,
     etc.)
@@ -945,28 +950,28 @@ class _LazyLoadAllMappings(OrderedDict):
         self._initialize()
         return self._data[key]
 
-    def keys(self):
+    def keys(self) -> KeysView[str]:
         self._initialize()
         return self._data.keys()
 
-    def values(self):
+    def values(self) -> ValuesView[str]:
         self._initialize()
         return self._data.values()
 
-    def items(self):
+    def items(self) -> KeysView[str]:
         self._initialize()
         return self._data.keys()
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         self._initialize()
         return iter(self._data)
 
-    def __contains__(self, item):
+    def __contains__(self, item: object) -> bool:
         self._initialize()
         return item in self._data
 
 
-def _get_class_name(model_class: Union[str, List[str]]):
+def _get_class_name(model_class: Union[str, list[str]]):
     if isinstance(model_class, (list, tuple)):
         return " or ".join([f"[`{c}`]" for c in model_class if c is not None])
     return f"[`{model_class}`]"
@@ -1005,7 +1010,9 @@ def _list_model_options(indent, config_to_class=None, use_model_types=True):
     return "\n".join(lines)
 
 
-def replace_list_option_in_docstrings(config_to_class=None, use_model_types=True):
+def replace_list_option_in_docstrings(
+    config_to_class=None, use_model_types: bool = True
+) -> Callable[[_CallableT], _CallableT]:
     def docstring_decorator(fn):
         docstrings = fn.__doc__
         if docstrings is None:
@@ -1040,14 +1047,14 @@ class AutoConfig:
     This class cannot be instantiated directly using `__init__()` (throws an error).
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         raise EnvironmentError(
             "AutoConfig is designed to be instantiated "
             "using the `AutoConfig.from_pretrained(pretrained_model_name_or_path)` method."
         )
 
     @classmethod
-    def for_model(cls, model_type: str, *args, **kwargs):
+    def for_model(cls, model_type: str, *args, **kwargs) -> PretrainedConfig:
         if model_type in CONFIG_MAPPING:
             config_class = CONFIG_MAPPING[model_type]
             return config_class(*args, **kwargs)
@@ -1057,7 +1064,7 @@ class AutoConfig:
 
     @classmethod
     @replace_list_option_in_docstrings()
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike[str]], **kwargs):
         r"""
         Instantiate one of the configuration classes of the library from a pretrained model configuration.
 
@@ -1204,7 +1211,7 @@ class AutoConfig:
         )
 
     @staticmethod
-    def register(model_type, config, exist_ok=False):
+    def register(model_type, config, exist_ok=False) -> None:
         """
         Register a new configuration for this class.
 
