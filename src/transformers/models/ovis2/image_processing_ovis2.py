@@ -1,3 +1,18 @@
+# coding=utf-8
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -213,7 +228,7 @@ class Ovis2ImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         crop_to_patches: bool = False,
         min_patches: int = 1,
         max_patches: int = 12,
@@ -308,7 +323,7 @@ class Ovis2ImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        do_convert_rgb: bool = None,
+        do_convert_rgb: Optional[bool] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         use_covering_area_grid: bool = True,
@@ -464,7 +479,7 @@ class Ovis2ImageProcessor(BaseImageProcessor):
         min_patches: int,
         max_patches: int,
         use_covering_area_grid: bool = True,
-        patch_size: Union[Tuple, int, dict] = None,
+        patch_size: Optional[Union[Tuple, int, dict]] = None,
         data_format: ChannelDimension = None,
         covering_threshold: float = 0.9,
     ):

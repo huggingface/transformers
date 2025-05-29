@@ -13,13 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from typing import List, Optional, Tuple, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
     group_images_by_shape,
@@ -35,7 +32,7 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -54,16 +51,30 @@ if is_torchvision_available():
 
 
 class Ovis2ImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    Args:
+        crop_to_patches (`bool`, *optional*, defaults to `False`):
+            Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
+            `preprocess` method.
+        min_patches (`int`, *optional*, defaults to 1):
+            The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+            set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
+        max_patches (`int`, *optional*, defaults to 12):
+            The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+            set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
+        use_covering_area_grid (`bool`, *optional*, defaults to `True`):
+            Whether to use the covering area grid to determine the number of patches. Only has an effect if
+            `crop_to_patches` is set to `True`. Can be overridden by the `use_covering_area_grid` parameter in the
+            `preprocess` method.
+    """
+
     crop_to_patches: Optional[bool]
     min_patches: Optional[int]
     max_patches: Optional[int]
     use_covering_area_grid: Optional[bool]
 
 
-@add_start_docstrings(
-    "Constructs a fast Ovis2 image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
+@auto_docstring
 class Ovis2ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
@@ -80,23 +91,7 @@ class Ovis2ImageProcessorFast(BaseImageProcessorFast):
     use_covering_area_grid = True
     valid_kwargs = Ovis2ImageProcessorKwargs
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-            crop_to_patches (`bool`, *optional*, defaults to `False`):
-                Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
-                `preprocess` method.
-            min_patches (`int`, *optional*, defaults to 1):
-                The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-                set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
-            max_patches (`int`, *optional*, defaults to 12):
-                The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-                set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
-            use_covering_area_grid (`bool`, *optional*, defaults to `True`):
-                Whether to use the original OVIS2 approach: compute the minimal number of tiles that cover at least 90%
-                of the image area. If `False`, the closest aspect ratio to the target is used.
-        """,
-    )
+    @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[valid_kwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
@@ -107,7 +102,7 @@ class Ovis2ImageProcessorFast(BaseImageProcessorFast):
         max_patches: int,
         use_covering_area_grid: bool = True,
         covering_threshold: float = 0.9,
-        patch_size: Union[Tuple, int, dict] = None,
+        patch_size: Optional[Union[Tuple, int, dict]] = None,
         interpolation: Optional["F.InterpolationMode"] = None,
     ):
         """
