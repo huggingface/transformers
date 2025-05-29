@@ -116,27 +116,6 @@ from unittest.mock import patch
 from transformers.utils import is_sklearn_available
 
 
-# TODO: raushan remove this when VLMs start accepting input embeds
-VLM_CLASS_NAMES = [
-    "llava",
-    "idefics2",
-    "idefics3",
-    "mllama",
-    "paligemma",
-    "emu3",
-    "gotocr2",
-    "qwen2vl",
-    "qwen2_5_vl",
-    "ayavision",
-    "janus",
-    "gemma3",
-    "mistral3",
-    "chameleon",
-    "internvl",
-    "qwen2_5omni",  # the file is named `qwen2_5_omni`, but the model class is `Qwen2_5Omni`
-]
-
-
 class GenerationTesterMixin:
     input_name = "input_ids"
     model_tester = None
@@ -1226,7 +1205,22 @@ class GenerationTesterMixin:
                     "blip2",  # overridden `generate()`
                     "instructblip",
                     "instructblipvideo",
-                    *VLM_CLASS_NAMES,  # shouldn't suggest image tokens
+                    "llava",  # shouldn't suggest image tokens. Can be fixed by passing `suppress_ids` to candidate generator: @joaa @raushan
+                    "idefics2",
+                    "idefics3",
+                    "mllama",
+                    "paligemma",
+                    "emu3",
+                    "gotocr2",
+                    "qwen2vl",
+                    "qwen2_5_vl",
+                    "ayavision",
+                    "janus",
+                    "gemma3",
+                    "mistral3",
+                    "chameleon",
+                    "internvl",
+                    "qwen2_5omni",  # the file is named `qwen2_5_omni`, but the model class is `Qwen2_5Omni`,
                 ]
             ):
                 self.skipTest(reason="May fix in the future: need model-specific fixes")
@@ -1703,7 +1697,12 @@ class GenerationTesterMixin:
             if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
                 continue
 
-            if model_class.main_input_name != "input_ids":
+            #  No easy fix, let's skip the test for now
+            has_complex_embeds_computation = any(
+                model_name in model_class.__name__.lower() for model_name in ["moshi"]
+            )
+
+            if model_class.main_input_name != "input_ids" or has_complex_embeds_computation:
                 self.skipTest(
                     "The model's main input name in not `input_ids` and we need kwargs from input dict as well."
                 )

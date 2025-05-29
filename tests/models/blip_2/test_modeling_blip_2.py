@@ -847,7 +847,7 @@ class Blip2ModelTester:
 
 
 @require_torch
-class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration, Blip2Model) if is_torch_available() else ()
     additional_model_inputs = ["input_ids", "decoder_input_ids"]
     # Doesn't run generation tests. TODO: fix generation tests for Blip2ForConditionalGeneration
