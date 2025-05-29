@@ -124,6 +124,7 @@ The original Aria model uses a custom grouped-gemm implementation, which is not 
 
 - Context window: 64,000 tokens for long multimodal documents.
 
+
 ## AriaImageProcessor
 
 [[autodoc]] AriaImageProcessor
@@ -154,4 +155,5 @@ The original Aria model uses a custom grouped-gemm implementation, which is not 
 
 ## AriaForConditionalGeneration
 
-[[autodoc]] AriaForConditionalGeneration - forward
+[[autodoc]] AriaForConditionalGeneration
+    - forward
