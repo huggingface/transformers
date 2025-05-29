@@ -18,10 +18,7 @@ import unittest
 from transformers import DbrxConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
-from ...test_pipeline_mixin import PipelineTesterMixin
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
@@ -30,7 +27,15 @@ if is_torch_available():
     from transformers import DbrxForCausalLM, DbrxModel
 
 
-class DbrxModelTester:
+@require_torch
+class DbrxModelTester(CausalLMModelTester):
+    config_class = DbrxConfig
+    if is_torch_available():
+        base_model_class = DbrxModel
+        causal_lm_class = DbrxForCausalLM
+        sequence_classification_class = None
+        token_classification_class = None
+
     def __init__(
         self,
         parent,
@@ -71,27 +76,11 @@ class DbrxModelTester:
         is_decoder=True,
         pad_token_id=0,
     ):
-        # Parameters unique to testing
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = scope
-        self.parent = parent
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-
-        # attn_config params
+        # DBRX-specific parameters
         self.clip_qkv = clip_qkv
         self.kv_n_heads = kv_n_heads
         self.rope_theta = rope_theta
         self.attn_config_model_type = attn_config_model_type
-
-        # ffn_config params
         self.ffn_hidden_size = ffn_hidden_size
         self.moe_jitter_eps = moe_jitter_eps
         self.moe_loss_weight = moe_loss_weight
@@ -99,22 +88,44 @@ class DbrxModelTester:
         self.moe_top_k = moe_top_k
         self.ffn_config_model_type = ffn_config_model_type
         self.ffn_act_fn_name = ffn_act_fn_name
-
-        # Other model params
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.max_position_embeddings = max_position_embeddings
-        self.vocab_size = vocab_size
-        self.use_cache = use_cache
-        self.initializer_range = initializer_range
         self.emb_pdrop = emb_pdrop
         self.output_router_logits = output_router_logits
         self.resid_pdrop = resid_pdrop
         self.tie_word_embeddings = tie_word_embeddings
         self.torch_dtype = torch_dtype
-        self.is_decoder = is_decoder
-        self.pad_token_id = pad_token_id
+        self.use_cache = use_cache
+        
+        # Call parent init
+        super().__init__(
+            parent=parent,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            is_training=is_training,
+            use_input_mask=use_input_mask,
+            use_token_type_ids=use_token_type_ids,
+            use_labels=use_labels,
+            vocab_size=vocab_size,
+            hidden_size=hidden_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            num_key_value_heads=kv_n_heads,
+            intermediate_size=ffn_hidden_size,
+            hidden_act=ffn_act_fn_name,
+            hidden_dropout_prob=resid_pdrop,
+            attention_probs_dropout_prob=resid_pdrop,
+            max_position_embeddings=max_position_embeddings,
+            type_vocab_size=type_vocab_size,
+            type_sequence_label_size=type_sequence_label_size,
+            initializer_range=initializer_range,
+            num_labels=num_labels,
+            num_choices=num_choices,
+            pad_token_id=pad_token_id,
+            is_decoder=is_decoder,
+            scope=scope,
+            moe_intermediate_size=ffn_hidden_size,
+            num_experts_per_tok=moe_top_k,
+            num_experts=moe_num_experts,
+        )
 
         # Make the dictionaries
         self.ffn_config = {
@@ -132,29 +143,6 @@ class DbrxModelTester:
             "model_type": self.attn_config_model_type,
             "rope_theta": self.rope_theta,
         }
-
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
-        if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
-
-        config = self.get_config()
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
         # Behind the scenes, `DbrxConfig` maps the parameters `hidden_size`, `num_hidden_layers`,
@@ -179,48 +167,21 @@ class DbrxModelTester:
         )
         return config
 
-    def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = DbrxModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
-        return config, inputs_dict
-
 
 @require_torch
-class DbrxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class DbrxModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (DbrxModel, DbrxForCausalLM) if is_torch_available() else ()
-    pipeline_model_mapping = {"text-generation": DbrxForCausalLM} if is_torch_available() else {}
-    test_headmasking = False
-    test_pruning = False
-
-    def setUp(self):
-        self.model_tester = DbrxModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DbrxConfig, d_model=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": DbrxModel,
+            "text-generation": DbrxForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
+    model_tester_class = DbrxModelTester
+    # DBRX's rotary embedding doesn't accept config parameter, so we disable RoPE tests
+    rotary_embedding_layer = None
 
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
