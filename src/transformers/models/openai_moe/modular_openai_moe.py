@@ -148,10 +148,10 @@ def openai_flex_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
-    sink = module.sink
+    sinks = module.sinks
 
     def attention_sink(score, b, h, q_idx, kv_idx):
-        score = torch.cat([score, sink], dim=-1)
+        score = torch.cat([score, sinks], dim=-1)
         return score
 
     return flex_attention_forward(
