@@ -17,13 +17,43 @@ from ...utils import _LazyModule
 from ...utils.import_utils import define_import_structure
 
 
+# if TYPE_CHECKING:
+#     from .configuration_glpn import *
+#     from .feature_extraction_glpn import *
+#     from .image_processing_glpn import *
+#     from .modeling_glpn import *
+#     from .image_processing_glpn_fast import GLPNImageProcessorFast
+# else:
+#     import sys
+
+#     _file = globals()["__file__"]
+#     sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+
+import_structure = {
+    "configuration_glpn": ["GLPNConfig"],
+    "feature_extraction_glpn": ["GLPNFeatureExtractor"],
+    "image_processing_glpn": ["GLPNImageProcessor"],
+    "image_processing_glpn_fast": ["GLPNImageProcessorFast"], 
+    "modeling_glpn": [
+        "GLPNModel",
+        "GLPNForDepthEstimation",
+        "GLPNPreTrainedModel",
+    ],
+}
+
 if TYPE_CHECKING:
-    from .configuration_glpn import *
-    from .feature_extraction_glpn import *
-    from .image_processing_glpn import *
-    from .modeling_glpn import *
+    from .configuration_glpn import GLPNConfig
+    from .feature_extraction_glpn import GLPNFeatureExtractor
+    from .image_processing_glpn import GLPNImageProcessor
+    from .image_processing_glpn_fast import GLPNImageProcessorFast
+    from .modeling_glpn import (
+        GLPNModel,
+        GLPNForDepthEstimation,
+        GLPNPreTrainedModel,
+    )
 else:
     import sys
+    import os
 
     _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, _file, import_structure, module_spec=__spec__)
