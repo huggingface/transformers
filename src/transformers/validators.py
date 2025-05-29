@@ -17,7 +17,7 @@ Validators to be used with `huggingface_hub.dataclasses.validated_field`. We rec
 describe the constraints of your dataclass fields, for the best user experience (e.g. better error messages).
 """
 
-from typing import Callable, Optional
+from typing import Callable, Optional, Union
 
 from huggingface_hub.dataclasses import as_validated_field
 
@@ -34,8 +34,8 @@ else:
 
 
 def interval(
-    min: Optional[int | float] = None,
-    max: Optional[int | float] = None,
+    min: Optional[Union[int, float]] = None,
+    max: Optional[Union[int, float]] = None,
     exclude_min: bool = False,
     exclude_max: bool = False,
 ) -> Callable:
