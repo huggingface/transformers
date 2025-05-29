@@ -207,8 +207,6 @@ def eager_attention_forward(
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
-    print("attn_weights", attn_weights.shape, attn_weights.dtype)
-    print("sinks", sinks.shape, sinks.dtype)
     attn_weights = torch.cat([attn_weights, sinks], dim=-1)
     attn_weights = torch.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
