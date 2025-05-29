@@ -181,7 +181,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
 
     def tearDown(self):
-        cleanup()
+        cleanup(torch_device)
 
     @tooslow
     @require_read_token
