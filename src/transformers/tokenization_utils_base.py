@@ -87,6 +87,17 @@ def import_protobuf_decode_error(error_message=""):
         raise ImportError(PROTOBUF_IMPORT_ERROR.format(error_message))
 
 
+def flatten(arr: list):
+    res = []
+    if len(arr) > 0:
+        for sub_arr in arr:
+            if isinstance(arr[0], (list, tuple)):
+                res.extend(flatten(sub_arr))
+            else:
+                res.append(sub_arr)
+    return res
+
+
 if is_tokenizers_available():
     from tokenizers import AddedToken
     from tokenizers import Encoding as EncodingFast
@@ -715,7 +726,7 @@ class BatchEncoding(UserDict):
             import tensorflow as tf
 
             def as_tensor(value, dtype=None):
-                if len(value) == 0 and dtype is None:
+                if len(flatten(value)) == 0 and dtype is None:
                     dtype = tf.int32
                 return tf.constant(value, dtype=dtype)
 
@@ -727,9 +738,9 @@ class BatchEncoding(UserDict):
             import torch
 
             def as_tensor(value, dtype=None):
-                if isinstance(value, list) and isinstance(value[0], np.ndarray):
+                if isinstance(value, list) and len(value) > 0 and isinstance(value[0], np.ndarray):
                     return torch.from_numpy(np.array(value))
-                if len(value) == 0 and dtype is None:
+                if len(flatten(value)) == 0 and dtype is None:
                     dtype = torch.int64
                 return torch.tensor(value, dtype=dtype)
 
@@ -741,7 +752,7 @@ class BatchEncoding(UserDict):
             import jax.numpy as jnp  # noqa: F811
 
             def as_tensor(value, dtype=None):
-                if len(value) == 0 and dtype is None:
+                if len(flatten(value)) == 0 and dtype is None:
                     dtype = jnp.int32
                 return jnp.array(value, dtype=dtype)
 
@@ -753,7 +764,7 @@ class BatchEncoding(UserDict):
             import mlx.core as mx
 
             def as_tensor(value, dtype=None):
-                if len(value) == 0 and dtype is None:
+                if len(flatten(value)) == 0 and dtype is None:
                     dtype = mx.int32
                 return mx.array(value, dtype=dtype)
 
@@ -762,12 +773,16 @@ class BatchEncoding(UserDict):
         else:
 
             def as_tensor(value, dtype=None):
-                if isinstance(value, (list, tuple)) and isinstance(value[0], (list, tuple, np.ndarray)):
+                if (
+                    isinstance(value, (list, tuple))
+                    and len(value) > 0
+                    and isinstance(value[0], (list, tuple, np.ndarray))
+                ):
                     value_lens = [len(val) for val in value]
                     if len(set(value_lens)) > 1 and dtype is None:
                         # we have a ragged list so handle explicitly
                         value = as_tensor([np.asarray(val) for val in value], dtype=object)
-                if len(value) == 0 and dtype is None:
+                if len(flatten(value)) == 0 and dtype is None:
                     dtype = np.int64
                 return np.asarray(value, dtype=dtype)
 
