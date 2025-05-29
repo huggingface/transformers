@@ -30,6 +30,7 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    is_flash_attn_2_available,
     require_flash_attn,
     require_read_token,
     require_torch,
@@ -416,7 +417,6 @@ class Gemma3IntegrationTest(unittest.TestCase):
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
-        breakpoint()
         self.assertEqual(output_text, EXPECTED_TEXT)
 
     @require_torch_large_accelerator
@@ -617,7 +617,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", 7): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a silent stream,\nInto the neural net, a waking dream.\nAlgorithms hum, a coded grace,\n'],
-                ("cuda", 8): [],
+                ("cuda", 8): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a silent stream,\nInto the neural net, a waking dream.\nAlgorithms hum, a coded grace,\n'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -658,6 +658,9 @@ class Gemma3IntegrationTest(unittest.TestCase):
         """
         model_id = "google/gemma-3-1b-it"
 
+        if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
+            self.skipTest("FlashAttention2 is required for this test.")
+
         input_text = [
             "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
             "A list of colors: red, blue",  # This will almost all be padding tokens
@@ -677,7 +680,6 @@ class Gemma3IntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(out)
 
         EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
-        breakpoint()
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
     def test_export_text_only_with_hybrid_cache(self):
