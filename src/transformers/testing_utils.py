@@ -23,6 +23,7 @@ import inspect
 import logging
 import multiprocessing
 import os
+import psutil
 import re
 import shlex
 import shutil
@@ -1050,6 +1051,14 @@ def require_torch_tensorrt_fx(test_case):
 def require_torch_gpu(test_case):
     """Decorator marking a test that requires CUDA and PyTorch."""
     return unittest.skipUnless(torch_device == "cuda", "test requires CUDA")(test_case)
+
+
+def require_large_cpu_ram(test_case, memory: float = 80):
+    """Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory."""
+    return unittest.skipUnless(
+        psutil.virtual_memory().total / 1024**3 > memory,
+        f"test requires a machine with more than {memory} GiB of CPU RAM memory",
+    )(test_case)
 
 
 def require_torch_large_gpu(test_case, memory: float = 20):

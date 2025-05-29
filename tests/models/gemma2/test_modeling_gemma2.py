@@ -25,13 +25,14 @@ from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     is_flash_attn_2_available,
     require_flash_attn,
+    require_large_cpu_ram,
     require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
     slow,
     tooslow,
-    torch_device, Expectations,
+    torch_device, Expectations, require_torch_large_accelerator,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -353,6 +354,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
     @slow
     @require_read_token
+    @require_large_cpu_ram
     def test_export_hybrid_cache(self):
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
         from transformers.pytorch_utils import is_torch_greater_or_equal
