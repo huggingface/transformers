@@ -312,7 +312,8 @@ class Gemma2IntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b", pad_token="</s>", padding_side="right")
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {
-                ("cuda", 8): ['Hello I am doing a project for my class and I am having trouble with the code. I am trying to make a']
+                ("cuda", 7): ['Hello I am doing a project for my school and I need to know how to make a program that will take a number'],
+                ("cuda", 8): ['Hello I am doing a project for my class and I am having trouble with the code. I am trying to make a'],
             }
 
         )
