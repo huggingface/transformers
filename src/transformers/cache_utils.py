@@ -2614,6 +2614,7 @@ class OffloadedStaticCache(StaticCache):
         self._device_key_cache[layer_idx & 1].copy_(self.key_cache[layer_idx], non_blocking=True)
         self._device_value_cache[layer_idx & 1].copy_(self.value_cache[layer_idx], non_blocking=True)
 
+
 class LagKVCache(DynamicCache):
     """
     A KV compression algorithm that as described in the [LagKV paper](https://arxiv.org/abs/2504.04704).
@@ -2658,14 +2659,16 @@ class LagKVCache(DynamicCache):
         LagKVCache()
         ```
     """
-    def __init__(self,
-                 _distributed_cache_data = None,
-                 ratio: float = 0.25,
-                 sink_size: int = 16,
-                 lag_size: int = 1024,
-                 score_v_ratio: float = 1.0,
-                 skip_layer_idx: Optional[List[int]] = None,
-                ):
+
+    def __init__(
+        self,
+        _distributed_cache_data=None,
+        ratio: float = 0.25,
+        sink_size: int = 16,
+        lag_size: int = 1024,
+        score_v_ratio: float = 1.0,
+        skip_layer_idx: Optional[List[int]] = None,
+    ):
         super().__init__(_distributed_cache_data)
         self.ratio = ratio
         self.sink_size: int = sink_size
@@ -2679,7 +2682,7 @@ class LagKVCache(DynamicCache):
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cache_kwargs = None,
+        cache_kwargs=None,
     ):
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
@@ -2763,17 +2766,16 @@ class LagKVCache(DynamicCache):
         selected_idx = torch.topk(score, int(self.ratio * self.lag_size), dim=-1).indices
         for i in range(1, selected_idx.size()[2], 1):
             selected_idx[:, :, i] += i * self.lag_size
-        selected_idx = selected_idx.reshape(in_size[0], in_size[1], -1).unsqueeze(-1).expand(
-                                                            -1, -1, -1, in_size[-1])
+        selected_idx = selected_idx.reshape(in_size[0], in_size[1], -1).unsqueeze(-1).expand(-1, -1, -1, in_size[-1])
         new_base_len = base_len + selected_idx.size()[-2]
         # alwarys keep the last window
         tail_len = self.lag_size + in_size[-2] - end_idx
-        self.key_cache[layer_idx] = self._modify_kv(self.key_cache[layer_idx],
-                                                   base_len, end_idx,
-                                                   selected_idx, tail_len)
-        self.value_cache[layer_idx] = self._modify_kv(self.value_cache[layer_idx],
-                                                     base_len, end_idx,
-                                                     selected_idx, tail_len)
+        self.key_cache[layer_idx] = self._modify_kv(
+            self.key_cache[layer_idx], base_len, end_idx, selected_idx, tail_len
+        )
+        self.value_cache[layer_idx] = self._modify_kv(
+            self.value_cache[layer_idx], base_len, end_idx, selected_idx, tail_len
+        )
         self._compressed_len[layer_idx] = new_base_len
 
     def _compress_kv_by_lag(self, layer_idx):
@@ -2782,6 +2784,6 @@ class LagKVCache(DynamicCache):
         base_len = self._compressed_len[layer_idx]
 
         keys_to_return, values_to_return = self.key_cache[layer_idx], self.value_cache[layer_idx]
-        if kv_size[-2] >= base_len + 2*self.lag_size:
+        if kv_size[-2] >= base_len + 2 * self.lag_size:
             self._compress_algo(layer_idx, base_len)
         return keys_to_return, values_to_return
