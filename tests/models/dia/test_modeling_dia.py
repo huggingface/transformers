@@ -24,6 +24,7 @@ import pytest
 from parameterized import parameterized
 
 from transformers import DiaConfig
+from transformers.masking_utils import AttentionMask
 from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
@@ -37,7 +38,7 @@ from transformers.utils import is_torch_available, is_torchaudio_available
 from transformers.utils.import_utils import is_datasets_available
 
 from ...generation.test_utils import GenerationTesterMixin
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -138,30 +139,12 @@ if is_torchaudio_available():
 
 
 def prepare_dia_inputs_dict(
-    config,
-    input_features,
+    encoder_input_ids,
     decoder_input_ids,
-    attention_mask=None,
-    decoder_attention_mask=None,
-    head_mask=None,
-    decoder_head_mask=None,
-    cross_attn_head_mask=None,
 ):
-    if decoder_attention_mask is None:
-        decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
-    if head_mask is None:
-        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
-    if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
-    if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
     return {
-        "input_ids": input_features,
+        "encoder_input_ids": encoder_input_ids,
         "decoder_input_ids": decoder_input_ids,
-        "decoder_attention_mask": decoder_attention_mask,
-        "head_mask": head_mask,
-        "decoder_head_mask": decoder_head_mask,
-        "cross_attn_head_mask": cross_attn_head_mask,
     }
 
 
@@ -218,15 +201,13 @@ class DiaModelTester:
         self.suppress_tokens = suppress_tokens
 
     def prepare_config_and_inputs(self):
-        input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length], self.vocab_size)
+        encoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-        decoder_input_ids = torch.tensor(self.batch_size * [[self.decoder_start_token_id]], device=torch_device)
+        decoder_input_ids = torch.tensor(self.batch_size * [[self.decoder_start_token_id] * 9], device=torch_device)
 
         config = self.get_config()
         inputs_dict = prepare_dia_inputs_dict(
-            config,
-            attention_mask=None,
-            input_features=input_features,
+            encoder_input_ids=encoder_input_ids,
             decoder_input_ids=decoder_input_ids,
         )
         return config, inputs_dict
@@ -278,21 +259,23 @@ class DiaModelTester:
         if freeze_encoder:
             model.freeze_encoder()
 
-        input_features = inputs_dict["input_features"]
+        encoder_input_ids = inputs_dict["encoder_input_ids"]
         decoder_input_ids = inputs_dict["decoder_input_ids"]
 
         # first forward pass
-        last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
+        last_hidden_state = model(
+            encoder_input_ids=encoder_input_ids, decoder_input_ids=decoder_input_ids
+        ).last_hidden_state
 
         self.parent.assertTrue(last_hidden_state.shape, (13, 7, 16))
 
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
         model = DiaModel(config=config).get_decoder().to(torch_device).eval()
-        input_ids = inputs_dict["decoder_input_ids"]
-        attention_mask = inputs_dict["decoder_attention_mask"]
+        encoder_input_ids = inputs_dict["encoder_input_ids"]
+        decoder_input_ids = inputs_dict["decoder_input_ids"]
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
+        outputs = model(encoder_input_ids=encoder_input_ids, decoder_input_ids=decoder_input_ids, use_cache=True)
 
         output, past_key_values = outputs.to_tuple()
 
@@ -301,8 +284,8 @@ class DiaModelTester:
         next_attn_mask = ids_tensor((self.batch_size, 3), 2)
 
         # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
+        next_input_ids = torch.cat([decoder_input_ids, next_tokens], dim=-1)
+        next_attention_mask = torch.cat([AttentionMask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
         output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
