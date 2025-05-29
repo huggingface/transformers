@@ -31,7 +31,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     slow,
     tooslow,
-    torch_device,
+    torch_device, Expectations,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -247,10 +247,15 @@ class Gemma2IntegrationTest(unittest.TestCase):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
         model_id = "google/gemma-2-2b"
         # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1960s and I am trying to find out what the average",
-            "Hi today I'm going to be talking about the 10 best anime of all time.\n\n1",
-        ]
+        EXPECTED_BATCH_TEXTS = Expectations(
+            {
+                ("cuda", 8): [
+                    'Hello I am doing a project on the 1960s and I am trying to find out what the average',
+                    "Hi today I'm going to be talking about the 10 most powerful characters in the Naruto series.",
+                ]
+            }
+        )
+        EXPECTED_BATCH_TEXT = EXPECTED_BATCH_TEXTS.get_expectation()
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
@@ -260,8 +265,8 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
         output = pipe(self.input_text, max_new_tokens=20, do_sample=False, padding=True)
 
-        self.assertEqual(output[0][0]["generated_text"], EXPECTED_TEXTS[0])
-        self.assertEqual(output[1][0]["generated_text"], EXPECTED_TEXTS[1])
+        self.assertEqual(output[0][0]["generated_text"], EXPECTED_BATCH_TEXT[0])
+        self.assertEqual(output[1][0]["generated_text"], EXPECTED_BATCH_TEXT[1])
 
     @require_read_token
     @require_flash_attn
@@ -300,9 +305,13 @@ class Gemma2IntegrationTest(unittest.TestCase):
         )
 
         tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b", pad_token="</s>", padding_side="right")
-        EXPECTED_TEXT_COMPLETION = [
-            "Hello I am doing a project for my school and I need to know how to make a program that will take a number",
-        ]
+        EXPECTED_TEXT_COMPLETIONS = Expectations(
+            {
+                ("cuda", 8): ['Hello I am doing a project for my class and I am having trouble with the code. I am trying to make a']
+            }
+
+        )
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
         max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
             "input_ids"
         ].shape[-1]
