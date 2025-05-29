@@ -71,6 +71,7 @@ class OpenaiConfig(PretrainedConfig):
         num_experts_per_tok=4,
         router_aux_loss_coef: float = 0.9,
         output_router_logits=False,
+        use_cache=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -104,6 +105,7 @@ class OpenaiConfig(PretrainedConfig):
         self.max_position_embeddings = 8192
         self.router_aux_loss_coef = router_aux_loss_coef
         self.output_router_logits = output_router_logits
+        self.use_cache = use_cache
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

@@ -121,6 +121,7 @@ class OpenaiMLP(nn.Module):
         # we don't slice weight as its not compile compatible
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = self.router(hidden_states)
+        return alternative(self, hidden_states, router_logits)
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)
         router_scores = (
             torch.full_like(router_logits, float(0)).scatter_(1, router_indices, router_top_value).transpose(0, 1)
@@ -128,27 +129,45 @@ class OpenaiMLP(nn.Module):
 
         routed_in = hidden_states.repeat(self.num_local_experts, 1)
         sigmoid_bias = (
-            torch.full_like(routed_in, float("-inf")).scatter_(1, router_indices, router_top_value)
+            torch.full_like(routed_in, float("-inf")).scatter_(1, router_indices, torch.full_like(routed_in, 0.0))
         ).contiguous()
 
         routed_out = self.experts(routed_in, sigmoid_bias)
-        routed_out = routed_out * router_scores.reshape(self.num_local_experts, -1, 1)
-        hidden_states = routed_out.sum(dim=0)[None, ...]
-        return hidden_states, router_scores
+        routed_out = routed_out * router_scores.view(self.num_local_experts, -1, 1)
+        output_states = routed_out.sum(dim=0)[None, ...]
+        return output_states, router_scores
+
+
+
+def swiglu2(x, alpha: float = 1.702):
+    # Note we add an extra bias of 1 to the linear layer
+    x_glu, x_linear = torch.chunk(x, 2, dim=-1)
+    out_glu = x_glu * torch.sigmoid(alpha * x_glu)
+    return out_glu * (x_linear + 1)
+
+
+def alternative(self, hidden_states, router_logits):
+    experts = torch.topk(router_logits, k=4, dim=-1, sorted=True)
+    expert_weights = torch.nn.functional.softmax(experts.values, dim=1)
+    expert_indices = experts.indices
+    mlp1_weight = self.experts.gate_up_proj[expert_indices, ...]
+    mlp1_bias = self.experts.gate_up_proj_bias[expert_indices, ...]
+    t = torch.einsum("beck,bk->bec", mlp1_weight.permute(0,1,3,2), hidden_states) + mlp1_bias
+    t = swiglu2(t)
+    mlp2_weight = self.experts.down_proj[expert_indices, ...]
+    mlp2_bias = self.experts.down_proj_bias[expert_indices, ...]
+    t = torch.einsum("beck,bek->bec", mlp2_weight.permute(0,1,3,2), t)
+    t += mlp2_bias
+    t = torch.einsum("bec,be->bc", t, expert_weights)
+    return t, router_logits
 
 
 class OpenaiRotaryEmbedding(nn.Module):
     rope_type = "default"
     def __init__(self, config: OpenaiConfig, device=None):
         super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-            self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        else:
-            self.attention_scaling = 1.0
-            inv_freq = 1.0 / (config.rope_theta ** ( torch.arange(0, config.head_dim, 2, dtype=torch.float32)/ config.head_dim))
+        self.attention_scaling = 1.0
+        inv_freq = 1.0 / (config.rope_theta ** ( torch.arange(0, config.head_dim, 2, dtype=torch.float32)/ config.head_dim))
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
@@ -180,25 +199,6 @@ def rotate_half(x):
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
@@ -230,7 +230,7 @@ def eager_attention_forward(
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
-    sinks = module.sinks.view(1, -1, 1, 1).expand(-1, -1, query.shape[-2], -1)
+    sinks = module.sinks.view(1, -1, 1, 1).expand(-1, -1, query.shape[-2], -1) # TODO make sure the sink is like a new token
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
@@ -238,9 +238,9 @@ def eager_attention_forward(
         attn_weights = attn_weights + causal_mask
 
     attn_weights = torch.cat([attn_weights, sinks], dim=-1)
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights[...,:-1], value_states)
+    attn_output = torch.matmul(attn_weights[...,:-1], value_states) # ignore the sinks
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
 
@@ -297,15 +297,8 @@ class OpenaiAttention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
-
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        # if self.config._attn_implementation != "eager":
+        #     attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,

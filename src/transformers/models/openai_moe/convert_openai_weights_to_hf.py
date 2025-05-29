@@ -113,13 +113,13 @@ def write_model(
             q_key = re.sub(r"qkv_proj", "q_proj", new_key)
             k_key = re.sub(r"qkv_proj", "k_proj", new_key)
             v_key = re.sub(r"qkv_proj", "v_proj", new_key)
-            state_dict[q_key] = q
-            state_dict[k_key] = k
-            state_dict[v_key] = v
-        elif re.search("gate_up_proj", new_key) and "bias" not in new_key:
-            state_dict[new_key] = final_[key].permute(0,2,1)
+            state_dict[q_key] = q.contiguous().to(torch.bfloat16)
+            state_dict[k_key] = k.contiguous().to(torch.bfloat16)
+            state_dict[v_key] = v.contiguous().to(torch.bfloat16)
+        elif re.search("gate_up_proj|down_proj", new_key) and "bias" not in new_key:
+            state_dict[new_key] = final_[key].permute(0,2,1).contiguous() # einsum in orignal, I use bmm
         else:
-            state_dict[new_key] = final_[key].to(torch.bfloat16) # TODO slow, let's rmeove
+            state_dict[new_key] = final_[key].contiguous().to(torch.bfloat16) # TODO slow, let's rmeove
 
     del final_
     gc.collect()
@@ -223,7 +223,7 @@ class OpenaiConverter(TikTokenConverter):
         special_tokens = tokenizer._special_tokens.keys()
 
         self.additional_special_tokens = {'<|endoftext|>': 199999, '<|endofprompt|>': 200018}
-        for k in range(200000, 200018):
+        for k in range(199999, 200018):
             self.additional_special_tokens[f"<|reserved_{k}|>"] = k
         sorted_list = sorted(self.additional_special_tokens.items(), key=lambda x: x[1])
         self.additional_special_tokens = [k[0] for k in sorted_list]
@@ -315,12 +315,12 @@ def main():
         help="Whether the model is an instruct model",
     )
     args = parser.parse_args()
-    # write_model(
-    #     model_path=args.output_dir,
-    #     input_base_path=args.input_dir,
-    #     safe_serialization=args.safe_serialization,
-    #     instruct=args.instruct,
-    # )
+    write_model(
+        model_path=args.output_dir,
+        input_base_path=args.input_dir,
+        safe_serialization=args.safe_serialization,
+        instruct=args.instruct,
+    )
 
     write_tokenizer(
         tokenizer_path="o200k_base",
