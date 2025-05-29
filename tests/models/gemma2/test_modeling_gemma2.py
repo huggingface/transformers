@@ -188,6 +188,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
     @require_torch_large_accelerator
     @require_read_token
+    @tooslow
     def test_model_9b_bf16(self):
         model_id = "google/gemma-2-9b"
         EXPECTED_TEXTS = [
@@ -209,6 +210,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
     @require_torch_large_accelerator
     @require_read_token
+    @tooslow
     def test_model_9b_fp16(self):
         model_id = "google/gemma-2-9b"
         EXPECTED_TEXTS = [
@@ -230,6 +232,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
     @require_read_token
     @require_torch_large_accelerator
+    @tooslow
     def test_model_9b_pipeline_bf16(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
         model_id = "google/gemma-2-9b"
