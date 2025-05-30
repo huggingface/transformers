@@ -68,6 +68,8 @@ class DiaRotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        if position_ids.ndim == 1:
+            position_ids = position_ids.unsqueeze(0)
         position_ids_expanded = position_ids[:, :, None, None].float().repeat(x.shape[0], 1, 1, 1)
         half_embedding_dim = self.embedding_dims // 2
         fraction = (2.0 * torch.arange(0, half_embedding_dim)) / self.embedding_dims
@@ -341,11 +343,19 @@ class DiaEncoder(nn.Module):
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ) -> BaseModelOutput | Tuple[torch.Tensor, ...]:
+        if cache_position is None:
+            cache_position = torch.arange(input_features.shape[1], dtype=torch.long, device=input_features.device)
+
         hidden_states = self.embedding(input_features)
         position_embeddings = self.rotary_embeddings(hidden_states, cache_position)  # type: ignore
         _attention_mask = torch.ones(
             (input_features.shape[0], 1, hidden_states.shape[1], hidden_states.shape[1]), device=hidden_states.device
         )
+        if attention_mask is None:
+            attention_mask = torch.ones(
+                (*hidden_states.shape[:2], hidden_states.shape[1]), dtype=torch.long, device=hidden_states.device
+            )
+
         _attention_mask = (_attention_mask.long() & attention_mask[:, None, None, :]) & attention_mask[  # type: ignore
             :, None, :, None
         ]
@@ -790,8 +800,8 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
         ).unsqueeze(1)
 
         # decoder eos stopping criteria
-        _eos = self.config.eos_token_id
-        _pad = self.config.pad_token_id
+        _eos = self.config.eos_token_id or generation_config.eos_token_id
+        _pad = self.config.pad_token_id or generation_config.pad_token_id
         _channel = self.config.decoder_config.num_channels
         generation_config._eos_token_tensor = torch.tensor([_pad for _ in range(_channel - 1)] + [_eos])
 
@@ -857,26 +867,28 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
 
     def forward(
         self,
+        encoder_attention_mask: torch.LongTensor,
+        decoder_input_ids: torch.LongTensor,
+        decoder_attention_mask: torch.LongTensor,
+        eos_countdown: torch.Tensor,
+        delay_pattern: torch.Tensor,
+        max_delay_pattern: int,
+        num_channels: int,
         encoder_input_ids: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.LongTensor] = None,
         encoder_outputs: Optional[BaseModelOutput] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        eos_countdown: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         cfg_scale: float = 3.0,
         cfg_filter_top_k: int = 50,
         audio_eos_value: int = 1024,
         audio_pad_value: int = 1025,
-        delay_pattern: Optional[torch.Tensor] = None,
-        max_delay_pattern: Optional[int] = None,
-        num_channels: Optional[int] = None,
+        step: int = 0,
+        max_step: int = 100,
     ) -> Seq2SeqLMOutput:
         """
         Forward method for DiaForConditionalGeneration, following WhisperForConditionalGeneration style.

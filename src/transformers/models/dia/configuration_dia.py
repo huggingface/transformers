@@ -116,7 +116,6 @@ class DiaConfig(PretrainedConfig):
         encoder_config: DiaEncoderConfig | None = None,
         decoder_config: DiaDecoderConfig | None = None,
         norm_eps: float = 1e-5,
-        is_encoder_decoder: bool = True,
         pad_token_id: int = 1025,
         eos_token_id: int = 1024,
         bos_token_id: int = 1026,
@@ -132,13 +131,18 @@ class DiaConfig(PretrainedConfig):
         self.norm_eps = norm_eps
         self.delay_pattern = delay_pattern if delay_pattern is not None else [0, 8, 9, 10, 11, 12, 13, 14, 15]
         self.is_encoder_decoder = True
+
+        assert self.decoder_config.num_channels == len(self.delay_pattern), (
+            "Number of channels must match delay pattern length."
+        )
+
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             bos_token_id=bos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
+            is_encoder_decoder=True,
             **kwargs,
         )
 
 
-__all__ = ["DiaConfig"]
+__all__ = ["DiaConfig", "DiaEncoderConfig", "DiaDecoderConfig"]

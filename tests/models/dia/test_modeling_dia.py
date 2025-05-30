@@ -19,12 +19,13 @@ import os
 import random
 import tempfile
 import unittest
+from typing import Tuple
 
 import pytest
 from parameterized import parameterized
 
-from transformers import DiaConfig
 from transformers.masking_utils import AttentionMask
+from transformers.models.dia import DiaConfig, DiaDecoderConfig, DiaEncoderConfig
 from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
@@ -154,56 +155,84 @@ class DiaModelTester:
         self,
         parent,
         batch_size=3,  # need batch_size != num_hidden_layers
-        seq_length=60,
-        is_training=True,
-        use_labels=False,
+        # Encoder specific
+        encoder_max_length=60,
+        encoder_seq_length=60,
+        encoder_vocab_size=100,
+        encoder_hidden_layers=2,
+        encoder_hidden_size=16,
+        encoder_num_attention_heads=4,
+        encoder_head_dim=64,
+        # Decoder specific
+        decoder_max_length=40,
+        decoder_hidden_layers=2,
+        decoder_hidden_size=32,  # Typically larger than encoder
+        decoder_num_attention_heads=4,
+        decoder_head_dim=64,
+        decoder_cross_attention_heads=4,
+        decoder_cross_head_dim=64,
+        # Common
         vocab_size=200,
-        hidden_size=16,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        input_channels=1,
-        hidden_act="gelu",
+        hidden_act="silu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
-        max_source_positions=30,
-        max_target_positions=40,
-        bos_token_id=98,
+        is_training=False,
+        use_labels=False,
+        # Special tokens
         eos_token_id=98,
-        pad_token_id=0,
-        num_mel_bins=80,
-        decoder_start_token_id=85,
+        pad_token_id=99,
+        bos_token_id=100,
+        # Other
+        seq_length=30,
         num_conv_layers=1,
         suppress_tokens=None,
+        delay_pattern=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_labels = use_labels
+        # Set default delay pattern if not provided
+        self.delay_pattern = (
+            delay_pattern if delay_pattern is not None else [0, 1, 2, 3, 4, 5, 6, 7, 8]
+        )  # 9 channels by default
+        # Encoder
+        self.encoder_max_length = encoder_max_length
+        self.encoder_seq_length = encoder_seq_length
+        self.encoder_vocab_size = encoder_vocab_size
+        self.encoder_hidden_layers = encoder_hidden_layers
+        self.encoder_hidden_size = encoder_hidden_size
+        self.encoder_num_attention_heads = encoder_num_attention_heads
+        self.encoder_head_dim = encoder_head_dim
+        # Decoder
+        self.decoder_max_length = decoder_max_length
+        self.decoder_hidden_layers = decoder_hidden_layers
+        self.decoder_hidden_size = decoder_hidden_size
+        self.decoder_num_attention_heads = decoder_num_attention_heads
+        self.decoder_head_dim = decoder_head_dim
+        self.decoder_cross_attention_heads = decoder_cross_attention_heads
+        self.decoder_cross_head_dim = decoder_cross_head_dim
+        # Common
         self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.input_channels = input_channels
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.num_mel_bins = num_mel_bins
-        self.max_position_embeddings = max_position_embeddings
-        self.max_source_positions = max_source_positions
-        self.max_target_positions = max_target_positions
+        self.is_training = is_training
+        self.use_labels = use_labels
+        # Special tokens
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
-        self.decoder_start_token_id = decoder_start_token_id
+        # Other
+        self.seq_length = seq_length
         self.num_conv_layers = num_conv_layers
         self.suppress_tokens = suppress_tokens
 
-    def prepare_config_and_inputs(self):
-        encoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        assert eos_token_id < pad_token_id and eos_token_id < bos_token_id
 
-        decoder_input_ids = torch.tensor(self.batch_size * [[self.decoder_start_token_id] * 9], device=torch_device)
+    def prepare_config_and_inputs(self) -> Tuple[DiaConfig, dict]:
+        encoder_input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.encoder_vocab_size)
+        decoder_input_ids = torch.tensor(
+            self.batch_size * [[self.bos_token_id] * len(self.delay_pattern)], device=torch_device
+        )
 
         config = self.get_config()
         inputs_dict = prepare_dia_inputs_dict(
@@ -212,36 +241,59 @@ class DiaModelTester:
         )
         return config, inputs_dict
 
-    def prepare_config_and_inputs_for_common(self):
+    def prepare_config_and_inputs_for_common(self) -> Tuple[DiaConfig, dict]:
         config, inputs_dict = self.prepare_config_and_inputs()
         return config, inputs_dict
 
-    def prepare_config_and_inputs_for_generate(self):
+    def prepare_config_and_inputs_for_generate(self) -> Tuple[DiaConfig, dict]:
         config, inputs_dict = self.prepare_config_and_inputs()
         return config, inputs_dict
 
     def get_config(self):
-        return DiaConfig(
-            vocab_size=self.vocab_size,
-            d_model=self.hidden_size,
-            encoder_layers=self.num_hidden_layers,
-            decoder_layers=self.num_hidden_layers,
-            encoder_attention_heads=self.num_attention_heads,
-            decoder_attention_heads=self.num_attention_heads,
-            input_channels=self.input_channels,
+        encoder_config = DiaEncoderConfig(
+            max_length=self.encoder_max_length,
+            num_hidden_layers=self.encoder_hidden_layers,
+            hidden_size=self.encoder_hidden_size,
+            num_attention_heads=self.encoder_num_attention_heads,
+            num_key_value_heads=self.encoder_num_attention_heads,  # Same as num_attention_heads for testing
+            head_dim=self.encoder_head_dim,
+            intermediate_size=self.encoder_hidden_size * 4,  # Standard ratio
+            vocab_size=self.encoder_vocab_size,
             dropout=self.hidden_dropout_prob,
-            attention_dropout=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            max_source_positions=self.max_source_positions,
-            max_target_positions=self.max_target_positions,
-            eos_token_id=self.eos_token_id,
-            bos_token_id=self.bos_token_id,
-            pad_token_id=self.pad_token_id,
-            decoder_ffn_dim=self.hidden_size,
-            encoder_ffn_dim=self.hidden_size,
-            decoder_start_token_id=self.decoder_start_token_id,
-            suppress_tokens=self.suppress_tokens,
+            hidden_act=self.hidden_act,
         )
+
+        # Number of channels must match delay pattern length
+        num_channels = len(self.delay_pattern)
+
+        decoder_config = DiaDecoderConfig(
+            max_length=self.decoder_max_length,
+            num_hidden_layers=self.decoder_hidden_layers,
+            hidden_size=self.decoder_hidden_size,
+            intermediate_size=self.decoder_hidden_size * 4,  # Standard ratio
+            num_attention_heads=self.decoder_num_attention_heads,
+            num_key_value_heads=max(1, self.decoder_num_attention_heads // 4),  # Grouped attention
+            head_dim=self.decoder_head_dim,
+            cross_num_attention_heads=self.decoder_cross_attention_heads,
+            cross_head_dim=self.decoder_cross_head_dim,
+            cross_num_key_value_heads=max(1, self.decoder_cross_attention_heads // 2),
+            cross_hidden_size=self.encoder_hidden_size,  # Match encoder hidden size
+            vocab_size=self.vocab_size,
+            dropout=self.hidden_dropout_prob,
+            hidden_act=self.hidden_act,
+            num_channels=num_channels,  # Must match delay pattern length
+        )
+
+        config = DiaConfig(
+            encoder_config=encoder_config,
+            decoder_config=decoder_config,
+            eos_token_id=self.eos_token_id,
+            pad_token_id=self.pad_token_id,
+            bos_token_id=self.bos_token_id,
+            delay_pattern=self.delay_pattern,
+        )
+
+        return config
 
     def get_subsampled_output_lengths(self, input_lengths):
         """
@@ -368,7 +420,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip
+    @unittest.skip(reason="")
     def test_generate_with_head_masking(self):
         pass
 
@@ -680,7 +732,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
-    @unittest.skip
+    @unittest.skip(reason="")
     def test_generate_without_input_ids(self):
         pass
 
