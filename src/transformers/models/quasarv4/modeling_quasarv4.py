@@ -79,7 +79,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "QuasarV4Config"
 
 
-# Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
