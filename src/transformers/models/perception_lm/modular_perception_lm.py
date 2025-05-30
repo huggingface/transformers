@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2025 the HuggingFace Inc. team. All rights reserved.
-#
+# Copyright 2025 Meta Platforms, Inc. and the HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -93,7 +92,8 @@ class AdaptiveAvgPooling(nn.Module):
     def forward(self, x):
         b, num_tokens, c = x.shape
         h = int(math.sqrt(num_tokens))
-        assert h * h == num_tokens
+        if h * h != num_tokens:
+            raise ValueError(f"num_tokens {num_tokens} is expected to be a square number")
 
         shape = (h // self.pooling_ratio, h // self.pooling_ratio)
         x = x.permute(0, 2, 1).reshape(b, -1, h, h)
