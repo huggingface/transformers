@@ -734,7 +734,7 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
             logits = logits * self.config.final_logit_softcapping
 
         loss = None
-        if labels is not None:
+        if labels is not None or loss_kwargs.get("shift_labels", None) is not None:
             loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
 
         return CausalLMOutputWithPast(
