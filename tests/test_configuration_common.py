@@ -53,11 +53,12 @@ class ConfigTester:
             self.parent.assertTrue(hasattr(config, prop), msg=f"`{prop}` does not exist")
 
         # Test that config has the common properties as setter
-        for idx, name in enumerate(common_properties):
+        dummy_value = 64
+        for name in common_properties:
             try:
-                setattr(config, name, idx)
+                setattr(config, name, dummy_value)
                 self.parent.assertEqual(
-                    getattr(config, name), idx, msg=f"`{name} value {idx} expected, but was {getattr(config, name)}"
+                    getattr(config, name), dummy_value, msg=f"`{name} value {dummy_value} expected, but was {getattr(config, name)}"
                 )
             except NotImplementedError:
                 # Some models might not be able to implement setters for common_properties
@@ -65,11 +66,11 @@ class ConfigTester:
                 pass
 
         # Test if config class can be called with Config(prop_name=..)
-        for idx, name in enumerate(common_properties):
+        for name in common_properties:
             try:
-                config = self.config_class(**{name: idx})
+                config = self.config_class(**{name: dummy_value})
                 self.parent.assertEqual(
-                    getattr(config, name), idx, msg=f"`{name} value {idx} expected, but was {getattr(config, name)}"
+                    getattr(config, name), dummy_value, msg=f"`{name} value {dummy_value} expected, but was {getattr(config, name)}"
                 )
             except NotImplementedError:
                 # Some models might not be able to implement setters for common_properties
