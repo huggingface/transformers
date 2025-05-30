@@ -175,47 +175,6 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 model(encoded_sequence)
                 model(batch_encoded_sequence)
 
-    def test_rust_and_python_full_tokenizers(self):
-        if not self.test_rust_tokenizer:
-            self.skipTest(reason="test_rust_tokenizer is set to False")
-
-        tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer()
-
-        sequence = "UNwant\u00e9d,running"
-
-        tokens = tokenizer.tokenize(sequence)
-        rust_tokens = rust_tokenizer.tokenize(sequence)
-        self.assertListEqual(tokens, rust_tokens)
-
-        ids = tokenizer.encode(sequence, add_special_tokens=False)
-        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
-        self.assertListEqual(ids, rust_ids)
-
-        rust_tokenizer = self.get_rust_tokenizer()
-        ids = tokenizer.encode(sequence)
-        rust_ids = rust_tokenizer.encode(sequence)
-        self.assertListEqual(ids, rust_ids)
-
-        # With lower casing
-        tokenizer = self.get_tokenizer(do_lower_case=True)
-        rust_tokenizer = self.get_rust_tokenizer(do_lower_case=True)
-
-        sequence = "UNwant\u00e9d,running"
-
-        tokens = tokenizer.tokenize(sequence)
-        rust_tokens = rust_tokenizer.tokenize(sequence)
-        self.assertListEqual(tokens, rust_tokens)
-
-        ids = tokenizer.encode(sequence, add_special_tokens=False)
-        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
-        self.assertListEqual(ids, rust_ids)
-
-        rust_tokenizer = self.get_rust_tokenizer()
-        ids = tokenizer.encode(sequence)
-        rust_ids = rust_tokenizer.encode(sequence)
-        self.assertListEqual(ids, rust_ids)
-
     @unittest.skip(reason="Chat template tests don't play well with table/layout models.")
     def test_chat_template_batched(self):
         pass

@@ -60,28 +60,6 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_vocab_size(self):
         self.assertEqual(self.get_tokenizer().vocab_size, 1_000)
 
-    def test_rust_and_python_full_tokenizers(self):
-        if not self.test_rust_tokenizer:
-            self.skipTest(reason="test_rust_tokenizer is set to False")
-
-        tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer()
-
-        sequence = "I was born in 92000, and this is falsé."
-
-        tokens = tokenizer.tokenize(sequence)
-        rust_tokens = rust_tokenizer.tokenize(sequence)
-        self.assertListEqual(tokens, rust_tokens)
-
-        ids = tokenizer.encode(sequence, add_special_tokens=False)
-        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
-        self.assertListEqual(ids, rust_ids)
-
-        rust_tokenizer = self.get_rust_tokenizer()
-        ids = tokenizer.encode(sequence)
-        rust_ids = rust_tokenizer.encode(sequence)
-        self.assertListEqual(ids, rust_ids)
-
     def test_padding(self, max_length=15):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
