@@ -188,21 +188,11 @@ class PagedAttentionCache(Cache):
         self.num_blocks = num_blocks
         self.cache_shape = (self.num_key_value_heads, num_blocks, self.block_size, self.head_dim)
 
-        self.dtype = dtype
+        self._dtype = dtype
         self.device = device
 
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
-        for idx in range(config.num_hidden_layers):
-            layer_device = layer_device_map[idx] if layer_device_map is not None else device
-            new_layer_key_cache = torch.zeros(self.cache_shape, dtype=self.dtype, device=layer_device)
-            new_layer_value_cache = torch.zeros(self.cache_shape, dtype=self.dtype, device=layer_device)
-            # Note: `mark_static_address` is used to tag the cache as a fixed data pointer,
-            # preventing compiled graph breaks when updating the cache.
-            torch._dynamo.mark_static_address(new_layer_key_cache)
-            torch._dynamo.mark_static_address(new_layer_value_cache)
-            self.key_cache.append(new_layer_key_cache)
-            self.value_cache.append(new_layer_value_cache)
 
         # Block management data structures
         self._free_blocks = deque(range(num_blocks))
@@ -280,6 +270,25 @@ class PagedAttentionCache(Cache):
 
         return physical_indices
 
+    @torch.compiler.disable
+    def initialise_cache_layer(self, layer_idx, key_states):
+        if len(self.key_cache) > layer_idx:
+            return
+        self.num_key_value_heads = key_states.shape[1]
+        device = key_states.device
+        cache_shape = (
+            self.num_key_value_heads,
+            self.num_blocks,
+            self.block_size,
+            self.head_dim,
+        )
+        new_layer_key_cache = torch.zeros(cache_shape, dtype=self._dtype, device=device)
+        new_layer_value_cache = torch.zeros(cache_shape, dtype=self._dtype, device=device)
+        torch._dynamo.mark_static_address(new_layer_key_cache)
+        torch._dynamo.mark_static_address(new_layer_value_cache)
+        self.key_cache.append(new_layer_key_cache)
+        self.value_cache.append(new_layer_value_cache)
+
     @traced
     def update(
         self,
@@ -291,6 +300,7 @@ class PagedAttentionCache(Cache):
         **kwargs,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # Reshape cache for easier indexing
+        self.initialise_cache_layer(layer_idx, key_states)
         total_slots = self.num_blocks * self.block_size
         k_cache_flat = self.key_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
         v_cache_flat = self.value_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
