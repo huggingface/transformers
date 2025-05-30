@@ -190,7 +190,7 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else {}
     )
-
+    additional_model_inputs = ["bool_masked_pos"]
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False

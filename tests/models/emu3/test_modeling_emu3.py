@@ -401,10 +401,6 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     def test_generate_with_static_cache(self):
         pass
 
-    @unittest.skip("Emu3 doesn't support Flex attn yet!")
-    def test_flex_attention_with_grads(self):
-        pass
-
 
 @require_torch
 class Emu3IntegrationTest(unittest.TestCase):
