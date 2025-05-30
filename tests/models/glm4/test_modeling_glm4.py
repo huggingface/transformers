@@ -28,8 +28,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...models.gemma.test_modeling_gemma import GemmaModelTest, GemmaModelTester
-from ...test_configuration_common import ConfigTester
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
@@ -43,17 +42,18 @@ if is_torch_available():
     )
 
 
-class Glm4ModelTester(GemmaModelTester):
+class Glm4ModelTester(CausalLMModelTester):
     if is_torch_available():
         config_class = Glm4Config
-        model_class = Glm4Model
-        for_causal_lm_class = Glm4ForCausalLM
-        for_sequence_class = Glm4ForSequenceClassification
-        for_token_class = Glm4ForTokenClassification
+        base_model_class = Glm4Model
+        causal_lm_class = Glm4ForCausalLM
+        sequence_classification_class = Glm4ForSequenceClassification
+        token_classification_class = Glm4ForTokenClassification
 
 
 @require_torch
-class Glm4ModelTest(GemmaModelTest, unittest.TestCase):
+class Glm4ModelTest(CausalLMModelTest, unittest.TestCase):
+    model_tester_class = Glm4ModelTester
     all_model_classes = (
         (Glm4Model, Glm4ForCausalLM, Glm4ForSequenceClassification, Glm4ForTokenClassification)
         if is_torch_available()
@@ -74,10 +74,6 @@ class Glm4ModelTest(GemmaModelTest, unittest.TestCase):
     test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
-
-    def setUp(self):
-        self.model_tester = Glm4ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Glm4Config, hidden_size=37)
 
 
 @slow

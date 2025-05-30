@@ -1123,4 +1123,9 @@
     - local: internal/time_series_utils
       title: Utilities for Time Series
     title: Internal helpers
+  - sections:
+    - local: reference/environment_variables
+      title: Environment Variables
+    title: Reference
   title: API
+

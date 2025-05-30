@@ -297,6 +297,27 @@ if is_torch_available():
                 hub.TRANSFORMERS_CACHE = transformers_cache
 
 
+# Need to be serializable, which means they cannot be in a test class method
+class TestGammaBetaNorm(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.gamma = torch.nn.Parameter(torch.ones(1))
+        self.beta = torch.nn.Parameter(torch.zeros(1))
+
+    def forward(self):
+        return self.gamma.sum() + self.beta.sum()
+
+
+class TestModelGammaBeta(PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.LayerNorm = TestGammaBetaNorm()
+        self.post_init()
+
+    def forward(self):
+        return self.LayerNorm()
+
+
 if is_flax_available():
     from transformers import FlaxBertModel
 
@@ -1636,24 +1657,6 @@ class ModelUtilsTest(TestCasePlus):
             torch.testing.assert_close(outputs_from_saved["logits"], outputs["logits"])
 
     def test_warning_for_beta_gamma_parameters(self):
-        class TestGammaBetaNorm(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.gamma = torch.nn.Parameter(torch.ones(1))
-                self.beta = torch.nn.Parameter(torch.zeros(1))
-
-            def forward(self):
-                return self.gamma.sum() + self.beta.sum()
-
-        class TestModelGammaBeta(PreTrainedModel):
-            def __init__(self, config):
-                super().__init__(config)
-                self.LayerNorm = TestGammaBetaNorm()
-                self.post_init()
-
-            def forward(self):
-                return self.LayerNorm()
-
         logger = logging.get_logger("transformers.modeling_utils")
         config = PretrainedConfig()
         warning_msg_gamma = "`LayerNorm.gamma` -> `LayerNorm.weight`"

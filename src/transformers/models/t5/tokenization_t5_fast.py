@@ -131,10 +131,6 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids
 
-    @property
-    def can_save_slow_tokenizer(self) -> bool:
-        return os.path.isfile(self.vocab_file) if self.vocab_file else False
-
     @staticmethod
     def _eventually_correct_t5_max_length(pretrained_model_name_or_path, max_model_length, init_max_model_length):
         if pretrained_model_name_or_path in T5TokenizerFast.max_model_input_sizes:

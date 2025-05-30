@@ -150,7 +150,6 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
     test_headmasking = False
     test_resize_embeddings = False
     test_resize_embeddings_untied = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = CsmModelTester(self)

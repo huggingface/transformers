@@ -235,10 +235,9 @@ def flex_attention_forward(
     head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    if kwargs.get("output_attentions", False) or head_mask is not None:
+    if head_mask is not None:
         logger.warning_once(
-            "`flex_attention` does not support `output_attentions=True` or `head_mask`."
-            " Please set your attention to `eager` if you want any of these features."
+            "`flex_attention` does not support `head_mask`. Please set your attention to `eager` if you want this feature."
         )
 
     if kwargs.get("dropout", 0.0) > 0:

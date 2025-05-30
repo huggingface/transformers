@@ -1077,6 +1077,13 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     def vqmodel(self):
         return self.model.vqmodel
 
+    @property
+    def vocabulary_mapping(self):
+        return self.model.vocabulary_mapping
+
+    def decode_image_tokens(self, **kwargs):
+        return self.model.decode_image_tokens(**kwargs)
+
     @can_return_tuple
     @auto_docstring
     def forward(
