@@ -1592,7 +1592,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
         logits = self.lm_head(hidden_states[:, slice_indices, :]).float()
 
         loss = None
-        if labels is not None:
+        if labels is not None or kwargs.get("shift_labels", None) is not None:
             loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         if not return_dict:
