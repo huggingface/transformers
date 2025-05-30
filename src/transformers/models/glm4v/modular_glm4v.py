@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The GLM4 & ZhipuAI team and HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The ZhipuAI Inc. team and HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
 # and OPT implementations in this library. It has been modified from its
@@ -32,10 +32,11 @@ from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLCo
 from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
     Qwen2_5_VisionRotaryEmbedding,
+    Qwen2_5_VLCausalLMOutputWithPast,
     Qwen2_5_VLDecoderLayer,
     Qwen2_5_VLForConditionalGeneration,
     Qwen2_5_VLMLP,
-    Qwen2_5_VLModel,
+    Qwen2_5_VLModelOutputWithPast,
     Qwen2_5_VLPreTrainedModel,
     Qwen2_5_VLTextModel,
     Qwen2_5_VLVisionAttention,
@@ -54,40 +55,11 @@ from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import LossKwargs, is_torchdynamo_compiling
 from ...video_utils import VideoInput
-
-
-logger = logging.get_logger(__name__)
-
-
-class Glm4VisionMlp(Qwen2_5_VLMLP):
-    def __init__(self, config, bias: bool = False):
-        super().__init__(config, bias)
-        self.intermediate_size = config.out_hidden_size
-
-
-class Glm4vMLP(Glm4MLP):
-    pass
-
-
-class Glm4vPatchMerger(nn.Module):
-    def __init__(self, dim: int, context_dim: int, hidden_act: str, bias: bool = False) -> None:
-        super().__init__()
-        self.proj = nn.Linear(dim, dim, bias=bias)
-        self.post_projection_norm = LayerNorm(dim)
-        self.gate_proj = nn.Linear(dim, context_dim, bias=bias)
-        self.up_proj = nn.Linear(dim, context_dim, bias=bias)
-        self.down_proj = nn.Linear(context_dim, dim, bias=bias)
-        self.act1 = nn.GELU()
-        self.act_fn = ACT2FN[hidden_act]
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.proj(hidden_state)
-        hidden_state = self.act1(self.post_projection_norm(hidden_state))
-        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
 
 
 class Glm4vVisionConfig(PretrainedConfig):
@@ -219,6 +191,7 @@ class Glm4vTextConfig(Qwen2_5_VLTextConfig):
 
     model_type = "glm4v_text"
 
+
 class Glm4vConfig(Qwen2_5_VLConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a
@@ -276,6 +249,12 @@ class Glm4vConfig(Qwen2_5_VLConfig):
         self.vision_end_token_id = vision_end_token_id
 
 
+class Glm4VisionMlp(Qwen2_5_VLMLP):
+    def __init__(self, config, bias: bool = False):
+        super().__init__(config, bias)
+        self.intermediate_size = config.out_hidden_size
+
+
 class Glm4vVisionPatchEmbed(Qwen2_5_VisionPatchEmbed):
     def __init__(
         self,
@@ -299,8 +278,29 @@ class Glm4vVisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
     pass
 
 
+class Glm4vMLP(Glm4MLP):
+    pass
+
+
 class Glm4vRMSNorm(Glm4RMSNorm):
     pass
+
+
+class Glm4vPatchMerger(nn.Module):
+    def __init__(self, dim: int, context_dim: int, hidden_act: str, bias: bool = False) -> None:
+        super().__init__()
+        self.proj = nn.Linear(dim, dim, bias=bias)
+        self.post_projection_norm = LayerNorm(dim)
+        self.gate_proj = nn.Linear(dim, context_dim, bias=bias)
+        self.up_proj = nn.Linear(dim, context_dim, bias=bias)
+        self.down_proj = nn.Linear(context_dim, dim, bias=bias)
+        self.act1 = nn.GELU()
+        self.act_fn = ACT2FN[hidden_act]
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.proj(hidden_state)
+        hidden_state = self.act1(self.post_projection_norm(hidden_state))
+        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
 
 
 class Glm4vVisionEmbeddings(nn.Module):
@@ -615,93 +615,33 @@ class Glm4vVisionTransformerPretrainedModel(Glm4vPreTrainedModel):
         return hidden_states
 
 
-class Glm4vDecoderLayer(Qwen2_5_VLDecoderLayer):
-    def __init__(self, config: Glm4vTextConfig, layer_idx: int):
-        super().__init__()
-        self.mlp = Glm4vMLP(config)
-        self.input_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_self_attn_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_mlp_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch, sequence_length)` where padding elements are indicated by 0.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
-                with `head_dim` being the embedding dimension of each attention head.
-            kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
-        """
-
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_value=past_key_value,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings,
-        )
-
-        hidden_states = self.post_self_attn_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_mlp_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        if use_cache:
-            outputs += (present_key_value,)
-
-        return outputs
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
-class Glm4vModel(Qwen2_5_VLModel):
-    config_class = Glm4vConfig
+class Glm4vModelOutputWithPast(Qwen2_5_VLModelOutputWithPast):
+    pass
+
+
+class Glm4vModel(Glm4vPreTrainedModel):
+    base_model_prefix = ""
     _checkpoint_conversion_mapping = None
+    config_class = Glm4vConfig
+    _no_split_modules = ["Glm4vDecoderLayer", "Glm4vVisionBlock"]
 
     def __init__(self, config):
         super().__init__(config)
         self.visual = Glm4vVisionTransformerPretrainedModel._from_config(config.vision_config)
+        self.language_model = Glm4vTextModel._from_config(config.text_config)
+        self.rope_deltas = None  # cache rope_deltas here
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.language_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.language_model.set_input_embeddings(value)
 
     def get_rope_index(
         self,
@@ -900,6 +840,267 @@ class Glm4vModel(Qwen2_5_VLModel):
 
             return position_ids, mrope_position_deltas
 
+    def get_video_features(
+        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: Optional[torch.LongTensor] = None
+    ):
+        """
+        Encodes videos into continuous embeddings that can be forwarded to the language model.
+
+        Args:
+            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+                The tensors corresponding to the input videos.
+            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+                The temporal, height and width of feature shape of each video in LLM.
+        """
+        pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
+        video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
+        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        video_embeds = torch.split(video_embeds, split_sizes)
+        return video_embeds
+
+    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
+        """
+        Encodes images into continuous embeddings that can be forwarded to the language model.
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+                The tensors corresponding to the input images.
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+        """
+        pixel_values = pixel_values.type(self.visual.dtype)
+        image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
+        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        image_embeds = torch.split(image_embeds, split_sizes)
+        return image_embeds
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        pixel_values: Optional[torch.Tensor] = None,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        rope_deltas: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        second_per_grid_ts: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[KwargsForCausalLM],
+    ) -> Union[Tuple, Glm4vModelOutputWithPast]:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(seq_length, num_channels * temporal_size * image_size * image_size)):
+            The tensors corresponding to the input videos. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`Glm4vImageProcessor.__call__`] for details. [`Glm4vProcessor`] uses
+            [`Glm4vImageProcessor`] for processing videos.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+            The rope index difference between sequence length and multimodal rope.
+        second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
+            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
+        """
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+            if pixel_values is not None:
+                image_embeds = self.get_image_features(pixel_values, image_grid_thw)
+                image_embeds = torch.cat(image_embeds, dim=0)
+                n_image_tokens = (input_ids == self.config.image_token_id).sum()
+                n_image_features = image_embeds.shape[0]
+                if not is_torchdynamo_compiling() and n_image_tokens != n_image_features:
+                    raise ValueError(
+                        f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                    )
+
+                mask = input_ids == self.config.image_token_id
+                mask_unsqueezed = mask.unsqueeze(-1)
+                mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
+                image_mask = mask_expanded.to(inputs_embeds.device)
+
+                image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+            if pixel_values_videos is not None:
+                video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
+                video_embeds = torch.cat(video_embeds, dim=0)
+                n_video_tokens = (input_ids == self.config.video_token_id).sum()
+                n_video_features = video_embeds.shape[0]
+                if not is_torchdynamo_compiling() and n_video_tokens != n_video_features:
+                    raise ValueError(
+                        f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
+                    )
+
+                mask = input_ids == self.config.video_token_id
+                mask_unsqueezed = mask.unsqueeze(-1)
+                mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
+                video_mask = mask_expanded.to(inputs_embeds.device)
+
+                video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+
+        if position_ids is None:
+            attention_mask_tensor = (
+                attention_mask if not isinstance(attention_mask, dict) else attention_mask["full_attention"]
+            )
+            if attention_mask_tensor is not None and attention_mask_tensor.ndim == 4:
+                attention_mask_tensor = torch.diagonal(attention_mask_tensor[:, 0], dim1=1, dim2=2)
+                attention_mask_tensor = attention_mask_tensor / torch.finfo(attention_mask_tensor.dtype).min
+                attention_mask_tensor = (1.0 - attention_mask_tensor).int()
+
+            # Calculate RoPE index once per generation in the pre-fill stage only.
+            # When compiling, we can't check tensor values thus we check only input length
+            # It is safe to assume that `length!=1` means we're in pre-fill because compiled
+            # models currently cannot do asssisted decoding
+            prefill_compiled_stage = is_torchdynamo_compiling() and (
+                (input_ids is not None and input_ids.shape[1] != 1)
+                or (inputs_embeds is not None and inputs_embeds.shape[1] != 1)
+            )
+            prefill_noncompiled_stage = not is_torchdynamo_compiling() and (
+                (cache_position is not None and cache_position[0] == 0)
+                or (past_key_values is None or past_key_values.get_seq_length() == 0)
+            )
+            if (prefill_compiled_stage or prefill_noncompiled_stage) or self.rope_deltas is None:
+                position_ids, rope_deltas = self.get_rope_index(
+                    input_ids,
+                    image_grid_thw,
+                    video_grid_thw,
+                    second_per_grid_ts=second_per_grid_ts,
+                    attention_mask=attention_mask_tensor,
+                )
+                self.rope_deltas = rope_deltas
+            # then use the prev pre-calculated rope-deltas to get the correct position ids
+            else:
+                batch_size, seq_length, _ = inputs_embeds.shape
+                delta = (
+                    (cache_position[0] + self.rope_deltas).to(inputs_embeds.device)
+                    if cache_position is not None
+                    else 0
+                )
+                position_ids = torch.arange(seq_length, device=inputs_embeds.device)
+                position_ids = position_ids.view(1, -1).expand(batch_size, -1)
+                if cache_position is not None:  # otherwise `deltas` is an int `0`
+                    delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
+                position_ids = position_ids.add(delta)
+                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+
+        outputs = self.language_model(
+            input_ids=None,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        output = Glm4vModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            rope_deltas=self.rope_deltas,
+        )
+        return output if return_dict else output.to_tuple()
+
+
+class Glm4vDecoderLayer(Qwen2_5_VLDecoderLayer):
+    def __init__(self, config: Glm4vTextConfig, layer_idx: int):
+        super().__init__()
+        self.mlp = Glm4vMLP(config)
+        self.input_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_self_attn_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_mlp_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        **kwargs,
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
+                `(batch, sequence_length)` where padding elements are indicated by 0.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence.
+            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
+            kwargs (`dict`, *optional*):
+                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
+                into the model
+        """
+
+        residual = hidden_states
+
+        hidden_states = self.input_layernorm(hidden_states)
+
+        # Self Attention
+        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings,
+        )
+
+        hidden_states = self.post_self_attn_layernorm(hidden_states)
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.post_mlp_layernorm(hidden_states)
+        hidden_states = residual + hidden_states
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (self_attn_weights,)
+
+        if use_cache:
+            outputs += (present_key_value,)
+
+        return outputs
+
 
 class Glm4vTextModel(Qwen2_5_VLTextModel):
     def __init__(self, config: Glm4vTextConfig):
@@ -907,9 +1108,128 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
         self.norm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
+class Glm4vCausalLMOutputWithPast(Qwen2_5_VLCausalLMOutputWithPast):
+    pass
+
+
 class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
     _checkpoint_conversion_mapping = None
     config_class = Glm4vConfig
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        pixel_values: Optional[torch.Tensor] = None,
+        pixel_values_videos: Optional[torch.FloatTensor] = None,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        rope_deltas: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        second_per_grid_ts: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[KwargsForCausalLM],
+    ) -> Union[Tuple, Glm4vCausalLMOutputWithPast]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        pixel_values_videos (`torch.FloatTensor` of shape `(seq_length, num_channels * temporal_size * image_size * image_size)):
+            The tensors corresponding to the input videos. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`Glm4vImageProcessor.__call__`] for details. [`Glm4vProcessor`] uses
+            [`Glm4vImageProcessor`] for processing videos.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+            The rope index difference between sequence length and multimodal rope.
+        second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
+            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
+
+        Example:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, Glm4vForConditionalGeneration
+
+        >>> model = Glm4vForConditionalGeneration.from_pretrained("THUDM/GLM-4V-9B-0414")
+        >>> processor = AutoProcessor.from_pretrained("THUDM/GLM-4V-9B-0414")
+
+        >>> messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": "What is shown in this image?"},
+                ],
+            },
+        ]
+        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        >>> inputs = processor(text=[text], images=[image], vision_infos=[vision_infos])
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "The image shows a street scene with a red stop sign in the foreground. In the background, there is a large red gate with Chinese characters ..."
+        ```"""
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            second_per_grid_ts=second_per_grid_ts,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        hidden_states = outputs[0]
+        logits = self.lm_head(hidden_states)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return (loss,) + output if loss is not None else output
+
+        return Glm4vCausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            rope_deltas=outputs.rope_deltas,
+        )
 
 
 class Glm4vVideosProcessorKwargs(Qwen2_5_VLVideosProcessorKwargs):
