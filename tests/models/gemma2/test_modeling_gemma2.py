@@ -33,7 +33,6 @@ from transformers.testing_utils import (
     require_torch_accelerator,
     require_torch_gpu,
     require_torch_large_accelerator,
-    run_test_using_subprocess,
     slow,
     tooslow,
     torch_device,
@@ -183,8 +182,11 @@ class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
 class Gemma2IntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
 
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
     def tearDown(self):
-        cleanup(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     @require_torch_large_accelerator
     @require_read_token
@@ -428,7 +430,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
     @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
     @require_read_token
-    @run_test_using_subprocess
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. This is non trivial as
         we need to correctly slice the attention mask in all cases (because we use a HybridCache).
