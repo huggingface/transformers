@@ -245,6 +245,7 @@ if TYPE_CHECKING:
     from .qwen2_audio import *
     from .qwen2_moe import *
     from .qwen2_vl import *
+    from .quasarv4 import *
     from .rag import *
     from .recurrent_gemma import *
     from .reformer import *
