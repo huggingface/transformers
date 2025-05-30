@@ -18,33 +18,33 @@ Processor class for MiniCPMO.
 
 import math
 import re
-from typing import List
-from typing import Literal
-from typing import Optional
-from typing import Union
-from typing import Any
-from typing import Dict
-from transformers.utils import logging 
+
+from typing import Any, Dict, List, Literal, Optional, Union
+
 import librosa
-
 import numpy as np
-import torch
-import torchaudio
-from transformers.image_utils import ImageInput
-from transformers.processing_utils import ProcessorMixin
-from transformers.tokenization_utils_base import PreTokenizedInput
-from transformers.tokenization_utils_base import TextInput
-from transformers.utils import TensorType
-
 import PIL
 import PIL.Image
+import torch
+import torchaudio
 from PIL import Image
 
 from transformers import AutoImageProcessor, AutoTokenizer, WhisperFeatureExtractor
 from transformers.image_processing_utils import BaseImageProcessor
-from ...feature_extraction_utils import BatchFeature
 from transformers.image_transforms import to_channel_dimension_format
-from ...image_utils import ChannelDimension, infer_channel_dimension_format, is_torch_tensor, to_numpy_array, valid_images
+from transformers.image_utils import ImageInput
+from transformers.processing_utils import ProcessorMixin
+from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
+from transformers.utils import logging, TensorType
+
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import (
+    ChannelDimension,
+    infer_channel_dimension_format,
+    is_torch_tensor,
+    to_numpy_array,
+    valid_images,
+)
 from ...utils import is_torch_device, is_torch_dtype, requires_backends, TensorType
 
 logger = logging.get_logger(__name__)

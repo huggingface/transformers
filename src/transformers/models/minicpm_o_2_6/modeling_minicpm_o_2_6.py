@@ -47,7 +47,7 @@ from transformers.utils import ModelOutput, add_start_docstrings, add_start_docs
 from transformers.cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
 from transformers.generation.logits_process import LogitsProcessor, TopKLogitsWarper, TopPLogitsWarper
 from transformers.models.siglip.configuration_siglip import SiglipVisionConfig
-from transformers.models.siglip.modeling_siglip import SIGLIP_START_DOCSTRING, SIGLIP_VISION_INPUTS_DOCSTRING, SiglipEncoderLayer, SiglipPreTrainedModel
+from transformers.models.siglip.modeling_siglip import SiglipEncoderLayer, SiglipPreTrainedModel
 from transformers.models.idefics2.modeling_idefics2 import Idefics2Encoder
 from transformers.models.whisper.modeling_whisper import WHISPER_ATTENTION_CLASSES, WhisperConfig, WhisperEncoder
 from transformers.activations import ACT2FN
@@ -183,7 +183,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             self.config.vision_config._attn_implementation = "flash_attention_2"
         else:
             self.config.vision_config._attn_implementation = "eager"
-        model = SiglipVisionTransformer(self.config.vision_config)
+        model = MiniCPMVisionTransformer(self.config.vision_config)
         if self.config.drop_vision_last_layer:
             model.encoder.layers = model.encoder.layers[:-1]
 
@@ -4265,7 +4265,7 @@ class SiglipVisionModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class SiglipVisionEmbeddings(nn.Module):
+class MiniCPMVisionEmbedding(nn.Module):
     def __init__(self, config: SiglipVisionConfig):
         super().__init__()
         self.config = config
@@ -4673,7 +4673,7 @@ class SiglipPreTrainedModel(PreTrainedModel):
     def _initialize_weights(self, module):
         """Initialize the weights"""
 
-        if isinstance(module, SiglipVisionEmbeddings):
+        if isinstance(module, MiniCPMVisionEmbedding):
             width = self.config.hidden_size
             nn.init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
         elif isinstance(module, nn.Embedding):
@@ -4732,7 +4732,7 @@ SIGLIP_VISION_INPUTS_DOCSTRING = r"""
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->Siglip
-class SiglipEncoder(nn.Module):
+class MiniCPMVisionEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     [`SiglipEncoderLayer`].
@@ -4816,7 +4816,7 @@ class SiglipEncoder(nn.Module):
 
 
 @add_start_docstrings("""The vision model from SigLIP without any head or projection on top.""", SIGLIP_START_DOCSTRING)
-class SiglipVisionTransformer(SiglipPreTrainedModel):
+class MiniCPMVisionTransformer(SiglipPreTrainedModel):
     config_class = SiglipVisionConfig
     main_input_name = "pixel_values"
     _supports_flash_attn_2 = True
@@ -4827,8 +4827,8 @@ class SiglipVisionTransformer(SiglipPreTrainedModel):
         self.config = config
         embed_dim = config.hidden_size
 
-        self.embeddings = SiglipVisionEmbeddings(config)
-        self.encoder = SiglipEncoder(config)
+        self.embeddings = MiniCPMVisionEmbedding(config)
+        self.encoder = MiniCPMVisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 

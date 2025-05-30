@@ -344,6 +344,7 @@ else:
             ),
             ("mega", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             ("megatron-bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            ("mgp-str", ("MgpstrTokenizer", None)),
             ("minicpm_o_2_6", ("Qwen2Tokenizer", "MiniCPM_o_2_6TokenizerFast" if is_tokenizers_available() else None)),
             (
                 "mistral",

@@ -182,7 +182,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
             self.config.vision_config._attn_implementation = "flash_attention_2"
         else:
             self.config.vision_config._attn_implementation = "eager"
-        model = SiglipVisionTransformer(self.config.vision_config)
+        model = MiniCPMVisionTransformer(self.config.vision_config)
         if self.config.drop_vision_last_layer:
             model.encoder.layers = model.encoder.layers[:-1]
 
@@ -4237,7 +4237,7 @@ def default_flax_embed_init(tensor):
     variance_scaling_(tensor, mode="fan_in", distribution="normal")
 
 
-class SiglipVisionEmbeddings(nn.Module):
+class MiniCPMVisionEmbedding(nn.Module):
     def __init__(self, config: SiglipVisionConfig):
         super().__init__()
         self.config = config
@@ -4304,7 +4304,7 @@ class SiglipVisionEmbeddings(nn.Module):
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->Siglip
-class SiglipEncoder(Idefics2Encoder):
+class MiniCPMVisionEncoder(Idefics2Encoder):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     [`SiglipEncoderLayer`].
@@ -4319,7 +4319,7 @@ class SiglipEncoder(Idefics2Encoder):
         self.gradient_checkpointing = False
 
 @add_start_docstrings("""The vision model from SigLIP without any head or projection on top.""", SIGLIP_START_DOCSTRING)
-class SiglipVisionTransformer(SiglipPreTrainedModel):
+class MiniCPMVisionTransformer(SiglipPreTrainedModel):
     config_class = SiglipVisionConfig
     main_input_name = "pixel_values"
     _supports_flash_attn_2 = True
@@ -4330,8 +4330,8 @@ class SiglipVisionTransformer(SiglipPreTrainedModel):
         self.config = config
         embed_dim = config.hidden_size
 
-        self.embeddings = SiglipVisionEmbeddings(config)
-        self.encoder = SiglipEncoder(config)
+        self.embeddings = MiniCPMVisionEmbedding(config)
+        self.encoder = MiniCPMVisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
