@@ -862,7 +862,7 @@ class RobertaPreLayerNormForCausalLM(RobertaPreLayerNormPreTrainedModel, Generat
         prediction_scores = self.lm_head(sequence_output)
 
         lm_loss = None
-        if labels is not None:
+        if labels is not None or kwargs.get("shift_labels", None) is not None:
             # move labels to correct device to enable model parallelism
             labels = labels.to(prediction_scores.device)
             lm_loss = self.loss_function(
