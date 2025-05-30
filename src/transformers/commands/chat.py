@@ -759,7 +759,9 @@ class ChatCommand(BaseTransformersCLICommand):
                 else:
                     chat.append({"role": "user", "content": user_input})
 
-                stream = client.chat_completion(chat, stream=True, extra_body={"request_id": request_id, **generation_config.to_dict()})
+                stream = client.chat_completion(
+                    chat, stream=True, extra_body={"request_id": request_id, **generation_config.to_dict()}
+                )
                 model_output, request_id = asyncio.run(interface.stream_output(stream))
                 asyncio.run(client.close())
 
