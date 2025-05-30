@@ -142,7 +142,6 @@ class MPNetTokenizerFast(PreTrainedTokenizerFast):
             pre_tok_state["strip_accents"] = strip_accents
             self.backend_tokenizer.normalizer = pre_tok_class(**pre_tok_state)
 
-        self.do_lower_case = do_lower_case
 
     @property
     def mask_token(self) -> str:
@@ -170,14 +169,6 @@ class MPNetTokenizerFast(PreTrainedTokenizerFast):
         # So we set lstrip to True
         value = AddedToken(value, lstrip=True, rstrip=False) if isinstance(value, str) else value
         self._mask_token = value
-
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-        output = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
-        if token_ids_1 is None:
-            return output
-
-        return output + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
-
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
@@ -201,9 +192,6 @@ class MPNetTokenizerFast(PreTrainedTokenizerFast):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
-        return tuple(files)
 
 
 __all__ = ["MPNetTokenizerFast"]

@@ -21,13 +21,15 @@ import json
 import os
 from collections import defaultdict
 from collections.abc import Iterable
-from typing import Any, Optional, Union
+from shutil import copyfile
+from typing import Any, Optional, Union, Tuple
 
 import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from tokenizers import Encoding as EncodingFast
 from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
+from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 
 from .convert_slow_tokenizer import convert_slow_tokenizer
 from .integrations.ggml import convert_gguf_tokenizer
@@ -103,8 +105,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         from_slow = kwargs.pop("from_slow", False)
         added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
         self.add_prefix_space = kwargs.get("add_prefix_space", False)
+        self.config_class = kwargs.pop("config_class", None)
+        self.do_lower_case = kwargs.pop("do_lower_case", False)
 
-        if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
+        if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None and self.config_class is None:
             raise ValueError(
                 "Cannot instantiate this tokenizer from a slow version. If it's based on sentencepiece, make sure you "
                 "have sentencepiece installed."
@@ -176,6 +180,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
+
+        self.bos_token = kwargs.get("bos_token", None)
+        self.eos_token = kwargs.get("eos_token", None)
+        self._add_bos_token = kwargs.pop("add_bos_token", None)
+        self._add_eos_token = kwargs.pop("add_eos_token", None)
+        self.update_post_processor()
+
         self._tokenizer.encode_special_tokens = self.split_special_tokens
 
         added_tokens_decoder_hash = {hash(repr(token)) for token in self.added_tokens_decoder}
@@ -914,3 +925,79 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             kwargs["additional_special_tokens"] = additional_special_tokens
 
         return self.__class__(tokenizer_object=tokenizer, **kwargs)
+
+    @property
+    def add_eos_token(self):
+        return self._add_eos_token
+
+    @property
+    def add_bos_token(self):
+        return self._add_bos_token
+
+    # @property
+    # def do_lower_case(self):
+    #     """
+    #     `bool`: Whether or not the tokenizer should lowercase the input when tokenizing.
+    #     """
+    #     return self._do_lower_case
+
+    @add_eos_token.setter
+    def add_eos_token(self, value):
+        self._add_eos_token = value
+        self.update_post_processor()
+
+    @add_bos_token.setter
+    def add_bos_token(self, value):
+        self._add_bos_token = value
+        self.update_post_processor()
+
+    # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.update_post_processor
+    def update_post_processor(self):
+        """
+        Updates the underlying post processor with the current `bos_token` and `eos_token`.
+        """
+        bos = self.bos_token
+        bos_token_id = self.bos_token_id
+        if bos is None and self.add_bos_token:
+            raise ValueError("add_bos_token = True but bos_token = None")
+
+        eos = self.eos_token
+        eos_token_id = self.eos_token_id
+        if eos is None and self.add_eos_token:
+            raise ValueError("add_eos_token = True but eos_token = None")
+
+        single = f"{(bos + ':0 ') if self.add_bos_token else ''}$A:0{(' ' + eos + ':0') if self.add_eos_token else ''}"
+        pair = f"{single}{(' ' + bos + ':1') if self.add_bos_token else ''} $B:1{(' ' + eos + ':1') if self.add_eos_token else ''}"
+
+        special_tokens = []
+        if self.add_bos_token:
+            special_tokens.append((bos, bos_token_id))
+        if self.add_eos_token:
+            special_tokens.append((eos, eos_token_id))
+        if self.add_eos_token or self.add_bos_token:
+            self._tokenizer.post_processor = processors.TemplateProcessing(
+                single=single, pair=pair, special_tokens=special_tokens
+            )
+
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        if hasattr(self, "_tokenizer"):
+            files = self._tokenizer.model.save(save_directory, name=filename_prefix)
+            return tuple(files)
+
+        if not self.can_save_slow_tokenizer:
+            raise ValueError(
+                "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
+                "tokenizer."
+            )
+
+        if not os.path.isdir(save_directory):
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
+            return
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
+
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
+            copyfile(self.vocab_file, out_vocab_file)
+
+        return (out_vocab_file,)

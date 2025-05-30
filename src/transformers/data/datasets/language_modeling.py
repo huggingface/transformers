@@ -89,8 +89,13 @@ class TextDataset(Dataset):
                 tokenized_text = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(text))
 
                 for i in range(0, len(tokenized_text) - block_size + 1, block_size):  # Truncate in block of block_size
+                    token_block = tokenized_text[i: i + block_size]
                     self.examples.append(
-                        tokenizer.build_inputs_with_special_tokens(tokenized_text[i : i + block_size])
+                        tokenizer.encode(
+                            tokenizer.decode(token_block),
+                            add_special_tokens=True,
+                            truncation=True
+                        )
                     )
                 # Note that we are losing the last truncated example here for the sake of simplicity (no padding)
                 # If your dataset is small, first you should look for a bigger one :-) and second you
@@ -321,7 +326,7 @@ class LineByLineWithSOPTextDataset(Dataset):
                         raise ValueError(f"Length of sequence b is {len(tokens_b)} which must be no less than 1")
 
                     # add special tokens
-                    input_ids = tokenizer.build_inputs_with_special_tokens(tokens_a, tokens_b)
+                    input_ids = tokenizer(tokenizer.decode(tokens_a), tokenizer.decode(tokens_b))['input_ids']
                     # add token type ids, 0 for sentence a, 1 for sentence b
                     token_type_ids = tokenizer.create_token_type_ids_from_sequences(tokens_a, tokens_b)
 
@@ -506,8 +511,7 @@ class TextDatasetForNextSentencePrediction(Dataset):
                         raise ValueError(f"Length of sequence b is {len(tokens_b)} which must be no less than 1")
 
                     # add special tokens
-                    input_ids = self.tokenizer.build_inputs_with_special_tokens(tokens_a, tokens_b)
-                    # add token type ids, 0 for sentence a, 1 for sentence b
+                    input_ids = self.tokenizer(self.tokenizer.decode(tokens_a), self.tokenizer.decode(tokens_b))['input_ids']                    # add token type ids, 0 for sentence a, 1 for sentence b
                     token_type_ids = self.tokenizer.create_token_type_ids_from_sequences(tokens_a, tokens_b)
 
                     example = {

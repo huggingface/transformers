@@ -106,33 +106,6 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
 
         self.backend_tokenizer.decode = new_decode_method
 
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A CLIP sequence has the following format:
-
-        - single sequence: `<|startoftext|> X <|endoftext|>`
-
-        Pairs of sequences are not the expected use case, but they will be handled without a separator.
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        bos_token = [self.bos_token_id]
-        eos_token = [self.eos_token_id]
-
-        if token_ids_1 is None:
-            return bos_token + token_ids_0 + eos_token
-        return bos_token + token_ids_0 + eos_token + eos_token + token_ids_1 + eos_token
-
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
@@ -156,9 +129,6 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
             return len(bos_token + token_ids_0 + eos_token) * [0]
         return len(bos_token + token_ids_0 + eos_token + eos_token + token_ids_1 + eos_token) * [0]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
-        return tuple(files)
 
 
 __all__ = ["CLIPTokenizerFast"]

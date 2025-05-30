@@ -147,35 +147,9 @@ class XLNetTokenizerFast(PreTrainedTokenizerFast):
         )
 
         self._pad_token_type_id = 3
-        self.do_lower_case = do_lower_case
         self.remove_space = remove_space
         self.keep_accents = keep_accents
         self.vocab_file = vocab_file
-
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. An XLNet sequence has the following format:
-
-        - single sequence: `X <sep> <cls>`
-        - pair of sequences: `A <sep> B <sep> <cls>`
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
-        if token_ids_1 is None:
-            return token_ids_0 + sep + cls
-        return token_ids_0 + sep + token_ids_1 + sep + cls
 
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -207,24 +181,6 @@ class XLNetTokenizerFast(PreTrainedTokenizerFast):
             return len(token_ids_0 + sep) * [0] + cls_segment_id
         return len(token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1] + cls_segment_id
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        if not self.can_save_slow_tokenizer:
-            raise ValueError(
-                "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
-                "tokenizer."
-            )
-
-        if not os.path.isdir(save_directory):
-            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return
-        out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
-
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
-            copyfile(self.vocab_file, out_vocab_file)
-
-        return (out_vocab_file,)
 
 
 __all__ = ["XLNetTokenizerFast"]

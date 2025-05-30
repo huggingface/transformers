@@ -168,33 +168,6 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         self._eot_token = eot_token
         self.fill_token = fill_token
 
-    # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.update_post_processor
-    def update_post_processor(self):
-        """
-        Updates the underlying post processor with the current `bos_token` and `eos_token`.
-        """
-        bos = self.bos_token
-        bos_token_id = self.bos_token_id
-        if bos is None and self.add_bos_token:
-            raise ValueError("add_bos_token = True but bos_token = None")
-
-        eos = self.eos_token
-        eos_token_id = self.eos_token_id
-        if eos is None and self.add_eos_token:
-            raise ValueError("add_eos_token = True but eos_token = None")
-
-        single = f"{(bos + ':0 ') if self.add_bos_token else ''}$A:0{(' ' + eos + ':0') if self.add_eos_token else ''}"
-        pair = f"{single}{(' ' + bos + ':1') if self.add_bos_token else ''} $B:1{(' ' + eos + ':1') if self.add_eos_token else ''}"
-
-        special_tokens = []
-        if self.add_bos_token:
-            special_tokens.append((bos, bos_token_id))
-        if self.add_eos_token:
-            special_tokens.append((eos, eos_token_id))
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=single, pair=pair, special_tokens=special_tokens
-        )
-
     @property
     def prefix_token(self):
         return self._prefix_token
@@ -234,24 +207,6 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
     @property
     def eot_token(self):
         return self._eot_token
-
-    @property
-    def add_eos_token(self):
-        return self._add_eos_token
-
-    @property
-    def add_bos_token(self):
-        return self._add_bos_token
-
-    @add_eos_token.setter
-    def add_eos_token(self, value):
-        self._add_eos_token = value
-        self.update_post_processor()
-
-    @add_bos_token.setter
-    def add_bos_token(self, value):
-        self._add_bos_token = value
-        self.update_post_processor()
 
     def set_infilling_processor(self, reset, suffix_first=False, add_special_tokens=True):
         """
@@ -323,52 +278,6 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         return tokens
 
     # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        if not self.can_save_slow_tokenizer:
-            raise ValueError(
-                "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
-                "tokenizer."
-            )
-
-        if not os.path.isdir(save_directory):
-            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return
-        out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
-
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
-            copyfile(self.vocab_file, out_vocab_file)
-
-        return (out_vocab_file,)
-
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. The special tokens depend on calling set_lang.
-
-        An NLLB sequence has the following format, where `X` represents the sequence:
-
-        - `input_ids` (for encoder) `X [eos, src_lang_code]`
-        - `decoder_input_ids`: (for decoder) `X [eos, tgt_lang_code]`
-
-        BOS is never used. Pairs of sequences are not the expected use case, but they will be handled without a
-        separator.
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        if token_ids_1 is None:
-            return self.bos_token_id + token_ids_0 + self.eos_token_id
-        return self.bos_token_id + token_ids_0 + token_ids_1 + self.eos_token_id
 
 
 __all__ = ["CodeLlamaTokenizerFast"]

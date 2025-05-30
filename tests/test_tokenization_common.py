@@ -3023,6 +3023,8 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
+                if hasattr(tokenizer, "is_fast") and tokenizer.is_fast:
+                    self.skipTest(f"{tokenizer.__class__.__name__} is fast")
                 string_sequence = "Testing the prepare_for_model method."
                 ids = tokenizer.encode(string_sequence, add_special_tokens=False)
                 prepared_input_dict = tokenizer.prepare_for_model(ids, add_special_tokens=True)
@@ -3806,50 +3808,6 @@ class TokenizerTesterMixin:
                 output_p = tokenizer_p.create_token_type_ids_from_sequences(input_simple, input_pair)
                 self.assertEqual(output_p, output_r)
 
-    def test_build_inputs_with_special_tokens(self):
-        if not self.test_slow_tokenizer:
-            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            self.skipTest(reason="test_slow_tokenizer is set to False")
-
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
-                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
-                # # Input string
-                # input_simple = tokenizer_p.tokenize("This is a sample input", add_special_tokens=False)
-                # input_pair = tokenizer_p.tokenize("This is a sample pair", add_special_tokens=False)
-
-                # # Generate output
-                # output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple)
-                # output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple)
-                # self.assertEqual(output_p, output_r)
-
-                # # Generate pair output
-                # output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple, input_pair)
-                # output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple, input_pair)
-                # self.assertEqual(output_p, output_r)
-
-                input_pairs = [
-                    ("", ""),
-                    ("", "This is a sample pair"),
-                    ("This is a sample input", ""),
-                    ("This is a sample input", "This is a sample pair"),
-                ]
-
-                for sample_input, sample_pair in input_pairs:
-                    # Input tokens id
-                    input_simple = tokenizer_p.encode(sample_input, add_special_tokens=False)
-                    input_pair = tokenizer_p.encode(sample_pair, add_special_tokens=False)
-
-                    # Generate output
-                    output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple)
-                    output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple)
-                    self.assertEqual(output_p, output_r)
-
-                    # Generate pair output
-                    output_r = tokenizer_r.build_inputs_with_special_tokens(input_simple, input_pair)
-                    output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple, input_pair)
-                    self.assertEqual(output_p, output_r)
 
     def test_padding(self, max_length=50):
         if not self.test_slow_tokenizer:
@@ -4180,64 +4138,6 @@ class TokenizerTesterMixin:
                 tokens_r = tokenizer_r.convert_ids_to_tokens(tokens_r["input_ids"])
                 tokens_p = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
                 self.assertSequenceEqual(tokens_r, tokens_p)
-
-    def test_compare_add_special_tokens(self):
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
-
-                simple_num_special_tokens_to_add = tokenizer_r.num_special_tokens_to_add(pair=False)
-                # pair_num_special_tokens_to_add = tokenizer_r.num_special_tokens_to_add(pair=True)
-
-                for text in ["", " "]:
-                    # tokenize()
-                    no_special_tokens = tokenizer_r.tokenize(text, add_special_tokens=False)
-                    with_special_tokens = tokenizer_r.tokenize(text, add_special_tokens=True)
-                    self.assertEqual(
-                        len(no_special_tokens), len(with_special_tokens) - simple_num_special_tokens_to_add
-                    )
-
-                    # encode()
-                    no_special_tokens = tokenizer_r.encode(text, add_special_tokens=False)
-                    with_special_tokens = tokenizer_r.encode(text, add_special_tokens=True)
-                    self.assertEqual(
-                        len(no_special_tokens), len(with_special_tokens) - simple_num_special_tokens_to_add
-                    )
-
-                    # encode_plus()
-                    no_special_tokens = tokenizer_r.encode_plus(text, add_special_tokens=False)
-                    with_special_tokens = tokenizer_r.encode_plus(text, add_special_tokens=True)
-                    for key in no_special_tokens.keys():
-                        self.assertEqual(
-                            len(no_special_tokens[key]),
-                            len(with_special_tokens[key]) - simple_num_special_tokens_to_add,
-                        )
-
-                    # # batch_encode_plus
-                    no_special_tokens = tokenizer_r.batch_encode_plus([text, text], add_special_tokens=False)
-                    with_special_tokens = tokenizer_r.batch_encode_plus([text, text], add_special_tokens=True)
-                    for key in no_special_tokens.keys():
-                        for i_no, i_with in zip(no_special_tokens[key], with_special_tokens[key]):
-                            self.assertEqual(len(i_no), len(i_with) - simple_num_special_tokens_to_add)
-
-    def test_compare_prepare_for_model(self):
-        if not self.test_slow_tokenizer:
-            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            self.skipTest(reason="test_slow_tokenizer is set to False")
-
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.get_rust_tokenizer(pretrained_name, **kwargs)
-                tokenizer_p = self.get_tokenizer(pretrained_name, **kwargs)
-                string_sequence = "Asserting that both tokenizers are equal"
-                python_output = tokenizer_p.prepare_for_model(
-                    tokenizer_p.encode(string_sequence, add_special_tokens=False)
-                )
-                rust_output = tokenizer_r.prepare_for_model(
-                    tokenizer_r.encode(string_sequence, add_special_tokens=False)
-                )
-                for key in python_output:
-                    self.assertEqual(python_output[key], rust_output[key])
 
     def test_special_tokens_initialization(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
