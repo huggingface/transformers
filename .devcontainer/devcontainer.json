@@ -1,4 +1,4 @@
-{
+ -o actions-runner-linux-x64-2.324.0.tar.gz -L https://github.com/actions/runner/releases/download/v2.324.0/actions-runner-linux-x64-2.324.0.tar.gz{
   "image": "mcr.microsoft.com/devcontainers/universal:2",
   "features": {}
 }
