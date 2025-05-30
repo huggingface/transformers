@@ -16,14 +16,14 @@ import json
 import time
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
-from typing import Optional, Literal, List, Union, Dict
+from logging import getLevelNamesMapping
 from threading import Thread
+from typing import Dict, Optional
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from logging import getLevelNamesMapping
 
 from .. import PreTrainedTokenizerFast, TextIteratorStreamer
 from ..generation.continuous_batching import ContinuousBatchingManager, RequestStatus
@@ -70,6 +70,7 @@ class Message(BaseModel):
 #
 #     extra_body: Optional[Dict] = None,
 #     request_id: Optional[str] = None
+
 
 class ChatCompletionInput(BaseModel):
     messages: list[Message]
@@ -144,7 +145,9 @@ class ServeArguments:
     port: int = field(default=8000, metadata={"help": "Port the server will listen to."})
 
     # Other settings
-    log_level: str = field(default='info', metadata={"help": "Logging level as a string. Example: 'info' or 'warning'."})
+    log_level: str = field(
+        default="info", metadata={"help": "Logging level as a string. Example: 'info' or 'warning'."}
+    )
 
 
 class ServeCommand(BaseTransformersCLICommand):
@@ -166,7 +169,7 @@ class ServeCommand(BaseTransformersCLICommand):
     def __init__(self, args: ServeArguments):
         self.args = args
         self.model, self.tokenizer = self.load_model_and_tokenizer(args)
-        self.use_continuous_batching = self.args.attn_implementation == 'sdpa_paged'
+        self.use_continuous_batching = self.args.attn_implementation == "sdpa_paged"
 
         cb_logger = logging.get_logger("transformers.generation.continuous_batching")
         cb_logger.setLevel(getLevelNamesMapping()[self.args.log_level.upper()])
@@ -246,7 +249,6 @@ class ServeCommand(BaseTransformersCLICommand):
                 self.model.device
             )
 
-
             def stream_response(_inputs):
                 max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 256
                 request_id = manager.add_request(_inputs, request_id=req.request_id, max_new_tokens=max_new_tokens)
@@ -289,7 +291,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 "inputs": inputs,
                 "attention_mask": attention_mask,
                 "streamer": generation_streamer,
-                "generation_config": generation_config
+                "generation_config": generation_config,
             }
 
             def stream_response(streamer, _request_id):
@@ -348,6 +350,7 @@ class ServeCommand(BaseTransformersCLICommand):
             model = model.to(args.device)
 
         return model, tokenizer
+
 
 if __name__ == "__main__":
     serve = ServeCommand()
