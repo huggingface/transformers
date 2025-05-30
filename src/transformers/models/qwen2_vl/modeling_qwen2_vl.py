@@ -1266,12 +1266,12 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
                 image_mask = inputs_embeds == self.get_input_embeddings()(
                     torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
-                n_image_tokens = (image_mask).sum(dim=1).sum(dim=0)[0]
+                image_mask = image_mask.all(-1)
             else:
-                image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-                image_mask = image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-                n_image_tokens = (input_ids == self.config.image_token_id).sum()
+                image_mask = input_ids == self.config.image_token_id
 
+            n_image_tokens = image_mask.sum()
+            image_mask = image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
             n_image_features = image_embeds.shape[0]
             if not is_torchdynamo_compiling() and n_image_tokens != n_image_features:
                 raise ValueError(

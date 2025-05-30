@@ -1340,8 +1340,8 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             else:
                 image_mask = input_ids == self.config.image_token_id
 
-            image_mask = image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
             n_image_tokens = (image_mask).sum()
+            image_mask = image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
             n_image_features = image_embeds.shape[0]
             if not is_torchdynamo_compiling() and n_image_tokens != n_image_features:
                 raise ValueError(
