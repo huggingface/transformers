@@ -27,7 +27,12 @@ from ...activations import ACT2FN
 from ...generation.utils import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_quasarv4 import QuasarV4Config
 
 
@@ -36,7 +41,9 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "QuasarV4Config"
 
 
-def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
+def _make_causal_mask(
+    input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0
+):
     """Make causal mask used for bi-directional self-attention."""
     bsz, tgt_len = input_ids_shape
     mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min))
@@ -45,8 +52,12 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     mask = mask.to(dtype)
 
     if past_key_values_length > 0:
-        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype), mask], dim=-1)
-    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+        mask = torch.cat(
+            [torch.zeros(tgt_len, past_key_values_length, dtype=dtype), mask], dim=-1
+        )
+    return mask[None, None, :, :].expand(
+        bsz, 1, tgt_len, tgt_len + past_key_values_length
+    )
 
 
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
@@ -58,7 +69,9 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
     inverted_mask = 1.0 - expanded_mask
 
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+    return inverted_mask.masked_fill(
+        inverted_mask.to(torch.bool), torch.finfo(dtype).min
+    )
 
 
 logger = logging.get_logger(__name__)
@@ -144,17 +157,23 @@ class QuasarV4RotaryEmbedding(nn.Module):
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
+        inv_freq = 1.0 / (
+            self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim)
+        )
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
         # Build here to make `torch.jit.trace` work.
         self._set_cos_sin_cache(
-            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
+            seq_len=max_position_embeddings,
+            device=self.inv_freq.device,
+            dtype=torch.get_default_dtype(),
         )
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(
+            self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype
+        )
 
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
@@ -175,6 +194,7 @@ class QuasarV4RotaryEmbedding(nn.Module):
 
 class QuasarV4TokenTemperatureLayer(nn.Module):
     """Enhanced token temperature layer with multi-dimensional temperature calculation"""
+
     def __init__(self, config):
         super().__init__()
         hidden_size = config.hidden_size
@@ -183,12 +203,16 @@ class QuasarV4TokenTemperatureLayer(nn.Module):
         # Multi-layer temperature projection network
         self.temperature_proj1 = nn.Linear(hidden_size, temperature_dim * 2)
         self.temperature_proj2 = nn.Linear(temperature_dim * 2, temperature_dim)
-        self.temperature_proj3 = nn.Linear(temperature_dim, 16)  # 16 different temperature dimensions
+        self.temperature_proj3 = nn.Linear(
+            temperature_dim, 16
+        )  # 16 different temperature dimensions
         self.temperature_proj4 = nn.Linear(16, 1)
 
         # Learnable temperature scales for different token positions
         self.temperature_scale_base = nn.Parameter(torch.ones(1) * 0.1)
-        self.position_dependent_scale = nn.Parameter(torch.randn(1, 1, 8) * 0.01)  # Position-dependent scaling
+        self.position_dependent_scale = nn.Parameter(
+            torch.randn(1, 1, 8) * 0.01
+        )  # Position-dependent scaling
 
         # Additional layers for token importance calculation
         self.token_importance = nn.Sequential(
@@ -197,7 +221,7 @@ class QuasarV4TokenTemperatureLayer(nn.Module):
             nn.Linear(temperature_dim, temperature_dim // 2),
             nn.GELU(),
             nn.Linear(temperature_dim // 2, 1),
-            nn.Sigmoid()
+            nn.Sigmoid(),
         )
 
         # Context-aware scaling factor
@@ -218,14 +242,26 @@ class QuasarV4TokenTemperatureLayer(nn.Module):
 
         # Calculate context-aware scaling
         context_vector = hidden_states.mean(dim=1, keepdim=True)  # [batch, 1, hidden]
-        context_scale = torch.sigmoid(self.context_scale(context_vector)) * 0.2 + 0.9  # 0.9-1.1 range
+        context_scale = (
+            torch.sigmoid(self.context_scale(context_vector)) * 0.2 + 0.9
+        )  # 0.9-1.1 range
 
         # Apply position-dependent scaling
-        position_scale = self.position_dependent_scale.expand(batch_size, seq_length, -1)
-        position_scale = position_scale.mean(dim=-1, keepdim=True) + 1.0  # Ensure positive scaling
+        position_scale = self.position_dependent_scale.expand(
+            batch_size, seq_length, -1
+        )
+        position_scale = (
+            position_scale.mean(dim=-1, keepdim=True) + 1.0
+        )  # Ensure positive scaling
 
         # Combine all temperature factors
-        token_temp = base_token_temp * token_importance * position_scale * context_scale * self.temperature_scale_base
+        token_temp = (
+            base_token_temp
+            * token_importance
+            * position_scale
+            * context_scale
+            * self.temperature_scale_base
+        )
 
         # Apply temperature scaling to hidden states
         scaled_states = hidden_states * (1.0 + token_temp)
@@ -235,6 +271,7 @@ class QuasarV4TokenTemperatureLayer(nn.Module):
 
 class QuasarV4TemperatureAggregation(nn.Module):
     """Enhanced temperature aggregation with more parameters"""
+
     def __init__(self, config):
         super().__init__()
         hidden_size = config.hidden_size
@@ -247,8 +284,14 @@ class QuasarV4TemperatureAggregation(nn.Module):
 
         # Add middle layers
         current_dim = hidden_size // 4
-        for i in range(agg_layers - 3):  # -3 because we already have input, middle, and output layers
-            next_dim = hidden_size // 2 if i == 0 else hidden_size // 4 if i == agg_layers - 4 else hidden_size // 2
+        for i in range(
+            agg_layers - 3
+        ):  # -3 because we already have input, middle, and output layers
+            next_dim = (
+                hidden_size // 2
+                if i == 0
+                else hidden_size // 4 if i == agg_layers - 4 else hidden_size // 2
+            )
             layers.append(nn.Linear(current_dim, next_dim))
             layers.append(nn.GELU())
             current_dim = next_dim
@@ -260,7 +303,9 @@ class QuasarV4TemperatureAggregation(nn.Module):
         layers.append(nn.Sigmoid())
 
         self.aggregation_network = nn.Sequential(*layers)
-        self.global_scaling_factor = config.temperature_aggregation["global_scaling_factor"]
+        self.global_scaling_factor = config.temperature_aggregation[
+            "global_scaling_factor"
+        ]
 
     def forward(self, token_temps):
         # Aggregate token temperatures
@@ -270,6 +315,7 @@ class QuasarV4TemperatureAggregation(nn.Module):
 
 class QuasarV4OutputAdaptation(nn.Module):
     """Output adaptation layers for enhanced model capabilities"""
+
     def __init__(self, config):
         super().__init__()
         hidden_size = config.hidden_size
@@ -279,7 +325,7 @@ class QuasarV4OutputAdaptation(nn.Module):
             nn.Linear(hidden_size, hidden_size),
             nn.GELU(),
             nn.Linear(hidden_size, hidden_size),
-            QuasarV4RMSNorm(hidden_size, eps=config.rms_norm_eps)
+            QuasarV4RMSNorm(hidden_size, eps=config.rms_norm_eps),
         )
 
     def forward(self, hidden_states):
@@ -289,6 +335,7 @@ class QuasarV4OutputAdaptation(nn.Module):
 
 class QuasarV4Attention(nn.Module):
     """Multi-headed attention with grouped query attention"""
+
     def __init__(self, config: QuasarV4Config):
         super().__init__()
         self.config = config
@@ -307,10 +354,22 @@ class QuasarV4Attention(nn.Module):
                 f" {self.num_heads})."
             )
 
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
+        self.q_proj = nn.Linear(
+            self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            self.hidden_size,
+            self.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
+        )
+        self.v_proj = nn.Linear(
+            self.hidden_size,
+            self.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
+        )
+        self.o_proj = nn.Linear(
+            self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias
+        )
         self.rotary_emb = QuasarV4RotaryEmbedding(
             self.head_dim,
             max_position_embeddings=self.max_position_embeddings,
@@ -319,7 +378,11 @@ class QuasarV4Attention(nn.Module):
         self.dropout = config.attention_dropout
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
     def _split_heads(self, tensor, num_heads, head_dim):
         """Split heads and rearrange elements."""
@@ -345,8 +408,12 @@ class QuasarV4Attention(nn.Module):
 
         # Reshape and transpose query, key, value for multi-head attention
         query_states = self._split_heads(query_states, self.num_heads, self.head_dim)
-        key_states = self._split_heads(key_states, self.num_key_value_heads, self.head_dim)
-        value_states = self._split_heads(value_states, self.num_key_value_heads, self.head_dim)
+        key_states = self._split_heads(
+            key_states, self.num_key_value_heads, self.head_dim
+        )
+        value_states = self._split_heads(
+            value_states, self.num_key_value_heads, self.head_dim
+        )
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
@@ -357,36 +424,51 @@ class QuasarV4Attention(nn.Module):
 
         # Determine position IDs for rotary embeddings
         if position_ids is None:
-            position_ids = torch.arange(kv_seq_len, device=hidden_states.device).unsqueeze(0)
+            position_ids = torch.arange(
+                kv_seq_len, device=hidden_states.device
+            ).unsqueeze(0)
             # Offset position IDs for past key values if they exist
             if past_key_value is not None:
-                position_ids = position_ids[:, past_key_value[0].shape[-2]:]
+                position_ids = position_ids[:, past_key_value[0].shape[-2] :]
 
         # Get rotary embeddings
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
         # Apply rotary embeddings to query and key states
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin, position_ids
+        )
 
         # Repeat key and value for grouped query attention if needed
         if self.num_key_value_groups > 1:
             key_states = key_states.repeat_interleave(self.num_key_value_groups, dim=1)
-            value_states = value_states.repeat_interleave(self.num_key_value_groups, dim=1)
+            value_states = value_states.repeat_interleave(
+                self.num_key_value_groups, dim=1
+            )
 
         # Compute attention scores
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
+        attn_weights = torch.matmul(
+            query_states, key_states.transpose(2, 3)
+        ) / math.sqrt(self.head_dim)
 
         # Apply causal mask if needed
         if self.is_causal and attention_mask is None and q_len > 1:
-            causal_mask = torch.ones((q_len, kv_seq_len), device=query_states.device, dtype=torch.bool).triu(1)
-            attn_weights = attn_weights.masked_fill(causal_mask.unsqueeze(0).unsqueeze(0), torch.finfo(attn_weights.dtype).min)
+            causal_mask = torch.ones(
+                (q_len, kv_seq_len), device=query_states.device, dtype=torch.bool
+            ).triu(1)
+            attn_weights = attn_weights.masked_fill(
+                causal_mask.unsqueeze(0).unsqueeze(0),
+                torch.finfo(attn_weights.dtype).min,
+            )
 
         # Apply attention mask if provided
         if attention_mask is not None:
             attn_weights = attn_weights + attention_mask
 
         # Normalize attention weights
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights = nn.functional.softmax(
+            attn_weights, dim=-1, dtype=torch.float32
+        ).to(query_states.dtype)
 
         # Apply dropout if training
         if self.dropout > 0 and self.training:
@@ -427,8 +509,12 @@ class QuasarV4DecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size
         self.self_attn = QuasarV4Attention(config=config)
         self.mlp = QuasarV4MLP(config)
-        self.input_layernorm = QuasarV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = QuasarV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = QuasarV4RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
+        self.post_attention_layernorm = QuasarV4RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
         self.use_sliding_window = config.use_sliding_window
         self.sliding_window = config.sliding_window
 
@@ -440,7 +526,9 @@ class QuasarV4DecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> Tuple[
+        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
+    ]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -493,7 +581,9 @@ class QuasarV4PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["QuasarV4DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
-    _keys_to_ignore_on_load_unexpected = [r"decoder\.layers\.\d+\.self_attn\.rotary_emb\.inv_freq"]
+    _keys_to_ignore_on_load_unexpected = [
+        r"decoder\.layers\.\d+\.self_attn\.rotary_emb\.inv_freq"
+    ]
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -604,8 +694,12 @@ class QuasarV4Model(QuasarV4PreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([QuasarV4DecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.embed_tokens = nn.Embedding(
+            config.vocab_size, config.hidden_size, self.padding_idx
+        )
+        self.layers = nn.ModuleList(
+            [QuasarV4DecoderLayer(config) for _ in range(config.num_hidden_layers)]
+        )
         self.norm = QuasarV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         # Token temperature mechanism
@@ -614,7 +708,9 @@ class QuasarV4Model(QuasarV4PreTrainedModel):
         self.output_adaptation = QuasarV4OutputAdaptation(config)
 
         # Additional parameters for enhanced capabilities
-        self.layer_temperatures = nn.Parameter(torch.ones(config.num_hidden_layers) * 0.1)
+        self.layer_temperatures = nn.Parameter(
+            torch.ones(config.num_hidden_layers) * 0.1
+        )
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -627,22 +723,28 @@ class QuasarV4Model(QuasarV4PreTrainedModel):
         self.embed_tokens = value
 
     # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
-    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
+    def _prepare_decoder_attention_mask(
+        self, attention_mask, input_shape, inputs_embeds, past_key_values_length
+    ):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
         if input_shape[-1] > 1:
             combined_attention_mask = _make_causal_mask(
-                input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
+                input_shape,
+                inputs_embeds.dtype,
+                past_key_values_length=past_key_values_length,
             ).to(inputs_embeds.device)
 
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
-                inputs_embeds.device
-            )
+            expanded_attn_mask = _expand_mask(
+                attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+            ).to(inputs_embeds.device)
             combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
+                expanded_attn_mask
+                if combined_attention_mask is None
+                else expanded_attn_mask + combined_attention_mask
             )
 
         return combined_attention_mask
@@ -672,17 +774,27 @@ class QuasarV4Model(QuasarV4PreTrainedModel):
             output_hidden_states (`bool`, *optional*): Whether to return hidden states.
             return_dict (`bool`, *optional*): Whether to return a ModelOutput object.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             batch_size, seq_length = input_ids.shape
         elif inputs_embeds is not None:
@@ -700,7 +812,10 @@ class QuasarV4Model(QuasarV4PreTrainedModel):
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
             position_ids = torch.arange(
-                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
+                past_key_values_length,
+                seq_length + past_key_values_length,
+                dtype=torch.long,
+                device=device,
             )
             position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
         else:
@@ -718,10 +833,15 @@ class QuasarV4Model(QuasarV4PreTrainedModel):
         # embed positions
         if attention_mask is None:
             attention_mask = torch.ones(
-                (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
+                (batch_size, seq_length_with_past),
+                dtype=torch.bool,
+                device=inputs_embeds.device,
             )
         attention_mask = self._prepare_decoder_attention_mask(
-            attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+            attention_mask,
+            (batch_size, seq_length),
+            inputs_embeds,
+            past_key_values_length,
         )
 
         hidden_states = inputs_embeds
@@ -742,7 +862,9 @@ class QuasarV4Model(QuasarV4PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            past_key_value = past_key_values[idx] if past_key_values is not None else None
+            past_key_value = (
+                past_key_values[idx] if past_key_values is not None else None
+            )
 
             # Apply layer-specific temperature scaling
             layer_temp_scale = torch.sigmoid(self.layer_temperatures[idx])
@@ -793,7 +915,11 @@ class QuasarV4Model(QuasarV4PreTrainedModel):
 
         next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns]
+                if v is not None
+            )
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
@@ -831,7 +957,9 @@ class QuasarV4ForCausalLM(QuasarV4PreTrainedModel, GenerationMixin):
         self.lm_head = new_embeddings
 
     @add_start_docstrings_to_model_forward(QUASARV4_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -877,11 +1005,19 @@ class QuasarV4ForCausalLM(QuasarV4PreTrainedModel, GenerationMixin):
             "Hey, are you conscious? Can you talk to me? Yes, I am conscious and I can talk to you. How can I help you today?"
             ```
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
@@ -925,7 +1061,12 @@ class QuasarV4ForCausalLM(QuasarV4PreTrainedModel, GenerationMixin):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        **kwargs,
     ):
         if past_key_values:
             input_ids = input_ids[:, -1:]
@@ -959,6 +1100,9 @@ class QuasarV4ForCausalLM(QuasarV4PreTrainedModel, GenerationMixin):
         reordered_past = ()
         for layer_past in past_key_values:
             reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+                tuple(
+                    past_state.index_select(0, beam_idx.to(past_state.device))
+                    for past_state in layer_past
+                ),
             )
         return reordered_past

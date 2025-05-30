@@ -119,6 +119,7 @@ class QuasarV4Config(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "quasarv4"
 
     def __init__(
@@ -149,20 +150,14 @@ class QuasarV4Config(PretrainedConfig):
             "temperature_dim": None,  # Will be set to hidden_size // 4 if None
             "num_temperature_layers": 4,
             "position_dependent_scaling": True,
-            "context_aware_scaling": True
+            "context_aware_scaling": True,
         },
-        output_adaptation={
-            "enabled": True,
-            "adaptation_factor": 0.1
-        },
-        dense_residual_connections={
-            "enabled": True,
-            "connection_factor": 0.05
-        },
+        output_adaptation={"enabled": True, "adaptation_factor": 0.1},
+        dense_residual_connections={"enabled": True, "connection_factor": 0.05},
         temperature_aggregation={
             "enabled": True,
             "aggregation_layers": 5,
-            "global_scaling_factor": 0.05
+            "global_scaling_factor": 0.05,
         },
         **kwargs,
     ):
