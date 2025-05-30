@@ -219,33 +219,6 @@ class Glm4vTextConfig(Qwen2_5_VLTextConfig):
 
     model_type = "glm4v_text"
 
-    def __init__(
-        self,
-        vocab_size=151552,
-        hidden_size=4096,
-        intermediate_size=13696,
-        num_hidden_layers=40,
-        num_attention_heads=32,
-        num_key_value_heads=2,
-        hidden_act="silu",
-        max_position_embeddings=32768,
-        initializer_range=0.02,
-        rms_norm_eps=1e-05,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        use_sliding_window=False,
-        sliding_window=4096,
-        max_window_layers=40,
-        attention_dropout=0.0,
-        rope_scaling=None,
-        image_token_id=None,
-        video_token_id=None,
-        **kwargs,
-    ):
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
-
-
 class Glm4vConfig(Qwen2_5_VLConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a

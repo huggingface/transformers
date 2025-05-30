@@ -24,7 +24,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 
 
@@ -176,29 +176,29 @@ class Glm4vTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=151552,
-        hidden_size=4096,
-        intermediate_size=13696,
-        num_hidden_layers=40,
-        num_attention_heads=32,
-        num_key_value_heads=2,
+        vocab_size=152064,
+        hidden_size=8192,
+        intermediate_size=29568,
+        num_hidden_layers=80,
+        num_attention_heads=64,
+        num_key_value_heads=8,
         hidden_act="silu",
         max_position_embeddings=32768,
         initializer_range=0.02,
         rms_norm_eps=1e-05,
         use_cache=True,
         tie_word_embeddings=False,
-        rope_theta=10000.0,
+        rope_theta=1000000.0,
         use_sliding_window=False,
         sliding_window=4096,
-        max_window_layers=40,
+        max_window_layers=80,
+        layer_types=None,
         attention_dropout=0.0,
         rope_scaling=None,
         image_token_id=None,
         video_token_id=None,
         **kwargs,
     ):
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -206,7 +206,7 @@ class Glm4vTextConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window
+        self.sliding_window = sliding_window if self.use_sliding_window else None
         self.max_window_layers = max_window_layers
 
         # for backward compatibility
@@ -222,6 +222,16 @@ class Glm4vTextConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.rope_scaling = rope_scaling
 
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention"
+                if self.sliding_window is not None and i >= self.max_window_layers
+                else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types)
+
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, move it to 'rope_type'.
         # and change type from 'mrope' to 'default' because `mrope` does default RoPE calculations
@@ -234,6 +244,8 @@ class Glm4vTextConfig(PretrainedConfig):
         rope_config_validation(self, ignore_keys={"mrope_section"})
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
+
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
 class Glm4vConfig(PretrainedConfig):

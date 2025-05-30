@@ -72,7 +72,6 @@ class Glm4vProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer", "video_processor"]
-    valid_kwargs = ["chat_template"]
 
     image_processor_class = "AutoImageProcessor"
     video_processor_class = "AutoVideoProcessor"
