@@ -290,7 +290,10 @@ class WhisperOnnxConfig(OnnxSeq2SeqConfigWithPast):
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         common_inputs = OrderedDict(
             [
-                ("input_features", {0: "batch", 1: "feature_size", 2: "encoder_sequence"}),
+                (
+                    "input_features",
+                    {0: "batch", 1: "feature_size", 2: "encoder_sequence"},
+                ),
             ]
         )
         if self.use_past:
