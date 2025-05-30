@@ -994,7 +994,7 @@ class RemBertForCausalLM(RemBertPreTrainedModel, GenerationMixin):
         prediction_scores = self.cls(sequence_output)
 
         lm_loss = None
-        if labels is not None:
+        if labels is not None or kwargs.get("shift_labels", None) is not None:
             lm_loss = self.loss_function(
                 prediction_scores,
                 labels,

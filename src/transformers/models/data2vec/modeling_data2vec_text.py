@@ -848,7 +848,7 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
         prediction_scores = self.lm_head(sequence_output)
 
         lm_loss = None
-        if labels is not None:
+        if labels is not None or kwargs.get("shift_labels", None) is not None:
             lm_loss = self.loss_function(
                 prediction_scores,
                 labels,
