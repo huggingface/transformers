@@ -402,6 +402,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         eager_generated_text = tokenizer.decode(eager_outputs[0], skip_special_tokens=True)
         self.assertEqual(export_generated_text, eager_generated_text)
 
+    @require_torch_large_accelerator
     @require_read_token
     def test_model_9b_bf16_flex_attention(self):
         model_id = "google/gemma-2-9b"
