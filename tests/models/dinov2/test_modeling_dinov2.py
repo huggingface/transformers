@@ -344,7 +344,6 @@ class Dinov2BackboneTest(unittest.TestCase, BackboneTesterMixin):
     def setUp(self):
         self.model_tester = Dinov2ModelTester(self)
 
-from transformers.testing_utils import require_torch_multi_gpu
 
 # @require_torch_multi_gpu
 @slow
