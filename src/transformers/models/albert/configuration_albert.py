@@ -16,12 +16,18 @@
 """ALBERT model configuration"""
 
 from collections import OrderedDict
-from typing import Mapping
+from dataclasses import dataclass
+from typing import Literal, Mapping, Optional, Union
+
+from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
+from ...validators import activation_fn_key, interval, probability
 
 
+@strict(accept_kwargs=True)
+@dataclass
 class AlbertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AlbertModel`] or a [`TFAlbertModel`]. It is used
@@ -53,9 +59,9 @@ class AlbertConfig(PretrainedConfig):
         hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu_new"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0):
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0):
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
@@ -103,51 +109,37 @@ class AlbertConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
+    vocab_size: int = interval(min=1)(default=30000)
+    embedding_size: int = interval(min=1)(default=128)
+    hidden_size: int = interval(min=1)(default=4096)
+    num_hidden_layers: int = interval(min=1)(default=12)
+    num_hidden_groups: int = interval(min=1)(default=1)
+    num_attention_heads: int = interval(min=0)(default=64)
+    intermediate_size: int = interval(min=1)(default=16384)
+    inner_group_num: int = interval(min=0)(default=1)
+    hidden_act: str = activation_fn_key(default="gelu_new")
+    hidden_dropout_prob: Union[float, int] = probability(default=0.0)
+    attention_probs_dropout_prob: Union[float, int] = probability(default=0.0)
+    max_position_embeddings: int = interval(min=0)(default=512)
+    type_vocab_size: int = interval(min=1)(default=2)
+    initializer_range: float = interval(min=0.0)(default=0.02)
+    layer_norm_eps: float = interval(min=0.0)(default=1e-12)
+    classifier_dropout_prob: float = probability(default=0.1)
+    position_embedding_type: Literal["absolute", "relative_key", "relative_key_query"] = "absolute"
+    pad_token_id: Optional[int] = 0
+    bos_token_id: Optional[int] = 2
+    eos_token_id: Optional[int] = 3
+
+    # Not part of __init__
     model_type = "albert"
 
-    def __init__(
-        self,
-        vocab_size=30000,
-        embedding_size=128,
-        hidden_size=4096,
-        num_hidden_layers=12,
-        num_hidden_groups=1,
-        num_attention_heads=64,
-        intermediate_size=16384,
-        inner_group_num=1,
-        hidden_act="gelu_new",
-        hidden_dropout_prob=0,
-        attention_probs_dropout_prob=0,
-        max_position_embeddings=512,
-        type_vocab_size=2,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        classifier_dropout_prob=0.1,
-        position_embedding_type="absolute",
-        pad_token_id=0,
-        bos_token_id=2,
-        eos_token_id=3,
-        **kwargs,
-    ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
-
-        self.vocab_size = vocab_size
-        self.embedding_size = embedding_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_hidden_groups = num_hidden_groups
-        self.num_attention_heads = num_attention_heads
-        self.inner_group_num = inner_group_num
-        self.hidden_act = hidden_act
-        self.intermediate_size = intermediate_size
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.classifier_dropout_prob = classifier_dropout_prob
-        self.position_embedding_type = position_embedding_type
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({self.num_attention_heads})."
+            )
 
 
 # Copied from transformers.models.bert.configuration_bert.BertOnnxConfig with Roberta->Albert

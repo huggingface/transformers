@@ -208,7 +208,19 @@ class PretrainedConfig(PushToHubMixin):
             key = super().__getattribute__("attribute_map")[key]
         return super().__getattribute__(key)
 
+    def __post_init__(self):
+        self._set_defaults()
+
     def __init__(self, **kwargs):
+        self._set_defaults(**kwargs)
+
+    def _set_defaults(self, **kwargs):
+        def _get_default_if_unset(attribute_name, default_value):
+            set_attribute = getattr(self, attribute_name, None)
+            if set_attribute is not None:
+                return set_attribute
+            return kwargs.pop(attribute_name, default_value)
+
         # Attributes with defaults
         self.return_dict = kwargs.pop("return_dict", True)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
@@ -267,12 +279,11 @@ class PretrainedConfig(PushToHubMixin):
         # Tokenizer arguments TODO: eventually tokenizer and models should share the same config
         self.tokenizer_class = kwargs.pop("tokenizer_class", None)
         self.prefix = kwargs.pop("prefix", None)
-        self.bos_token_id = kwargs.pop("bos_token_id", None)
-        self.pad_token_id = kwargs.pop("pad_token_id", None)
-        self.eos_token_id = kwargs.pop("eos_token_id", None)
-        self.sep_token_id = kwargs.pop("sep_token_id", None)
-
-        self.decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
+        self.bos_token_id = _get_default_if_unset("bos_token_id", None)
+        self.pad_token_id = _get_default_if_unset("pad_token_id", None)
+        self.eos_token_id = _get_default_if_unset("eos_token_id", None)
+        self.sep_token_id = _get_default_if_unset("sep_token_id", None)
+        self.decoder_start_token_id = _get_default_if_unset("decoder_start_token_id", None)
 
         # task specific arguments
         self.task_specific_params = kwargs.pop("task_specific_params", None)
@@ -382,6 +393,29 @@ class PretrainedConfig(PushToHubMixin):
     def _attn_implementation(self, value):
         self._attn_implementation_internal = value
 
+    @property
+    def attn_implementation(self):
+        return self._attn_implementation
+
+    @attn_implementation.setter
+    def attn_implementation(self, value):
+        self._attn_implementation = value
+
+    def validate_token_ids(self):
+        """Part of `@strict`-powered validation. Validates the contents of the special tokens."""
+        text_config = self.get_text_config()
+        vocab_size = getattr(text_config, "vocab_size", None)
+        if vocab_size is not None:
+            for token_name in ["pad_token_id", "bos_token_id", "eos_token_id"]:
+                token_id = getattr(text_config, token_name, None)
+                if token_id is not None and not 0 <= token_id < vocab_size:
+                    # Can't be an exception until we can load configs that fail validation: several configs on the Hub
+                    # store invalid special tokens, e.g. `pad_token_id=-1`
+                    logger.warning_once(
+                        f"Model config: {token_name} must be `None` or an integer within the vocabulary (between 0 "
+                        f"and {vocab_size - 1}), got {token_id}. This may result in unexpected behavior."
+                    )
+
     def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
         """
         Save a configuration object to the directory `save_directory`, so that it can be re-loaded using the
@@ -413,6 +447,10 @@ class PretrainedConfig(PushToHubMixin):
                 f"\nNon-default generation parameters: {str(non_default_generation_parameters)}",
                 UserWarning,
             )
+
+        # Strict validation at save-time: prevent bad patterns from propagating
+        if hasattr(self, "validate"):
+            self.validate()
 
         os.makedirs(save_directory, exist_ok=True)
 
