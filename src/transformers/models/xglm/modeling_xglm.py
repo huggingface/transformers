@@ -705,7 +705,7 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
         logits = self.lm_head(outputs[0])
 
         loss = None
-        if labels is not None:
+        if labels is not None or kwargs.get("shift_labels", None) is not None:
             loss = self.loss_function(
                 logits,
                 labels,
