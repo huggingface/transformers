@@ -880,9 +880,11 @@ class Bert2DModel(Bert2DPreTrainedModel):
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
         word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)` or `(batch_size, num_choices, sequence_length)` for multiple choice, *optional*):
-            Word IDs for each token in the input sequence.
+            Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
+            which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
         subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)` or `(batch_size, num_choices, sequence_length)` for multiple choice, *optional*):
-            Subword IDs for each token in the input sequence.
+            Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
+            within its parent word. Together with `word_ids`, they create a 2D positional ID system.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1014,6 +1016,19 @@ class Bert2DForPreTraining(Bert2DPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], Bert2DForPreTrainingOutput]:
+        r"""
+        word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
+            which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
+        subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
+            within its parent word. Together with `word_ids`, they create a 2D positional ID system.
+        next_sentence_label (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair (see `input_ids` docstring)
+            Indices should be in `[0, 1]`:
+            - 0 indicates sequence B is not the continuation of sequence A,
+            - 1 indicates sequence B is the continuation of sequence A.
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         outputs = self.bert2d(
             input_ids,
@@ -1089,6 +1104,14 @@ class Bert2DLMHeadModel(Bert2DPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
+        r"""
+        word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
+            which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
+        subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
+            within its parent word. Together with `word_ids`, they create a 2D positional ID system.
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
             use_cache = False
@@ -1183,6 +1206,14 @@ class Bert2DForMaskedLM(Bert2DPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
+        r"""
+        word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
+            which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
+        subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
+            within its parent word. Together with `word_ids`, they create a 2D positional ID system.
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         outputs = self.bert2d(
             input_ids,
@@ -1259,6 +1290,14 @@ class Bert2DForNextSentencePrediction(Bert2DPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple[torch.Tensor], NextSentencePredictorOutput]:
+        r"""
+        word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
+            which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
+        subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
+            within its parent word. Together with `word_ids`, they create a 2D positional ID system.
+        """
         if "next_sentence_label" in kwargs:
             warnings.warn(
                 "The `next_sentence_label` argument is deprecated and will be removed in a future version, use"
@@ -1330,6 +1369,14 @@ class Bert2DForSequenceClassification(Bert2DPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
+        r"""
+        word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
+            which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
+        subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
+            within its parent word. Together with `word_ids`, they create a 2D positional ID system.
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         outputs = self.bert2d(
             input_ids,
@@ -1410,6 +1457,14 @@ class Bert2DForMultipleChoice(Bert2DPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], MultipleChoiceModelOutput]:
+        r"""
+        word_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
+            which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
+        subword_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
+            Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
+            within its parent word. Together with `word_ids`, they create a 2D positional ID system.
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
@@ -1487,6 +1542,14 @@ class Bert2DForTokenClassification(Bert2DPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
+        r"""
+        word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
+            which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
+        subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
+            within its parent word. Together with `word_ids`, they create a 2D positional ID system.
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         outputs = self.bert2d(
             input_ids,
@@ -1548,6 +1611,14 @@ class Bert2DForQuestionAnswering(Bert2DPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], QuestionAnsweringModelOutput]:
+        r"""
+        word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
+            which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
+        subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
+            within its parent word. Together with `word_ids`, they create a 2D positional ID system.
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         outputs = self.bert2d(
             input_ids,
