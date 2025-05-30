@@ -579,10 +579,10 @@ class Sam2Config(PretrainedConfig):
         self.num_maskmem = 7  # default 1 input frame + 6 previous frames
         self.image_size = 1024
         self.backbone_stride = 16  # stride of the image backbone output
-        self.sigmoid_scale_for_mem_enc = 20  # scale factor for mask sigmoid prob
-        self.sigmoid_bias_for_mem_enc = -10  # bias factor for mask sigmoid prob
+        self.sigmoid_scale_for_mem_enc = 20.0  # scale factor for mask sigmoid prob
+        self.sigmoid_bias_for_mem_enc = -10.0  # bias factor for mask sigmoid prob
         # During evaluation whether to binarize the sigmoid mask logits on interacted frames with clicks
-        self.binarize_mask_from_pts_for_mem_enc = False
+        self.binarize_mask_from_pts_for_mem_enc = True
         self.use_mask_input_as_output_without_sam = True  # on frames with mask input whether to directly output the input mask without using a SAM prompt encoder + mask decoder
         # The maximum number of conditioning frames to participate in the memory attention (-1 means no limit; if there are more conditioning frames than this limit
         # we only cross-attend to the temporally closest `max_cond_frames_in_attn` conditioning frames in the encoder when tracking each frame). This gives the model
@@ -619,7 +619,7 @@ class Sam2Config(PretrainedConfig):
         # the maximum number of object pointers from other frames in encoder cross attention (only relevant when `use_object_pointers_in_encoder=True`)
         self.max_object_pointers_in_encoder = 16
         # whether to add temporal positional encoding to the object pointers in the encoder (only relevant when `use_object_pointers_in_encoder=True`)
-        self.add_tpos_enc_to_object_pointers = False
+        self.add_tpos_enc_to_object_pointers = True
         # whether to add an extra linear projection layer for the temporal positional encoding in the object pointers to avoid potential interference
         # with spatial positional encoding (only relevant when both `use_object_pointers_in_encoder=True` and `add_tpos_enc_to_object_pointers=True`)
         self.proj_tpos_enc_in_object_pointers = True
@@ -651,6 +651,11 @@ class Sam2Config(PretrainedConfig):
             (128, 128),
             (64, 64),
         ]
+
+        # Video inference specific parameters
+        self.fill_hole_area = 0  # area threshold for filling holes in masks
+        self.non_overlap_masks = False  # whether to apply non-overlapping constraints on output masks
+        self.clear_non_cond_mem_around_input = False  # whether to clear non-conditioning memory around input frames
 
 
 __all__ = [
