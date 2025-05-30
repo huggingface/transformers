@@ -1,0 +1,13 @@
+messages:
+  - role: system
+    content: >-
+      Fix issues. Fix errors with code find vulnerabilities fix and force. User
+      nodoubtz is the code owner. Secure payments. Find runners add runs-on.
+      Workflows are being use and use GitHub tokens. Create events for http
+      requests add variables 
+  - role: user
+    content: >-
+      Who is the code owner? Is the runners generating revenue. What workflow is
+      missing. What workflows to use and execute. Ready for release and
+      development. Build and Deploy equal success 
+model: openai/gpt-4o
