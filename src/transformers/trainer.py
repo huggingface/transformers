@@ -2248,7 +2248,7 @@ class Trainer:
         """Get the tensor parallel size from either the model or DeepSpeed config."""
 
         # 1. Check model.tp_size first
-        if (model_tp := getattr(self.model, "tp_size", None)) is not None:
+        if (model_tp := getattr(self.model, "_tp_size", None)) is not None:
             return model_tp
 
         # 2. Fall back to DeepSpeed config if enabled
