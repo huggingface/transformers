@@ -56,7 +56,7 @@ class AlbertModelTester:
         hidden_size=12,
         num_hidden_layers=2,
         # this needs to be the same as `num_hidden_layers`!
-        num_hidden_groups=2, 
+        num_hidden_groups=2,
         num_attention_heads=4,
         intermediate_size=16,
         hidden_act="gelu",
@@ -281,15 +281,17 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
-        
+
     def test_save_load(self):
         # Override to use pytorch save only
-        import tempfile
         import os
-        import torch
+        import tempfile
+
         import numpy as np
+        import torch
+
         from transformers.configuration_utils import CONFIG_NAME
-        
+
         def check_save_load(out1, out2):
             # make sure we don't have nans
             out_2 = out2.cpu().numpy()
@@ -336,11 +338,11 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-        
+
     def test_save_load_low_cpu_mem_usage(self):
         # Skip this test to avoid SafeTensors issues
         self.skipTest("Skipping test_save_load_low_cpu_mem_usage to avoid SafeTensors errors")
-        
+
     def test_save_load_low_cpu_mem_usage_checkpoints(self):
         # Skip this test to avoid SafeTensors issues
         self.skipTest("Skipping test_save_load_low_cpu_mem_usage_checkpoints to avoid SafeTensors errors")
