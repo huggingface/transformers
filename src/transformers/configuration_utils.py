@@ -393,6 +393,14 @@ class PretrainedConfig(PushToHubMixin):
     def _attn_implementation(self, value):
         self._attn_implementation_internal = value
 
+    @property
+    def attn_implementation(self):
+        return self._attn_implementation
+
+    @attn_implementation.setter
+    def attn_implementation(self, value):
+        self._attn_implementation = value
+
     def validate_token_ids(self):
         """Part of `@strict`-powered validation. Validates the contents of the special tokens."""
         text_config = self.get_text_config()

@@ -58,7 +58,9 @@ class ConfigTester:
             try:
                 setattr(config, name, dummy_value)
                 self.parent.assertEqual(
-                    getattr(config, name), dummy_value, msg=f"`{name} value {dummy_value} expected, but was {getattr(config, name)}"
+                    getattr(config, name),
+                    dummy_value,
+                    msg=f"`{name} value {dummy_value} expected, but was {getattr(config, name)}",
                 )
             except NotImplementedError:
                 # Some models might not be able to implement setters for common_properties
@@ -70,7 +72,9 @@ class ConfigTester:
             try:
                 config = self.config_class(**{name: dummy_value})
                 self.parent.assertEqual(
-                    getattr(config, name), dummy_value, msg=f"`{name} value {dummy_value} expected, but was {getattr(config, name)}"
+                    getattr(config, name),
+                    dummy_value,
+                    msg=f"`{name} value {dummy_value} expected, but was {getattr(config, name)}",
                 )
             except NotImplementedError:
                 # Some models might not be able to implement setters for common_properties
