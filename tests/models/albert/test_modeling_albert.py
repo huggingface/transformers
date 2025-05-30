@@ -282,69 +282,14 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_save_load(self):
-        # Override to use pytorch save only
-        import os
-        import tempfile
-
-        import numpy as np
-        import torch
-
-        from transformers.configuration_utils import CONFIG_NAME
-
-        def check_save_load(out1, out2):
-            # make sure we don't have nans
-            out_2 = out2.cpu().numpy()
-            out_2[np.isnan(out_2)] = 0
-            out_2 = out_2[~np.isneginf(out_2)]
-
-            out_1 = out1.cpu().numpy()
-            out_1[np.isnan(out_1)] = 0
-            out_1 = out_1[~np.isneginf(out_1)]
-            max_diff = np.amax(np.abs(out_1 - out_2))
-            self.assertLessEqual(max_diff, 1e-5)
-
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                # Save without safetensors
-                model.save_pretrained(tmpdirname, safe_serialization=False)
-
-                # the config file should be saved
-                self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
-
-                model = model_class.from_pretrained(tmpdirname)
-                model.to(torch_device)
-                with torch.no_grad():
-                    second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
-
-                # Save and load second time because `from_pretrained` adds a bunch of new config fields
-                # so we need to make sure those fields can be loaded back after saving
-                model.save_pretrained(tmpdirname, safe_serialization=False)
-                model = model_class.from_pretrained(tmpdirname)
-
-            if isinstance(first, tuple) and isinstance(second, tuple):
-                for tensor1, tensor2 in zip(first, second):
-                    check_save_load(tensor1, tensor2)
-            else:
-                check_save_load(first, second)
-
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_save_load_low_cpu_mem_usage(self):
-        # Skip this test to avoid SafeTensors issues
         self.skipTest("Skipping test_save_load_low_cpu_mem_usage to avoid SafeTensors errors")
 
     def test_save_load_low_cpu_mem_usage_checkpoints(self):
-        # Skip this test to avoid SafeTensors issues
         self.skipTest("Skipping test_save_load_low_cpu_mem_usage_checkpoints to avoid SafeTensors errors")
 
     def test_for_pretraining(self):
