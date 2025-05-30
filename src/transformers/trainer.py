@@ -2244,13 +2244,26 @@ class Trainer:
                 ignore_keys_for_eval=ignore_keys_for_eval,
             )
 
-    def get_total_train_batch_size(self, args):
-        tp_size = 1
-        if self.is_deepspeed_enabled and getattr(self.args, "hf_deepspeed_config", None):
-            tp_size = self.args.hf_deepspeed_config.config.get("tensor_parallel", {}).get("autotp_size", 1)
+    def get_tp_size(self) -> int:
+        """Get the tensor parallel size from either the model or DeepSpeed config."""
 
-        total_train_batch_size = self._train_batch_size * args.gradient_accumulation_steps * args.world_size // tp_size
-        return total_train_batch_size
+        # 1. Check model.tp_size first
+        if (model_tp := getattr(self.model, "tp_size", None)) is not None:
+            return model_tp
+
+        # 2. Fall back to DeepSpeed config if enabled
+        if self.is_deepspeed_enabled and (deepspeed_config := getattr(self.args, "hf_deepspeed_config", None)):
+            return deepspeed_config.config.get("tensor_parallel", {}).get("autotp_size", 1)
+
+        # 3. Default fallback
+        return 1
+
+    def get_total_train_batch_size(self, args) -> int:
+        """Calculates total batch size (micro_batch * grad_accum * dp_world_size).
+
+        Note: Only considers DP and TP (dp_world_size = world_size // tp_size)."""
+        dp_world_size = args.world_size // self.get_tp_size()
+        return self._train_batch_size * args.gradient_accumulation_steps * dp_world_size
 
     def _inner_training_loop(
         self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
