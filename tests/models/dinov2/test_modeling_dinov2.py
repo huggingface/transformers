@@ -343,3 +343,18 @@ class Dinov2BackboneTest(unittest.TestCase, BackboneTesterMixin):
 
     def setUp(self):
         self.model_tester = Dinov2ModelTester(self)
+
+from transformers.testing_utils import require_torch_multi_gpu
+
+# @require_torch_multi_gpu
+@slow
+class Dinov2ModelDeviceMapTest(unittest.TestCase):
+    def test_model_parallelism(self):
+        model = Dinov2Model.from_pretrained("facebook/dinov2-base", device_map="auto")
+        self.assertTrue(hasattr(model, "hf_device_map"), "Model missing device map")
+        self.assertIsInstance(model.hf_device_map, dict, "Device map is not a dictionary")
+
+        # Optional forward pass (can be removed if CI times out)
+        pixel_values = torch.randn(1, 3, 224, 224).to(model.device)
+        outputs = model(pixel_values=pixel_values)
+        self.assertIsNotNone(outputs.last_hidden_state)
