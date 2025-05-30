@@ -78,8 +78,7 @@ class OpenaiExperts(nn.Module):
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_size, 2 * self.expert_dim))
         self.gate_up_proj_bias = nn.Parameter(torch.empty(self.num_experts, 2 * self.expert_dim))
         self.down_proj = nn.Parameter(torch.empty((self.num_experts, self.expert_dim, self.hidden_size)))
-        self.down_proj_bias = nn.Parameter(torch.empty(self.num_experts, self.expert_dim))
-        self.act_fn = torch.nn.Sigmoid()
+        self.down_proj_bias = nn.Parameter(torch.empty(self.num_experts, self.hidden_size))
         self.alpha =  1.702
 
     def forward(self, hidden_states: torch.Tensor, router_indices = None, routing_weights=None) -> torch.Tensor:
@@ -110,7 +109,7 @@ class OpenaiExperts(nn.Module):
             current_state = hidden_states[top_x]  # (num_tokens, hidden_dim)
             gate_up = current_state @ self.gate_up_proj[expert_idx] + self.gate_up_proj_bias[expert_idx]  # (num_tokens, 2 * interm_dim)
             gate, up = gate_up.chunk(2, dim=-1)  # (num_tokens, interm_dim)
-            glu = gate * self.act_fn(gate * self.alpha)  # (num_tokens, interm_dim)
+            glu = gate * torch.sigmoid(gate * self.alpha)  # (num_tokens, interm_dim)
             gated_output = (up + 1) * glu  # (num_tokens, interm_dim)
             out = gated_output @ self.down_proj[expert_idx] + self.down_proj_bias[expert_idx]  # (num_tokens, hidden_dim)
             weighted_output = out * routing_weights[top_x, idx].unsqueeze(-1)  # (num_tokens, hidden_dim)
