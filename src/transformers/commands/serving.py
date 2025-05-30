@@ -48,35 +48,11 @@ class Message(BaseModel):
     content: str
 
 
-# class ChatCompletionInput(BaseModel):
-#     messages: List[Message]
-#     stream: Literal[False] = False,
-#     frequency_penalty: Optional[float] = None,
-#     logit_bias: Optional[List[float]] = None,
-#     logprobs: Optional[bool] = None,
-#     max_tokens: Optional[int] = None,
-#     n: Optional[int] = None,
-#     presence_penalty: Optional[float] = None,
-#     response_format: Optional[ChatCompletionInputGrammarType] = None,
-#     seed: Optional[int] = None,
-#     stop: Optional[List[str]] = None,
-#     stream_options: Optional[ChatCompletionInputStreamOptions] = None,
-#     temperature: Optional[float] = None,
-#     tool_choice: Optional[Union[ChatCompletionInputToolChoiceClass]] = None,
-#     tool_prompt: Optional[str] = None,
-#     tools: Optional[List[ChatCompletionInputTool]] = None,
-#     top_logprobs: Optional[int] = None,
-#     top_p: Optional[float] = None,
-#
-#     extra_body: Optional[Dict] = None,
-#     request_id: Optional[str] = None
-
-
 class ChatCompletionInput(BaseModel):
     messages: list[Message]
     stream: Optional[bool] = False
     model: Optional[str] = None
-    max_tokens: Optional[int] = None
+    generation_config: Optional[dict] = None
     request_id: Optional[str] = None
     extra_body: Optional[Dict] = None
 
@@ -195,31 +171,12 @@ class ServeCommand(BaseTransformersCLICommand):
     def run(self):
         app = FastAPI()
 
-
         if self.use_continuous_batching:
             self.continuous_batching(app)
         else:
             self.generate(app)
 
         uvicorn.run(app, host=self.args.host, port=self.args.port, log_level=self.args.log_level)
-
-    @staticmethod
-    def get_generation_parameters(req: ChatCompletionInput):
-        return req.extra_body or {}
-        # return {
-        #     "frequency_penalty": req.frequency_penalty,
-        #     "logit_bias": req.logit_bias,
-        #     "logprobs": req.logprobs,
-        #     "max_tokens": req.max_tokens,
-        #     "n": req.n,
-        #     "presence_penalty": req.presence_penalty,
-        #     "response_format": req.response_format,
-        #     "stop": req.stop,
-        #     "temperature": req.temperature,
-        #     "top_logprobs": req.top_logprobs,
-        #     "top_p": req.top_p,
-        #     **(req.extra_body or {}),
-        # }
 
     def continuous_batching(self, app):
         generation_config = GenerationConfig(
@@ -248,6 +205,8 @@ class ServeCommand(BaseTransformersCLICommand):
             inputs = self.tokenizer.apply_chat_template(chat, return_tensors="pt", add_generation_prompt=True).to(
                 self.model.device
             )
+
+            generation_config = GenerationConfig(**req.generation_config)
 
             def stream_response(_inputs):
                 max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 256
@@ -285,7 +244,7 @@ class ServeCommand(BaseTransformersCLICommand):
 
             attention_mask = torch.ones_like(inputs)
             generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
-            generation_config = GenerationConfig(max_new_tokens=256, **self.get_generation_parameters(req))
+            generation_config = GenerationConfig(**req.generation_config)
 
             generation_kwargs = {
                 "inputs": inputs,
