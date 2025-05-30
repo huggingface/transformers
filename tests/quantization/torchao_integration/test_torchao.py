@@ -43,10 +43,10 @@ if is_torchao_available():
         TensorCoreTiledLayout,
     )
     from torchao.quantization import (
-        AOPerModuleConfig,
         Int8WeightOnlyConfig,
         IntxWeightOnlyConfig,
         MappingType,
+        ModuleFqnToConfig,
         PerAxis,
     )
     from torchao.quantization.autoquant import AQMixin
@@ -226,7 +226,7 @@ class TorchAoTest(unittest.TestCase):
             granularity=granularity,
             mapping_type=mapping_type,
         )
-        config = AOPerModuleConfig(
+        config = ModuleFqnToConfig(
             {"_default": None, "model.embed_tokens": embedding_config, "lm_head": embedding_config}
         )
         # need set `include_input_output_embeddings` to True
@@ -253,7 +253,7 @@ class TorchAoTest(unittest.TestCase):
     @require_torchao_version_greater_or_equal("0.11.0")
     def test_per_module_config_skip(self):
         linear_config = Int8WeightOnlyConfig()
-        config = AOPerModuleConfig({"_default": linear_config, "model.layers.0.self_attn.q_proj": None})
+        config = ModuleFqnToConfig({"_default": linear_config, "model.layers.0.self_attn.q_proj": None})
         quant_config = TorchAoConfig(quant_type=config)
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
