@@ -1205,7 +1205,8 @@ class GenerationTesterMixin:
                     "blip2",  # overridden `generate()`
                     "instructblip",
                     "instructblipvideo",
-                    "llava",  # shouldn't suggest image tokens. Can be fixed by passing `suppress_ids` to candidate generator: @joaa @raushan
+                    # All models below: shouldn't suggest image tokens. Can be fixed by passing `suppress_ids` to candidate generator: @joaa @raushan
+                    "llava",
                     "idefics2",
                     "idefics3",
                     "mllama",
@@ -1682,9 +1683,9 @@ class GenerationTesterMixin:
     @pytest.mark.generate
     def test_generate_from_random_inputs_embeds(self):
         """
-        Tests that the model uses `inputs_embeds` when passed along with `ids`. Different from the general `test_generate_from_inputs_embeds`
-        test, this one pop out all kwargs from the input dict except for the `ids`. It is done because some models (e.g. VLMs) cannot
-        get random embeddings at input and otherwise fail to merge multimodal features.
+        Text-only: Tests that different `inputs_embeds` generate different outputs in models with `main_input=="input_ids"`.
+        Some models have 'images' as main input and thus can't generate with random text embeddings.
+        See `test_generate_from_inputs_embeds` for more general checks.
         """
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()

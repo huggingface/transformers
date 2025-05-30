@@ -2437,9 +2437,11 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 audio_mask = inputs_embeds == self.get_input_embeddings()(
                     torch.tensor(self.config.audio_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
+                audio_mask = audio_mask.all(-1)
             else:
-                audio_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
-                audio_mask = audio_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+                audio_mask = input_ids == self.config.audio_token_id
+
+            audio_mask = audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
             audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
 
@@ -2449,9 +2451,11 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 image_mask = inputs_embeds == self.get_input_embeddings()(
                     torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
+                image_mask = image_mask.all(-1)
             else:
-                image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-                image_mask = image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+                image_mask = input_ids == self.config.image_token_id
+
+            image_mask = image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
@@ -2461,9 +2465,11 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 video_mask = inputs_embeds == self.get_input_embeddings()(
                     torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
+                video_mask = video_mask.all(-1)
             else:
-                video_mask = (input_ids == self.config.video_token_id).unsqueeze(-1)
-                video_mask = video_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+                video_mask = input_ids == self.config.video_token_id
+
+            video_mask = video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
             video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 

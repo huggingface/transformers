@@ -963,10 +963,11 @@ class JanusModel(JanusPreTrainedModel):
                 image_attention_mask = inputs_embeds == self.get_input_embeddings()(
                     torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
+                image_attention_mask = image_attention_mask.all(-1)
             else:
-                image_attention_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-                image_attention_mask = image_attention_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+                image_attention_mask = input_ids == self.config.image_token_id
 
+            image_attention_mask = image_attention_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
             image_embeds = self.get_image_features(pixel_values)
             image_features = image_embeds.reshape(-1, inputs_embeds.shape[-1])
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)

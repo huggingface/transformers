@@ -1336,12 +1336,12 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 image_mask = inputs_embeds == self.get_input_embeddings()(
                     torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
-                n_image_tokens = (image_mask).sum(dim=1).sum(dim=0)[0]
+                image_mask = image_mask.all(-1)
             else:
-                image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-                image_mask = image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-                n_image_tokens = (input_ids == self.config.image_token_id).sum()
+                image_mask = input_ids == self.config.image_token_id
 
+            image_mask = image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+            n_image_tokens = (image_mask).sum()
             n_image_features = image_embeds.shape[0]
             if not is_torchdynamo_compiling() and n_image_tokens != n_image_features:
                 raise ValueError(
@@ -1358,12 +1358,12 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 video_mask = inputs_embeds == self.get_input_embeddings()(
                     torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
-                n_video_tokens = (video_mask).sum(dim=1).sum(dim=0)[0]
+                video_mask = video_mask.all(-1)
             else:
-                video_mask = (input_ids == self.config.video_token_id).unsqueeze(-1)
-                video_mask = video_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-                n_video_tokens = (input_ids == self.config.video_token_id).sum()
+                video_mask = input_ids == self.config.video_token_id
 
+            video_mask = video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+            n_video_tokens = (video_mask).sum()
             n_video_features = video_embeds.shape[0]
             if not is_torchdynamo_compiling() and n_video_tokens != n_video_features:
                 raise ValueError(

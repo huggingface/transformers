@@ -972,11 +972,12 @@ class ChameleonModel(ChameleonPreTrainedModel):
                 special_image_mask = inputs_embeds == self.get_input_embeddings()(
                     torch.tensor(self.vocabulary_mapping.image_token_id, dtype=torch.long, device=inputs_embeds.device)
                 )
-                n_image_tokens_in_text = (special_image_mask).sum(dim=1).sum(dim=0)[0]
+                special_image_mask = special_image_mask.all(-1)
             else:
-                special_image_mask = (input_ids == self.vocabulary_mapping.image_token_id).unsqueeze(-1)
-                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-                n_image_tokens_in_text = (input_ids == self.vocabulary_mapping.image_token_id).sum()
+                special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
+
+            n_image_tokens_in_text = (special_image_mask).sum()
+            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
 
             image_embeds = self.get_image_features(pixel_values)
             if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_embeds.numel():
