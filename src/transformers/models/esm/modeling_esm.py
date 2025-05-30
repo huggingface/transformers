@@ -20,9 +20,14 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
+from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ...modeling_attn_mask_utils import (
+    _prepare_4d_attention_mask_for_sdpa,
+    _prepare_4d_causal_attention_mask_for_sdpa,
+)
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -31,7 +36,13 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import auto_docstring, is_flash_attn_2_available, is_flash_attn_greater_or_equal_2_10, logging
+from ...utils import (
+    auto_docstring,
+    get_torch_version,
+    is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal_2_10,
+    logging,
+)
 from .configuration_esm import EsmConfig
 
 
@@ -89,7 +100,6 @@ class RotaryEmbedding(torch.nn.Module):
         super().__init__()
         # Generate and save the inverse frequency buffer (non trainable)
         inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
-        inv_freq = inv_freq
         self.register_buffer("inv_freq", inv_freq)
 
         self._seq_len_cached = None
@@ -103,12 +113,20 @@ class RotaryEmbedding(torch.nn.Module):
         # or if we're on a new device (possibly due to tracing for instance)
         if seq_len != self._seq_len_cached or self._cos_cached.device != x.device:
             self._seq_len_cached = seq_len
-            t = torch.arange(x.shape[seq_dimension], device=x.device).type_as(self.inv_freq)
-            freqs = torch.outer(t, self.inv_freq)
-            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
+            t = torch.arange(x.shape[seq_dimension], device=x.device).float()
 
-            self._cos_cached = emb.cos()[None, None, :, :]
-            self._sin_cached = emb.sin()[None, None, :, :]
+            # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
+            device_type = x.device.type
+            device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+            with torch.autocast(device_type=device_type, enabled=False):
+                freqs = torch.outer(t.float(), self.inv_freq.float())
+                emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
+
+                cos = emb.cos()[None, None, :, :]
+                sin = emb.sin()[None, None, :, :]
+
+            self._cos_cached = cos.to(dtype=x.dtype)
+            self._sin_cached = sin.to(dtype=x.dtype)
 
         return self._cos_cached, self._sin_cached
 
@@ -374,7 +392,7 @@ class EsmSelfAttention(nn.Module):
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
-        context_layer = torch.matmul(attention_probs.to(value_layer.dtype), value_layer)
+        context_layer = torch.matmul(attention_probs, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -382,6 +400,113 @@ class EsmSelfAttention(nn.Module):
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
+        if self.is_decoder:
+            outputs = outputs + (past_key_value,)
+        return outputs
+
+
+class EsmSdpaSelfAttention(EsmSelfAttention):
+    def __init__(self, config, position_embedding_type=None):
+        super().__init__(config, position_embedding_type)
+        self.attention_dropout_prob = config.attention_probs_dropout_prob
+        self.require_contiguous_qkv = version.parse(get_torch_version()) < version.parse("2.2.0")
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
+        if self.position_embedding_type not in ["absolute", "rotary"] or output_attentions or head_mask is not None:
+            # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once implemented.
+            logger.warning_once(
+                "EsmSdpaSelfAttention is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
+                "non-absolute or non-rotary `position_embedding_type` or `output_attentions=True` or `head_mask`. "
+                "Falling back to the manual attention implementation, but specifying the manual implementation will "
+                "be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument "
+                '`attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states,
+                attention_mask,
+                head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                past_key_value,
+                output_attentions,
+            )
+
+        bsz, tgt_len, _ = hidden_states.size()
+
+        query_layer = self.transpose_for_scores(self.query(hidden_states))
+
+        # If this is instantiated as a cross-attention module, the keys and values come from an encoder; the attention
+        # mask needs to be such that the encoder's padding tokens are not attended to.
+        is_cross_attention = encoder_hidden_states is not None
+
+        current_states = encoder_hidden_states if is_cross_attention else hidden_states
+        attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
+
+        # Check `seq_length` of `past_key_value` == `len(current_states)` to support prefix tuning
+        if is_cross_attention and past_key_value and past_key_value[0].shape[2] == current_states.shape[1]:
+            key_layer, value_layer = past_key_value
+        else:
+            key_layer = self.transpose_for_scores(self.key(current_states))
+            value_layer = self.transpose_for_scores(self.value(current_states))
+            if past_key_value is not None and not is_cross_attention:
+                key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
+                value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
+
+        # Scale the query for rotary embeddings
+        query_layer = query_layer * self.attention_head_size**-0.5
+
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_layer, value_layer)
+
+        if self.position_embedding_type == "rotary":
+            query_layer, key_layer = self.rotary_embeddings(query_layer, key_layer)
+
+        # SDPA with memory-efficient backend is broken in torch==2.1.2 when using non-contiguous inputs and a custom
+        # attn_mask, so we need to call `.contiguous()` here. This was fixed in torch==2.2.0.
+        # Reference: https://github.com/pytorch/pytorch/issues/112577
+        if self.require_contiguous_qkv and query_layer.device.type == "cuda" and attention_mask is not None:
+            query_layer = query_layer.contiguous()
+            key_layer = key_layer.contiguous()
+            value_layer = value_layer.contiguous()
+
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create
+        # a causal mask in case tgt_len == 1.
+        is_causal = (
+            True if self.is_decoder and not is_cross_attention and attention_mask is None and tgt_len > 1 else False
+        )
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_layer,
+            key_layer,
+            value_layer,
+            attn_mask=attention_mask,
+            dropout_p=self.attention_dropout_prob if self.training else 0.0,
+            is_causal=is_causal,
+            scale=1.0,  # Scale is already applied to query_layer
+        )
+
+        attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.reshape(bsz, tgt_len, self.all_head_size)
+
+        outputs = (attn_output,)
         if self.is_decoder:
             outputs = outputs + (past_key_value,)
         return outputs
@@ -515,6 +640,7 @@ class EsmFlashAttention2(EsmSelfAttention):
 ESM_ATTENTION_CLASSES = {
     "eager": EsmSelfAttention,
     "flash_attention_2": EsmFlashAttention2,
+    "sdpa": EsmSdpaSelfAttention,
 }
 
 
@@ -799,6 +925,7 @@ class EsmPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["EsmLayer", "EsmFoldTriangularSelfAttentionBlock", "EsmEmbeddings"]
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with BertLMPredictionHead->EsmLMHead
     def _init_weights(self, module):
@@ -850,6 +977,9 @@ class EsmModel(EsmPreTrainedModel):
         self.contact_head = EsmContactPredictionHead(
             in_features=config.num_hidden_layers * config.num_attention_heads, bias=True
         )
+
+        self.attn_implementation = config._attn_implementation
+        self.position_embedding_type = config.position_embedding_type
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -932,9 +1062,38 @@ class EsmModel(EsmPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
 
+        embedding_output = self.embeddings(
+            input_ids=input_ids,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            past_key_values_length=past_key_values_length,
+        )
+
+        use_sdpa_attention_masks = (
+            self.attn_implementation == "sdpa"
+            and self.position_embedding_type in ["absolute", "rotary"]
+            and head_mask is None
+            and not output_attentions
+        )
+
+        # Expand the attention mask
         if self.config._attn_implementation == "flash_attention_2":
             extended_attention_mask = attention_mask
-
+        elif use_sdpa_attention_masks and attention_mask.dim() == 2:
+            # Expand the attention mask for SDPA.
+            # [bsz, seq_len] -> [bsz, 1, seq_len, seq_len]
+            if self.config.is_decoder:
+                extended_attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                    attention_mask,
+                    input_shape,
+                    embedding_output,
+                    past_key_values_length,
+                )
+            else:
+                extended_attention_mask = _prepare_4d_attention_mask_for_sdpa(
+                    attention_mask, embedding_output.dtype, tgt_len=seq_length
+                )
         else:
             # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
             # ourselves in which case we just need to make it broadcastable to all heads.
@@ -947,7 +1106,15 @@ class EsmModel(EsmPreTrainedModel):
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+
+            if use_sdpa_attention_masks and encoder_attention_mask.dim() == 2:
+                # Expand the attention mask for SDPA.
+                # [bsz, seq_len] -> [bsz, 1, seq_len, seq_len]
+                encoder_extended_attention_mask = _prepare_4d_attention_mask_for_sdpa(
+                    encoder_attention_mask, embedding_output.dtype, tgt_len=seq_length
+                )
+            else:
+                encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
 
@@ -958,13 +1125,6 @@ class EsmModel(EsmPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output = self.embeddings(
-            input_ids=input_ids,
-            position_ids=position_ids,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            past_key_values_length=past_key_values_length,
-        )
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
