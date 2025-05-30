@@ -150,7 +150,7 @@ class PerceptionLMConfig(PretrainedConfig):
     ```"""
 
     model_type = "perception_lm"
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs = {"text_config": AutoConfig, "vision_config": PerceptionEncoderConfig}
 
     def __init__(
         self,
