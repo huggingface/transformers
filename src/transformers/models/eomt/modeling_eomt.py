@@ -29,18 +29,18 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...file_utils import ModelOutput, requires_backends
+from ...file_utils import ModelOutput, is_scipy_available, requires_backends
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple, is_accelerate_available, is_scipy_available
-from .configuration_eomt import EoMTConfig
+from ...utils import auto_docstring, can_return_tuple, is_accelerate_available
+from .configuration_eomt import EoMTConfig, EoMTTextConfig, EoMTVisionConfig
 
+
+if is_scipy_available():
+    from scipy.optimize import linear_sum_assignment
 
 if is_accelerate_available():
     from accelerate import PartialState
     from accelerate.utils import reduce
-
-if is_scipy_available():
-    from scipy.optimize import linear_sum_assignment
 
 
 @dataclass
@@ -80,7 +80,7 @@ class EoMTForUniversalSegmentationOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.mask2former.modeling_mask2former.sample_point
+# Adapted from https://github.com/facebookresearch/detectron2/blob/main/projects/PointRend/point_rend/point_features.py
 def sample_point(
     input_features: torch.Tensor, point_coordinates: torch.Tensor, add_dim=False, **kwargs
 ) -> torch.Tensor:
@@ -113,7 +113,6 @@ def sample_point(
     return point_features
 
 
-# Copied from transformers.models.mask2former.modeling_mask2former.pair_wise_dice_loss
 def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
     """
     A pair wise version of the dice loss, see `dice_loss` for usage.
@@ -136,7 +135,6 @@ def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
     return loss
 
 
-# Copied from transformers.models.mask2former.modeling_mask2former.pair_wise_sigmoid_cross_entropy_loss
 def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
     r"""
     A pair wise version of the cross entropy loss, see `sigmoid_cross_entropy_loss` for usage.
@@ -164,7 +162,7 @@ def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Ten
     return loss
 
 
-# Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerHungarianMatcher with Mask2Former->EoMT
+# Adapted from https://github.com/facebookresearch/EoMT/blob/main/eomt/modeling/matcher.py
 class EoMTHungarianMatcher(nn.Module):
     """This class computes an assignment between the labels and the predictions of the network.
 
@@ -271,7 +269,6 @@ class EoMTHungarianMatcher(nn.Module):
         return matched_indices
 
 
-# Copied from transformers.models.maskformer.modeling_maskformer.dice_loss
 def dice_loss(inputs: Tensor, labels: Tensor, num_masks: int) -> Tensor:
     r"""
     Compute the DICE loss, similar to generalized IOU for masks as follows:
@@ -302,7 +299,6 @@ def dice_loss(inputs: Tensor, labels: Tensor, num_masks: int) -> Tensor:
     return loss
 
 
-# Copied from transformers.models.mask2former.modeling_mask2former.sigmoid_cross_entropy_loss
 def sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor, num_masks: int) -> torch.Tensor:
     r"""
     Args:
@@ -322,17 +318,17 @@ def sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Tensor, num_m
     return loss
 
 
-# Modified from transformers.models.mask2former.modeling_mask2former.Mask2FormerLoss with Mask2Former->EoMT
+# Adapted from https://github.com/facebookresearch/EoMT/blob/main/eomt/modeling/criterion.py
 class EoMTLoss(nn.Module):
     def __init__(self, config: EoMTConfig, weight_dict: Dict[str, float]):
         """
-        The Mask2Former Loss. The loss is computed very similar to DETR. The process happens in two steps: 1) we
+        The EoMT Loss. The loss is computed very similar to DETR. The process happens in two steps: 1) we
         compute hungarian assignment between ground truth masks and the outputs of the model 2) we supervise each pair
         of matched ground-truth / prediction (supervise class and mask)
 
         Args:
-            config (`Mask2FormerConfig`):
-                The configuration for Mask2Former model also containing loss calculation specific parameters.
+            config (`EoMTConfig`):
+                The configuration for EoMT model also containing loss calculation specific parameters.
             weight_dict (`Dict[str, float]`):
                 A dictionary of weights to be applied to the different losses.
         """
@@ -340,18 +336,15 @@ class EoMTLoss(nn.Module):
         requires_backends(self, ["scipy"])
         self.num_labels = config.num_labels
         self.weight_dict = weight_dict
-
         # Weight to apply to the null class
         self.eos_coef = config.no_object_weight
         empty_weight = torch.ones(self.num_labels + 1)
         empty_weight[-1] = self.eos_coef
         self.register_buffer("empty_weight", empty_weight)
-
         # pointwise mask loss parameters
         self.num_points = config.train_num_points
         self.oversample_ratio = config.oversample_ratio
         self.importance_sample_ratio = config.importance_sample_ratio
-
         self.matcher = EoMTHungarianMatcher(
             cost_class=2.0,
             cost_dice=config.dice_weight,
@@ -494,7 +487,7 @@ class EoMTLoss(nn.Module):
 
     def calculate_uncertainty(self, logits: torch.Tensor) -> torch.Tensor:
         """
-        In Mask2Former paper, uncertainty is estimated as L1 distance between 0.0 and the logit prediction in 'logits'
+        In EoMT paper, uncertainty is estimated as L1 distance between 0.0 and the logit prediction in 'logits'
         for the foreground class in `classes`.
 
         Args:
@@ -585,8 +578,8 @@ class EoMTLoss(nn.Module):
             class_labels (`List[torch.Tensor]`):
                 List of class labels of shape `(labels)`.
             auxiliary_predictions (`Dict[str, torch.Tensor]`, *optional*):
-                if `use_auxiliary_loss` was set to `true` in [`Mask2FormerConfig`], then it contains the logits from
-                the inner layers of the Mask2FormerMaskedAttentionDecoder.
+                if `use_auxiliary_loss` was set to `true` in [`EoMTConfig`], then it contains the logits from
+                the inner layers of the EoMTMaskedAttentionDecoder.
 
         Returns:
             losses (`Dict[str, Tensor]`): A dict of `torch.Tensor` containing three keys:
@@ -595,7 +588,7 @@ class EoMTLoss(nn.Module):
               masks.
             - **loss_dice** -- The loss computed using dice loss on the predicted on the predicted and ground truth
               masks.
-            if `use_auxiliary_loss` was set to `true` in [`Mask2FormerConfig`], the dictionary contains additional
+            if `use_auxiliary_loss` was set to `true` in [`EoMTConfig`], the dictionary contains additional
             losses for each auxiliary predictions.
         """
 
@@ -642,7 +635,7 @@ class EoMTPatchEmbeddings(nn.Module):
     Transformer.
     """
 
-    def __init__(self, config: EoMTConfig):
+    def __init__(self, config):
         super().__init__()
         image_size, patch_size = config.image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_size
@@ -656,7 +649,6 @@ class EoMTPatchEmbeddings(nn.Module):
         self.num_patches = num_patches
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
-        self.grid_size = (self.image_size[0] // self.patch_size[0], self.image_size[1] // self.patch_size[1])
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         num_channels = pixel_values.shape[1]
@@ -734,28 +726,25 @@ def eager_attention_forward(
 class EoMTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: EoMTConfig):
+    def __init__(self, config: Union[EoMTVisionConfig, EoMTTextConfig]):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.attention_dropout = config.attention_dropout
         self.head_dim = self.embed_dim // self.num_heads
         if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
                 f" {self.num_heads})."
             )
-
-        self.scaling = self.head_dim**-0.5
-
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
-        self.proj_out = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
-        self.proj_drop = nn.Dropout(config.projection_dropout)
-
+        self.scale = self.head_dim**-0.5
+        self.dropout = config.attention_dropout
         self.is_causal = False
+
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     def forward(
         self,
@@ -790,7 +779,7 @@ class EoMTAttention(nn.Module):
             key_states,
             value_states,
             attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
+            dropout=0.0 if not self.training else self.dropout,
             scaling=self.scaling,
             is_causal=self.is_causal,
             **kwargs,
@@ -798,8 +787,7 @@ class EoMTAttention(nn.Module):
 
         attn_output = attn_output.reshape(batch_size, q_len, self.embed_dim)
 
-        attn_output = self.proj_out(attn_output)
-        attn_output = self.proj_drop(attn_output)
+        attn_output = self.out_proj(attn_output)
 
         output = (attn_output, attn_weights) if output_attentions else (attn_output, None)
 
@@ -869,6 +857,8 @@ class EoMTDropPath(nn.Module):
 
 
 class EoMTLayer(nn.Module):
+    """This corresponds to the Block class in the original implementation."""
+
     def __init__(self, config: EoMTConfig) -> None:
         super().__init__()
 
@@ -884,25 +874,28 @@ class EoMTLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        normalized_hidden_states = self.norm1(hidden_states)
         self_attention_outputs = self.attention(
-            normalized_hidden_states,
-            attention_mask=attention_mask,
+            self.norm1(hidden_states),  # in EoMT, layernorm is applied before self-attention
+            head_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
-        attention_output = self.layer_scale1(attention_output)
-        outputs = self_attention_outputs[1:]
 
+        attention_output = self.layer_scale1(attention_output)
+        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+
+        # first residual connection
         hidden_states = self.drop_path(attention_output) + hidden_states
 
+        # in EoMT, layernorm is also applied after self-attention
         layer_output = self.norm2(hidden_states)
         layer_output = self.mlp(layer_output)
         layer_output = self.layer_scale2(layer_output)
 
+        # second residual connection
         layer_output = self.drop_path(layer_output) + hidden_states
 
         outputs = (layer_output,) + outputs
@@ -910,7 +903,7 @@ class EoMTLayer(nn.Module):
         return outputs
 
 
-class LayerNorm2d(nn.LayerNorm):
+class EoMTLayerNorm2d(nn.LayerNorm):
     def __init__(self, num_channels, eps=1e-6, affine=True):
         super().__init__(num_channels, eps=eps, elementwise_affine=affine)
 
@@ -936,7 +929,7 @@ class EoMTScaleLayer(nn.Module):
             bias=False,
         )
 
-        self.layernorm2d = LayerNorm2d(hidden_size)
+        self.layernorm2d = EoMTLayerNorm2d(hidden_size)
 
     def forward(self, hidden_states: torch.tensor) -> torch.Tensor:
         hidden_states = self.conv1(hidden_states)
@@ -958,7 +951,7 @@ class EoMTScaleBlock(nn.Module):
         return hidden_states
 
 
-class MaskHead(nn.Module):
+class EoMTMaskHead(nn.Module):
     def __init__(self, config: EoMTConfig):
         super().__init__()
 
@@ -988,6 +981,7 @@ class EoMTPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
     _no_split_modules = ["EoMTMLP"]
     _supports_sdpa = True
+    _supports_flash_attn_2 = True
 
     def _init_weights(self, module: nn.Module) -> None:
         std = self.config.initializer_range
@@ -1014,7 +1008,6 @@ class EoMTPreTrainedModel(PreTrainedModel):
             module.register_tokens.data.zero_()
 
 
-# ToDo: How to add gradient checkpointing to the model?
 @auto_docstring(
     custom_intro="""
     The EoMT Model with heads on top for instance/semantic/panoptic segmentation.
@@ -1032,11 +1025,11 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
         self.layers = nn.ModuleList([EoMTLayer(config) for _ in range(config.num_hidden_layers)])
 
         self.upscale_block = EoMTScaleBlock(config)
-        self.mask_head = MaskHead(config)
+        self.mask_head = EoMTMaskHead(config)
 
         self.class_predictor = nn.Linear(config.hidden_size, config.num_labels + 1)
 
-        self.grid_size = self.embeddings.patch_embeddings.grid_size
+        self.grid_size = (config.image_size // config.patch_size, config.image_size // config.patch_size)
         self.weight_dict: Dict[str, float] = {
             "loss_cross_entropy": config.class_weight,
             "loss_mask": config.mask_weight,

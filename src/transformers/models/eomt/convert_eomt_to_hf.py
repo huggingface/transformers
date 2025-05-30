@@ -37,7 +37,7 @@ MAPPINGS = {
 
     # Encoder Block
     r"network.encoder.backbone.blocks.(\d+).norm1"       : r"layers.\1.norm1",
-    r"network.encoder.backbone.blocks.(\d+).attn.proj"   : r"layers.\1.attention.proj_out",
+    r"network.encoder.backbone.blocks.(\d+).attn.proj"   : r"layers.\1.attention.out_proj",
     r"network.encoder.backbone.blocks.(\d+).ls1.gamma"   : r"layers.\1.layer_scale1.lambda1",
     r"network.encoder.backbone.blocks.(\d+).norm2"       : r"layers.\1.norm2",
     r"network.encoder.backbone.blocks.(\d+).mlp"         : r"layers.\1.mlp",
@@ -206,17 +206,14 @@ def convert_model(
     with open(os.path.join(input_path, "config.json"), "r") as f:
         config_data = json.load(f)
 
-    config = EoMTConfig()
-    config.image_size = config_data["image_size"]
-    config.patch_size = config_data["patch_size"]
-    config.num_queries = config_data["num_queries"]
-    config.num_labels = config_data["num_labels"]
-    config.num_blocks = config_data["num_blocks"]
-    # With 1e-5 the test_initialization fails hence set it directly in config.
-    config.layerscale_value = 1e-5
+    config = EoMTConfig(
+        **{
+            **config_data,
+            "layerscale_value": 1e-5,
+        }
+    )
 
-    processor = EoMTImageProcessor()
-    processor.size = {"height": config.image_size, "width": config.image_size}
+    processor = EoMTImageProcessor(size={"height": config.image_size, "width": config.image_size})
 
     # Save the config and processor
     if output_dir:
