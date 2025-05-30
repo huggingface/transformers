@@ -39,7 +39,6 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import _config_zero_init, ids_tensor
 
 
@@ -97,7 +96,7 @@ class BambaModelTester(CausalLMModelTester):
         self.attention_dropout = attention_dropout
         self.attn_layer_indices = attn_layer_indices
         self.attn_rotary_emb = attn_rotary_emb
-        
+
         # Call parent class __init__
         super().__init__(
             parent=parent,
@@ -135,7 +134,7 @@ class BambaModelTester(CausalLMModelTester):
         # Bamba doesn't use token_type_ids, sequence_labels, or choice_labels
         config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels = config_and_inputs
         return config, input_ids, input_mask, token_labels
-    
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -167,7 +166,7 @@ class BambaModelTester(CausalLMModelTester):
         config.attn_layer_indices = self.attn_layer_indices
         config.attn_rotary_emb = self.attn_rotary_emb
         return config
-    
+
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -178,8 +177,6 @@ class BambaModelTester(CausalLMModelTester):
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -264,7 +261,7 @@ class BambaModelTest(CausalLMModelTest, unittest.TestCase):
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-    
+
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         # Expand to match the expected signature

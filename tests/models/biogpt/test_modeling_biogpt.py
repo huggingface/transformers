@@ -22,7 +22,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -45,7 +45,7 @@ class BioGptModelTester(CausalLMModelTester):
     causal_lm_class = BioGptForCausalLM
     sequence_classification_class = BioGptForSequenceClassification
     token_classification_class = BioGptForTokenClassification
-    
+
     def __init__(
         self,
         parent,
@@ -96,8 +96,6 @@ class BioGptModelTester(CausalLMModelTester):
             num_choices=num_choices,
             scope=scope,
         )
-
-
 
     def create_and_check_biogpt_model_attention_mask_past(self, config, input_ids, input_mask, token_type_ids, *args):
         model = BioGptModel(config=config)
@@ -202,8 +200,6 @@ class BioGptModelTester(CausalLMModelTester):
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
 
-
-
 @require_torch
 class BioGptModelTest(CausalLMModelTest, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
@@ -249,8 +245,6 @@ class BioGptModelTest(CausalLMModelTest, GenerationTesterMixin, PipelineTesterMi
     def test_biogpt_weight_initialization(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_biogpt_weight_initialization(*config_and_inputs)
-
-
 
     @slow
     def test_batch_generation(self):
@@ -303,8 +297,6 @@ class BioGptModelTest(CausalLMModelTest, GenerationTesterMixin, PipelineTesterMi
         model_name = "microsoft/biogpt"
         model = BioGptModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-
 
 
 @require_torch

@@ -22,7 +22,7 @@ from transformers.testing_utils import require_torch, require_torch_accelerator,
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -48,7 +48,7 @@ class BloomModelTester(CausalLMModelTester):
     sequence_classification_class = BloomForSequenceClassification
     token_classification_class = BloomForTokenClassification
     question_answering_class = BloomForQuestionAnswering
-    
+
     def __init__(
         self,
         parent,
@@ -108,8 +108,6 @@ class BloomModelTester(CausalLMModelTester):
 
     def get_large_model_config(self):
         return BloomConfig.from_pretrained("bigscience/bloom")
-
-
 
     def get_config(self, gradient_checkpointing=False, slow_but_exact=True):
         return BloomConfig(
@@ -228,9 +226,7 @@ class BloomModelTester(CausalLMModelTester):
             next_attention_mask = next_mask
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_mask, past_key_values=past)[
-            "last_hidden_state"
-        ]
+        output_from_past = model(next_tokens, attention_mask=next_mask, past_key_values=past)["last_hidden_state"]
         self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
 
         # select random slice
@@ -240,8 +236,6 @@ class BloomModelTester(CausalLMModelTester):
 
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
-
-
 
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, *args, gradient_checkpointing=False
@@ -263,8 +257,6 @@ class BloomModelTester(CausalLMModelTester):
             if "c_proj" in key and "weight" in key:
                 self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
                 self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
-
-
 
 
 @require_torch
@@ -316,8 +308,6 @@ class BloomModelTest(CausalLMModelTest, GenerationTesterMixin, PipelineTesterMix
     def test_bloom_model_past_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bloom_model_past_large_inputs(*config_and_inputs)
-
-
 
     def test_bloom_gradient_checkpointing(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

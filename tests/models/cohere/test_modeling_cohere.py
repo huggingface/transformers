@@ -28,7 +28,7 @@ from transformers.testing_utils import (
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -99,8 +99,6 @@ class CohereModelTester(CausalLMModelTester):
             scope=scope,
         )
 
-
-
     # Ignore copy
     def get_config(self):
         return self.config_class(
@@ -131,7 +129,9 @@ class CohereModelTester(CausalLMModelTester):
 
 
 @require_torch
-class CohereModelTest(CausalLMModelTest, ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class CohereModelTest(
+    CausalLMModelTest, ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (CohereModel, CohereForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
