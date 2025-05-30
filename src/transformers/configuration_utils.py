@@ -208,7 +208,13 @@ class PretrainedConfig(PushToHubMixin):
             key = super().__getattribute__("attribute_map")[key]
         return super().__getattribute__(key)
 
+    def __post_init__(self):
+        self._set_defaults()
+
     def __init__(self, **kwargs):
+        self._set_defaults(**kwargs)
+
+    def _set_defaults(self, **kwargs):
         # Attributes with defaults
         self.return_dict = kwargs.pop("return_dict", True)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
