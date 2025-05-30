@@ -46,7 +46,10 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     "Qwen2Config": ["use_sliding_window", "max_window_layers"],
     "Qwen2MoeConfig": ["use_sliding_window"],
-    "Qwen2VLConfig": ["use_sliding_window"],
+    "Qwen2VLTextConfig": ["use_sliding_window", "max_window_layers"],
+    "Qwen2_5_VLTextConfig": ["use_sliding_window", "max_window_layers"],
+    "Qwen2_5OmniTextConfig": ["use_sliding_window", "max_window_layers"],
+    "Qwen2_5OmniTalkerConfig": ["use_sliding_window", "max_window_layers"],
     "Qwen3Config": ["max_window_layers", "use_sliding_window"],  # now use `layer_types` instead
     "Qwen3MoeConfig": ["max_window_layers", "use_sliding_window"],
     # `cache_implementation` should be in the default generation config, but we don't yet support per-model
