@@ -22,7 +22,7 @@ from transformers.testing_utils import backend_manual_seed, require_torch, slow,
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -40,6 +40,7 @@ class CodeGenModelTester(CausalLMModelTester):
     sequence_classification_class = None  # CodeGen doesn't have this
     token_classification_class = None  # CodeGen doesn't have this
     question_answering_class = None  # CodeGen doesn't have this
+
     def __init__(
         self,
         parent,
@@ -49,7 +50,6 @@ class CodeGenModelTester(CausalLMModelTester):
         use_token_type_ids=False,
         use_input_mask=True,
         use_labels=True,
-
         vocab_size=256,
         hidden_size=32,
         rotary_dim=4,
@@ -75,7 +75,6 @@ class CodeGenModelTester(CausalLMModelTester):
             use_token_type_ids=use_token_type_ids,
             use_input_mask=use_input_mask,
             use_labels=use_labels,
-
             vocab_size=vocab_size,
             hidden_size=hidden_size,
             num_hidden_layers=num_hidden_layers,
@@ -96,8 +95,6 @@ class CodeGenModelTester(CausalLMModelTester):
 
     def get_large_model_config(self):
         return CodeGenConfig.from_pretrained("Salesforce/codegen-2B-mono")
-
-
 
     def get_config(self):
         return CodeGenConfig(
@@ -130,8 +127,6 @@ class CodeGenModelTester(CausalLMModelTester):
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.past_key_values), config.n_layer)
-
-
 
     def create_and_check_codegen_model_attention_mask_past(
         self, config, input_ids, input_mask, head_mask, token_type_ids, *args
@@ -175,10 +170,6 @@ class CodeGenModelTester(CausalLMModelTester):
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-
-
-
-
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, head_mask, token_type_ids, *args, gradient_checkpointing=False
     ):
@@ -191,8 +182,6 @@ class CodeGenModelTester(CausalLMModelTester):
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         result.loss.backward()
-
-
 
 
 @require_torch
@@ -223,15 +212,9 @@ class CodeGenModelTest(CausalLMModelTest, GenerationTesterMixin, PipelineTesterM
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_codegen_model(*config_and_inputs)
 
-
-
     def test_codegen_model_att_mask_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_codegen_model_attention_mask_past(*config_and_inputs)
-
-
-
-
 
     def test_codegen_gradient_checkpointing(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -254,13 +237,6 @@ class CodeGenModelTest(CausalLMModelTest, GenerationTesterMixin, PipelineTesterM
 
         inputs = tokenizer(sentences, return_tensors="pt", padding=True)
         input_ids = inputs["input_ids"].to(torch_device)
-        token_type_ids = torch.cat(
-            [
-                input_ids.new_full((input_ids.shape[0], input_ids.shape[1] - 1), 0),
-                input_ids.new_full((input_ids.shape[0], 1), 500),
-            ],
-            dim=-1,
-        )
 
         outputs = model.generate(
             input_ids=input_ids,
@@ -343,11 +319,8 @@ class CodeGenModelLanguageGenerationTest(unittest.TestCase):
         output_ids = model.generate(input_ids, do_sample=True)
         output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
-        token_type_ids = tokenized.token_type_ids.to(torch_device)
         output_seq = model.generate(input_ids=input_ids, do_sample=True, num_return_sequences=5)
-        output_seq_tt = model.generate(
-            input_ids=input_ids, do_sample=True, num_return_sequences=5
-        )
+        output_seq_tt = model.generate(input_ids=input_ids, do_sample=True, num_return_sequences=5)
         output_seq_strs = tokenizer.batch_decode(output_seq, skip_special_tokens=True)
         output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
 
