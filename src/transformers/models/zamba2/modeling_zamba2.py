@@ -1579,7 +1579,7 @@ class Zamba2ForCausalLM(Zamba2PreTrainedModel, GenerationMixin):
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
-        if labels is not None:
+        if labels is not None or loss_kwargs.get("shift_labels", None) is not None:
             loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
 
         if not return_dict:
