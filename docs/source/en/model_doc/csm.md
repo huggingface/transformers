@@ -39,7 +39,7 @@ CSM can be used to simply generate speech from a text prompt:
 import torch
 from transformers import CsmForConditionalGeneration, AutoProcessor
 
-model_id = "eustlb/csm-1b"
+model_id = "sesame/csm-1b"
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # load the model and the processor
@@ -74,7 +74,7 @@ import torch
 from transformers import CsmForConditionalGeneration, AutoProcessor
 from datasets import load_dataset, Audio
 
-model_id = "eustlb/csm-1b"
+model_id = "sesame/csm-1b"
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # load the model and the processor
@@ -119,7 +119,7 @@ import torch
 from transformers import CsmForConditionalGeneration, AutoProcessor
 from datasets import load_dataset, Audio
 
-model_id = "eustlb/csm-1b"
+model_id = "sesame/csm-1b"
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # load the model and the processor
@@ -176,7 +176,7 @@ import copy
 from transformers import CsmForConditionalGeneration, AutoProcessor
 from datasets import load_dataset
 
-model_id = "eustlb/csm-1b"
+model_id = "sesame/csm-1b"
 device = "cuda"
 
 # set logs to ensure no recompilation and graph breaks
@@ -308,13 +308,14 @@ CSM Transformers integration supports training!
 from transformers import CsmForConditionalGeneration, AutoProcessor
 from datasets import load_dataset, Audio
 
-model_id = "eustlb/csm-1b"
+model_id = "sesame/csm-1b"
 device = "cuda"
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)
 model = CsmForConditionalGeneration.from_pretrained(model_id, device_map=device)
 model.train()
+model.codec_model.eval()
 
 ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
 # ensure the audio is 24kHz
@@ -354,6 +355,10 @@ The original code can be found [here](https://github.com/SesameAILabs/csm).
 [[autodoc]] CsmDepthDecoderConfig
 
 ## CsmProcessor
+
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/eustlb/documentation-images/resolve/main/fig1.jpg"/>
+</div>
 
 [[autodoc]] CsmProcessor
     - __call__

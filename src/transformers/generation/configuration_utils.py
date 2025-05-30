@@ -821,7 +821,7 @@ class GenerationConfig(PushToHubMixin):
                 warning_message = (
                     f"The following generation flags are not valid and may be ignored: {attributes_with_issues}."
                 )
-                if logger.getEffectiveLevel() >= logging.WARNING:
+                if logging.get_verbosity() >= logging.WARNING:
                     warning_message += " Set `TRANSFORMERS_VERBOSITY=info` for more details."
                 logger.warning(warning_message)
                 logger.info(info_message)
