@@ -409,7 +409,6 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("janus", "JanusForConditionalGeneration"),
         ("layoutlm", "LayoutLMForMaskedLM"),
         ("llava", "LlavaForConditionalGeneration"),
-        ("perception_lm", "PerceptionLMForConditionalGeneration"),
         ("llava_next", "LlavaNextForConditionalGeneration"),
         ("llava_next_video", "LlavaNextVideoForConditionalGeneration"),
         ("llava_onevision", "LlavaOnevisionForConditionalGeneration"),
