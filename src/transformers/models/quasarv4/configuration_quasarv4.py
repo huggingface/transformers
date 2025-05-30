@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 QUASARV4_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "eyad-silx/QuasarV4-500M-2": "https://huggingface.co/eyad-silx/QuasarV4-500M-2/resolve/main/config.json",
+    "silx-ai/QuasarV4-600M-Transformer": "https://huggingface.co/silx-ai/QuasarV4-600M-Transformer/resolve/main/config.json",
 }
 
 
@@ -30,7 +30,7 @@ class QuasarV4Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`QuasarV4Model`]. It is used to instantiate a
     QuasarV4 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the QuasarV4
-    [eyad-silx/QuasarV4-500M-2](https://huggingface.co/eyad-silx/QuasarV4-500M-2) architecture.
+    [silx-ai/QuasarV4-600M-Transformer](https://huggingface.co/silx-ai/QuasarV4-600M-Transformer) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
