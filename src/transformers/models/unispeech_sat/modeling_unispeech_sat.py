@@ -819,7 +819,8 @@ class UniSpeechSatGumbelVectorQuantizer(nn.Module):
 
             # compute perplexity
             codevector_soft_dist = torch.softmax(
-                hidden_states.view(batch_size * sequence_length, self.num_groups, -1).float(), dim=-1
+                hidden_states.view(batch_size * sequence_length, self.num_groups, -1).float(),
+                dim=-1,
             )
             perplexity = self._compute_perplexity(codevector_soft_dist)
         else:
@@ -1271,8 +1272,19 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
 
         if not return_dict:
             if loss is not None:
-                return (loss, logits, transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
-            return (logits, transformer_features, quantized_features, codevector_perplexity) + outputs[2:]
+                return (
+                    loss,
+                    logits,
+                    transformer_features,
+                    quantized_features,
+                    codevector_perplexity,
+                ) + outputs[2:]
+            return (
+                logits,
+                transformer_features,
+                quantized_features,
+                codevector_perplexity,
+            ) + outputs[2:]
 
         return UniSpeechSatForPreTrainingOutput(
             loss=loss,
