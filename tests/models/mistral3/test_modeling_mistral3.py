@@ -57,9 +57,6 @@ class Mistral3VisionText2TextModelTester:
         image_seq_length=4,
         vision_feature_layer=-1,
         ignore_index=-100,
-        bos_token_id=0,
-        eos_token_id=0,
-        pad_token_id=0,
         image_token_index=1,
         num_channels=3,
         image_size=30,
@@ -80,9 +77,9 @@ class Mistral3VisionText2TextModelTester:
             "rms_norm_eps": 1e-05,
             "rope_theta": 1000000000.0,
             "sliding_window": None,
-            "bos_token_id": 0,
-            "eos_token_id": 0,
-            "pad_token_id": 0,
+            "bos_token_id": 2,
+            "eos_token_id": 3,
+            "pad_token_id": 4,
         },
         vision_config={
             "model_type": "pixtral",
@@ -98,9 +95,9 @@ class Mistral3VisionText2TextModelTester:
     ):
         self.parent = parent
         self.ignore_index = ignore_index
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
+        self.bos_token_id = text_config["bos_token_id"]
+        self.eos_token_id = text_config["eos_token_id"]
+        self.pad_token_id = text_config["pad_token_id"]
         self.image_token_index = image_token_index
         self.model_type = model_type
         self.text_config = text_config
