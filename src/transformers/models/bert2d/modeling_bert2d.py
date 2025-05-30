@@ -49,7 +49,6 @@ from .configuration_bert2d import Bert2DConfig
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.bert.modeling_bert.load_tf_weights_in_bert with bert->bert2d
 def load_tf_weights_in_bert2d(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
@@ -159,7 +158,6 @@ class Bert2DEmbeddings(nn.Module):
             "token_type_ids_buffer", torch.zeros(1, config.max_position_embeddings, dtype=torch.long), persistent=False
         )
 
-
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -167,7 +165,7 @@ class Bert2DEmbeddings(nn.Module):
         word_ids: Optional[torch.LongTensor] = None,
         subword_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        past_key_values_length: int = 0, # This argument is not directly used in Bert2D's 2D embedding logic
+        past_key_values_length: int = 0,  # This argument is not directly used in Bert2D's 2D embedding logic
     ) -> torch.Tensor:
         r"""
         word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -188,14 +186,12 @@ class Bert2DEmbeddings(nn.Module):
         """
         if input_ids is not None:
             input_shape = input_ids.size()
-            device = input_ids.device
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
-            device = inputs_embeds.device
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        seq_length = input_shape[-1] # Works for 2D (batch, seq) and 3D (batch, num_choices, seq)
+        seq_length = input_shape[-1]  # Works for 2D (batch, seq) and 3D (batch, num_choices, seq)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -203,9 +199,9 @@ class Bert2DEmbeddings(nn.Module):
         if token_type_ids is None:
             # Use the registered buffer for token_type_ids
             buffered_token_type_ids = self.token_type_ids_buffer[:, :seq_length]
-            if len(input_shape) == 3: # (batch, num_choices, seq_len)
+            if len(input_shape) == 3:  # (batch, num_choices, seq_len)
                 token_type_ids = buffered_token_type_ids.expand(input_shape[0], input_shape[1], seq_length)
-            else: # (batch, seq_len)
+            else:  # (batch, seq_len)
                 token_type_ids = buffered_token_type_ids.expand(input_shape[0], seq_length)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
@@ -214,7 +210,7 @@ class Bert2DEmbeddings(nn.Module):
                 "`word_ids` was not provided and will be defaulted to sequential IDs. This behavior is usually "
                 "not desired for Bert2D models and may lead to unexpected results if the model is not explicitly "
                 "expecting this behavior.",
-                UserWarning
+                UserWarning,
             )
             # Use the registered buffer for default_word_ids
             default_word_ids_slice = self.default_word_ids[:, :seq_length]
@@ -228,7 +224,7 @@ class Bert2DEmbeddings(nn.Module):
                 "`subword_ids` was not provided and will be defaulted to zeros. This behavior is usually "
                 "not desired for Bert2D models and may lead to unexpected results if the model is not explicitly "
                 "expecting this behavior.",
-                UserWarning
+                UserWarning,
             )
             # Use the registered buffer for default_subword_ids (all zeros)
             default_subword_ids_slice = self.default_subword_ids[:, :seq_length]
@@ -236,7 +232,6 @@ class Bert2DEmbeddings(nn.Module):
                 subword_ids = default_subword_ids_slice.expand(input_shape[0], input_shape[1], seq_length)
             else:
                 subword_ids = default_subword_ids_slice.expand(input_shape[0], seq_length)
-
 
         whole_word_embeddings = self.whole_word_embeddings(word_ids)
         subword_embeddings = self.subword_embeddings(subword_ids)
@@ -248,7 +243,6 @@ class Bert2DEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Bert2D
 class Bert2DSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -339,7 +333,6 @@ class Bert2DSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSdpaSelfAttention with Bert->Bert2D
 class Bert2DSdpaSelfAttention(Bert2DSelfAttention):
     def __init__(self, config, position_embedding_type=None):
         super().__init__(config, position_embedding_type=position_embedding_type)
@@ -398,7 +391,9 @@ class Bert2DSdpaSelfAttention(Bert2DSelfAttention):
             value_layer = value_layer.contiguous()
 
         is_causal = (
-            True if self.is_decoder and not is_cross_attention and attention_mask_to_pass is None and tgt_len > 1 else False
+            True
+            if self.is_decoder and not is_cross_attention and attention_mask_to_pass is None and tgt_len > 1
+            else False
         )
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
@@ -418,7 +413,6 @@ class Bert2DSdpaSelfAttention(Bert2DSelfAttention):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Bert2D
 class Bert2DSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -439,7 +433,6 @@ BERT2D_SELF_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with BERT->BERT2D,Bert->Bert2D
 class Bert2DAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -489,7 +482,6 @@ class Bert2DAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Bert2D
 class Bert2DIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -505,7 +497,6 @@ class Bert2DIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->Bert2D
 class Bert2DOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -520,7 +511,6 @@ class Bert2DOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Bert2D
 class Bert2DLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -601,7 +591,6 @@ class Bert2DLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Bert2D
 class Bert2DEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -695,7 +684,6 @@ class Bert2DEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->Bert2D
 class Bert2DPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -709,7 +697,6 @@ class Bert2DPooler(nn.Module):
         return pooled_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->Bert2D
 class Bert2DPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -727,7 +714,6 @@ class Bert2DPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->Bert2D
 class Bert2DLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -745,7 +731,6 @@ class Bert2DLMPredictionHead(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->Bert2D
 class Bert2DOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -756,7 +741,6 @@ class Bert2DOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOnlyNSPHead with Bert->Bert2D
 class Bert2DOnlyNSPHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -767,7 +751,6 @@ class Bert2DOnlyNSPHead(nn.Module):
         return seq_relationship_score
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPreTrainingHeads with Bert->Bert2D
 class Bert2DPreTrainingHeads(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -781,7 +764,6 @@ class Bert2DPreTrainingHeads(nn.Module):
 
 
 @auto_docstring
-# Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel with Bert->Bert2D,bert->bert2d
 class Bert2DPreTrainedModel(PreTrainedModel):
     config_class = Bert2DConfig
     load_tf_weights = load_tf_weights_in_bert2d
@@ -802,12 +784,11 @@ class Bert2DPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, Bert2DLMPredictionHead): # Ensure bias is initialized for this specific head
+        elif isinstance(module, Bert2DLMPredictionHead):  # Ensure bias is initialized for this specific head
             module.bias.data.zero_()
 
 
 @dataclass
-# Copied from transformers.models.bert.modeling_bert.BertForPreTrainingOutput with Bert->Bert2D
 class Bert2DForPreTrainingOutput(ModelOutput):
     """
     Output type of [`Bert2DForPreTraining`].
@@ -853,7 +834,6 @@ class Bert2DForPreTrainingOutput(ModelOutput):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 )
-# Copied from transformers.models.bert.modeling_bert.BertModel with Bert->Bert2D
 class Bert2DModel(Bert2DPreTrainedModel):
     _no_split_modules = ["Bert2DEmbeddings", "Bert2DLayer"]
 
@@ -928,7 +908,7 @@ class Bert2DModel(Bert2DPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         batch_size, seq_length = input_shape[:2]
-        
+
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if attention_mask is None:
@@ -936,15 +916,15 @@ class Bert2DModel(Bert2DPreTrainedModel):
 
         # Default token_type_ids if not provided (similar to vanilla BERT)
         if token_type_ids is None:
-            if hasattr(self.embeddings, "token_type_ids_buffer"): # Check for our buffer
-                buffered_token_type_ids = self.embeddings.token_type_ids_buffer[:, :input_shape[-1]]
-                if len(input_shape) == 3: # (batch, num_choices, seq_len)
+            if hasattr(self.embeddings, "token_type_ids_buffer"):  # Check for our buffer
+                buffered_token_type_ids = self.embeddings.token_type_ids_buffer[:, : input_shape[-1]]
+                if len(input_shape) == 3:  # (batch, num_choices, seq_len)
                     token_type_ids = buffered_token_type_ids.expand(input_shape[0], input_shape[1], input_shape[-1])
-                else: # (batch, seq_len)
+                else:  # (batch, seq_len)
                     token_type_ids = buffered_token_type_ids.expand(input_shape[0], input_shape[-1])
-            else: # Fallback if buffer isn't there (shouldn't happen with new __init__)
+            else:  # Fallback if buffer isn't there (shouldn't happen with new __init__)
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
-        
+
         # word_ids and subword_ids will be defaulted inside Bert2DEmbeddings.forward if None
 
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
@@ -962,9 +942,9 @@ class Bert2DModel(Bert2DPreTrainedModel):
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
-            word_ids=word_ids, # Can be None, will be handled by Bert2DEmbeddings
-            subword_ids=subword_ids, # Can be None, will be handled by Bert2DEmbeddings
-            token_type_ids=token_type_ids, # Now guaranteed to be non-None
+            word_ids=word_ids,  # Can be None, will be handled by Bert2DEmbeddings
+            subword_ids=subword_ids,  # Can be None, will be handled by Bert2DEmbeddings
+            token_type_ids=token_type_ids,  # Now guaranteed to be non-None
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
@@ -1002,7 +982,6 @@ class Bert2DModel(Bert2DPreTrainedModel):
     sentence prediction (classification)` head.
     """
 )
-# Copied from transformers.models.bert.modeling_bert.BertForPreTraining with Bert->Bert2D,bert->bert2d
 class Bert2DForPreTraining(Bert2DPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
@@ -1073,7 +1052,6 @@ class Bert2DForPreTraining(Bert2DPreTrainedModel):
     Bert2D Model with a `language modeling` head on top for CLM fine-tuning.
     """
 )
-# Copied from transformers.models.bert.modeling_bert.BertLMHeadModel with Bert->Bert2D,bert->bert2d
 class Bert2DLMHeadModel(Bert2DPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
@@ -1167,7 +1145,6 @@ class Bert2DLMHeadModel(Bert2DPreTrainedModel, GenerationMixin):
     Bert2D Model with a `language modeling` head on top for CLM fine-tuning.
     """
 )
-# Copied from transformers.models.bert.modeling_bert.BertForMaskedLM with Bert->Bert2D,bert->bert2d
 class Bert2DForMaskedLM(Bert2DPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
@@ -1259,7 +1236,6 @@ class Bert2DForMaskedLM(Bert2DPreTrainedModel):
     Bert2D Model with a `next sentence prediction (classification)` head on top.
     """
 )
-# Copied from transformers.models.bert.modeling_bert.BertForNextSentencePrediction with Bert->Bert2D,bert->bert2d
 class Bert2DForNextSentencePrediction(Bert2DPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1326,7 +1302,6 @@ class Bert2DForNextSentencePrediction(Bert2DPreTrainedModel):
     output) e.g. for GLUE tasks.
     """
 )
-# Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification with Bert->Bert2D,bert->bert2d
 class Bert2DForSequenceClassification(Bert2DPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1409,7 +1384,6 @@ class Bert2DForSequenceClassification(Bert2DPreTrainedModel):
     output) e.g. for GLUE tasks.
     """
 )
-# Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice with Bert->Bert2D,bert->bert2d
 class Bert2DForMultipleChoice(Bert2DPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1486,7 +1460,6 @@ class Bert2DForMultipleChoice(Bert2DPreTrainedModel):
     Named-Entity-Recognition (NER) tasks.
     """
 )
-# Copied from transformers.models.bert.modeling_bert.BertForTokenClassification with Bert->Bert2D,bert->bert2d
 class Bert2DForTokenClassification(Bert2DPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1551,7 +1524,6 @@ class Bert2DForTokenClassification(Bert2DPreTrainedModel):
     layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """
 )
-# Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering with Bert->Bert2D,bert->bert2d
 class Bert2DForQuestionAnswering(Bert2DPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
