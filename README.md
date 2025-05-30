@@ -1,3 +1,5 @@
+[![Build PR Documentation](https://github.com/nodoubtz/2lit-formers/actions/workflows/build_pr_documentation.yml/badge.svg)](https://github.com/nodoubtz/2lit-formers/actions/workflows/build_pr_documentation.yml)
+
 [![Secret Leaks](https://github.com/nodoubtz/2lit-formers/actions/workflows/trufflehog.yml/badge.svg?branch=Nodoubtz)](https://github.com/nodoubtz/2lit-formers/actions/workflows/trufflehog.yml)
 
 [![Deploy static content to Pages](https://github.com/nodoubtz/2lit-formers/actions/workflows/static.yml/badge.svg)](https://github.com/nodoubtz/2lit-formers/actions/workflows/static.yml)
