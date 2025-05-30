@@ -180,10 +180,6 @@ class XcodecConfig(PretrainedConfig):
         return math.ceil(self.sample_rate / np.prod(self.acoustic_model_config.upsampling_ratios))
 
     @property
-    def bits_per_codebook(self) -> int:
-        return int(math.log2(self.codebook_size))
-
-    @property
     def hop_length(self) -> int:
         return int(np.prod(self.acoustic_model_config.downsampling_ratios))
 

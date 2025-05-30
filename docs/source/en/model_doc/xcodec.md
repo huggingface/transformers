@@ -59,15 +59,26 @@ audio_sample = dummy_dataset[-1]["audio"]["array"]
 inputs = feature_extractor(raw_audio=audio_sample, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
 
 encoder_outputs = model.encode(inputs["input_values"])
-audio_codes = encoder_outputs.audio_codes
-decoder_outputs = model.decode(audio_codes)
+decoder_outputs = model.decode(encoder_outputs.audio_codes)
 audio_values = decoder_outputs.audio_values
 
 # or the equivalent with a forward pass
-outputs = model(inputs["input_values"])
-audio_codes = outputs.audio_codes
-audio_values = outputs.audio_values
+audio_values = model(inputs["input_values"]).audio_values
+
 ```
+To listen to the original and reconstructed audio, run the snippet below and then open the generated `original.wav` and `reconstruction.wav` files in your music player to compare.
+
+```python
+import soundfile as sf
+
+original = audio_sample
+reconstruction = audio_values[0].cpu().detach().numpy()
+sampling_rate = feature_extractor.sampling_rate
+
+sf.write("original.wav", original, sampling_rate)
+sf.write("reconstruction.wav", reconstruction.T, sampling_rate)
+```
+
 
 ## XcodecConfig
 
