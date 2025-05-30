@@ -40,6 +40,10 @@ class ColQwen2PreTrainedModel(PreTrainedModel):
     config_class = ColQwen2Config
     base_model_prefix = "model"
     _no_split_modules = []
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_cache_class = True
 
     def _init_weights(self, module):
         std = (
