@@ -24,7 +24,11 @@ CHECKPOINT_URL_MAP = {
     "mm_grounding_dino_tiny_o365v1_goldg_v3det": "https://download.openmmlab.com/mmdetection/v3.0/mm_grounding_dino/grounding_dino_swin-t_pretrain_obj365_goldg_v3det/grounding_dino_swin-t_pretrain_obj365_goldg_v3det_20231218_095741-e316e297.pth",
     "mm_grounding_dino_tiny_o365v1_goldg_grit_v3det": "https://download.openmmlab.com/mmdetection/v3.0/mm_grounding_dino/grounding_dino_swin-t_pretrain_obj365_goldg_grit9m_v3det/grounding_dino_swin-t_pretrain_obj365_goldg_grit9m_v3det_20231204_095047-b448804b.pth",
     "mm_grounding_dino_base_o365v1_goldg_v3det": "https://download.openmmlab.com/mmdetection/v3.0/mm_grounding_dino/grounding_dino_swin-b_pretrain_obj365_goldg_v3det/grounding_dino_swin-b_pretrain_obj365_goldg_v3de-f83eef00.pth",
+    "mm_grounding_dino_base_all": "https://download.openmmlab.com/mmdetection/v3.0/mm_grounding_dino/grounding_dino_swin-b_pretrain_all/grounding_dino_swin-b_pretrain_all-f9818a7c.pth",
     "mm_grounding_dino_large_o365v2_oiv6_goldg": "https://download.openmmlab.com/mmdetection/v3.0/mm_grounding_dino/grounding_dino_swin-l_pretrain_obj365_goldg/grounding_dino_swin-l_pretrain_obj365_goldg-34dcdc53.pth",
+    "mm_grounding_dino_large_all": "https://download.openmmlab.com/mmdetection/v3.0/mm_grounding_dino/grounding_dino_swin-l_pretrain_all/grounding_dino_swin-l_pretrain_all-56d69e78.pth",
+    "llmdet_tiny": "https://huggingface.co/fushh7/LLMDet/resolve/main/tiny.pth?download=true",
+    "llmdet_base": "https://huggingface.co/fushh7/LLMDet/resolve/main/base.pth?download=true",
     "llmdet_large": "https://huggingface.co/fushh7/LLMDet/resolve/main/large.pth?download=true",
 }
 
@@ -457,7 +461,7 @@ def main(args):
         outputs, inputs.input_ids, box_threshold=0.4, text_threshold=0.3, target_sizes=[image.size[::-1]]
     )
     result = results[0]
-    for box, score, labels in zip(result["boxes"], result["scores"], result["labels"]):
+    for box, score, labels in zip(result["boxes"], result["scores"], result["text_labels"]):
         box = [round(x, 2) for x in box.tolist()]
         print(f"Detected {labels} with confidence {round(score.item(), 3)} at location {box}")
 
@@ -473,7 +477,7 @@ def main(args):
             draw_bounding_boxes(
                 pil_to_tensor(image),
                 result["boxes"],
-                [f"{label}: {score:.2f}" for label, score in zip(result["labels"], result["scores"])],
+                [f"{label}: {score:.2f}" for label, score in zip(result["text_labels"], result["scores"])],
             )
         )
         img_draw.show()
