@@ -117,6 +117,7 @@ from .utils import (
     is_peft_available,
     is_phonemizer_available,
     is_pretty_midi_available,
+    is_psutil_available,
     is_pyctcdecode_available,
     is_pytesseract_available,
     is_pytest_available,
@@ -1055,6 +1056,9 @@ def require_torch_gpu(test_case):
 
 def require_large_cpu_ram(test_case, memory: float = 80):
     """Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory."""
+    if not is_psutil_available():
+        return test_case
+
     return unittest.skipUnless(
         psutil.virtual_memory().total / 1024**3 > memory,
         f"test requires a machine with more than {memory} GiB of CPU RAM memory",
