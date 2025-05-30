@@ -149,15 +149,17 @@ class QuasarV4Config(PretrainedConfig):
             "enabled": True,
             "temperature_dim": None,  # Will be set to hidden_size // 4 if None
             "num_temperature_layers": 4,
-            "position_dependent_scaling": True,
-            "context_aware_scaling": True,
         },
-        output_adaptation={"enabled": True, "adaptation_factor": 0.1},
-        dense_residual_connections={"enabled": True, "connection_factor": 0.05},
-        temperature_aggregation={
+        output_adaptation={
             "enabled": True,
-            "aggregation_layers": 5,
-            "global_scaling_factor": 0.05,
+            "output_dim": None,  # Will be set to hidden_size if None
+            "adaptation_factor": 0.5,
+        },
+        dense_residual_connections=None,
+        temperature_aggregation={
+            "aggregation_layers": 4,
+            "aggregation_method": "mean",
+            "global_scaling_factor": 1.0,
         },
         **kwargs,
     ):
