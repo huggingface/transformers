@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Llava-NeXT-Video model."""
 
+import copy
 import unittest
 
 import numpy as np
@@ -23,6 +24,7 @@ from transformers import (
     AutoProcessor,
     LlavaNextVideoConfig,
     LlavaNextVideoForConditionalGeneration,
+    LlavaNextVideoModel,
     is_torch_available,
     is_vision_available,
 )
@@ -194,7 +196,14 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
     Model tester for `LlavaNextVideoForConditionalGeneration`.
     """
 
-    all_model_classes = (LlavaNextVideoForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            LlavaNextVideoModel,
+            LlavaNextVideoForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     test_pruning = False
     test_head_masking = False
     _is_composite = True
@@ -279,18 +288,19 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
-            _ = model(**input_dict)  # successful forward with no modifications
+            curr_input_dict = copy.deepcopy(input_dict)  # in=place modifications further
+            _ = model(**curr_input_dict)  # successful forward with no modifications
 
             # remove one image but leave the image token in text
-            input_dict["pixel_values"] = input_dict["pixel_values"][-1:, ...]
-            input_dict["image_sizes"] = input_dict["image_sizes"][-1:, ...]
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
+            curr_input_dict["image_sizes"] = curr_input_dict["image_sizes"][-1:, ...]
             with self.assertRaises(ValueError):
-                _ = model(**input_dict)
+                _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = input_dict["input_ids"][:1]
-            pixel_values = input_dict["pixel_values"][:1]
-            image_sizes = input_dict["image_sizes"][:1]
+            input_ids = curr_input_dict["input_ids"][:1]
+            pixel_values = curr_input_dict["pixel_values"][:1]
+            image_sizes = curr_input_dict["image_sizes"][:1]
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
@@ -301,6 +311,28 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             image_sizes = torch.cat([image_sizes, image_sizes], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
+
+    def test_odd_sized_image(self):
+        # prepare model configuration
+        config = self.model_tester.get_config()
+
+        # prepare input
+        num_image_tokens = 24
+        pixel_values = floats_tensor([1, 5, 3, config.vision_config.image_size, config.vision_config.image_size])
+        input_ids = ids_tensor([1, 64], config.text_config.vocab_size - 2) + 2
+        input_ids[:, :num_image_tokens] = config.image_token_index
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "image_sizes": torch.tensor([[13, 16]]),  # odd-sized image
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+
+        # forward with odd-sized image input
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model(**inputs_dict)
 
     @parameterized.expand(
         [
@@ -325,7 +357,8 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
             model = model_class(config).to(torch_device)
             # We should have the right number of input features,
             # and should be able to run a forward pass without exploding
-            assert model.multi_modal_projector.linear_1.in_features == expected_features
+            base_model = getattr(model, "model", model)
+            assert base_model.multi_modal_projector.linear_1.in_features == expected_features
             model(**input_dict)
 
     @unittest.skip(
@@ -382,7 +415,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
             "llava-hf/LLaVA-NeXT-Video-7B-hf", load_in_4bit=True, cache_dir="./"
         )
 
-        inputs = self.processor(self.prompt_video, videos=self.video, return_tensors="pt")
+        inputs = self.processor(text=self.prompt_video, videos=self.video, return_tensors="pt")
         # verify single forward pass
         inputs = inputs.to(torch_device)
         with torch.no_grad():
@@ -405,7 +438,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         inputs = self.processor(
-            [self.prompt_video, self.prompt_video],
+            text=[self.prompt_video, self.prompt_video],
             videos=[self.video, self.video],
             return_tensors="pt",
             padding=True,
@@ -432,7 +465,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         inputs = self.processor(
-            [self.prompt_image, self.prompt_video],
+            text=[self.prompt_image, self.prompt_video],
             images=self.image,
             videos=self.video,
             return_tensors="pt",
@@ -458,7 +491,7 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         inputs_batched = self.processor(
-            [self.prompt_video, self.prompt_image],
+            text=[self.prompt_video, self.prompt_image],
             images=[self.image],
             videos=[self.video],
             return_tensors="pt",

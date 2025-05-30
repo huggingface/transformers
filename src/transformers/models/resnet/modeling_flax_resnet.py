@@ -489,7 +489,7 @@ class FlaxResNetPreTrainedModel(FlaxPreTrainedModel):
     def __call__(
         self,
         pixel_values,
-        params: dict = None,
+        params: Optional[dict] = None,
         train: bool = False,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,

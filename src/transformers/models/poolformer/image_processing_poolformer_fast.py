@@ -17,8 +17,6 @@
 from typing import Optional, Union
 
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     BatchFeature,
     DefaultFastImageProcessorKwargs,
@@ -41,7 +39,7 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    add_start_docstrings,
+    auto_docstring,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -59,17 +57,16 @@ if is_torchvision_available():
 
 
 class PoolFormerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    Args:
+        crop_pct (`float`, *optional*, defaults to `self.crop_pct`):
+            Percentage of the image to crop. Only has an effect if `do_resize` is set to `True`.
+    """
+
     crop_pct: Optional[float]
 
 
-@add_start_docstrings(
-    "Constructs a fast PoolFormer image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    """
-        crop_pct (`float`, *optional*, defaults to `self.crop_pct`):
-            Percentage of the image to crop. Only has an effect if `do_resize` is set to `True`.
-    """,
-)
+@auto_docstring
 class PoolFormerImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -87,13 +84,7 @@ class PoolFormerImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[PoolFormerFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-            crop_pct (`float`, *optional*, defaults to `self.crop_pct`):
-                Percentage of the image to crop. Only has an effect if `do_resize` is set to `True`.
-        """,
-    )
+    @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[PoolFormerFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 

@@ -245,8 +245,8 @@ class Siglip2VisionTransformer(SiglipVisionTransformer):
         output_hidden_states: Optional[bool] = None,
     ) -> BaseModelOutputWithPooling:
         r"""
-        Returns:
-
+        spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
+            Tensor containing the spatial dimensions (height, width) of the input images.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -323,6 +323,31 @@ class Siglip2VisionModel(SiglipVisionModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> BaseModelOutputWithPooling:
+        r"""
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
+        spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
+            Tensor containing the spatial dimensions (height, width) of the input images.
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, Siglip2VisionModel
+
+        >>> model = Siglip2VisionModel.from_pretrained("google/siglip2-base-patch16-224")
+        >>> processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled features
+        ```"""
         return self.vision_model(
             pixel_values=pixel_values,
             attention_mask=pixel_attention_mask,
@@ -342,6 +367,36 @@ class Siglip2Model(SiglipModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> torch.FloatTensor:
+        r"""
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
+        spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
+            Tensor containing the spatial dimensions (height, width) of the input images.
+
+        Returns:
+            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
+            applying the projection layer to the pooled output of [`Siglip2VisionModel`].
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, AutoModel
+        >>> import torch
+
+        >>> model = AutoModel.from_pretrained("google/siglip2-base-patch16-224")
+        >>> processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     image_features = model.get_image_features(**inputs)
+        ```
+        """
         # Use Siglip2Model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -373,6 +428,41 @@ class Siglip2Model(SiglipModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> Siglip2Output:
+        r"""
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
+        spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
+            Tensor containing the spatial dimensions (height, width) of the input images.
+        return_loss (`bool`, *optional*):
+            Whether or not to return the contrastive loss.
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, AutoModel
+        >>> import torch
+
+        >>> model = AutoModel.from_pretrained("google/siglip2-base-patch16-224")
+        >>> processor = AutoProcessor.from_pretrained("google/siglip2-base-patch16-224")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> texts = ["a photo of 2 cats", "a photo of 2 dogs"]
+        >>> # important: we pass `padding=max_length` since the model was trained with this
+        >>> inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> logits_per_image = outputs.logits_per_image
+        >>> probs = torch.sigmoid(logits_per_image) # these are the probabilities
+        >>> print(f"{probs[0][0]:.1%} that image 0 is '{texts[0]}'")
+        31.9% that image 0 is 'a photo of 2 cats'
+        ```
+        """
         # Use Siglip2 model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -441,6 +531,42 @@ class Siglip2ForImageClassification(SiglipForImageClassification):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> ImageClassifierOutput:
+        r"""
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
+        spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
+            Tensor containing the spatial dimensions (height, width) of the input images.
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, Siglip2ForImageClassification
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> # note: we are loading a `Siglip2Model` from the hub here,
+        >>> # so the head will be randomly initialized, hence the predictions will be random if seed is not set above.
+        >>> image_processor = AutoImageProcessor.from_pretrained("google/siglip2-base-patch16-224")
+        >>> model = Siglip2ForImageClassification.from_pretrained("google/siglip2-base-patch16-224")
+
+        >>> inputs = image_processor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> logits = outputs.logits
+        >>> # model predicts one of the two classes
+        >>> predicted_class_idx = logits.argmax(-1).item()
+        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        Predicted class: LABEL_1
+        ```
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

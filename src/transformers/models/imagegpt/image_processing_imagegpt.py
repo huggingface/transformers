@@ -89,7 +89,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         # clusters is a first argument to maintain backwards compatibility with the old ImageGPTImageProcessor
         clusters: Optional[Union[List[List[int]], np.ndarray]] = None,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_normalize: bool = True,
         do_color_quantize: bool = True,
@@ -180,7 +180,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_normalize: Optional[bool] = None,
         do_color_quantize: Optional[bool] = None,

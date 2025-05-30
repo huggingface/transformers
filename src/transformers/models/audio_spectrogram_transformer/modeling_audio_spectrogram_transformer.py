@@ -25,23 +25,11 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import auto_docstring, logging
 from .configuration_audio_spectrogram_transformer import ASTConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "ASTConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "MIT/ast-finetuned-audioset-10-10-0.4593"
-_EXPECTED_OUTPUT_SHAPE = [1, 1214, 768]
-
-# Audio classification docstring
-_SEQ_CLASS_CHECKPOINT = "MIT/ast-finetuned-audioset-10-10-0.4593"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'Speech'"
-_SEQ_CLASS_EXPECTED_LOSS = 0.17
 
 
 class ASTEmbeddings(nn.Module):
@@ -388,12 +376,8 @@ class ASTEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class ASTPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = ASTConfig
     base_model_prefix = "audio_spectrogram_transformer"
     main_input_name = "input_values"
@@ -420,48 +404,7 @@ class ASTPreTrainedModel(PreTrainedModel):
             module.distillation_token.data.zero_()
 
 
-AUDIO_SPECTROGRAM_TRANSFORMER_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`ASTConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-AUDIO_SPECTROGRAM_TRANSFORMER_INPUTS_DOCSTRING = r"""
-    Args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, max_length, num_mel_bins)`):
-            Float values mel features extracted from the raw audio waveform. Raw audio waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
-            the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-            [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
-            tensor of type `torch.FloatTensor`. See [`~ASTFeatureExtractor.__call__`]
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare AST Model transformer outputting raw hidden-states without any specific head on top.",
-    AUDIO_SPECTROGRAM_TRANSFORMER_START_DOCSTRING,
-)
+@auto_docstring
 class ASTModel(ASTPreTrainedModel):
     def __init__(self, config: ASTConfig) -> None:
         super().__init__(config)
@@ -486,14 +429,7 @@ class ASTModel(ASTPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(AUDIO_SPECTROGRAM_TRANSFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPooling,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor] = None,
@@ -502,6 +438,14 @@ class ASTModel(ASTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, max_length, num_mel_bins)`):
+            Float values mel features extracted from the raw audio waveform. Raw audio waveform can be obtained by
+            loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
+            the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
+            [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
+            tensor of type `torch.FloatTensor`. See [`~ASTFeatureExtractor.__call__`]
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -555,12 +499,11 @@ class ASTMLPHead(nn.Module):
         return hidden_state
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Audio Spectrogram Transformer model with an audio classification head on top (a linear layer on top of the pooled
     output) e.g. for datasets like AudioSet, Speech Commands v2.
-    """,
-    AUDIO_SPECTROGRAM_TRANSFORMER_START_DOCSTRING,
+    """
 )
 class ASTForAudioClassification(ASTPreTrainedModel):
     def __init__(self, config: ASTConfig) -> None:
@@ -575,15 +518,7 @@ class ASTForAudioClassification(ASTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(AUDIO_SPECTROGRAM_TRANSFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_SEQ_CLASS_CHECKPOINT,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
-    )
+    @auto_docstring
     def forward(
         self,
         input_values: Optional[torch.Tensor] = None,
@@ -594,6 +529,12 @@ class ASTForAudioClassification(ASTPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, max_length, num_mel_bins)`):
+            Float values mel features extracted from the raw audio waveform. Raw audio waveform can be obtained by
+            loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
+            the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
+            [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
+            tensor of type `torch.FloatTensor`. See [`~ASTFeatureExtractor.__call__`]
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the audio classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If

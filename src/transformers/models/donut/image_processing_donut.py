@@ -94,7 +94,7 @@ class DonutImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_thumbnail: bool = True,
         do_align_long_axis: bool = False,
@@ -313,7 +313,7 @@ class DonutImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_thumbnail: Optional[bool] = None,
         do_align_long_axis: Optional[bool] = None,

@@ -22,10 +22,7 @@ import numpy as np
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import (
-    PreTokenizedInput,
-    TextInput,
-)
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 class MllamaImagesKwargs(ImagesKwargs, total=False):
@@ -208,7 +205,6 @@ class MllamaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
     image_processor_class = "MllamaImageProcessor"
     tokenizer_class = "PreTrainedTokenizerFast"
 
@@ -370,7 +366,7 @@ class MllamaProcessor(ProcessorMixin):
                 or `(sequence_length,)`.
             skip_special_tokens (`bool`, *optional*, defaults to `True`):
                 Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
-            Clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
                 Whether or not to clean up the tokenization spaces. Argument passed to the tokenizer's `batch_decode` method.
             **kwargs:
                 Additional arguments to be passed to the tokenizer's `batch_decode method`.

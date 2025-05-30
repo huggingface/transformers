@@ -92,12 +92,12 @@ class PatchTSMixerModelTester:
         head_dropout: float = 0.2,
         # forecast related
         prediction_length: int = 16,
-        out_channels: int = None,
+        out_channels: Optional[int] = None,
         # Classification/regression related
         # num_labels: int = 3,
         num_targets: int = 3,
-        output_range: list = None,
-        head_aggregation: str = None,
+        output_range: Optional[list] = None,
+        head_aggregation: Optional[str] = None,
         # Trainer related
         batch_size=13,
         is_training=True,
@@ -480,7 +480,7 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(output.shape, expected_shape)
 
-        expected_slice = torch.tensor([[[[-0.9106]],[[1.5326]],[[-0.8245]],[[0.7439]],[[-0.7830]],[[2.6256]],[[-0.6485]],]],device=torch_device)  # fmt: skip
+        expected_slice = torch.tensor([[[-0.9106]],[[1.5326]],[[-0.8245]],[[0.7439]],[[-0.7830]],[[2.6256]],[[-0.6485]],],device=torch_device)  # fmt: skip
         torch.testing.assert_close(output[0, :7, :1, :1], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     def test_forecasting_head(self):
