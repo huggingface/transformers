@@ -16,14 +16,16 @@ import json
 import time
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Literal, List, Union, Dict
+from threading import Thread
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from logging import getLevelNamesMapping
 
-from .. import PreTrainedTokenizerFast
+from .. import PreTrainedTokenizerFast, TextIteratorStreamer
 from ..generation.continuous_batching import ContinuousBatchingManager, RequestStatus
 from ..utils import is_torch_available, logging
 from . import BaseTransformersCLICommand
@@ -46,12 +48,36 @@ class Message(BaseModel):
     content: str
 
 
+# class ChatCompletionInput(BaseModel):
+#     messages: List[Message]
+#     stream: Literal[False] = False,
+#     frequency_penalty: Optional[float] = None,
+#     logit_bias: Optional[List[float]] = None,
+#     logprobs: Optional[bool] = None,
+#     max_tokens: Optional[int] = None,
+#     n: Optional[int] = None,
+#     presence_penalty: Optional[float] = None,
+#     response_format: Optional[ChatCompletionInputGrammarType] = None,
+#     seed: Optional[int] = None,
+#     stop: Optional[List[str]] = None,
+#     stream_options: Optional[ChatCompletionInputStreamOptions] = None,
+#     temperature: Optional[float] = None,
+#     tool_choice: Optional[Union[ChatCompletionInputToolChoiceClass]] = None,
+#     tool_prompt: Optional[str] = None,
+#     tools: Optional[List[ChatCompletionInputTool]] = None,
+#     top_logprobs: Optional[int] = None,
+#     top_p: Optional[float] = None,
+#
+#     extra_body: Optional[Dict] = None,
+#     request_id: Optional[str] = None
+
 class ChatCompletionInput(BaseModel):
     messages: list[Message]
     stream: Optional[bool] = False
     model: Optional[str] = None
     max_tokens: Optional[int] = None
     request_id: Optional[str] = None
+    extra_body: Optional[Dict] = None
 
 
 logger = logging.get_logger("transformers/serving")
@@ -117,6 +143,9 @@ class ServeArguments:
     host: str = field(default="localhost", metadata={"help": "Interface the server will listen to.."})
     port: int = field(default=8000, metadata={"help": "Port the server will listen to."})
 
+    # Other settings
+    log_level: str = field(default='info', metadata={"help": "Logging level as a string. Example: 'info' or 'warning'."})
+
 
 class ServeCommand(BaseTransformersCLICommand):
     @staticmethod
@@ -137,9 +166,10 @@ class ServeCommand(BaseTransformersCLICommand):
     def __init__(self, args: ServeArguments):
         self.args = args
         self.model, self.tokenizer = self.load_model_and_tokenizer(args)
+        self.use_continuous_batching = self.args.attn_implementation == 'sdpa_paged'
 
         cb_logger = logging.get_logger("transformers.generation.continuous_batching")
-        cb_logger.setLevel(logging.ERROR)
+        cb_logger.setLevel(getLevelNamesMapping()[self.args.log_level.upper()])
 
     def build_chunk(self, content: str, request_id: str) -> str:
         payload = {
@@ -161,10 +191,35 @@ class ServeCommand(BaseTransformersCLICommand):
 
     def run(self):
         app = FastAPI()
-        args = self.args
 
+
+        if self.use_continuous_batching:
+            self.continuous_batching(app)
+        else:
+            self.generate(app)
+
+        uvicorn.run(app, host=self.args.host, port=self.args.port, log_level=self.args.log_level)
+
+    @staticmethod
+    def get_generation_parameters(req: ChatCompletionInput):
+        return req.extra_body or {}
+        # return {
+        #     "frequency_penalty": req.frequency_penalty,
+        #     "logit_bias": req.logit_bias,
+        #     "logprobs": req.logprobs,
+        #     "max_tokens": req.max_tokens,
+        #     "n": req.n,
+        #     "presence_penalty": req.presence_penalty,
+        #     "response_format": req.response_format,
+        #     "stop": req.stop,
+        #     "temperature": req.temperature,
+        #     "top_logprobs": req.top_logprobs,
+        #     "top_p": req.top_p,
+        #     **(req.extra_body or {}),
+        # }
+
+    def continuous_batching(self, app):
         generation_config = GenerationConfig(
-            max_new_tokens=256,
             eos_token_id=self.tokenizer.eos_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
             use_cache=False,
@@ -191,9 +246,10 @@ class ServeCommand(BaseTransformersCLICommand):
                 self.model.device
             )
 
-            def stream_response(inputs):
-                request_id = manager.add_request(inputs, request_id=req.request_id)
 
+            def stream_response(_inputs):
+                max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 256
+                request_id = manager.add_request(_inputs, request_id=req.request_id, max_new_tokens=max_new_tokens)
                 queue_is_flushed = False
 
                 for result in manager:
@@ -212,7 +268,41 @@ class ServeCommand(BaseTransformersCLICommand):
 
             return StreamingResponse(stream_response(inputs[0]), media_type="text/event-stream")
 
-        uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+    def generate(self, app):
+        @app.post("/v1/chat/completions")
+        def _serve(req: ChatCompletionInput):
+            if not req.stream:
+                return {"error": "Only streaming mode is supported."}
+
+            chat = req.messages
+            request_id = req.request_id if req.request_id is not None else "req_0"
+
+            inputs = self.tokenizer.apply_chat_template(chat, return_tensors="pt", add_generation_prompt=True).to(
+                self.model.device
+            )
+
+            attention_mask = torch.ones_like(inputs)
+            generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
+            generation_config = GenerationConfig(max_new_tokens=256, **self.get_generation_parameters(req))
+
+            generation_kwargs = {
+                "inputs": inputs,
+                "attention_mask": attention_mask,
+                "streamer": generation_streamer,
+                "generation_config": generation_config
+            }
+
+            def stream_response(streamer, _request_id):
+                thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
+                thread.start()
+
+                for result in streamer:
+                    yield self.build_chunk(result, _request_id)
+                yield "data: [DONE]\n\n"
+
+                thread.join()
+
+            return StreamingResponse(stream_response(generation_streamer, request_id), media_type="text/event-stream")
 
     @staticmethod
     def get_quantization_config(model_args: ServeArguments) -> Optional["BitsAndBytesConfig"]:
@@ -258,7 +348,6 @@ class ServeCommand(BaseTransformersCLICommand):
             model = model.to(args.device)
 
         return model, tokenizer
-
 
 if __name__ == "__main__":
     serve = ServeCommand()
