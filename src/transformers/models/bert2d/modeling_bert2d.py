@@ -50,7 +50,7 @@ logger = logging.get_logger(__name__)
 
 
 # Copied from transformers.models.bert.modeling_bert.load_tf_weights_in_bert with bert->bert2d
-def load_tf_weights_in_bert2d(model, config, tf_checkpoint_path):
+def load_tf_weights_in_bert2d(model, config, tf_checkpoint_path):\
     """Load tf checkpoints in a pytorch model."""
     try:
         import re
@@ -87,8 +87,8 @@ def load_tf_weights_in_bert2d(model, config, tf_checkpoint_path):
             continue
         pointer = model
         for m_name in name:
-            if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
-                scope_names = re.split(r"_(\d+)", m_name)
+            if re.fullmatch(r"[A-Za-z]+_\\d+", m_name):
+                scope_names = re.split(r"_(\\d+)", m_name)
             else:
                 scope_names = [m_name]
             if scope_names[0] == "bert":
@@ -309,7 +309,7 @@ class Bert2DSelfAttention(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertSdpaSelfAttention with Bert->Bert2D
 class Bert2DSdpaSelfAttention(Bert2DSelfAttention):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config, position_embedding_type=None):\
         super().__init__(config, position_embedding_type=position_embedding_type)
         self.dropout_prob = config.attention_probs_dropout_prob
         self.require_contiguous_qkv = version.parse(get_torch_version()) < version.parse("2.2.0")
@@ -746,7 +746,7 @@ class Bert2DLMPredictionHead(nn.Module):
     def _tie_weights(self):
         self.decoder.bias = self.bias
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states):\
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
         return hidden_states
@@ -1303,8 +1303,29 @@ class Bert2DLMHeadModel(Bert2DPreTrainedModel, GenerationMixin):
             cross_attentions=outputs.cross_attentions,
         )
 
+    @staticmethod
+    def _reorder_cache(
+        past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
+    ) -> Tuple[Tuple[torch.Tensor]]:
+        """
+        This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
+        [`~PreTrainedModel.beam_sample`] is used. This is required to match `past_key_values` with the correct
+        beam_idx at each generation step.
+        """
+        reordered_past = ()
+        for layer_past in past_key_values:
+            # each layer_past is a tuple of (key, value)
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
+        return reordered_past
 
-@auto_docstring
+
+@auto_docstring(
+    custom_intro="""
+    Bert2D Model with a `language modeling` head on top for CLM fine-tuning.
+    """
+)
 # Copied from transformers.models.bert.modeling_bert.BertForMaskedLM with Bert->Bert2D,bert->bert2d
 class Bert2DForMaskedLM(Bert2DPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.bias", "cls.predictions.decoder.weight"]
@@ -1406,7 +1427,7 @@ class Bert2DForMaskedLM(Bert2DPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):\
         input_shape = input_ids.shape
         effective_batch_size = input_shape[0]
 
@@ -1664,7 +1685,12 @@ class Bert2DForSequenceClassification(Bert2DPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Bert2D Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    output) e.g. for GLUE tasks.
+    """
+)
 # Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice with Bert->Bert2D,bert->bert2d
 class Bert2DForMultipleChoice(Bert2DPreTrainedModel):
     def __init__(self, config):
@@ -1767,7 +1793,12 @@ class Bert2DForMultipleChoice(Bert2DPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Bert2D Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """
+)
 # Copied from transformers.models.bert.modeling_bert.BertForTokenClassification with Bert->Bert2D,bert->bert2d
 class Bert2DForTokenClassification(Bert2DPreTrainedModel):
     def __init__(self, config):
@@ -1855,7 +1886,12 @@ class Bert2DForTokenClassification(Bert2DPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    Bert2D Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """
+)
 # Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering with Bert->Bert2D,bert->bert2d
 class Bert2DForQuestionAnswering(Bert2DPreTrainedModel):
     def __init__(self, config):
