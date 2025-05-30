@@ -31,10 +31,9 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torch_large_accelerator,
+    require_torch_large_gpu,
     slow,
-    tooslow,
     torch_device,
 )
 
@@ -190,7 +189,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
     @require_torch_large_accelerator
     @require_read_token
-    @tooslow
     def test_model_9b_bf16(self):
         model_id = "google/gemma-2-9b"
         EXPECTED_TEXTS = [
@@ -212,7 +210,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
     @require_torch_large_accelerator
     @require_read_token
-    @tooslow
     def test_model_9b_fp16(self):
         model_id = "google/gemma-2-9b"
         EXPECTED_TEXTS = [
@@ -234,7 +231,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
     @require_read_token
     @require_torch_large_accelerator
-    @tooslow
     def test_model_9b_pipeline_bf16(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
         model_id = "google/gemma-2-9b"
@@ -283,16 +279,15 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
     @require_read_token
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_large_gpu
     @mark.flash_attn_test
     @slow
-    @tooslow
     def test_model_9b_flash_attn(self):
         # See https://github.com/huggingface/transformers/issues/31953 --- flash attn was generating garbage for gemma2, especially in long context
         model_id = "google/gemma-2-9b"
         EXPECTED_TEXTS = [
             '<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many people died in the United States. I have found a few sites that say 500,000 but I am not sure if that is correct. I have also found a site that says 675,000 but I am not sure if that is correct either. I am trying to find out how many people died in the United States. I have found a few',
-            "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America is a country in North America. It is the third largest country in the world by total area and the third most populous country with over 320 million people. The United States is a federal republic consisting of 50 states and a federal district. The 48 contiguous states and the district of Columbia are in central North America between Canada and Mexico. The state of Alaska is in the"
+            "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America is a country in North America. It is the third largest country in the world by total area and the third most populous country with over 320 million people. The United States is a federal republic composed of 50 states and a federal district. The 48 contiguous states and the district of Columbia are in central North America between Canada and Mexico. The state of Alaska is in the",
         ]  # fmt: skip
 
         model = AutoModelForCausalLM.from_pretrained(
@@ -408,7 +403,6 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(export_generated_text, eager_generated_text)
 
     @require_read_token
-    @tooslow
     def test_model_9b_bf16_flex_attention(self):
         model_id = "google/gemma-2-9b"
         EXPECTED_TEXTS = [
