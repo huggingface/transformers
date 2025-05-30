@@ -286,12 +286,6 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_save_load_low_cpu_mem_usage(self):
-        self.skipTest("Skipping test_save_load_low_cpu_mem_usage to avoid SafeTensors errors")
-
-    def test_save_load_low_cpu_mem_usage_checkpoints(self):
-        self.skipTest("Skipping test_save_load_low_cpu_mem_usage_checkpoints to avoid SafeTensors errors")
-
     def test_for_pretraining(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
