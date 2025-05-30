@@ -1051,7 +1051,7 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype)).float()
 
         loss = None
-        if labels is not None:
+        if labels is not None or kwargs.get("shift_labels", None) is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if not return_dict:
