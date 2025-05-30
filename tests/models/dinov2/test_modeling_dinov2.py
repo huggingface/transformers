@@ -348,8 +348,6 @@ class Dinov2BackboneTest(unittest.TestCase, BackboneTesterMixin):
         self.model_tester = Dinov2ModelTester(self)
 
 
-
-
 @require_torch_multi_gpu
 @slow
 class Dinov2ModelDeviceMapTest(unittest.TestCase):
