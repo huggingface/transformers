@@ -590,7 +590,6 @@ def _preprocess_mask_arguments(
     attention_mask: Optional[Union[torch.Tensor, BlockMask]],
     cache_position: torch.Tensor,
     past_key_values: Optional[Cache],
-    layer_idx: Optional[int],
 ) -> tuple[bool, Optional[Union[torch.Tensor, BlockMask]], int, int]:
     """
     Perform some common pre-processing of the mask arguments we get from the modeling code. Mostly determine the
@@ -641,6 +640,10 @@ def _preprocess_mask_arguments(
 
     # If using a cache, it can give all informations about mask sizes based on seen tokens
     if past_key_values is not None:
+        if hasattr(past_key_values, "is_sliding") and isinstance(past_key_values.is_sliding, list):
+            layer_idx = past_key_values.is_sliding.index(False)
+        else:
+            layer_idx = 0
         kv_length, kv_offset = past_key_values.get_mask_sizes(cache_position, layer_idx)
     # Otherwise, the sizes are simply the input sizes
     else:
@@ -684,13 +687,8 @@ def create_causal_mask(
             useful to easily overlay another mask on top of the causal one, for example for image tokens handling.
     """
     # If we have an HybridCache structure, here we want to create the mask for the full layers
-    try:
-        layer_idx = past_key_values.is_sliding.index(False)
-    except (ValueError, AttributeError):
-        layer_idx = 0
-
     early_exit, attention_mask, kv_length, kv_offset = _preprocess_mask_arguments(
-        config, input_embeds, attention_mask, cache_position, past_key_values, layer_idx
+        config, input_embeds, attention_mask, cache_position, past_key_values
     )
     if early_exit:
         return attention_mask
