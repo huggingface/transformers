@@ -184,7 +184,7 @@ class QuasarV4Config(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.sliding_window = sliding_window
         self.use_sliding_window = use_sliding_window
-        
+
         # QuasarV4 specific config
         if token_temperature["temperature_dim"] is None:
             token_temperature["temperature_dim"] = hidden_size // 4

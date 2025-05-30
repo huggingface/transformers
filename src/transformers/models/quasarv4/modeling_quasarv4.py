@@ -23,10 +23,20 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ...activations import ACT2FN
+from ...generation.utils import GenerationMixin
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_utils import PreTrainedModel
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from .configuration_quasarv4 import QuasarV4Config
 
-def _make_causal_mask(
-    input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0
-):
+
+logger = logging.get_logger(__name__)
+
+_CONFIG_FOR_DOC = "QuasarV4Config"
+
+
+def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
     """Make causal mask used for bi-directional self-attention."""
     bsz, tgt_len = input_ids_shape
     mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min))
@@ -49,13 +59,6 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     inverted_mask = 1.0 - expanded_mask
 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
-
-from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import PreTrainedModel
-from ...generation.utils import GenerationMixin
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from .configuration_quasarv4 import QuasarV4Config
 
 
 logger = logging.get_logger(__name__)
@@ -105,15 +108,15 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     if position_ids is not None:
         cos = cos[position_ids]
         sin = sin[position_ids]
-    
+
     # Make sure we have the right dimensions
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
-    
+
     # Apply rotary embeddings
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
-    
+
     return q_embed, k_embed
 
 
@@ -176,17 +179,17 @@ class QuasarV4TokenTemperatureLayer(nn.Module):
         super().__init__()
         hidden_size = config.hidden_size
         temperature_dim = config.token_temperature["temperature_dim"]
-        
+    
         # Multi-layer temperature projection network
         self.temperature_proj1 = nn.Linear(hidden_size, temperature_dim * 2)
         self.temperature_proj2 = nn.Linear(temperature_dim * 2, temperature_dim)
         self.temperature_proj3 = nn.Linear(temperature_dim, 16)  # 16 different temperature dimensions
         self.temperature_proj4 = nn.Linear(16, 1)
-        
+    
         # Learnable temperature scales for different token positions
         self.temperature_scale_base = nn.Parameter(torch.ones(1) * 0.1)
         self.position_dependent_scale = nn.Parameter(torch.randn(1, 1, 8) * 0.01)  # Position-dependent scaling
-        
+    
         # Additional layers for token importance calculation
         self.token_importance = nn.Sequential(
             nn.Linear(hidden_size, temperature_dim),
@@ -196,37 +199,37 @@ class QuasarV4TokenTemperatureLayer(nn.Module):
             nn.Linear(temperature_dim // 2, 1),
             nn.Sigmoid()
         )
-        
+    
         # Context-aware scaling factor
         self.context_scale = nn.Linear(hidden_size, 1, bias=False)
-        
+    
     def forward(self, hidden_states):
         # Get sequence dimensions
         batch_size, seq_length, _ = hidden_states.shape
-        
+    
         # Calculate base token temperature through multi-layer network
         temp_features = F.gelu(self.temperature_proj1(hidden_states))
         temp_features = F.gelu(self.temperature_proj2(temp_features))
         temp_features = F.gelu(self.temperature_proj3(temp_features))
         base_token_temp = torch.sigmoid(self.temperature_proj4(temp_features))
-        
+    
         # Calculate token importance scores
         token_importance = self.token_importance(hidden_states)
-        
+    
         # Calculate context-aware scaling
         context_vector = hidden_states.mean(dim=1, keepdim=True)  # [batch, 1, hidden]
         context_scale = torch.sigmoid(self.context_scale(context_vector)) * 0.2 + 0.9  # 0.9-1.1 range
-        
+    
         # Apply position-dependent scaling
         position_scale = self.position_dependent_scale.expand(batch_size, seq_length, -1)
         position_scale = position_scale.mean(dim=-1, keepdim=True) + 1.0  # Ensure positive scaling
-        
+    
         # Combine all temperature factors
         token_temp = base_token_temp * token_importance * position_scale * context_scale * self.temperature_scale_base
-        
+    
         # Apply temperature scaling to hidden states
         scaled_states = hidden_states * (1.0 + token_temp)
-        
+    
         return scaled_states, token_temp
 
 
@@ -236,12 +239,12 @@ class QuasarV4TemperatureAggregation(nn.Module):
         super().__init__()
         hidden_size = config.hidden_size
         agg_layers = config.temperature_aggregation["aggregation_layers"]
-        
+    
         # Build a deeper network with multiple layers
         layers = []
         layers.append(nn.Linear(1, hidden_size // 4))
         layers.append(nn.GELU())
-        
+    
         # Add middle layers
         current_dim = hidden_size // 4
         for i in range(agg_layers - 3):  # -3 because we already have input, middle, and output layers
@@ -249,16 +252,16 @@ class QuasarV4TemperatureAggregation(nn.Module):
             layers.append(nn.Linear(current_dim, next_dim))
             layers.append(nn.GELU())
             current_dim = next_dim
-        
+    
         # Add output layer
         layers.append(nn.Linear(current_dim, hidden_size // 8))
         layers.append(nn.GELU())
         layers.append(nn.Linear(hidden_size // 8, 1))
         layers.append(nn.Sigmoid())
-        
+    
         self.aggregation_network = nn.Sequential(*layers)
         self.global_scaling_factor = config.temperature_aggregation["global_scaling_factor"]
-    
+
     def forward(self, token_temps):
         # Aggregate token temperatures
         global_temp = self.aggregation_network(token_temps)
@@ -271,14 +274,14 @@ class QuasarV4OutputAdaptation(nn.Module):
         super().__init__()
         hidden_size = config.hidden_size
         self.adaptation_factor = config.output_adaptation["adaptation_factor"]
-        
+    
         self.adaptation_network = nn.Sequential(
             nn.Linear(hidden_size, hidden_size),
             nn.GELU(),
             nn.Linear(hidden_size, hidden_size),
             QuasarV4RMSNorm(hidden_size, eps=config.rms_norm_eps)
         )
-    
+
     def forward(self, hidden_states):
         adapted_states = self.adaptation_network(hidden_states)
         return hidden_states + self.adaptation_factor * adapted_states
@@ -297,13 +300,13 @@ class QuasarV4Attention(nn.Module):
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
-        
+    
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size} and `num_heads`:"
                 f" {self.num_heads})."
             )
-        
+    
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
@@ -314,16 +317,16 @@ class QuasarV4Attention(nn.Module):
             base=self.rope_theta,
         )
         self.dropout = config.attention_dropout
-    
+
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-    
+
     def _split_heads(self, tensor, num_heads, head_dim):
         """Split heads and rearrange elements."""
         batch_size, seq_length, _ = tensor.shape
         tensor = tensor.view(batch_size, seq_length, num_heads, head_dim)
         return tensor.transpose(1, 2).contiguous()  # (batch, heads, seq_len, head_dim)
-    
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -351,20 +354,20 @@ class QuasarV4Attention(nn.Module):
             # Concatenate past key and value states
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
-        
+    
         # Determine position IDs for rotary embeddings
         if position_ids is None:
             position_ids = torch.arange(kv_seq_len, device=hidden_states.device).unsqueeze(0)
             # Offset position IDs for past key values if they exist
             if past_key_value is not None:
                 position_ids = position_ids[:, past_key_value[0].shape[-2]:]
-        
+    
         # Get rotary embeddings
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        
+    
         # Apply rotary embeddings to query and key states
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
-        
+    
         # Repeat key and value for grouped query attention if needed
         if self.num_key_value_groups > 1:
             key_states = key_states.repeat_interleave(self.num_key_value_groups, dim=1)
@@ -377,7 +380,7 @@ class QuasarV4Attention(nn.Module):
         if self.is_causal and attention_mask is None and q_len > 1:
             causal_mask = torch.ones((q_len, kv_seq_len), device=query_states.device, dtype=torch.bool).triu(1)
             attn_weights = attn_weights.masked_fill(causal_mask.unsqueeze(0).unsqueeze(0), torch.finfo(attn_weights.dtype).min)
-        
+    
         # Apply attention mask if provided
         if attention_mask is not None:
             attn_weights = attn_weights + attention_mask
@@ -604,16 +607,16 @@ class QuasarV4Model(QuasarV4PreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList([QuasarV4DecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = QuasarV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        
+    
         # Token temperature mechanism
         self.token_temperature = QuasarV4TokenTemperatureLayer(config)
         self.temperature_aggregation = QuasarV4TemperatureAggregation(config)
         self.output_adaptation = QuasarV4OutputAdaptation(config)
-        
+    
         # Additional parameters for enhanced capabilities
         self.layer_temperatures = nn.Parameter(torch.ones(config.num_hidden_layers) * 0.1)
         self.gradient_checkpointing = False
-        
+    
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -643,7 +646,7 @@ class QuasarV4Model(QuasarV4PreTrainedModel):
             )
 
         return combined_attention_mask
-        
+    
     @add_start_docstrings_to_model_forward(QUASARV4_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -708,7 +711,7 @@ class QuasarV4Model(QuasarV4PreTrainedModel):
 
         # Apply token temperature mechanism to input embeddings
         inputs_embeds, token_temps = self.token_temperature(inputs_embeds)
-        
+    
         # Aggregate token temperatures for global temperature
         global_temp = self.temperature_aggregation(token_temps)
 
