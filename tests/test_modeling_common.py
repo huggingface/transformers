@@ -4578,6 +4578,11 @@ class ModelTesterMixin:
                 self.skipTest(reason="This model does not support flex attention")
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if len(config.sub_configs) > 1:
+                self.skipTest(
+                    reason="This model uses sub configs. Manipulation of dimensionalities cannot be guaranteed."
+                )
+
             config._attn_implementation = "flex_attention"
             # Flex Attention cannot use dropout
             if hasattr(config, "attention_dropout"):
