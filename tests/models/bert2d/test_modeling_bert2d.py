@@ -18,7 +18,6 @@ import unittest
 from packaging import version
 
 from transformers import AutoTokenizer, Bert2DConfig, is_torch_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import (
     CaptureLogger,
     require_torch,
@@ -37,7 +36,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MODEL_FOR_PRETRAINING_MAPPING,
         Bert2DForMaskedLM,
         Bert2DForMultipleChoice,
         Bert2DForNextSentencePrediction,
@@ -102,7 +100,6 @@ class Bert2DModelTester:
         self.max_word_position_embeddings = max_word_position_embeddings
         self.max_intermediate_subword_position_embeddings = max_intermediate_subword_position_embeddings
 
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -119,7 +116,7 @@ class Bert2DModelTester:
         word_ids = ids_tensor([self.batch_size, self.seq_length], config.max_word_position_embeddings)
         subword_ids = ids_tensor(
             [self.batch_size, self.seq_length], config.max_intermediate_subword_position_embeddings + 2
-        ) # +2 for embedding layer size
+        )  # +2 for embedding layer size
 
         sequence_labels = None
         token_labels = None
@@ -212,12 +209,7 @@ class Bert2DModelTester:
             word_ids=word_ids,
             subword_ids=subword_ids,
         )
-        result = model(
-            input_ids,
-            token_type_ids=token_type_ids,
-            word_ids=word_ids,
-            subword_ids=subword_ids
-        )
+        result = model(input_ids, token_type_ids=token_type_ids, word_ids=word_ids, subword_ids=subword_ids)
         result = model(input_ids, word_ids=word_ids, subword_ids=subword_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
@@ -278,10 +270,10 @@ class Bert2DModelTester:
         choice_labels,
         word_ids,
         subword_ids,
-        encoder_hidden_states, # from prepare_config_and_inputs_for_decoder
-        encoder_attention_mask, # from prepare_config_and_inputs_for_decoder
+        encoder_hidden_states,  # from prepare_config_and_inputs_for_decoder
+        encoder_attention_mask,  # from prepare_config_and_inputs_for_decoder
     ):
-        model = Bert2DLMHeadModel(config=config) # is_decoder should be true in config for Causal LM
+        model = Bert2DLMHeadModel(config=config)  # is_decoder should be true in config for Causal LM
         model.to(torch_device)
         model.eval()
         result = model(
@@ -290,7 +282,7 @@ class Bert2DModelTester:
             token_type_ids=token_type_ids,
             word_ids=word_ids,
             subword_ids=subword_ids,
-            labels=token_labels
+            labels=token_labels,
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
@@ -315,7 +307,7 @@ class Bert2DModelTester:
             token_type_ids=token_type_ids,
             word_ids=word_ids,
             subword_ids=subword_ids,
-            labels=token_labels
+            labels=token_labels,
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
@@ -393,9 +385,10 @@ class Bert2DModelTester:
         next_mask = ids_tensor((self.batch_size, next_tokens_length), vocab_size=2)
 
         next_word_ids = ids_tensor((self.batch_size, next_tokens_length), config.max_word_position_embeddings)
-        next_subword_ids = ids_tensor((self.batch_size, next_tokens_length), config.max_intermediate_subword_position_embeddings + 2)
+        next_subword_ids = ids_tensor(
+            (self.batch_size, next_tokens_length), config.max_intermediate_subword_position_embeddings + 2
+        )
         next_token_type_ids_simple = ids_tensor((self.batch_size, next_tokens_length), config.type_vocab_size)
-
 
         next_input_ids_extended = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask_extended = torch.cat([input_mask, next_mask], dim=-1)
@@ -416,12 +409,12 @@ class Bert2DModelTester:
 
         output_from_past = model(
             next_tokens,
-            attention_mask=next_attention_mask_extended, # Full mask for combined context
+            attention_mask=next_attention_mask_extended,  # Full mask for combined context
             token_type_ids=next_token_type_ids_simple,
             word_ids=next_word_ids,
             subword_ids=next_subword_ids,
             encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask, # Full mask for encoder states
+            encoder_attention_mask=encoder_attention_mask,  # Full mask for encoder states
             past_key_values=past_key_values,
             output_hidden_states=True,
         )["hidden_states"][0]
@@ -432,7 +425,6 @@ class Bert2DModelTester:
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
-
 
     def create_and_check_for_next_sequence_prediction(
         self,
@@ -535,7 +527,7 @@ class Bert2DModelTester:
             token_type_ids=token_type_ids,
             word_ids=word_ids,
             subword_ids=subword_ids,
-            labels=sequence_labels
+            labels=sequence_labels,
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
@@ -561,7 +553,7 @@ class Bert2DModelTester:
             token_type_ids=token_type_ids,
             word_ids=word_ids,
             subword_ids=subword_ids,
-            labels=token_labels
+            labels=token_labels,
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
@@ -604,9 +596,9 @@ class Bert2DModelTester:
             input_ids,
             token_type_ids,
             input_mask,
-            _, # sequence_labels
-            _, # token_labels
-            _, # choice_labels
+            _,  # sequence_labels
+            _,  # token_labels
+            _,  # choice_labels
             word_ids,
             subword_ids,
         ) = config_and_inputs
@@ -649,7 +641,7 @@ class Bert2DModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else {}
     )
-    fx_compatible = False # Bert2D uses non-standard embeddings that might not trace well with FX
+    fx_compatible = False  # Bert2D uses non-standard embeddings that might not trace well with FX
     model_split_percents = [0.5, 0.8, 0.9]
 
     def _is_generative_model(self, model_class):
@@ -669,33 +661,34 @@ class Bert2DModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             final_ids_shape = inputs_dict["inputs_embeds"].shape[:-1]  # Exclude the hidden_size dimension
             input_device = inputs_dict["inputs_embeds"].device
         else:
+            logger = logging.get_logger("transformers.modeling_utils")
             # Fallback if inputs are not prepared as expected
             logger.warning(
                 "input_ids or inputs_embeds not found in inputs_dict for _prepare_for_class. "
                 "Falling back to model_tester default shapes for word_ids/subword_ids."
             )
             final_ids_shape = (self.model_tester.batch_size, self.model_tester.seq_length)
-            input_device = torch_device # Default device
+            input_device = torch_device  # Default device
 
         # Ensure word_ids and subword_ids are present and correctly shaped
         if inputs_dict.get("word_ids") is None:
             word_ids = ids_tensor(
-                final_ids_shape, # Use the determined shape (e.g., (batch, seq) or (batch, num_choices, seq))
+                final_ids_shape,  # Use the determined shape (e.g., (batch, seq) or (batch, num_choices, seq))
                 self.model_tester.max_word_position_embeddings,
             ).to(input_device)
             inputs_dict["word_ids"] = word_ids
 
         if inputs_dict.get("subword_ids") is None:
             subword_ids = ids_tensor(
-                final_ids_shape, # Use the determined shape
-                self.model_tester.max_intermediate_subword_position_embeddings + 2, # +2 for embedding layer size
+                final_ids_shape,  # Use the determined shape
+                self.model_tester.max_intermediate_subword_position_embeddings + 2,  # +2 for embedding layer size
             ).to(input_device)
             inputs_dict["subword_ids"] = subword_ids
 
         # Adjust label generation to use derived dimensions
         if return_labels:
             derived_batch_size = final_ids_shape[0]
-            derived_seq_length = final_ids_shape[-1] # Last dim is always seq_length for ids
+            derived_seq_length = final_ids_shape[-1]  # Last dim is always seq_length for ids
 
             if model_class == Bert2DForPreTraining:
                 inputs_dict["labels"] = torch.zeros(
@@ -705,12 +698,8 @@ class Bert2DModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                     derived_batch_size, dtype=torch.long, device=input_device
                 )
             elif model_class == Bert2DForQuestionAnswering:
-                 inputs_dict["start_positions"] = torch.zeros(
-                    derived_batch_size, dtype=torch.long, device=input_device
-                )
-                 inputs_dict["end_positions"] = torch.zeros(
-                    derived_batch_size, dtype=torch.long, device=input_device
-                )
+                inputs_dict["start_positions"] = torch.zeros(derived_batch_size, dtype=torch.long, device=input_device)
+                inputs_dict["end_positions"] = torch.zeros(derived_batch_size, dtype=torch.long, device=input_device)
             # For MultipleChoice, labels are (batch_size,) and handled by super() or specific test logic
         return inputs_dict
 
@@ -727,15 +716,14 @@ class Bert2DModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def test_model_various_embeddings(self):
         for type_pos_emb in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs = list(self.model_tester.prepare_config_and_inputs()) # Get fresh inputs
-            config_and_inputs[0].position_embedding_type = type_pos_emb # Modify config
+            config_and_inputs = list(self.model_tester.prepare_config_and_inputs())  # Get fresh inputs
+            config_and_inputs[0].position_embedding_type = type_pos_emb  # Modify config
             self.model_tester.create_and_check_model(*config_and_inputs)
-
 
     def test_model_3d_mask_shapes(self):
         config_and_inputs = list(self.model_tester.prepare_config_and_inputs())
-        batch_size, seq_length = config_and_inputs[1].shape # input_ids is at index 1
-        config_and_inputs[3] = random_attention_mask([batch_size, seq_length, seq_length]) # input_mask is at index 3
+        batch_size, seq_length = config_and_inputs[1].shape  # input_ids is at index 1
+        config_and_inputs[3] = random_attention_mask([batch_size, seq_length, seq_length])  # input_mask is at index 3
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_model_as_decoder(self):
@@ -747,7 +735,7 @@ class Bert2DModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             config,
             input_ids,
             token_type_ids,
-            _, # input_mask placeholder
+            _,  # input_mask placeholder
             sequence_labels,
             token_labels,
             choice_labels,
@@ -778,14 +766,14 @@ class Bert2DModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             config,
             input_ids,
             token_type_ids,
-            _, # input_mask_2d placeholder
+            _,  # input_mask_2d placeholder
             sequence_labels,
             token_labels,
             choice_labels,
             word_ids,
             subword_ids,
             encoder_hidden_states,
-            _, # encoder_attention_mask_2d placeholder
+            _,  # encoder_attention_mask_2d placeholder
         ) = self.model_tester.prepare_config_and_inputs_for_decoder()
 
         batch_size, seq_length = input_ids.shape
@@ -809,9 +797,8 @@ class Bert2DModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        config_and_inputs[0].is_decoder = True # Ensure config is set for decoder/causal LM
+        config_and_inputs[0].is_decoder = True  # Ensure config is set for decoder/causal LM
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
-
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -819,8 +806,8 @@ class Bert2DModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def test_for_causal_lm_decoder(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        config_and_inputs[0].is_decoder = True # Ensure config is set for decoder
-        config_and_inputs[0].add_cross_attention = True # For encoder_hidden_states
+        config_and_inputs[0].is_decoder = True  # Ensure config is set for decoder
+        config_and_inputs[0].add_cross_attention = True  # For encoder_hidden_states
         self.model_tester.create_and_check_model_for_causal_lm_as_decoder(*config_and_inputs)
 
     def test_decoder_model_past_with_large_inputs(self):
@@ -861,8 +848,10 @@ class Bert2DModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             config,
             input_ids,
             token_type_ids,
-            _, # input_mask placeholder
-            _1, _2, _3, # labels placeholders
+            _,  # input_mask placeholder
+            _1,
+            _2,
+            _3,  # labels placeholders
             word_ids,
             subword_ids,
         ) = self.model_tester.prepare_config_and_inputs()
@@ -902,7 +891,6 @@ class Bert2DModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             "defaulting logic under these specific test conditions."
         )
 
-
     @slow
     @require_torch_accelerator
     def test_torchscript_device_change(self):
@@ -925,17 +913,25 @@ class Bert2DModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             example_inputs_tuple = tuple(inp for inp in example_inputs_list if inp is not None)
 
             try:
-                if model_class in [Bert2DModel, Bert2DLMHeadModel, Bert2DForMaskedLM, Bert2DForPreTraining,
-                                   Bert2DForNextSentencePrediction, Bert2DForSequenceClassification,
-                                   Bert2DForTokenClassification, Bert2DForQuestionAnswering]:
+                if model_class in [
+                    Bert2DModel,
+                    Bert2DLMHeadModel,
+                    Bert2DForMaskedLM,
+                    Bert2DForPreTraining,
+                    Bert2DForNextSentencePrediction,
+                    Bert2DForSequenceClassification,
+                    Bert2DForTokenClassification,
+                    Bert2DForQuestionAnswering,
+                ]:
                     pass
                 else:
                     self.skipTest(f"JIT signature for {model_class.__name__} with Bert2D inputs needs verification.")
 
                 traced_model = torch.jit.trace(model, example_inputs_tuple)
             except Exception as e:
-                self.fail(f"torch.jit.trace failed for {model_class.__name__} with inputs {[(i.shape if hasattr(i, 'shape') else type(i)) for i in example_inputs_tuple]} with error: {e}")
-
+                self.fail(
+                    f"torch.jit.trace failed for {model_class.__name__} with inputs {[(i.shape if hasattr(i, 'shape') else type(i)) for i in example_inputs_tuple]} with error: {e}"
+                )
 
             with tempfile.TemporaryDirectory() as tmp:
                 torch.jit.save(traced_model, os.path.join(tmp, "bert2d_traced.pt"))
@@ -972,7 +968,7 @@ class Bert2DModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             try:
                 super().test_assisted_decoding_matches_greedy_search_0_random(*args, **kwargs)
             except Exception as e:
-                 self.skipTest(f"Skipping failing generation test for {model_class.__name__} (Bert2D): {e}")
+                self.skipTest(f"Skipping failing generation test for {model_class.__name__} (Bert2D): {e}")
 
     def test_assisted_decoding_matches_greedy_search_1_same(self, *args, **kwargs):
         if not any(self._is_generative_model(cls) for cls in self.all_model_classes):
@@ -986,10 +982,11 @@ class Bert2DModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 return
         self.skipTest("Bert2D is primarily an encoder; skipping generation test for non-LMHead models.")
 
-
     def test_assisted_decoding_sample(self, *args, **kwargs):
-        if not self._is_generative_model(self.model_tester.model_class if hasattr(self.model_tester, "model_class") else Bert2DModel): # Fallback
-             self.skipTest("Bert2D: Skipping generation test for non-LMHead model.")
+        if not self._is_generative_model(
+            self.model_tester.model_class if hasattr(self.model_tester, "model_class") else Bert2DModel
+        ):  # Fallback
+            self.skipTest("Bert2D: Skipping generation test for non-LMHead model.")
         try:
             super().test_assisted_decoding_sample(*args, **kwargs)
         except Exception as e:
@@ -1001,7 +998,6 @@ class Bert2DModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
 @require_torch
 class Bert2DModelIntegrationTest(unittest.TestCase):
-
     def _get_bert2d_inputs(self, tokenizer, text, device=torch_device, max_length=None):
         inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=max_length)
         try:
@@ -1014,8 +1010,8 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
                     processed_word_ids.append(i)
                 else:
                     if wid != last_word_id_from_tokenizer:
-                        current_word_idx +=1
-                    processed_word_ids.append(current_word_idx-1)
+                        current_word_idx += 1
+                    processed_word_ids.append(current_word_idx - 1)
                     last_word_id_from_tokenizer = wid
             inputs["word_ids"] = torch.tensor([processed_word_ids], dtype=torch.long)
         except Exception:
@@ -1028,13 +1024,12 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
 
         return {k: v.to(device) for k, v in inputs.items()}
 
-
     @slow
     def test_inference_no_head_absolute_embedding(self):
         model_name = "yigitbekir/Bert2D-cased-Turkish-128K-WWM-NSW2"
         try:
             model = Bert2DModel.from_pretrained(model_name).to(torch_device).eval()
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            _tokenizer = AutoTokenizer.from_pretrained(model_name)  # ignore: F841
         except OSError:
             self.skipTest(f"Model or Tokenizer {model_name} not found online.")
 
@@ -1051,14 +1046,15 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
                 attention_mask=attention_mask_orig.to(torch_device),
                 token_type_ids=token_type_ids_tensor.to(torch_device),
                 word_ids=word_ids_tensor.to(torch_device),
-                subword_ids=subword_ids_tensor.to(torch_device)
+                subword_ids=subword_ids_tensor.to(torch_device),
             )[0]
 
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
-        expected_slice = torch.tensor([[[0.4249, 0.1008, 0.7531], [0.3771, 0.1188, 0.7467], [0.4152, 0.1098, 0.7108]]], device=torch_device)
+        expected_slice = torch.tensor(
+            [[[0.4249, 0.1008, 0.7531], [0.3771, 0.1188, 0.7467], [0.4152, 0.1098, 0.7108]]], device=torch_device
+        )
         torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
-
 
     @slow
     def test_inference_no_head_relative_embedding_key(self):
@@ -1082,7 +1078,7 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
                 attention_mask=attention_mask_orig.to(torch_device),
                 token_type_ids=token_type_ids_tensor.to(torch_device),
                 word_ids=word_ids_tensor.to(torch_device),
-                subword_ids=subword_ids_tensor.to(torch_device)
+                subword_ids=subword_ids_tensor.to(torch_device),
             )[0]
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
@@ -1090,7 +1086,6 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
             [[[0.0756, 0.3142, -0.5128], [0.3761, 0.3462, -0.5477], [0.2052, 0.3760, -0.1240]]], device=torch_device
         )
         torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
-
 
     @slow
     def test_inference_no_head_relative_embedding_key_query(self):
@@ -1114,7 +1109,7 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
                 attention_mask=attention_mask_orig.to(torch_device),
                 token_type_ids=token_type_ids_tensor.to(torch_device),
                 word_ids=word_ids_tensor.to(torch_device),
-                subword_ids=subword_ids_tensor.to(torch_device)
+                subword_ids=subword_ids_tensor.to(torch_device),
             )[0]
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
@@ -1122,7 +1117,6 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
             [[[0.6496, 0.3784, 0.8203], [0.8148, 0.5656, 0.2636], [-0.0681, 0.5597, 0.7045]]], device=torch_device
         )
         torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
-
 
     def test_sdpa_ignored_mask(self):
         model_name = "yigitbekir/Bert2D-cased-Turkish-128K-WWM-NSW2"
@@ -1137,15 +1131,16 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
         for _ in range(model_eager.config.num_hidden_layers):
             num_heads = model_eager.config.num_attention_heads
             head_dim = model_eager.config.hidden_size // model_eager.config.num_attention_heads
-            pkv.append([
-                torch.rand(1, num_heads, 3, head_dim, device=torch_device),
-                torch.rand(1, num_heads, 3, head_dim, device=torch_device)
-            ])
+            pkv.append(
+                [
+                    torch.rand(1, num_heads, 3, head_dim, device=torch_device),
+                    torch.rand(1, num_heads, 3, head_dim, device=torch_device),
+                ]
+            )
 
         inp = self._get_bert2d_inputs(tokenizer, "I am in Paris and", device=torch_device)
 
         inp_no_mask = {k: v for k, v in inp.items() if k != "attention_mask"}
-
 
         with torch.no_grad():
             res_eager = model_eager(
@@ -1153,14 +1148,14 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
                 attention_mask=None,
                 token_type_ids=inp_no_mask.get("token_type_ids"),
                 word_ids=inp_no_mask["word_ids"],
-                subword_ids=inp_no_mask["subword_ids"]
+                subword_ids=inp_no_mask["subword_ids"],
             )
             res_sdpa = model_sdpa(
                 input_ids=inp_no_mask["input_ids"],
                 attention_mask=None,
                 token_type_ids=inp_no_mask.get("token_type_ids"),
                 word_ids=inp_no_mask["word_ids"],
-                subword_ids=inp_no_mask["subword_ids"]
+                subword_ids=inp_no_mask["subword_ids"],
             )
             self.assertTrue(
                 torch.allclose(res_eager.last_hidden_state, res_sdpa.last_hidden_state, atol=1e-5, rtol=1e-4)
@@ -1172,7 +1167,7 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
                 token_type_ids=inp_no_mask.get("token_type_ids"),
                 word_ids=inp_no_mask["word_ids"],
                 subword_ids=inp_no_mask["subword_ids"],
-                past_key_values=pkv
+                past_key_values=pkv,
             )
             res_sdpa_past = model_sdpa(
                 input_ids=inp_no_mask["input_ids"],
@@ -1180,12 +1175,11 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
                 token_type_ids=inp_no_mask.get("token_type_ids"),
                 word_ids=inp_no_mask["word_ids"],
                 subword_ids=inp_no_mask["subword_ids"],
-                past_key_values=pkv
+                past_key_values=pkv,
             )
             self.assertTrue(
                 torch.allclose(res_eager_past.last_hidden_state, res_sdpa_past.last_hidden_state, atol=1e-5, rtol=1e-4)
             )
-
 
     @slow
     def test_export(self):
@@ -1199,19 +1193,24 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
 
         try:
             tokenizer = AutoTokenizer.from_pretrained(bert2d_model_name)
-            model = Bert2DForMaskedLM.from_pretrained(
-                bert2d_model_name,
-                attn_implementation=attn_implementation,
-                use_cache=True,
-            ).to(device).eval()
+            model = (
+                Bert2DForMaskedLM.from_pretrained(
+                    bert2d_model_name,
+                    attn_implementation=attn_implementation,
+                    use_cache=True,
+                )
+                .to(device)
+                .eval()
+            )
         except OSError:
             self.skipTest(f"Model or Tokenizer {bert2d_model_name} not found online.")
 
-        inputs_dict = self._get_bert2d_inputs(tokenizer, "the man worked as a [MASK].", device=device, max_length=max_length)
+        inputs_dict = self._get_bert2d_inputs(
+            tokenizer, "the man worked as a [MASK].", device=device, max_length=max_length
+        )
 
         if "token_type_ids" not in inputs_dict:
-             inputs_dict["token_type_ids"] = torch.zeros_like(inputs_dict["input_ids"], device=device)
-
+            inputs_dict["token_type_ids"] = torch.zeros_like(inputs_dict["input_ids"], device=device)
 
         with torch.no_grad():
             logits = model(
@@ -1233,7 +1232,6 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
         )
         export_args_non_none = tuple(arg for arg in export_args if arg is not None)
 
-
         exported_program = torch.export.export(
             model,
             args=export_args_non_none,
@@ -1249,60 +1247,98 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
 
 # Define lists of tests to skip
 GENERATION_TESTS_TO_SKIP_OR_ADAPT = [
-    "test_beam_sample_generate", "test_beam_sample_generate_dict_output",
-    "test_beam_search_generate", "test_beam_search_generate_dict_output",
+    "test_beam_sample_generate",
+    "test_beam_sample_generate_dict_output",
+    "test_beam_search_generate",
+    "test_beam_search_generate_dict_output",
     "test_beam_search_generate_dict_outputs_use_cache",
-    "test_constrained_beam_search_generate", "test_constrained_beam_search_generate_dict_output",
-    "test_contrastive_generate", "test_contrastive_generate_dict_outputs_use_cache",
-    "test_contrastive_generate_low_memory", "test_dola_decoding_sample",
-    "test_generate_from_inputs_embeds_0_greedy", "test_generate_from_inputs_embeds_1_beam_search",
-    "test_greedy_generate", "test_greedy_generate_dict_outputs",
+    "test_constrained_beam_search_generate",
+    "test_constrained_beam_search_generate_dict_output",
+    "test_contrastive_generate",
+    "test_contrastive_generate_dict_outputs_use_cache",
+    "test_contrastive_generate_low_memory",
+    "test_dola_decoding_sample",
+    "test_generate_from_inputs_embeds_0_greedy",
+    "test_generate_from_inputs_embeds_1_beam_search",
+    "test_greedy_generate",
+    "test_greedy_generate_dict_outputs",
     "test_greedy_generate_dict_outputs_use_cache",
-    "test_group_beam_search_generate", "test_group_beam_search_generate_dict_output",
-    "test_left_padding_compatibility", # This is a generation test
+    "test_group_beam_search_generate",
+    "test_group_beam_search_generate_dict_output",
+    "test_left_padding_compatibility",  # This is a generation test
     "test_prompt_lookup_decoding_matches_greedy_search",
-    "test_sample_generate", "test_sample_generate_dict_output",
+    "test_sample_generate",
+    "test_sample_generate_dict_output",
 ]
 
 PIPELINE_TESTS_TO_SKIP = [
-    "test_pipeline_audio_classification", "test_pipeline_audio_classification_fp16",
-    "test_pipeline_automatic_speech_recognition", "test_pipeline_automatic_speech_recognition_fp16",
-    "test_pipeline_feature_extraction", "test_pipeline_feature_extraction_fp16",
-    "test_pipeline_fill_mask", "test_pipeline_fill_mask_fp16",
-    "test_pipeline_question_answering", "test_pipeline_question_answering_fp16",
-    "test_pipeline_summarization", "test_pipeline_summarization_fp16",
-    "test_pipeline_table_question_answering", "test_pipeline_table_question_answering_fp16",
-    "test_pipeline_text2text_generation", "test_pipeline_text2text_generation_fp16",
-    "test_pipeline_text_classification", "test_pipeline_text_classification_fp16",
-    "test_pipeline_text_generation", "test_pipeline_text_generation_fp16",
-    "test_pipeline_text_to_audio", "test_pipeline_text_to_audio_fp16",
-    "test_pipeline_token_classification", "test_pipeline_token_classification_fp16",
-    "test_pipeline_translation", "test_pipeline_translation_fp16",
-    "test_pipeline_zero_shot", "test_pipeline_zero_shot_fp16",
-    "test_pipeline_zero_shot_audio_classification", "test_pipeline_zero_shot_audio_classification_fp16",
+    "test_pipeline_audio_classification",
+    "test_pipeline_audio_classification_fp16",
+    "test_pipeline_automatic_speech_recognition",
+    "test_pipeline_automatic_speech_recognition_fp16",
+    "test_pipeline_feature_extraction",
+    "test_pipeline_feature_extraction_fp16",
+    "test_pipeline_fill_mask",
+    "test_pipeline_fill_mask_fp16",
+    "test_pipeline_question_answering",
+    "test_pipeline_question_answering_fp16",
+    "test_pipeline_summarization",
+    "test_pipeline_summarization_fp16",
+    "test_pipeline_table_question_answering",
+    "test_pipeline_table_question_answering_fp16",
+    "test_pipeline_text2text_generation",
+    "test_pipeline_text2text_generation_fp16",
+    "test_pipeline_text_classification",
+    "test_pipeline_text_classification_fp16",
+    "test_pipeline_text_generation",
+    "test_pipeline_text_generation_fp16",
+    "test_pipeline_text_to_audio",
+    "test_pipeline_text_to_audio_fp16",
+    "test_pipeline_token_classification",
+    "test_pipeline_token_classification_fp16",
+    "test_pipeline_translation",
+    "test_pipeline_translation_fp16",
+    "test_pipeline_zero_shot",
+    "test_pipeline_zero_shot_fp16",
+    "test_pipeline_zero_shot_audio_classification",
+    "test_pipeline_zero_shot_audio_classification_fp16",
 ]
 
 # Dynamically add skipper methods to Bert2DModelTest after its definition
 for test_name in GENERATION_TESTS_TO_SKIP_OR_ADAPT:
     if hasattr(GenerationTesterMixin, test_name):
+
         def create_generation_skipper(name):
             def skipper_method(self, *args, **kwargs):
                 current_model_class_being_tested = getattr(self, "model_class", None)
-                if current_model_class_being_tested and not self._is_generative_model(current_model_class_being_tested):
-                    self.skipTest(f"Bert2D: Skipping generation test {name} for non-LMHead model {current_model_class_being_tested.__name__}.")
+                if current_model_class_being_tested and not self._is_generative_model(
+                    current_model_class_being_tested
+                ):
+                    self.skipTest(
+                        f"Bert2D: Skipping generation test {name} for non-LMHead model {current_model_class_being_tested.__name__}."
+                    )
                 else:
                     try:
                         super_method_to_call = getattr(super(Bert2DModelTest, self), name)
                         super_method_to_call(*args, **kwargs)
                     except Exception as e:
-                         self.skipTest(f"Skipping failing generation test {name} for Bert2D ({current_model_class_being_tested.__name__ if current_model_class_being_tested else 'Unknown'}): {e}")
+                        self.skipTest(
+                            f"Skipping failing generation test {name} for Bert2D ({current_model_class_being_tested.__name__ if current_model_class_being_tested else 'Unknown'}): {e}"
+                        )
+
             setattr(Bert2DModelTest, test_name, skipper_method)
+
         create_generation_skipper(test_name)
 
 for test_name in PIPELINE_TESTS_TO_SKIP:
     if hasattr(PipelineTesterMixin, test_name):
+
         def create_pipeline_skipper(name):
             def skipper_method(self, *args, **kwargs):
-                self.skipTest(f"Skipping pipeline test {name} for Bert2D as it requires specific pipeline integration.")
+                self.skipTest(
+                    f"Skipping pipeline test {name} for Bert2D as it requires specific pipeline integration."
+                )
+
             setattr(Bert2DModelTest, test_name, skipper_method)
+
         create_pipeline_skipper(test_name)

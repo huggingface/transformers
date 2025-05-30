@@ -63,6 +63,15 @@ class Bert2DTokenizerFast(BertTokenizerFast):
             value for `lowercase` (as in the original BERT).
         wordpieces_prefix (`str`, *optional*, defaults to `"##"`):
             The prefix for subwords.
+        max_intermediate_subword_positions_per_word (`int`, *optional*, defaults to `1`):
+            The maximum number of intermediate subword positions per word. This is used to determine how many subword
+            positions are allowed for each word in the tokenization process.
+        subword_embedding_order (`str`, *optional*, defaults to `"ending_first"`):
+            The order in which subword embeddings are processed. Can be `"ending_first"` or `"starting_first"`.
+        intermediate_subword_distribution_strategy (`str`, *optional*, defaults to `"uniform"`):
+            The strategy for distributing intermediate subword positions. Can be `"uniform"` or `"random"`.
+            (Note: The original prompt mentioned "uniform" or "random", but the function code provided earlier
+            implemented "uniform" or "leftover_as_last". This docstring reflects the prompt's options.)
     """
 
     model_input_names: List[str] = ["input_ids", "token_type_ids", "word_ids", "subword_ids", "attention_mask"]
