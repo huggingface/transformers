@@ -215,6 +215,12 @@ class PretrainedConfig(PushToHubMixin):
         self._set_defaults(**kwargs)
 
     def _set_defaults(self, **kwargs):
+        def _get_default_if_unset(attribute_name, default_value):
+            set_attribute = getattr(self, attribute_name, None)
+            if set_attribute is not None:
+                return set_attribute
+            return kwargs.pop(attribute_name, default_value)
+
         # Attributes with defaults
         self.return_dict = kwargs.pop("return_dict", True)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
@@ -273,12 +279,11 @@ class PretrainedConfig(PushToHubMixin):
         # Tokenizer arguments TODO: eventually tokenizer and models should share the same config
         self.tokenizer_class = kwargs.pop("tokenizer_class", None)
         self.prefix = kwargs.pop("prefix", None)
-        self.bos_token_id = kwargs.pop("bos_token_id", None)
-        self.pad_token_id = kwargs.pop("pad_token_id", None)
-        self.eos_token_id = kwargs.pop("eos_token_id", None)
-        self.sep_token_id = kwargs.pop("sep_token_id", None)
-
-        self.decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
+        self.bos_token_id = _get_default_if_unset("bos_token_id", None)
+        self.pad_token_id = _get_default_if_unset("pad_token_id", None)
+        self.eos_token_id = _get_default_if_unset("eos_token_id", None)
+        self.sep_token_id = _get_default_if_unset("sep_token_id", None)
+        self.decoder_start_token_id = _get_default_if_unset("decoder_start_token_id", None)
 
         # task specific arguments
         self.task_specific_params = kwargs.pop("task_specific_params", None)
