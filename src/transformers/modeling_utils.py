@@ -733,11 +733,7 @@ def _load_parameter_into_model(model: "PreTrainedModel", param_name: str, tensor
     """Cast a single parameter `param_name` into the `model`, with value `tensor`."""
     module, param_type = get_module_from_name(model, param_name)
     # This will check potential shape mismatch if skipped before
-    try:
-        module.load_state_dict({param_type: tensor}, strict=False, assign=True)
-        return None
-    except RuntimeError:
-        return f"parameter {re.sub(r'\d+', '.*.', param_name)} has shape {tensor.shape} but the model has {module.state_dict()[param_type].shape}. "
+    module.load_state_dict({param_type: tensor}, strict=False, assign=True)
 
 
 @torch.no_grad()
@@ -780,7 +776,6 @@ def _load_state_dict_into_meta_model(
     if is_meta_state_dict:
         file_pointer = safe_open(shard_file, framework="pt", device=tensor_device)
 
-    errors = set()
     for param_name, empty_param in state_dict.items():
         if param_name not in expected_keys:
             continue
@@ -850,9 +845,7 @@ def _load_state_dict_into_meta_model(
                 if is_fsdp_enabled():
                     param_device = "cpu" if is_local_dist_rank_0() else "meta"
 
-                error = _load_parameter_into_model(model, param_name, param.to(param_device))
-                if error is not None:
-                    errors.add(error)
+                _load_parameter_into_model(model, param_name, param.to(param_device))
 
             else:
                 hf_quantizer.create_quantized_param(
@@ -4793,10 +4786,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 device_map_kwargs["offload_buffers"] = True
 
             if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
-                try:
-                    dispatch_model(model, **device_map_kwargs)
-                except RuntimeError as e:
-                    error_msgs += [str(e)]
+                dispatch_model(model, **device_map_kwargs)
 
         if hf_quantizer is not None:
             hf_quantizer.postprocess_model(model, config=config)
@@ -5587,8 +5577,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     def get_parameter_or_buffer(self, target: str):
         """
         Return the parameter or buffer given by `target` if it exists, otherwise throw an error. This combines
-        `get_parameter()` and `get_buffer()` in a single handy function. Note that it only work if `target` is a
-        leaf of the model.
+        `get_parameter()` and `get_buffer()` in a single handy function. If the target is an `_extra_state` attribute,
+        it will return the extra state provided by the module. Note that it only work if `target` is a leaf of the model.
         """
         try:
             return self.get_parameter(target)
@@ -5598,7 +5588,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             return self.get_buffer(target)
         except AttributeError:
             pass
-        raise AttributeError(f"`{target}` is neither a parameter nor a buffer.")
+        module, param_name = get_module_from_name(self, target)
+        if (
+            param_name == "_extra_state"
+            and getattr(module.__class__, "get_extra_state", torch.nn.Module.get_extra_state)
+            is not torch.nn.Module.get_extra_state
+        ):
+            return module.get_extra_state()
+
+        raise AttributeError(f"`{target}` is neither a parameter, buffer, nor extra state.")
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
