@@ -1740,6 +1740,7 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
         )
 
         pooled_output = text_outputs[0] if not return_dict else text_outputs.last_hidden_state
+        pooled_output = pooled_output.to(dtype=self.text_projection.weight.dtype)
 
         text_embeds = self.text_projection(pooled_output)
         text_embeds = nn.functional.normalize(text_embeds, dim=-1)
@@ -1841,6 +1842,7 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
         )
 
         embeds = query_outputs[0] if not return_dict else query_outputs.last_hidden_state
+        embeds = embeds.to(dtype=self.vision_projection.weight.dtype)
         image_embeds = self.vision_projection(embeds)
         image_embeds = nn.functional.normalize(image_embeds, dim=-1)
 
