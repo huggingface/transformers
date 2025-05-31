@@ -1640,6 +1640,12 @@ class MllamaModel(MllamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
+    def set_decoder(self, decoder):
+        self.language_model = decoder
+
+    def get_decoder(self):
+        return self.language_model
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1791,10 +1797,10 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
-        self.model = decoder
+        self.model.set_decoder(decoder)
 
     def get_decoder(self):
-        return self.model
+        return self.model.get_decoder()
 
     # Make modules available throught conditional class for BC
     @property
