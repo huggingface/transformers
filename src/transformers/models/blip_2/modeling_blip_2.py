@@ -1665,6 +1665,7 @@ class Blip2Model(Blip2PreTrainedModel):
 @auto_docstring
 class Blip2TextModelWithProjection(Blip2PreTrainedModel):
     supports_gradient_checkpointing = False
+    _supports_flex_attn = False
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
 
     def __init__(self, config: Blip2Config):
@@ -1755,6 +1756,7 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
 
 @auto_docstring
 class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
+    _supports_flex_attn = False
     main_input_name = "pixel_values"
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
 
@@ -2263,6 +2265,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
     """
 )
 class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
+    _supports_flex_attn = False
     main_input_name = "pixel_values"
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
 
