@@ -142,17 +142,12 @@ class PerceptionLMProcessor(ProcessorMixin):
         if images is None and text is None:
             raise ValueError("You have to specify at least one of `images` or `text`.")
 
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
-
         output_kwargs = self._merge_kwargs(
             PerceptionLMProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
         if images is not None:
-            print("image_processor class", self.image_processor.__class__)
-            images = [] if images is None else images
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
         else:
             image_inputs = {}
