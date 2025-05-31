@@ -1197,7 +1197,8 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         )
 
         # `Blip2QFormerModel` is kept as fp32
-        embedding_output = self.layernorm(query_embeds.to(self.layernorm.weight.dtype))
+        query_embeds = query_embeds.to(self.layernorm.weight.dtype)
+        embedding_output = self.layernorm(query_embeds)
         embedding_output = self.dropout(embedding_output)
 
         input_shape = embedding_output.size()[:-1]
