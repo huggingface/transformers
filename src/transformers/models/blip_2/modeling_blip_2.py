@@ -2425,6 +2425,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
                 return_dict=return_dict,
             )
             question_embeds = text_outputs[0] if not return_dict else text_outputs.last_hidden_state
+            question_embeds = question_embeds.to(dtype=torch.float16)
 
             # normalized features
             image_embeds = nn.functional.normalize(self.vision_projection(image_embeds), dim=-1)
