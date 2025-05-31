@@ -439,6 +439,8 @@
         title: DiffLlama
       - local: model_doc/distilbert
         title: DistilBERT
+      - local: model_doc/dots1
+        title: dots1
       - local: model_doc/dpr
         title: DPR
       - local: model_doc/electra
