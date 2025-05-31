@@ -892,9 +892,10 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
         logits = self.lm_head(outputs[0]).contiguous()
 
         loss = None
-        if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(logits.device)
+        if labels is not None or kwargs.get("shift_labels", None) is not None:
+            if labels is not None:
+                # move labels to correct device to enable model parallelism
+                labels = labels.to(logits.device)
             loss = self.loss_function(
                 logits,
                 labels,

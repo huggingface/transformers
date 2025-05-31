@@ -795,7 +795,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
         logits = nn.functional.tanh(logits / cap) * cap
 
         loss = None
-        if labels is not None:
+        if labels is not None or kwargs.get("shift_labels", None) is not None:
             # Upcast to float if we need to compute the loss to avoid potential precision issues
             logits = logits.float()
             loss = self.loss_function(
