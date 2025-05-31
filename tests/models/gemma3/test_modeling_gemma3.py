@@ -30,7 +30,7 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
-    is_flash_attn_2_available,
+    is_flash_attn_available,
     require_flash_attn,
     require_read_token,
     require_torch,
@@ -662,7 +662,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         """
         model_id = "google/gemma-3-1b-it"
 
-        if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
+        if attn_implementation == "flash_attention_2" and not is_flash_attn_available():
             self.skipTest("FlashAttention2 is required for this test.")
 
         input_text = [

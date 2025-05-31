@@ -40,9 +40,8 @@ if is_flash_attn_2_available():
 
 # patch functions in package `flash-attn` when using flash-attention on Ascend NPU.
 if is_torch_npu_available():
-    from torch_npu import npu_rotary_mul as apply_rotary_emb  # noqa
-
     from .integrations.npu_flash_attention import index_first_axis, pad_input, unpad_input
+    from .integrations.npu_flash_attention import npu_apply_rotary_emb as apply_rotary_emb  # noqa
     from .integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_func
     from .integrations.npu_flash_attention import npu_flash_attn_varlen_func as flash_attn_varlen_func
 

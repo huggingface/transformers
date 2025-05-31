@@ -3295,3 +3295,7 @@ class Expectations(UserDict[DeviceProperties, Any]):
 
     def __repr__(self):
         return f"{self.data}"
+
+
+if is_torch_available():
+    from .modeling_flash_attention_utils import is_flash_attn_available  # noqa
