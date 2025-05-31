@@ -1,0 +1,111 @@
+#!D:\contributions\transformers\transformer-contribution\Scripts\python.exe
+# pripalpng
+
+
+"""Convert to Palette PNG (without changing colours)"""
+
+import argparse
+import collections
+
+# https://docs.python.org/2.7/library/io.html
+import io
+import string
+import zlib
+
+# Local module.
+import png
+
+
+def make_inverse_palette(rows, channels):
+    """
+    The inverse palette maps from tuple to palette index.
+    """
+
+    palette = {}
+
+    for row in rows:
+        for pixel in png.group(row, channels):
+            if pixel in palette:
+                continue
+            palette[pixel] = len(palette)
+    return palette
+
+
+def palette_convert(out, inp, palette_file):
+    """
+    Convert PNG image in `inp` to use a palette, colour type 3,
+    and write converted image to `out`.
+
+    `palette_file` is a file descriptor for the palette to use.
+
+    If `palette_file` is None, then `inp` is used as the palette.
+    """
+
+    if palette_file is None:
+        inp, palette_file = palette_file, inp
+
+    reader = png.Reader(file=palette_file)
+    w, h, rows, info = asRGBorA8(reader)
+    channels = info["planes"]
+    if not inp:
+        rows = list(rows)
+
+    palette_map = make_inverse_palette(rows, channels)
+
+    if inp:
+        reader = png.Reader(file=inp)
+        w, h, rows, info = asRGBorA8(reader)
+        channels = info["planes"]
+
+    # Default for colours not in palette is to use last entry.
+    last = len(palette_map) - 1
+
+    def map_pixel(p):
+        return palette_map.get(p, last)
+
+    def convert_rows():
+        for row in rows:
+            yield [map_pixel(p) for p in png.group(row, channels)]
+
+    # Make a palette by sorting the pixels according to their index.
+    palette = sorted(palette_map.keys(), key=palette_map.get)
+    pal_info = dict(size=info["size"], palette=palette)
+
+    w = png.Writer(**pal_info)
+    w.write(out, convert_rows())
+
+
+def asRGBorA8(reader):
+    """
+    Return (width, height, rows, info) converting to RGB,
+    or RGBA if original has an alpha channel.
+    """
+    _, _, _, info = reader.read()
+    if info["alpha"]:
+        return reader.asRGBA8()
+    else:
+        return reader.asRGB8()
+
+
+def main(argv=None):
+    import sys
+    import re
+
+    if argv is None:
+        argv = sys.argv
+
+    argv = argv[1:]
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--palette", type=png.cli_open)
+    parser.add_argument(
+        "input", nargs="?", default="-", type=png.cli_open, metavar="PNG"
+    )
+
+    args = parser.parse_args(argv)
+
+    palette_convert(png.binary_stdout(), args.input, args.palette)
+
+
+if __name__ == "__main__":
+    main()

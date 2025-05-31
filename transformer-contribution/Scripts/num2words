@@ -1,0 +1,95 @@
+#!D:\contributions\transformers\transformer-contribution\Scripts\python.exe
+# -*- coding: utf-8 -*-
+# Copyright (c) 2003, Taro Ogawa.  All Rights Reserved.
+# Copyright (c) 2013, Savoir-faire Linux inc.  All Rights Reserved.
+
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+# Lesser General Public License for more details.
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+# MA 02110-1301 USA
+
+"""num2words: convert numbers into words.
+
+Usage:
+    num2words [options] <number>
+    num2words --list-languages
+    num2words --list-converters
+    num2words --help
+
+Arguments:
+    <number>                Number you want to convert into words
+
+Options:
+    -L --list-languages     Show all languages.
+    -C --list-converters    Show all converters.
+    -l --lang=<lang>        Output language [default: en].
+    -t --to=<to>            Output converter [default: cardinal].
+    -h --help               Show this message.
+    -v --version            Show version.
+
+Examples:
+    $ num2words 10001
+    ten thousand and one
+
+    $ num2words 24,120.10
+    twenty-four thousand, one hundred and twenty point one
+
+    $ num2words 24,120.10 -l es
+    veinticuatro mil ciento veinte punto uno
+
+    $num2words 2.14 -l es --to currency
+    dos euros con catorce céntimos
+"""
+
+from __future__ import print_function, unicode_literals
+import os
+import sys
+from docopt import docopt
+import num2words
+
+__version__ = "0.5.14"
+__license__ = "LGPL"
+
+
+def get_languages():
+    return sorted(list(num2words.CONVERTER_CLASSES.keys()))
+
+
+def get_converters():
+    return sorted(list(num2words.CONVERTES_TYPES))
+
+
+def main():
+    version = "{}=={}".format(os.path.basename(__file__), __version__)
+    args = docopt(__doc__, argv=None, help=True, version=version, options_first=False)
+    if args["--list-languages"]:
+        for lang in get_languages():
+            sys.stdout.write(lang)
+            sys.stdout.write(os.linesep)
+        sys.exit(0)
+    if args["--list-converters"]:
+        for cvt in get_converters():
+            sys.stdout.write(cvt)
+            sys.stdout.write(os.linesep)
+        sys.exit(0)
+    try:
+        words = num2words.num2words(args['<number>'], lang=args['--lang'], to=args['--to'])
+        sys.stdout.write(words + os.linesep)
+        sys.exit(0)
+    except Exception as err:
+        sys.stderr.write(str(args['<number>']))
+        sys.stderr.write(str(err) + os.linesep)
+        sys.stderr.write(__doc__)
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()

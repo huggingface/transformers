@@ -1,0 +1,33 @@
+#!D:\contributions\transformers\transformer-contribution\Scripts\python.exe
+# pripnglsch
+# PNG List Chunks
+
+import png
+
+
+def list_chunks(out, inp):
+    r = png.Reader(file=inp)
+    for t, v in r.chunks():
+        add = ""
+        if len(v) <= 28:
+            add = " " + v.hex()
+        else:
+            add = " " + v[:26].hex() + "..."
+        t = t.decode("ascii")
+        print("%s %10d%s" % (t, len(v), add), file=out)
+
+
+def main(argv=None):
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "input", nargs="?", default="-", type=png.cli_open, metavar="PNG"
+    )
+    args = parser.parse_args()
+    return list_chunks(sys.stdout, args.input)
+
+
+if __name__ == "__main__":
+    main()

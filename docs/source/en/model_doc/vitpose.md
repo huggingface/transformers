@@ -280,6 +280,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] VitPoseImageProcessor
     - preprocess
+
+## VitPoseImageProcessorFast
+
+[[autodoc]] VitPoseImageProcessorFast
+    - preprocess
     - post_process_pose_estimation
 
 ## VitPoseConfig

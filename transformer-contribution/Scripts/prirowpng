@@ -1,0 +1,71 @@
+#!D:\contributions\transformers\transformer-contribution\Scripts\python.exe
+
+# http://www.python.org/doc/2.4.4/lib/module-itertools.html
+import itertools
+import sys
+
+import png
+
+Description = """Join PNG images in a row left-to-right."""
+
+
+class FormatError(Exception):
+    """
+    Some problem with the image format.
+    """
+
+
+def join_row(out, l):
+    """
+    Concatenate the list of images.
+    All input images must be same height and
+    have the same number of channels.
+    They are concatenated left-to-right.
+    `out` is the (open file) destination for the output image.
+    `l` should be a list of open files (the input image files).
+    """
+
+    l = [png.Reader(file=f) for f in l]
+
+    # Ewgh, side effects.
+    for r in l:
+        r.preamble()
+
+    # The reference height; from the first image.
+    height = l[0].height
+    # The total target width
+    width = 0
+    for i,r in enumerate(l):
+        if r.height != height:
+            raise FormatError('Image %d, height %d, does not match %d.' %
+              (i, r.height, height))
+        width += r.width
+
+    # Various bugs here because different numbers of channels and depths go wrong.
+    pixel, info = zip(*[r.asDirect()[2:4] for r in l])
+    tinfo = dict(info[0])
+    del tinfo['size']
+    w = png.Writer(width, height, **tinfo)
+
+    def iter_all_rows():
+        for row in zip(*pixel):
+            # `row` is a sequence that has one row from each input image.
+            # list() is required here to hasten the lazy row building;
+            # not sure if that's a bug in PyPNG or not.
+            yield list(itertools.chain(*row))
+    w.write(out, iter_all_rows())
+
+def main(argv):
+    import argparse
+
+    parser = argparse.ArgumentParser(description=Description)
+    parser.add_argument(
+        "input", nargs="*", default="-", type=png.cli_open, metavar="PNG"
+    )
+
+    args = parser.parse_args()
+
+    return join_row(png.binary_stdout(), args.input)
+
+if __name__ == '__main__':
+    main(sys.argv)
