@@ -45,8 +45,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, is_torchdynamo_compiling, logging, replace_return_docstrings
-from ...utils.deprecation import deprecate_kwarg
+from ...utils import auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 from .configuration_falcon_h1 import FalconH1Config
 
@@ -64,8 +63,6 @@ else:
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "FalconH1Config"
 
 
 class FalconHybridMambaAttentionDynamicCache(DynamicCache):
@@ -604,9 +601,10 @@ class FalconH1Mixer(nn.Module):
     ):
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
+        # Add Multipliers
         hidden_states = hidden_states * self.ssm_in_multiplier
         projected_states = self.in_proj(hidden_states)
-        projected_states = projected_states * self.mup_vector
+        projected_states = projected_states * self.mup_vector  # ADD Mup Multipliers
         d_to_remove = 2 * self.intermediate_size + 2 * self.n_groups * self.ssm_state_size + self.num_heads
 
         # Set up dimensions for reshapes later
@@ -800,10 +798,13 @@ class FalconH1Mixer(nn.Module):
 
         # 1. Gated MLP's linear projection
         input_states = apply_mask_to_padding_states(input_states, attention_mask)
+        # Add Multipliers
+        input_states = input_states * self.ssm_in_multiplier
         projected_states = self.in_proj(input_states)
-        gate, hidden_states_B_C, dt = projected_states.split(
-                [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
-        )
+        projected_states = projected_states * self.mup_vector  # ADD Mup Multipliers
+        gate, hidden_states_B_C, dt = projected_states.split([
+                self.intermediate_size, self.conv_dim, self.num_heads
+            ], dim=-1)
 
         use_precomputed_states = (
             cache_params is not None
@@ -914,8 +915,8 @@ class FalconH1Mixer(nn.Module):
             hidden_states = hidden_states.reshape(batch_size, seq_len, -1, self.head_dim).float()
             B = B.reshape(batch_size, seq_len, -1, self.ssm_state_size).float()
             C = C.reshape(batch_size, seq_len, -1, self.ssm_state_size).float()
-            B = B.repeat(1, 1, self.num_heads // self.n_groups, 1)
-            C = C.repeat(1, 1, self.num_heads // self.n_groups, 1)
+            B = B.repeat_interleave(self.num_heads // self.n_groups, dim=2, output_size=self.num_heads)
+            C = C.repeat_interleave(self.num_heads // self.n_groups, dim=2, output_size=self.num_heads)
             pad_size = (self.chunk_size - seq_len % self.chunk_size) % self.chunk_size
 
             D_residual = self.D[..., None] * pad_tensor_by_size(hidden_states, pad_size)
@@ -1220,13 +1221,6 @@ def compute_mup_vector(config):
 @auto_docstring
 # Adapted from transformers.models.jamba.modeling_jamba.JambaModel
 class FalconH1Model(FalconH1PreTrainedModel):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`FalconH1DecoderLayer`]
-
-    Args:
-        config: FalconH1Config
-    """
-
     def __init__(self, config: FalconH1Config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -1260,6 +1254,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1271,7 +1266,6 @@ class FalconH1Model(FalconH1PreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,  # NOOP kwargs, for now
     ) -> Union[Tuple, BaseModelOutputWithPast]:
@@ -1280,8 +1274,6 @@ class FalconH1Model(FalconH1PreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1352,8 +1344,6 @@ class FalconH1Model(FalconH1PreTrainedModel):
 
         next_cache = None if not use_cache else past_key_values
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
@@ -1522,9 +1512,8 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
+    @can_return_tuple
     @auto_docstring
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1536,7 +1525,6 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs,
@@ -1546,14 +1534,6 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        logits_to_keep (`int` or `torch.Tensor`, *optional*):
-            If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-            `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-            token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-            If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-            This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
 
         Example:
 
@@ -1575,7 +1555,6 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
@@ -1587,7 +1566,6 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             **kwargs,
         )
@@ -1600,10 +1578,6 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return CausalLMOutputWithPast(
             loss=loss,

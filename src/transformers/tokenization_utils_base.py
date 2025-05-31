@@ -43,8 +43,6 @@ from .utils import (
     PushToHubMixin,
     TensorType,
     add_end_docstrings,
-    add_model_info_to_auto_map,
-    add_model_info_to_custom_pipelines,
     cached_file,
     copy_func,
     download_url,
@@ -295,15 +293,6 @@ class BatchEncoding(UserDict):
 
         if "encodings" in state:
             self._encodings = state["encodings"]
-
-    def keys(self):
-        return self.data.keys()
-
-    def values(self):
-        return self.data.values()
-
-    def items(self):
-        return self.data.items()
 
     # After this point:
     # Extended properties and methods only available for fast (Rust-based) tokenizers
@@ -1208,7 +1197,7 @@ ENCODE_KWARGS_DOCSTRING = r"""
                 Activates and controls padding. Accepts the following values:
 
                 - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
+                  sequence is provided).
                 - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
                   acceptable input length for the model if that argument is not provided.
                 - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
@@ -2116,13 +2105,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 # For backward compatibility with odl format.
                 if isinstance(init_kwargs["auto_map"], (tuple, list)):
                     init_kwargs["auto_map"] = {"AutoTokenizer": init_kwargs["auto_map"]}
-                init_kwargs["auto_map"] = add_model_info_to_auto_map(
-                    init_kwargs["auto_map"], pretrained_model_name_or_path
-                )
-            if "custom_pipelines" in init_kwargs:
-                init_kwargs["custom_pipelines"] = add_model_info_to_custom_pipelines(
-                    init_kwargs["custom_pipelines"], pretrained_model_name_or_path
-                )
 
         if config_tokenizer_class is None:
             # Matt: This entire block is only used to decide if the tokenizer class matches the class in the repo.
@@ -3973,11 +3955,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Register this class with a given auto class. This should only be used for custom tokenizers as the ones in the
         library are already mapped with `AutoTokenizer`.
 
-        <Tip warning={true}>
 
-        This API is experimental and may have some slight breaking changes in the next releases.
-
-        </Tip>
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"AutoTokenizer"`):

@@ -1438,9 +1438,6 @@ class Emu3Model(Emu3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.text_model = Emu3TextModel._from_config(config.text_config)
-        if self.text_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"text_model.{k}" for k in self.text_model._tied_weights_keys]
-
         self.vqmodel = Emu3VQVAE(config.vq_config)
         self.vocabulary_mapping = Emu3ImageVocabularyMapping(config.vocabulary_map)
 
@@ -1454,12 +1451,6 @@ class Emu3Model(Emu3PreTrainedModel):
         self.text_model.set_input_embeddings(value)
 
     def get_image_tokens(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor):
-        logger.warning(
-            "`model.get_image_tokens()` is deprecated and will be removed in v4.58. To obtain discrete token use `model.get_image_features()`"
-        )
-        return self.get_image_featues(pixel_values)
-
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor):
         """
         Tokenizes images into discrete tokens with VQGAN module. Converts
         obtained image tokens into BPE tokens and wraps with "boi" and "eoi"
@@ -1475,6 +1466,24 @@ class Emu3Model(Emu3PreTrainedModel):
         bpe_tokens_list = [self.vocabulary_mapping.convert_img2bpe(tokens).flatten() for tokens in image_tokens_list]
         bpe_tokens = torch.cat(bpe_tokens_list)
         return bpe_tokens
+
+    def get_image_features(self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor):
+        """
+        Tokenizes images into discrete tokens with VQGAN module and embeds
+        them with text embeddings layer
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+                The tensors corresponding to the input images.
+        """
+        image_tokens = self.get_image_tokens(pixel_values, image_sizes)
+        split_sizes = [
+            (height // self.vqmodel.vision_spatial_factor) * (width // self.vqmodel.vision_spatial_factor + 1)
+            for height, width in image_sizes
+        ]
+        image_features = self.get_input_embeddings()(image_tokens)
+        image_features = torch.split(image_features, split_sizes)
+        return image_features
 
     @torch.no_grad
     def decode_image_tokens(self, image_tokens: torch.LongTensor, height: int, width: int):
@@ -1536,7 +1545,7 @@ class Emu3Model(Emu3PreTrainedModel):
             )
 
         if pixel_values is not None:
-            image_tokens = self.get_image_features(pixel_values, image_sizes)
+            image_tokens = self.get_image_tokens(pixel_values, image_sizes)
             special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
             image_tokens = image_tokens.to(input_ids.device, input_ids.dtype)
             input_ids = input_ids.masked_scatter(special_image_mask, image_tokens)
@@ -1561,6 +1570,7 @@ class Emu3Model(Emu3PreTrainedModel):
 
 class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     base_model_prefix = ""
+    _tied_weights_keys = ["lm_head.weight"]
     _checkpoint_conversion_mapping = {
         "^text_model.model": "model.text_model",
         "^vqmodel": "model.vqmodel",
@@ -1580,6 +1590,18 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
+
+    def get_output_embeddings(self) -> nn.Module:
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.model = decoder
+
+    def get_decoder(self):
+        return self.model
 
     # Make modules available throught conditional class for BC
     @property

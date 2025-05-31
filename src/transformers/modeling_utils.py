@@ -37,7 +37,6 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, TypeVa
 from zipfile import is_zipfile
 
 import torch
-import torch.distributed.tensor
 from huggingface_hub import split_torch_state_dict_into_shards
 from packaging import version
 from torch import Tensor, nn
@@ -324,7 +323,8 @@ def get_torch_context_manager_or_global_device():
     is not "cpu". This is used to infer the correct device to load the model on, in case `device_map` is not provided.
     """
     device_in_context = torch.tensor([]).device
-    default_device = torch.get_default_device()
+    # `get_default_device` was only introduced in torch>=2.3 - use cpu otherwise to align the behavior
+    default_device = torch.get_default_device() if is_torch_greater_or_equal("2.3") else torch.device("cpu")
     # This case means no context manager was used -> we still check if the default that was potentially set is not cpu
     if device_in_context == default_device:
         if default_device != torch.device("cpu"):
@@ -1004,6 +1004,7 @@ def _get_resolved_checkpoint_files(
     user_agent: dict,
     revision: str,
     commit_hash: Optional[str],
+    is_remote_code: bool,  # Because we can't determine this inside this function, we need it to be passed in
     transformers_explicit_filename: Optional[str] = None,
 ) -> Tuple[Optional[List[str]], Optional[Dict]]:
     """Get all the checkpoint filenames based on `pretrained_model_name_or_path`, and optional metadata if the
@@ -1200,7 +1201,10 @@ def _get_resolved_checkpoint_files(
                                 "_commit_hash": commit_hash,
                                 **has_file_kwargs,
                             }
-                            if not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs):
+                            if (
+                                not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs)
+                                and not is_remote_code
+                            ):
                                 Thread(
                                     target=auto_conversion,
                                     args=(pretrained_model_name_or_path,),
@@ -1572,7 +1576,8 @@ def _find_mismatched_keys(
                 # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
                 # Without matching with module type or parameter type it seems like a practical way to detect valid 4bit weights.
                 if not (
-                    new_state_dict[key].shape[-1] == 1
+                    is_quantized
+                    and new_state_dict[key].shape[-1] == 1
                     and new_state_dict[key].numel() * 2 == model_state_dict[key].numel()
                 ):
                     mismatched_keys.append(key)
@@ -2078,7 +2083,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             if plan := getattr(module, "_tp_plan", None):
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
 
-        if self._tp_plan is not None and is_torch_greater_or_equal("2.3"):
+        if self._tp_plan is not None and is_torch_greater_or_equal("2.5") and _torch_distributed_available:
             for _, v in self._tp_plan.items():
                 if v not in ALL_PARALLEL_STYLES:
                     raise ValueError(
@@ -2657,7 +2662,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             def smart_apply(self, fn):
                 for module in self.children():
                     # We found a sub-model: recursively dispatch its own init function now!
-                    if hasattr(module, "_init_weights"):
+                    if isinstance(module, PreTrainedModel):
                         module.smart_apply(module._initialize_weights)
                     else:
                         module.smart_apply(fn)
@@ -3647,7 +3652,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             for key, value in state_dict.items():
                 for pattern, replacement in reverse_key_mapping.items():
                     replacement = replacement.lstrip("^")  # strip off un-needed chars and patterns
-                    replacement = re.sub(r"\(.*?\)", "", pattern)
+                    replacement = re.sub(r"\(.*\)", "", replacement)
                     key, n_replace = re.subn(pattern, replacement, key)
                     # Early exit of the loop
                     if n_replace > 0:
@@ -3740,7 +3745,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     error_names.append(unknown)
 
             if shared_names:
-                error_names.append(set(shared_names))
+                error_names.extend(shared_names)
 
             if len(error_names) > 0:
                 raise RuntimeError(
@@ -4549,6 +4554,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             user_agent=user_agent,
             revision=revision,
             commit_hash=commit_hash,
+            is_remote_code=cls._auto_class is not None,
             transformers_explicit_filename=transformers_explicit_filename,
         )
 
@@ -5320,11 +5326,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         Register this class with a given auto class. This should only be used for custom models as the ones in the
         library are already mapped with an auto class.
 
-        <Tip warning={true}>
 
-        This API is experimental and may have some slight breaking changes in the next releases.
-
-        </Tip>
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"AutoModel"`):
@@ -5574,8 +5576,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     def get_parameter_or_buffer(self, target: str):
         """
         Return the parameter or buffer given by `target` if it exists, otherwise throw an error. This combines
-        `get_parameter()` and `get_buffer()` in a single handy function. Note that it only work if `target` is a
-        leaf of the model.
+        `get_parameter()` and `get_buffer()` in a single handy function. If the target is an `_extra_state` attribute,
+        it will return the extra state provided by the module. Note that it only work if `target` is a leaf of the model.
         """
         try:
             return self.get_parameter(target)
@@ -5585,7 +5587,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             return self.get_buffer(target)
         except AttributeError:
             pass
-        raise AttributeError(f"`{target}` is neither a parameter nor a buffer.")
+        module, param_name = get_module_from_name(self, target)
+        if (
+            param_name == "_extra_state"
+            and getattr(module.__class__, "get_extra_state", torch.nn.Module.get_extra_state)
+            is not torch.nn.Module.get_extra_state
+        ):
+            return module.get_extra_state()
+
+        raise AttributeError(f"`{target}` is neither a parameter, buffer, nor extra state.")
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)

@@ -593,8 +593,7 @@ jobs:
     secrets: inherit
 
   check_new_failures:
-    # TODO: work on `run_quantization_torch_gpu`
-    if: ${{ always() && inputs.ci_event == 'Daily CI' && inputs.job != 'run_quantization_torch_gpu' && needs.send_results.result == 'success' }}
+    if: ${{ always() && inputs.ci_event == 'Daily CI' && needs.send_results.result == 'success' }}
     name: Check new failures
     needs: send_results
     uses: ./.github/workflows/check_failed_tests.yml
