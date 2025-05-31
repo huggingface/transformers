@@ -139,16 +139,6 @@ if is_torchaudio_available():
     pass
 
 
-def prepare_dia_inputs_dict(
-    encoder_input_ids,
-    decoder_input_ids,
-):
-    return {
-        "encoder_input_ids": encoder_input_ids,
-        "decoder_input_ids": decoder_input_ids,
-    }
-
-
 @require_torch
 class DiaModelTester:
     def __init__(
@@ -171,8 +161,8 @@ class DiaModelTester:
         decoder_head_dim=64,
         decoder_cross_attention_heads=4,
         decoder_cross_head_dim=64,
+        decoder_vocab_size=200,
         # Common
-        vocab_size=200,
         hidden_act="silu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -210,8 +200,8 @@ class DiaModelTester:
         self.decoder_head_dim = decoder_head_dim
         self.decoder_cross_attention_heads = decoder_cross_attention_heads
         self.decoder_cross_head_dim = decoder_cross_head_dim
+        self.decoder_vocab_size = decoder_vocab_size
         # Common
-        self.vocab_size = vocab_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
@@ -229,16 +219,20 @@ class DiaModelTester:
         assert eos_token_id < pad_token_id and eos_token_id < bos_token_id
 
     def prepare_config_and_inputs(self) -> Tuple[DiaConfig, dict]:
-        encoder_input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.encoder_vocab_size)
-        decoder_input_ids = torch.tensor(
-            self.batch_size * [[self.bos_token_id] * len(self.delay_pattern)], device=torch_device
+        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.encoder_vocab_size)
+        # Shape: (batch_size, 1, num_channels)
+        decoder_input_ids = torch.full(
+            (self.batch_size, 1, len(self.delay_pattern)),
+            self.bos_token_id,
+            dtype=torch.long,
+            device=torch_device,
         )
 
         config = self.get_config()
-        inputs_dict = prepare_dia_inputs_dict(
-            encoder_input_ids=encoder_input_ids,
-            decoder_input_ids=decoder_input_ids,
-        )
+        inputs_dict = {
+            "input_ids": input_ids,
+            "decoder_input_ids": decoder_input_ids,
+        }
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self) -> Tuple[DiaConfig, dict]:
@@ -278,7 +272,7 @@ class DiaModelTester:
             cross_head_dim=self.decoder_cross_head_dim,
             cross_num_key_value_heads=max(1, self.decoder_cross_attention_heads // 2),
             cross_hidden_size=self.encoder_hidden_size,  # Match encoder hidden size
-            vocab_size=self.vocab_size,
+            vocab_size=self.decoder_vocab_size,
             dropout=self.hidden_dropout_prob,
             hidden_act=self.hidden_act,
             num_channels=num_channels,  # Must match delay pattern length
@@ -311,23 +305,21 @@ class DiaModelTester:
         if freeze_encoder:
             model.freeze_encoder()
 
-        encoder_input_ids = inputs_dict["encoder_input_ids"]
+        input_ids = inputs_dict["input_ids"]
         decoder_input_ids = inputs_dict["decoder_input_ids"]
 
         # first forward pass
-        last_hidden_state = model(
-            encoder_input_ids=encoder_input_ids, decoder_input_ids=decoder_input_ids
-        ).last_hidden_state
+        last_hidden_state = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids).last_hidden_state
 
         self.parent.assertTrue(last_hidden_state.shape, (13, 7, 16))
 
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
         model = DiaModel(config=config).get_decoder().to(torch_device).eval()
-        encoder_input_ids = inputs_dict["encoder_input_ids"]
+        input_ids = inputs_dict["input_ids"]
         decoder_input_ids = inputs_dict["decoder_input_ids"]
 
         # first forward pass
-        outputs = model(encoder_input_ids=encoder_input_ids, decoder_input_ids=decoder_input_ids, use_cache=True)
+        outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids, use_cache=True)
 
         output, past_key_values = outputs.to_tuple()
 
