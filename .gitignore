@@ -98,13 +98,11 @@ celerybeat-schedule
 # Environments
 .env
 .venv
-.transformer-contribution
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
-transformer-contribution/
 
 # Spyder project settings
 .spyderproject
