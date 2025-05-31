@@ -189,6 +189,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("llama4", "Llama4Config"),
         ("llama4_text", "Llama4TextConfig"),
         ("llava", "LlavaConfig"),
+        ("perception_lm", "PerceptionLMConfig"),
         ("llava_next", "LlavaNextConfig"),
         ("llava_next_video", "LlavaNextVideoConfig"),
         ("llava_onevision", "LlavaOnevisionConfig"),
@@ -252,6 +253,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("pegasus", "PegasusConfig"),
         ("pegasus_x", "PegasusXConfig"),
         ("perceiver", "PerceiverConfig"),
+        ("perception_encoder", "PerceptionEncoderConfig"),
         ("persimmon", "PersimmonConfig"),
         ("phi", "PhiConfig"),
         ("phi3", "Phi3Config"),
@@ -559,6 +561,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("llama4", "Llama4"),
         ("llama4_text", "Llama4ForCausalLM"),
         ("llava", "LLaVa"),
+        ("perception_lm", "PerceptionLM"),
         ("llava_next", "LLaVA-NeXT"),
         ("llava_next_video", "LLaVa-NeXT-Video"),
         ("llava_onevision", "LLaVA-Onevision"),
@@ -630,6 +633,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("pegasus", "Pegasus"),
         ("pegasus_x", "PEGASUS-X"),
         ("perceiver", "Perceiver"),
+        ("perception_encoder", "PerceptionEncoder"),
         ("persimmon", "Persimmon"),
         ("phi", "Phi"),
         ("phi3", "Phi3"),
@@ -828,6 +832,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("sam_hq_vision_model", "sam_hq"),
         ("llama4_text", "llama4"),
         ("blip_2_qformer", "blip_2"),
+        ("perception_encoder", "perception_lm"),
     ]
 )
 
