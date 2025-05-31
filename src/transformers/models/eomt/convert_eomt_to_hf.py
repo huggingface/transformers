@@ -213,7 +213,14 @@ def convert_model(
         }
     )
 
-    processor = EoMTImageProcessor(size={"height": config.image_size, "width": config.image_size})
+    if "semantic" in repo_id:
+        size = {"shortest_edge": config.image_size, "longest_edge": None}
+        do_split_image = True
+    else:
+        size = {"shortest_edge": config.image_size, "longest_edge": config.image_size}
+        do_split_image = False
+
+    processor = EoMTImageProcessor(size=size, do_split_image=do_split_image)
 
     # Save the config and processor
     if output_dir:

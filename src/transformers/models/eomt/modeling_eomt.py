@@ -32,7 +32,7 @@ from ...activations import ACT2FN
 from ...file_utils import ModelOutput, is_scipy_available, requires_backends
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple, is_accelerate_available
-from .configuration_eomt import EoMTConfig, EoMTTextConfig, EoMTVisionConfig
+from .configuration_eomt import EoMTConfig
 
 
 if is_scipy_available():
@@ -726,7 +726,7 @@ def eager_attention_forward(
 class EoMTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Union[EoMTVisionConfig, EoMTTextConfig]):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size

@@ -4,7 +4,7 @@ import numpy as np
 import requests
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -16,6 +16,9 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import EoMTImageProcessor
+
+    if is_torchvision_available():
+        from transformers import EoMTImageProcessorFast
     from transformers.models.eomt.modeling_eomt import EoMTForUniversalSegmentationOutput
 
 
@@ -40,7 +43,7 @@ class EoMTImageProcessingTester:
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
         self.do_resize = do_resize
-        self.size = size if size is not None else {"height": 18, "width": 18}
+        self.size = size if size is not None else {"shortest_edge": 18, "longest_edge": 18}
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -48,8 +51,8 @@ class EoMTImageProcessingTester:
         self.batch_size = 2
         self.num_queries = 3
         self.num_classes = 2
-        self.height = self.size["height"]
-        self.width = self.size["width"]
+        self.height = 18
+        self.width = 18
         self.num_labels = num_labels
 
     def prepare_image_processor_dict(self):
@@ -84,6 +87,7 @@ class EoMTImageProcessingTester:
 @require_vision
 class EoMTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = EoMTImageProcessor if is_vision_available() else None
+    fast_image_processing_class = EoMTImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -107,10 +111,10 @@ class EoMTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"height": 18, "width": 18})
+        self.assertEqual(image_processor.size, {"shortest_edge": 18, "longest_edge": 18})
 
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
-        self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+        self.assertEqual(image_processor.size, {"shortest_edge": 42})
 
     def test_call_numpy(self):
         for image_processing_class in self.image_processor_list:
@@ -168,14 +172,16 @@ class EoMTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_post_process_semantic_segmentation(self):
         processor = self.image_processing_class(**self.image_processor_dict)
+        # Set longest_edge to None to test for semantic segmentatiom.
+        processor.size = {"shortest_edge": 18, "longest_edge": None}
         image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
-        inputs = processor(images=image, segmentation_type="semantic", return_tensors="pt")
+        inputs = processor(images=image, do_split_image=True, return_tensors="pt")
         crops_offset = inputs.pop("crops_offset")
 
         original_sizes = [image.size[::-1]]
 
-        # For semantic segmentation, the BS of output is 2 coz, two crops are created.
+        # For semantic segmentation, the BS of output is 2 coz, two crops are created for the image.
         outputs = self.image_processor_tester.prepare_fake_eomt_outputs(inputs["pixel_values"].shape[0])
         segmentation = processor.post_process_semantic_segmentation(outputs, crops_offset, original_sizes)
 
