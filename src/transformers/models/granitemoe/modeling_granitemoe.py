@@ -998,7 +998,7 @@ class GraniteMoeForCausalLM(GraniteMoePreTrainedModel, GenerationMixin):
         logits = logits / self.config.logits_scaling
 
         loss = None
-        if labels is not None:
+        if labels is not None or kwargs.get("shift_labels", None) is not None:
             # Upcast to float if we need to compute the loss to avoid potential precision issues
             logits = logits.float()
             # Flatten the tokens
@@ -1017,7 +1017,7 @@ class GraniteMoeForCausalLM(GraniteMoePreTrainedModel, GenerationMixin):
                 self.num_experts_per_tok,
                 attention_mask,
             )
-            if labels is not None:
+            if loss is not None:
                 loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
 
         if not return_dict:
