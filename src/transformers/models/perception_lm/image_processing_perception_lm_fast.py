@@ -42,8 +42,6 @@ class PerceptionLMFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     image_res: int = 448
     max_num_tiles: int = 36
     normalize_img: bool = True
-    return_tensors: Optional[Union[str, TensorType]] = None
-
 
 @add_start_docstrings(
     "Constructs a fast PerceptionLM image processor.",
