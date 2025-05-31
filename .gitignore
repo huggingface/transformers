@@ -33,6 +33,7 @@ wheels/
 *.egg
 MANIFEST
 
+
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
@@ -97,11 +98,13 @@ celerybeat-schedule
 # Environments
 .env
 .venv
+.transformer-contribution
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+transformer-contribution/
 
 # Spyder project settings
 .spyderproject
