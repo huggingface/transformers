@@ -1222,7 +1222,7 @@ class BertLMHeadModel(BertPreTrainedModel, GenerationMixin):
         prediction_scores = self.cls(sequence_output)
 
         lm_loss = None
-        if labels is not None:
+        if labels is not None or loss_kwargs.get("shift_labels", None) is not None:
             lm_loss = self.loss_function(prediction_scores, labels, self.config.vocab_size, **loss_kwargs)
 
         if not return_dict:

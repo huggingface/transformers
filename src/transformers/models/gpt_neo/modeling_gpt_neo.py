@@ -888,9 +888,10 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
         lm_logits = self.lm_head(hidden_states)
 
         loss = None
-        if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(lm_logits.device)
+        if labels is not None or kwargs.get("shift_labels", None) is not None:
+            if labels is not None:
+                # move labels to correct device to enable model parallelism
+                labels = labels.to(lm_logits.device)
             # Compute loss in fp32 to match with mesh-tf version
             # https://github.com/EleutherAI/gpt-neo/blob/89ce74164da2fb16179106f54e2269b5da8db333/models/gpt2/gpt2.py#L179
             lm_logits = lm_logits.to(torch.float32)

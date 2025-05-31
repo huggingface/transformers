@@ -691,7 +691,7 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel, GenerationMixin):
         lm_logits = self.lm_head(hidden_states).to(torch.float32)
 
         loss = None
-        if labels is not None:
+        if labels is not None or kwargs.get("shift_labels", None) is not None:
             # move labels to correct device to enable model parallelism
             labels = labels.to(lm_logits.device)
             # Flatten the tokens

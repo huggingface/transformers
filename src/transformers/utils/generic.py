@@ -859,6 +859,7 @@ class LossKwargs(TypedDict, total=False):
     """
 
     num_items_in_batch: Optional[int]
+    shift_labels: Optional["torch.Tensor"]
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
