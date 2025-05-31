@@ -750,9 +750,10 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel, GenerationMixin
         lm_logits = self.embed_out(hidden_states)
 
         lm_loss = None
-        if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(lm_logits.device)
+        if labels is not None or kwargs.get("shift_labels", None) is not None:
+            if labels is not None:
+                # move labels to correct device to enable model parallelism
+                labels = labels.to(lm_logits.device)
 
             lm_loss = self.loss_function(
                 lm_logits,
