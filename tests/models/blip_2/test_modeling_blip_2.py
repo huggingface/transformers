@@ -1621,8 +1621,11 @@ def prepare_img():
 @slow
 class Blip2ModelIntegrationTest(unittest.TestCase):
 
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
     def tearDown(self):
-        cleanup(gc_collect=True)
+        cleanup(torch_device, gc_collect=True)
 
     def test_inference_opt(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
