@@ -159,6 +159,7 @@ class PerceptionLMConfig(PretrainedConfig):
         projector_pooling_ratio=1,
         image_token_id=128002,
         video_token_id=128003,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.image_token_id = image_token_id
@@ -179,7 +180,7 @@ class PerceptionLMConfig(PretrainedConfig):
 
         self.text_config = text_config
         self.projector_pooling_ratio = projector_pooling_ratio
-        super().__init__(**kwargs)
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
 __all__ = ["PerceptionLMConfig", "PerceptionEncoderConfig"]

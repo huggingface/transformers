@@ -5,8 +5,7 @@
 #                          modular_perception_lm.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2025 the HuggingFace Inc. team. All rights reserved.
-#
+# Copyright 2025 Meta Platforms, Inc. and the HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -34,7 +33,7 @@ from transformers.generation.utils import GenerationMixin
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple
-from ..auto import AutoModel, AutoModelForCausalLM
+from ..auto import AutoModel
 from .configuration_perception_lm import PerceptionEncoderConfig, PerceptionLMConfig
 
 
@@ -70,7 +69,8 @@ class AdaptiveAvgPooling(nn.Module):
     def forward(self, x):
         b, num_tokens, c = x.shape
         h = int(math.sqrt(num_tokens))
-        assert h * h == num_tokens
+        if h * h != num_tokens:
+            raise ValueError(f"num_tokens {num_tokens} is expected to be a square number")
 
         shape = (h // self.pooling_ratio, h // self.pooling_ratio)
         x = x.permute(0, 2, 1).reshape(b, -1, h, h)
@@ -116,7 +116,7 @@ class PerceptionLMMultiModalProjector(nn.Module):
 @auto_docstring
 class PerceptionLMPreTrainedModel(PreTrainedModel):
     config_class = PerceptionLMConfig
-    base_model_prefix = "model"
+    base_model_prefix = ""
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
     _supports_cache_class = True
@@ -188,7 +188,7 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
     def __init__(self, config: PerceptionLMConfig):
         super().__init__(config)
         self.multi_modal_projector = PerceptionLMMultiModalProjector(config)
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+        self.language_model = AutoModel.from_config(config.text_config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
         self.post_init()
 
@@ -322,19 +322,25 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
         )
         return outputs, image_features
 
-    def get_output_embeddings(self):
-        return self.language_model.get_output_embeddings()
-
 
 @auto_docstring
 class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["lm_head.weight"]
+
     def __init__(self, config: PerceptionLMConfig, **super_kwargs):
         super().__init__(config, **super_kwargs)
         self.model = PerceptionLMModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
     def get_output_embeddings(self):
-        return self.model.get_output_embeddings()
+        return self.lm_head
 
     def prepare_inputs_for_generation(
         self,
@@ -350,7 +356,7 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        model_inputs = self.model.language_model.prepare_inputs_for_generation(
+        model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -431,30 +437,16 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
             **lm_kwargs,
         )
 
-        logits = outputs[0]
+        hidden_states = outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
-            if attention_mask is not None:
-                # we use the input attention mask to shift the logits and labels, because it is 2D.
-                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
-                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
-                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
-            else:
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)),
-                shift_labels.view(-1).to(shift_logits.device),
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **lm_kwargs
             )
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
 
         return PerceptionLMCausalLMOutputWithPast(
             loss=loss,
