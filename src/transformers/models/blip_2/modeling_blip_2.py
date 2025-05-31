@@ -2400,7 +2400,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
                 return_dict=return_dict,
             )
             text_embeds = text_outputs[0] if not return_dict else text_outputs.last_hidden_state
-            text_embeds = text_embeds.to(dtype=torch.float16)
+            text_embeds = text_embeds.to(dtype=self.itm_head.weight.dtype)
 
             output = self.itm_head(text_embeds[:, : query_tokens.size(1), :])
             logits_per_image = output.mean(dim=1)
