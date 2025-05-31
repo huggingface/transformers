@@ -911,7 +911,7 @@ class SpecialTokensMixin:
           makes it easy to develop model-agnostic training and fine-tuning scripts.
 
         When possible, special tokens are already registered for provided pretrained models (for instance
-        [`BertTokenizer`] `cls_token` is already registered to be :obj*'[CLS]'* and XLM's one is also registered to be
+        [`BertTokenizer`] `cls_token` is already registered to be `'[CLS]'` and XLM's one is also registered to be
         `'</s>'`).
 
         Args:
