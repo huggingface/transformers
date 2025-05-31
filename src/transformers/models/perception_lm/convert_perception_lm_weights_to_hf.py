@@ -270,38 +270,38 @@ def write_model(
             filename = f"pytorch_model-{layer_i + 1}-of-{n_layers + 2}.bin"
             assert num_shards == 1, "PerceptionLM does not support sharded weights"
             state_dict = {
-                f"language_model.model.layers.{layer_i}.self_attn.q_proj.weight": permute(
+                f"model.language_model.layers.{layer_i}.self_attn.q_proj.weight": permute(
                     loaded[f"layers.{layer_i}.attention.wq.weight"], n_heads=n_heads
                 ),
-                f"language_model.model.layers.{layer_i}.self_attn.k_proj.weight": permute(
+                f"model.language_model.layers.{layer_i}.self_attn.k_proj.weight": permute(
                     loaded[f"layers.{layer_i}.attention.wk.weight"],
                     n_heads=num_key_value_heads,
                     dim1=key_value_dim,
                 ),
-                f"language_model.model.layers.{layer_i}.self_attn.v_proj.weight": loaded[
+                f"model.language_model.layers.{layer_i}.self_attn.v_proj.weight": loaded[
                     f"layers.{layer_i}.attention.wv.weight"
                 ],
-                f"language_model.model.layers.{layer_i}.self_attn.o_proj.weight": loaded[
+                f"model.language_model.layers.{layer_i}.self_attn.o_proj.weight": loaded[
                     f"layers.{layer_i}.attention.wo.weight"
                 ],
-                f"language_model.model.layers.{layer_i}.mlp.gate_proj.weight": loaded[
+                f"model.language_model.layers.{layer_i}.mlp.gate_proj.weight": loaded[
                     f"layers.{layer_i}.feed_forward.w1.weight"
                 ],
-                f"language_model.model.layers.{layer_i}.mlp.down_proj.weight": loaded[
+                f"model.language_model.layers.{layer_i}.mlp.down_proj.weight": loaded[
                     f"layers.{layer_i}.feed_forward.w2.weight"
                 ],
-                f"language_model.model.layers.{layer_i}.mlp.up_proj.weight": loaded[
+                f"model.language_model.layers.{layer_i}.mlp.up_proj.weight": loaded[
                     f"layers.{layer_i}.feed_forward.w3.weight"
                 ],
-                f"language_model.model.layers.{layer_i}.input_layernorm.weight": loaded[
+                f"model.language_model.layers.{layer_i}.input_layernorm.weight": loaded[
                     f"layers.{layer_i}.attention_norm.weight"
                 ],
-                f"language_model.model.layers.{layer_i}.post_attention_layernorm.weight": loaded[
+                f"model.language_model.layers.{layer_i}.post_attention_layernorm.weight": loaded[
                     f"layers.{layer_i}.ffn_norm.weight"
                 ],
             }
             state_dict[
-                f"language_model.model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"
+                f"model.language_model.layers.{layer_i}.self_attn.rotary_emb.inv_freq"
             ] = inv_freq
             for k, v in state_dict.items():
                 index_dict["weight_map"][k] = filename
@@ -312,26 +312,23 @@ def write_model(
         filename = f"pytorch_model-{n_layers + 1}-of-{n_layers + 2}.bin"
 
         state_dict = {
-            "language_model.model.embed_tokens.weight": loaded["tok_embeddings.weight"],
-            "language_model.model.norm.weight": loaded["norm.weight"],
-            "language_model.lm_head.weight": (
-                loaded["output.weight"]
-                if not tie_word_embeddings
-                else loaded["tok_embeddings.weight"]
-            ),
-            "multi_modal_projector.projector.0.weight": loaded[
+            "model.language_model.embed_tokens.weight": loaded["tok_embeddings.weight"],
+            "model.language_model.norm.weight": loaded["norm.weight"],
+            "model.multi_modal_projector.projector.0.weight": loaded[
                 "vision_projector.projector.0.weight"
             ],
-            "multi_modal_projector.projector.2.weight": loaded[
+            "model.multi_modal_projector.projector.2.weight": loaded[
                 "vision_projector.projector.2.weight"
             ],
-            "multi_modal_projector.projector.0.bias": loaded[
+            "model.multi_modal_projector.projector.0.bias": loaded[
                 "vision_projector.projector.0.bias"
             ],
-            "multi_modal_projector.projector.2.bias": loaded[
+            "model.multi_modal_projector.projector.2.bias": loaded[
                 "vision_projector.projector.2.bias"
             ],
         }
+        if not tie_word_embeddings:
+            state_dict["lm_head.weight"] = loaded["output.weight"]
         for k, v in state_dict.items():
             index_dict["weight_map"][k] = filename
             param_count += v.numel()
@@ -346,16 +343,16 @@ def write_model(
         }
         vision_params = model_params["vision_model"]
         if vision_params["layers"] == 23 and vision_params["width"] == 1024:
-            vision_model_name = "vit_pe_core_large_patch14_336"
+            architecture = "vit_pe_core_large_patch14_336"
         elif vision_params["layers"] == 47 and vision_params["width"] == 1536:
-            vision_model_name = "vit_pe_core_gigantic_patch14_448"
+            architecture = "vit_pe_core_gigantic_patch14_448"
         else:
             raise ValueError(f"Unsupported PE config: {vision_params['layers']} layers and {vision_params['width']} width")
         
         vision_config = PerceptionEncoderConfig(
             use_cls_token=vision_params["use_cls_token"],
             width=vision_params["width"],
-            model_name=vision_model_name,
+            architecture=architecture,
             img_size=(vision_params["image_size"], vision_params["image_size"]),
             depth=vision_params["layers"],
             num_classes=0,
@@ -369,7 +366,7 @@ def write_model(
         )
         perception_encoder = PerceptionEncoder(vision_config)
         state_dict = checkpoint_filter_fn(state_dict, perception_encoder.eva_pe)
-        state_dict = {"vision_tower.eva_pe." + k: v for k, v in state_dict.items()}
+        state_dict = {"model.vision_tower.eva_pe." + k: v for k, v in state_dict.items()}
         for k, v in state_dict.items():
             index_dict["weight_map"][k] = filename
             param_count += v.numel()
@@ -431,6 +428,7 @@ def write_model(
             vision_config=vision_config.to_dict(),
             projector_pooling_ratio=projector_pooling_ratio,
             image_token_id=image_token_id,
+            tie_word_embeddings=tie_word_embeddings,
         )
 
         config.save_pretrained(tmp_model_path)
@@ -444,6 +442,7 @@ def write_model(
 
         # Make space so we can load the model properly now.
         del state_dict
+        # output_weight = loaded.get("output.weight", None)
         del loaded
         gc.collect()
 
@@ -451,6 +450,10 @@ def write_model(
         model = PerceptionLMForConditionalGeneration.from_pretrained(
             tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
         )
+        # if not tie_word_embeddings:
+        #     if output_weight is None:
+        #         raise ValueError("Output weight/lm_head is not found in the checkpoint.")
+        #     model.lm_head.load_state_dict({"weight": output_weight})
 
         # Avoid saving this as part of the config.
         del model.config._name_or_path
