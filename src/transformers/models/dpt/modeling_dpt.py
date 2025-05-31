@@ -885,8 +885,7 @@ class DPTModel(DPTPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPoolingAndIntermediateActivations]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1071,8 +1070,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         pixel_values: torch.FloatTensor,
         head_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], DepthEstimatorOutput]:
         r"""
@@ -1244,8 +1242,7 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], SemanticSegmenterOutput]:
         r"""

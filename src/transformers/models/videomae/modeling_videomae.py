@@ -539,8 +539,7 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         pixel_values: torch.FloatTensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
@@ -755,8 +754,7 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
         pixel_values: torch.FloatTensor,
         bool_masked_pos: torch.BoolTensor,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, VideoMAEForPreTrainingOutput]:
         r"""
@@ -934,8 +932,7 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, ImageClassifierOutput]:
         r"""

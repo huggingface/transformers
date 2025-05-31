@@ -607,8 +607,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         height: int,
         width: int,
         mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
     ) -> Tuple[torch.Tensor, torch.Tensor, Tuple, Tuple]:
         """
         Perform keypoint matching between two images.
@@ -749,8 +748,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, KeypointMatchingOutput]:
         r"""
