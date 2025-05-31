@@ -52,6 +52,45 @@ if is_torch_available():
     import torch.nn.functional as F
 
 
+def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, int]:
+    """
+    Computes the output image size given the input image size and the desired output size.
+
+    Args:
+        image_size (`Tuple[int, int]`):
+            The input image size.
+        size (`int`):
+            The desired output size.
+        max_size (`int`, *optional*):
+            The maximum allowed output size.
+    """
+    height, width = image_size
+    raw_size = None
+    if max_size is not None:
+        min_original_size = float(min((height, width)))
+        max_original_size = float(max((height, width)))
+        if max_original_size / min_original_size * size > max_size:
+            raw_size = max_size * min_original_size / max_original_size
+            size = int(round(raw_size))
+
+    if (height <= width and height == size) or (width <= height and width == size):
+        oh, ow = height, width
+    elif width < height:
+        ow = size
+        if max_size is not None and raw_size is not None:
+            oh = round(raw_size * height / width)
+        else:
+            oh = round(size * height / width)
+    else:
+        oh = size
+        if max_size is not None and raw_size is not None:
+            ow = round(raw_size * width / height)
+        else:
+            ow = round(size * width / height)
+
+    return (oh, ow)
+
+
 # Copied from transformers.models.detr.image_processing_detr.remove_low_and_no_objects
 def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
     """
@@ -157,6 +196,14 @@ def compute_segments(
     return segmentation, segments
 
 
+def get_target_size(size_dict: Dict[str, int]) -> Tuple[int, int]:
+    """Returns the height and width from a size dict."""
+    target_height = size_dict["shortest_edge"]
+    target_width = size_dict.get("longest_edge", None) or target_height
+
+    return target_height, target_width
+
+
 class EoMTImageProcessor(BaseImageProcessor):
     r"""
     Constructs a EoMT image processor. The image processor can be used to prepare image(s) and optional targets
@@ -191,6 +238,10 @@ class EoMTImageProcessor(BaseImageProcessor):
             ImageNet std.
         num_labels (`int`, *optional*):
             The number of labels in the segmentation map.
+        do_split_image (`bool`, *optional*, defaults to `False`):
+            Whether to split the input images into overlapping crops for semantic segmentation. If set to `True`, the
+            input images will be split into crops of size `size["shortest_edge"]` with an overlap between crops.
+            Otherwise, the input images will be padded to the target size.
     """
 
     model_input_names = ["pixel_values"]
@@ -206,12 +257,13 @@ class EoMTImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         num_labels: Optional[int] = None,
+        do_split_image: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
-        size = size if size is not None else {"height": 640, "width": 640}
-        size = get_size_dict(size, default_to_square=True)
+        size = size if size is not None else {"shortest_edge": 640, "longest_edge": 640}
+        size = get_size_dict(size, default_to_square=False)
 
         self.do_resize = do_resize
         self.size = size
@@ -222,41 +274,11 @@ class EoMTImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.num_labels = num_labels
-
-    def scale_image_size(self, image_size: Tuple[int, int], segmentation_type: str) -> Tuple[int, int]:
-        """
-        Scales image dimensions based on the segmentation type.
-
-        For semantic segmentation, scales up to or exceed the target size.
-        For instance or panoptic segmentation, scales down to fit within the target size.
-
-        Args:
-            image_size (`Tuple[int, int]`):
-                Original image size (height, width).
-            segmentation_type (`str`):
-                One of "semantic", "instance", or "panoptic".
-
-        Returns:
-            `Tuple[int, int]`: Scaled image size (height, width).
-        """
-        target_h, target_w = self.size["height"], self.size["width"]
-        orig_h, orig_w = image_size
-
-        # For semantic segmentation: scale up so that both sides are ≥ target size
-        if segmentation_type == "semantic":
-            scale_factor = max(target_h / orig_h, target_w / orig_w)
-        else:
-            scale_factor = min(target_h / orig_h, target_w / orig_w)
-
-        output_h = round(orig_h * scale_factor)
-        output_w = round(orig_w * scale_factor)
-
-        return (output_h, output_w)
+        self.do_split_image = do_split_image
 
     def resize(
         self,
         image: np.ndarray,
-        segmentation_type: str,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format=None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -271,8 +293,6 @@ class EoMTImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`Dict[str, int]`):
                 Size of the output image.
-            segmentation_type (`str`):
-                Type of segmentation task. One of the "semantic", "instance", or "panoptic".
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
@@ -281,8 +301,7 @@ class EoMTImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
         image_size = get_image_size(image)
-
-        output_size = self.scale_image_size(image_size, segmentation_type)
+        output_size = get_size_with_aspect_ratio(image_size, self.size["shortest_edge"], self.size["longest_edge"])
 
         image = resize(
             image=image,
@@ -296,13 +315,13 @@ class EoMTImageProcessor(BaseImageProcessor):
 
         return image
 
-    def _preprocessing_semantic_segmentation(self, image: ImageInput, image_index: int) -> Tuple[List, List]:
+    def _split_image(self, image: ImageInput, image_index: int) -> Tuple[List, List]:
         """Slices an image into overlapping crops for semantic segmentation."""
 
         crops, crops_offset = [], []
 
-        image_size = get_image_size(image=image)  # (H, W)
-        crop_size = self.size["height"]  # or 'width', both are equal
+        image_size = get_image_size(image=image)
+        crop_size = self.size["shortest_edge"]
 
         longer_side = max(image_size)
         num_crops = math.ceil(longer_side / crop_size)
@@ -326,8 +345,10 @@ class EoMTImageProcessor(BaseImageProcessor):
     def _pad(self, image):
         """Pads the image to the target size using zero padding."""
         height, width = get_image_size(image)
-        pad_h = max(0, self.size["height"] - height)
-        pad_w = max(0, self.size["width"] - width)
+
+        target_height, target_width = get_target_size(self.size)
+        pad_h = max(0, target_height - height)
+        pad_w = max(0, target_width - width)
 
         padding = ((0, pad_h), (0, pad_w))
 
@@ -339,9 +360,9 @@ class EoMTImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_type: str = "semantic",
         mask_labels: Optional[ImageInput] = None,
         class_labels: Optional[Dict[int, int]] = None,
+        do_split_image: Optional[bool] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
@@ -360,16 +381,16 @@ class EoMTImageProcessor(BaseImageProcessor):
         Args:
             images (`ImageInput`):
                 Image or batch of images to preprocess.
-            segmentation_type (`str`):
-                Type of segmentation. Must be one of `"semantic"`, `"instance"`, or `"panoptic"`.
             mask_labels (`ImageInput`, *optional*):
                 Ground truth segmentation mask corresponding to input images.
             class_labels (`Dict[int, int]`, *optional*):
                 Class labels to map instance/panoptic segments to semantic classes.
+            do_split_image (`bool`, *optional*, defaults to `self.do_split_image`):
+                Whether to split the input images into overlapping crops for semantic segmentation.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the input images.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Target size as a dictionary with `"height"` and `"width"` keys.
+                Target size as a dictionary with `"shortest_edge"` and `"longest_edge"` keys.
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
                 Resampling filter to use when resizing.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
@@ -390,8 +411,11 @@ class EoMTImageProcessor(BaseImageProcessor):
                 Channel format of the input image.
         """
 
+        do_split_image = do_split_image if do_split_image is not None else self.do_split_image
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
+        size = get_size_dict(size, default_to_square=False)
+        self.size = size
         size = get_size_dict(size, default_to_square=False)
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
@@ -406,11 +430,6 @@ class EoMTImageProcessor(BaseImageProcessor):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
-
-        if segmentation_type not in {"semantic", "instance", "panoptic"}:
-            raise ValueError(
-                f"Invalid segmentation type: {segmentation_type}. Must be one of ['semantic', 'instance', 'panoptic']."
             )
 
         validate_preprocess_arguments(
@@ -431,7 +450,6 @@ class EoMTImageProcessor(BaseImageProcessor):
             images = [
                 self.resize(
                     image,
-                    segmentation_type=segmentation_type,
                     resample=resample,
                     data_format=data_format,
                     input_data_format=input_data_format,
@@ -442,11 +460,11 @@ class EoMTImageProcessor(BaseImageProcessor):
         # crops_offset is only used for semantic segmentation.
         processed_images, crops_offset = [], []
 
-        if segmentation_type == "semantic":
+        if do_split_image:
             for idx, img in enumerate(images):
-                crops, origins = self._preprocessing_semantic_segmentation(img, idx)
+                crops, offsets = self._split_image(img, idx)
                 processed_images.extend(crops)
-                crops_offset.extend(origins)
+                crops_offset.extend(offsets)
         else:
             processed_images = [self._pad(img) for img in images]
 
@@ -469,7 +487,7 @@ class EoMTImageProcessor(BaseImageProcessor):
 
         output = {"pixel_values": images}
 
-        if segmentation_type == "semantic" and crops_offset:
+        if do_split_image and crops_offset:
             output["crops_offset"] = crops_offset
 
         if mask_labels is not None:
@@ -479,7 +497,7 @@ class EoMTImageProcessor(BaseImageProcessor):
 
         return BatchFeature(output, tensor_type=return_tensors)
 
-    def _reverse_image_preprocessing_semantic(
+    def _reverse_semantic_image_preprocessing(
         self,
         segmentation_logits: torch.Tensor,
         crops_offset: List[Tuple[int, int, int]],
@@ -505,7 +523,9 @@ class EoMTImageProcessor(BaseImageProcessor):
         crop_counts = []
 
         for image_size in original_image_sizes:
-            height, width = self.scale_image_size(image_size, segmentation_type="semantic")
+            height, width = get_size_with_aspect_ratio(
+                image_size, self.size["shortest_edge"], self.size["longest_edge"]
+            )
             aggregated_logits.append(torch.zeros((num_classes, height, width), device=segmentation_logits.device))
             crop_counts.append(torch.zeros((num_classes, height, width), device=segmentation_logits.device))
 
@@ -533,7 +553,7 @@ class EoMTImageProcessor(BaseImageProcessor):
 
         return reconstructed_logits
 
-    def _reverse_image_preprocessing_panoptic(
+    def _reverse_panoptic_image_preprocessing(
         self,
         segmentation_logits: torch.Tensor,
         original_image_sizes: List[Tuple[int, int]],
@@ -543,7 +563,9 @@ class EoMTImageProcessor(BaseImageProcessor):
         resized_logits = []
 
         for idx, original_size in enumerate(original_image_sizes):
-            target_height, target_width = self.scale_image_size(original_size, segmentation_type="panoptic")
+            target_height, target_width = get_size_with_aspect_ratio(
+                original_size, self.size["shortest_edge"], self.size["longest_edge"]
+            )
             cropped_logits = segmentation_logits[idx][:, :target_height, :target_width]
             upsampled_logits = F.interpolate(
                 cropped_logits[None, ...], size=original_size, mode="bilinear", align_corners=False
@@ -562,7 +584,7 @@ class EoMTImageProcessor(BaseImageProcessor):
         masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
 
-        size = (self.size["height"], self.size["width"])
+        size = get_target_size(self.size)
         masks_queries_logits = torch.nn.functional.interpolate(
             masks_queries_logits,
             size=size,
@@ -575,7 +597,7 @@ class EoMTImageProcessor(BaseImageProcessor):
 
         segmentation_logits = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
 
-        output_logits = self._reverse_image_preprocessing_semantic(
+        output_logits = self._reverse_semantic_image_preprocessing(
             segmentation_logits, crops_offset, original_image_sizes
         )
 
@@ -599,14 +621,14 @@ class EoMTImageProcessor(BaseImageProcessor):
         batch_size = class_queries_logits.shape[0]
         num_labels = class_queries_logits.shape[-1] - 1
 
-        size = (self.size["height"], self.size["width"])
+        size = get_target_size(self.size)
         masks_queries_logits = torch.nn.functional.interpolate(
             masks_queries_logits,
             size=size,
             mode="bilinear",
         )
 
-        mask_probs_batch = self._reverse_image_preprocessing_panoptic(masks_queries_logits, original_image_sizes)
+        mask_probs_batch = self._reverse_panoptic_image_preprocessing(masks_queries_logits, original_image_sizes)
         pred_scores_batch, pred_labels_batch = class_queries_logits.softmax(dim=-1).max(-1)
 
         results: List = []
