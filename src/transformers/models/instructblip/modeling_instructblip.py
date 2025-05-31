@@ -1634,7 +1634,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
             )
             logits = outputs.logits if return_dict else outputs[0]
             loss = None
-            if labels is not None:
+            if labels is not None or kwargs.get("shift_labels", None) is not None:
                 loss = self.loss_function(
                     logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
                 )
