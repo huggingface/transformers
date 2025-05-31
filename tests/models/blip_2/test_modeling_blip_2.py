@@ -31,7 +31,7 @@ from transformers.testing_utils import (
     require_torch_sdpa,
     require_vision,
     slow,
-    torch_device,
+    torch_device, cleanup,
 )
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -1620,6 +1620,10 @@ def prepare_img():
 @require_torch
 @slow
 class Blip2ModelIntegrationTest(unittest.TestCase):
+
+    def tearDown(self):
+        cleanup(gc_collect=True)
+
     def test_inference_opt(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
         model = Blip2ForConditionalGeneration.from_pretrained(
