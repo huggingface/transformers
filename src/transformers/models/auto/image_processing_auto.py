@@ -170,7 +170,7 @@ else:
             ("vitmatte", ("VitMatteImageProcessor", "VitMatteImageProcessorFast")),
             ("xclip", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("yolos", ("YolosImageProcessor", "YolosImageProcessorFast")),
-            ("zoedepth", ("ZoeDepthImageProcessor",)),
+            ("zoedepth", ("ZoeDepthImageProcessor", "ZoeDepthImageProcessorFast")),
         ]
     )
 

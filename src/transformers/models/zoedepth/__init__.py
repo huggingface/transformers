@@ -14,15 +14,31 @@
 from typing import TYPE_CHECKING
 
 from ...utils import _LazyModule
-from ...utils.import_utils import define_import_structure
 
+
+_import_structure = {
+    "configuration_zoedepth": ["ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP", "ZoeDepthConfig"],
+    "image_processing_zoedepth": ["ZoeDepthImageProcessor"],
+    "image_processing_zoedepth_fast": ["ZoeDepthImageProcessorFast"],
+    "modeling_zoedepth": [
+        "ZoeDepthForDepthEstimation",
+        "ZoeDepthPreTrainedModel",
+    ],
+}
 
 if TYPE_CHECKING:
-    from .configuration_zoedepth import *
-    from .image_processing_zoedepth import *
-    from .modeling_zoedepth import *
+    from .configuration_zoedepth import ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP, ZoeDepthConfig
+    from .image_processing_zoedepth import ZoeDepthImageProcessor
+    from .image_processing_zoedepth_fast import ZoeDepthImageProcessorFast
+    from .modeling_zoedepth import (
+        ZoeDepthForDepthEstimation,
+        ZoeDepthForDepthEstimation,
+        ZoeDepthPreTrainedModel,
+    )
 else:
+    # Attempt direct import for runtime availability before lazy loading
+    from .image_processing_zoedepth_fast import ZoeDepthImageProcessorFast
+
     import sys
 
-    _file = globals()["__file__"]
-    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
