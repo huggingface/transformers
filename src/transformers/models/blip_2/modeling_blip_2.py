@@ -1196,6 +1196,8 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
             query_length if query_length is not None else query_embeds.shape[1] if query_embeds is not None else 0
         )
 
+        # `Blip2QFormerModel` is kept as fp32
+        query_embeds = query_embeds.to(self.layernorm.weight.dtype)
         embedding_output = self.layernorm(query_embeds)
         embedding_output = self.dropout(embedding_output)
 
@@ -1665,6 +1667,7 @@ class Blip2Model(Blip2PreTrainedModel):
 @auto_docstring
 class Blip2TextModelWithProjection(Blip2PreTrainedModel):
     supports_gradient_checkpointing = False
+    _supports_flex_attn = False
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
 
     def __init__(self, config: Blip2Config):
@@ -1737,6 +1740,7 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
         )
 
         pooled_output = text_outputs[0] if not return_dict else text_outputs.last_hidden_state
+        pooled_output = pooled_output.to(dtype=self.text_projection.weight.dtype)
 
         text_embeds = self.text_projection(pooled_output)
         text_embeds = nn.functional.normalize(text_embeds, dim=-1)
@@ -1755,6 +1759,7 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
 
 @auto_docstring
 class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
+    _supports_flex_attn = False
     main_input_name = "pixel_values"
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
 
@@ -1837,6 +1842,7 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
         )
 
         embeds = query_outputs[0] if not return_dict else query_outputs.last_hidden_state
+        embeds = embeds.to(dtype=self.vision_projection.weight.dtype)
         image_embeds = self.vision_projection(embeds)
         image_embeds = nn.functional.normalize(image_embeds, dim=-1)
 
@@ -1870,6 +1876,7 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
 class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
     config_class = Blip2Config
     main_input_name = "pixel_values"
+    _supports_sdpa = False
     _supports_cache_class = True
     _supports_static_cache = True
     _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
@@ -2263,6 +2270,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
     """
 )
 class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
+    _supports_flex_attn = False
     main_input_name = "pixel_values"
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
 
@@ -2395,6 +2403,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
                 return_dict=return_dict,
             )
             text_embeds = text_outputs[0] if not return_dict else text_outputs.last_hidden_state
+            text_embeds = text_embeds.to(dtype=self.itm_head.weight.dtype)
 
             output = self.itm_head(text_embeds[:, : query_tokens.size(1), :])
             logits_per_image = output.mean(dim=1)
@@ -2408,6 +2417,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
                 return_dict=return_dict,
             )
             image_embeds = query_outputs[0] if not return_dict else query_outputs.last_hidden_state
+            image_embeds = image_embeds.to(dtype=self.vision_projection.weight.dtype)
 
             query_embeds = self.embeddings(
                 input_ids=input_ids,
@@ -2419,6 +2429,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
                 return_dict=return_dict,
             )
             question_embeds = text_outputs[0] if not return_dict else text_outputs.last_hidden_state
+            question_embeds = question_embeds.to(dtype=self.text_projection.weight.dtype)
 
             # normalized features
             image_embeds = nn.functional.normalize(self.vision_projection(image_embeds), dim=-1)
