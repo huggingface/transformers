@@ -39,6 +39,13 @@ from ...generation.logits_process import (
     TopPLogitsWarper,
     TypicalLogitsWarper,
 )
+from ...generation.stopping_criteria import (
+    ConfidenceCriteria,
+    EosTokenCriteria,
+    MaxTimeCriteria,
+    StoppingCriteria,
+    StoppingCriteriaList,
+)
 from ...generation.utils import GenerationConfig, GenerationMixin
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
@@ -55,6 +62,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
+from ...tokenization_utils_base import PreTrainedTokenizerBase
 from ...utils import (
     is_torch_flex_attn_available,
     logging,
@@ -1138,6 +1146,24 @@ class DiaUnflattenLogitsProcessor(LogitsProcessor):
         return scores.view(batch_size, -1, *scores.shape[1:])
 
 
+class DiaEosTokenCriteria(StoppingCriteria):
+    """
+    This class can be used to stop generation whenever the "end-of-sequence" token is generated.
+    By default, it uses the `model.generation_config.eos_token_id`.
+
+    Args:
+        eos_token_id (`Union[int, List[int], torch.Tensor]`):
+            The id(s) of the *end-of-sequence* token.
+    """
+
+    def __init__(self, eos_value: int, pad_value: int, num_channels: int, device: str = "cpu"):
+        self.eos_token_id = torch.tensor([pad_value] * (num_channels - 1) + [eos_value], device=device)
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+        is_done = (input_ids == self.eos_token_id).all(dim=-1)
+        return is_done
+
+
 def build_delay_indices(B: int, T: int, C: int, delay_pattern: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Precompute (t_idx_BxTxC, indices_BTCx3) so that out[t, c] = in[t - delay[c], c].
@@ -1248,17 +1274,9 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
         # Enabling unconditioned input for generation
         model_kwargs["with_unconditioned_input"] = True
 
-        # decoder eos stopping criteria
-        _eos = self.config.eos_token_id or generation_config.eos_token_id
-        _pad = self.config.pad_token_id or generation_config.pad_token_id
-        _bos = self.config.bos_token_id or generation_config.bos_token_id
-        _channel = self.config.decoder_config.num_channels
-        generation_config._eos_token_tensor = torch.tensor([_pad for _ in range(_channel - 1)] + [_eos])
-
-        # audio eos value
-        self.config.eos_token_id = _eos
-        self.config.pad_token_id = _pad
-        self.config.bos_token_id = _bos
+        self.config.eos_token_id = self.config.eos_token_id or generation_config.eos_token_id
+        self.config.pad_token_id = self.config.pad_token_id or generation_config.pad_token_id
+        self.config.bos_token_id = self.config.bos_token_id or generation_config.bos_token_id
 
         return generation_config, model_kwargs
 
@@ -1537,6 +1555,35 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
         if generation_config.renormalize_logits is True:
             processors.append(LogitNormalization())
         return processors
+
+    def _get_stopping_criteria(
+        self,
+        generation_config: GenerationConfig,
+        stopping_criteria: Optional[StoppingCriteriaList],
+        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
+        **kwargs,
+    ) -> StoppingCriteriaList:
+        criteria = StoppingCriteriaList()
+        if generation_config.max_time is not None:
+            criteria.append(MaxTimeCriteria(max_time=generation_config.max_time))
+        criteria.append(
+            DiaEosTokenCriteria(
+                eos_value=self.config.eos_token_id,
+                pad_value=self.config.pad_token_id,
+                num_channels=self.config.decoder_config.num_channels,
+                device=self.device,
+            )
+        )
+        if (
+            generation_config.is_assistant
+            and generation_config.assistant_confidence_threshold is not None
+            and generation_config.assistant_confidence_threshold > 0
+        ):
+            criteria.append(
+                ConfidenceCriteria(assistant_confidence_threshold=generation_config.assistant_confidence_threshold)
+            )
+        criteria = self._merge_criteria_processor_list(criteria, stopping_criteria)
+        return criteria
 
     def forward(
         self,
