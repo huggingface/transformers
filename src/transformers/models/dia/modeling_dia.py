@@ -45,7 +45,8 @@ from ...generation.stopping_criteria import (
     StoppingCriteria,
     StoppingCriteriaList,
 )
-from ...generation.utils import GenerationConfig, GenerationMixin
+from ...generation.streamers import BaseStreamer
+from ...generation.utils import GenerateOutput, GenerationConfig, GenerationMixin
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
     _prepare_4d_attention_mask,
@@ -984,6 +985,21 @@ class DiaHangoverLogitsProcessor(LogitsProcessor):
         self.device = self.hangover.device
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        """
+        This logits processor is used to apply the hangover to the generated tokens.
+
+        If delay pattern is [0, 2, 3, 4] then:
+
+            s   s+1 s+2 s+3 s+4 s+5 ...
+            |   |   |   |   |   |
+        C0: x   x   x   x   x   x ...
+        C1: H   H   x   x   x   x ...
+        C2: H   H   H   x   x   x ...
+        C3: H   H   H   H   x   x ...
+
+        (H is the hangover token.)
+        The H is forced until the hangover is over.
+        """
         if self.step < self.hangover.shape[1]:  # Check if step is within hangover sequence length
             hangover_mask = self.hangover[:, self.step, :] != self.pad_value
 
@@ -1029,10 +1045,12 @@ class DiaEOSFilterAndScaleLogitsProcessor(LogitsProcessor):
         self.eos_scale = torch.tensor(eos_scale, device=device) if eos_scale != 1.0 else None
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        # EOS filter, this ensures:
+        """
+        EOS filter, this ensures:
         # 1. only channel 0 can generate EOS
         # 2. if channel 0 has EOS with highest logit, it will be the only candidate
         # 3. if channel 0 has EOS not with highest logit, it will be suppressed
+        """
         scores[:, 1:, self.eos_value :] = torch.full_like(
             scores[:, 1:, self.eos_value :],
             fill_value=-torch.inf,
@@ -1057,7 +1075,7 @@ class DiaEOSFilterAndScaleLogitsProcessor(LogitsProcessor):
         return scores
 
 
-class DiaEOSCountdownLogitsProcessor(LogitsProcessor):
+class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
     def __init__(
         self,
         delay_pattern: torch.Tensor,
@@ -1072,38 +1090,50 @@ class DiaEOSCountdownLogitsProcessor(LogitsProcessor):
         self.eos_value = eos_value
         self.pad_value = pad_value
         self.max_step = torch.tensor(max_step, device=device)
-        self.eos_countdown: Optional[torch.Tensor] = None
+        self.eos_countup: Optional[torch.Tensor] = None
         self.device = device
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        # EOS Countdown
+        """
+        This logits processor is used to apply the delay pattern to the generated tokens when EOS is generated.
+
+        If delay pattern is [0, 2, 3, 4] then:
+
+            s   s+1 s+2 s+3 s+4 s+5 ...
+            |   |   |   |   |   |
+        C0: EOS PAD PAD PAD PAD PAD ...
+        C1: x   x   EOS PAD PAD PAD ...
+        C2: x   x   x   EOS PAD PAD ...
+        C3: x   x   x   x   EOS PAD ...
+
+        The PAD & EOS are forced from step s+1.
+        """
+        # EOS Countup
         # Due to delay pattern, we do not stop generation at the first EOS token.
         # Instead, we force EOS, PAD at delay pattern steps.
         batch_size = scores.shape[0]
-        if self.eos_countdown is None:
-            self.eos_countdown = torch.full((batch_size,), -1, dtype=torch.long, device=self.device)
+        if self.eos_countup is None:
+            self.eos_countup = torch.full((batch_size,), -1, dtype=torch.long, device=self.device)
 
         step = input_ids.shape[1]
 
         # EOS countdown and delay pattern application
-        active_mask = self.eos_countdown > 0
+        active_mask = self.eos_countup > 0
 
         if active_mask.any():
             # Logits for active items: [num_active, C, V]
             scores_active = scores[active_mask]
             # Countdown values for active items: [num_active]
-            eos_countdown_active = self.eos_countdown[active_mask]
-            # Delay steps for active items: [num_active]
-            current_delay_steps_active = self.max_delay_pattern - eos_countdown_active
+            eos_countup_active = self.eos_countup[active_mask]
 
             # Expand for comparison with delay_pattern: [num_active, C]
-            current_delay_steps_active = current_delay_steps_active.unsqueeze(1).expand(-1, self.num_channels)
+            eos_countup_active = eos_countup_active.unsqueeze(1).expand(-1, self.num_channels)
             delay_pattern = self.delay_pattern.unsqueeze(0).expand(scores_active.shape[0], -1)  # [num_active, C]
 
             # Mask for forcing EOS: [num_active, C]
-            force_eos_mask_BxC = current_delay_steps_active == delay_pattern
+            force_eos_mask_BxC = eos_countup_active == delay_pattern
             # Mask for forcing PAD: [num_active, C]
-            force_pad_mask_BxC = current_delay_steps_active > delay_pattern
+            force_pad_mask_BxC = eos_countup_active > delay_pattern
 
             # Efficiently apply forced EOS and PAD logits
             vocab_size = scores_active.shape[-1]
@@ -1126,10 +1156,10 @@ class DiaEOSCountdownLogitsProcessor(LogitsProcessor):
         last_generated_tokens = torch.argmax(scores, dim=-1)[:, 0]  # Shape [B_orig]
         eos_start_mask = last_generated_tokens == self.eos_value
         eos_start_mask |= step - self.max_delay_pattern == self.max_step
-        eos_start_mask &= self.eos_countdown < 0
+        eos_start_mask &= self.eos_countup < 0
 
-        self.eos_countdown[eos_start_mask] = self.max_delay_pattern
-        self.eos_countdown[self.eos_countdown > 0] -= 1
+        self.eos_countup[eos_start_mask] = 0
+        self.eos_countup[self.eos_countup >= 0] += 1
 
         return scores
 
@@ -1155,11 +1185,30 @@ class DiaEosTokenCriteria(StoppingCriteria):
             The id(s) of the *end-of-sequence* token.
     """
 
-    def __init__(self, eos_value: int, pad_value: int, num_channels: int, device: str = "cpu"):
-        self.eos_token_id = torch.tensor([pad_value] * (num_channels - 1) + [eos_value], device=device)
+    def __init__(self, eos_value: int, delay_pattern: torch.Tensor, device: str = "cpu"):
+        self.eos_token_id = torch.tensor(eos_value, device=device)
+        self.max_delay_pattern = delay_pattern.max().item()
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
-        is_done = (input_ids == self.eos_token_id).all(dim=-1)
+        """
+        This stopping criteria is used to stop generation when EOS is generated.
+
+        If delay pattern is [0, 2, 3, 4] then:
+
+            s   s+1 s+2 s+3 s+4 s+5 ...
+            |   |   |   |   |   |
+        C0: EOS PAD PAD PAD PAD PAD ...
+        C1: x   x   EOS PAD PAD PAD ...
+        C2: x   x   x   EOS PAD PAD ...
+        C3: x   x   x   x   EOS PAD ...
+
+        We need to stop generation in step s+3, where all of the information is generated.
+        We check by if the first channel has EOS in the `step - max_delay_pattern + 1` step.
+        """
+        if input_ids.shape[1] < self.max_delay_pattern:
+            return torch.zeros(input_ids.shape[0], dtype=torch.bool, device=input_ids.device)
+
+        is_done = input_ids[:, -self.max_delay_pattern + 1, 0] == self.eos_token_id
         return is_done
 
 
@@ -1170,33 +1219,17 @@ def build_delay_indices(B: int, T: int, C: int, delay_pattern: torch.Tensor) -> 
     """
     device = delay_pattern.device
 
-    t_idx_BxT = torch.broadcast_to(
-        torch.arange(T, dtype=torch.long, device=device)[None, :],
-        [B, T],
-    )
+    t_idx_BxT = torch.broadcast_to(torch.arange(T, dtype=torch.long, device=device)[None, :], [B, T])
     t_idx_BxTx1 = t_idx_BxT[..., None]
     t_idx_BxTxC = t_idx_BxTx1 - delay_pattern.view(1, 1, C)
 
-    b_idx_BxTxC = torch.broadcast_to(
-        torch.arange(B, dtype=torch.long, device=device).view(B, 1, 1),
-        [B, T, C],
-    )
-    c_idx_BxTxC = torch.broadcast_to(
-        torch.arange(C, dtype=torch.long, device=device).view(1, 1, C),
-        [B, T, C],
-    )
+    b_idx_BxTxC = torch.broadcast_to(torch.arange(B, dtype=torch.long, device=device).view(B, 1, 1), [B, T, C])
+    c_idx_BxTxC = torch.broadcast_to(torch.arange(C, dtype=torch.long, device=device).view(1, 1, C), [B, T, C])
 
     # We must clamp time indices to [0..T-1] so gather_nd equivalent won't fail
     t_clamped_BxTxC = torch.clamp(t_idx_BxTxC, 0, T - 1)
 
-    indices_BTCx3 = torch.stack(
-        [
-            b_idx_BxTxC.reshape(-1),
-            t_clamped_BxTxC.reshape(-1),
-            c_idx_BxTxC.reshape(-1),
-        ],
-        dim=1,
-    ).long()  # Ensure indices are long type for indexing
+    indices_BTCx3 = torch.stack([b_idx_BxTxC.reshape(-1), t_clamped_BxTxC.reshape(-1), c_idx_BxTxC.reshape(-1)], dim=1)
 
     return t_idx_BxTxC, indices_BTCx3
 
@@ -1243,6 +1276,73 @@ def apply_audio_delay(
     result = torch.where(mask_bos, bos_tensor, torch.where(mask_pad, pad_tensor, gathered_BxTxC))
 
     return result
+
+
+def build_revert_indices(B: int, T: int, C: int, delay_pattern: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Precompute indices for the revert operation using PyTorch.
+
+    Returns:
+        A tuple (t_idx_BxTxC, indices_BTCx3) where:
+            - t_idx_BxTxC is a tensor of shape [B, T, C] computed as time indices plus the delay.
+            - indices_BTCx3 is a tensor of shape [B*T*C, 3] used for gathering, computed from:
+                batch indices, clamped time indices, and channel indices.
+    """
+    # Use default device unless specified otherwise; assumes inputs might define device later
+    device = delay_pattern.device
+
+    t_idx_BT1 = torch.broadcast_to(torch.arange(T, dtype=torch.long, device=device).unsqueeze(0), [B, T])
+    t_idx_BT1 = t_idx_BT1.unsqueeze(-1)
+
+    t_idx_BxTxC = torch.minimum(
+        t_idx_BT1 + delay_pattern.view(1, 1, C), torch.tensor(T - 1, dtype=torch.long, device=device)
+    )
+    b_idx_BxTxC = torch.broadcast_to(torch.arange(B, dtype=torch.long, device=device).view(B, 1, 1), [B, T, C])
+    c_idx_BxTxC = torch.broadcast_to(torch.arange(C, dtype=torch.long, device=device).view(1, 1, C), [B, T, C])
+
+    indices_BTCx3 = torch.stack([b_idx_BxTxC.reshape(-1), t_idx_BxTxC.reshape(-1), c_idx_BxTxC.reshape(-1)], dim=1)
+
+    return t_idx_BxTxC, indices_BTCx3
+
+
+def revert_audio_delay(
+    audio_BxTxC: torch.Tensor,
+    pad_value: int,
+    precomp: Tuple[torch.Tensor, torch.Tensor],
+    T: int,
+) -> torch.Tensor:
+    """
+    Reverts a delay pattern from batched audio tokens using precomputed indices (PyTorch version).
+
+    Args:
+        audio_BxTxC: Input delayed audio tensor
+        pad_value: Padding value for out-of-bounds indices
+        precomp: Precomputed revert indices tuple containing:
+            - t_idx_BxTxC: Time offset indices tensor
+            - indices_BTCx3: Gather indices tensor for original audio
+        T: Original sequence length before padding
+
+    Returns:
+        Reverted audio tensor with same shape as input
+    """
+    t_idx_BxTxC, indices_BTCx3 = precomp
+    device = audio_BxTxC.device  # Get device from input tensor
+
+    # Move precomputed indices to the same device as audio_BxTxC if they aren't already
+    t_idx_BxTxC = t_idx_BxTxC.to(device)
+    indices_BTCx3 = indices_BTCx3.to(device)
+
+    # Using PyTorch advanced indexing (equivalent to tf.gather_nd or np equivalent)
+    gathered_flat = audio_BxTxC[indices_BTCx3[:, 0], indices_BTCx3[:, 1], indices_BTCx3[:, 2]]
+    gathered_BxTxC = gathered_flat.view(audio_BxTxC.size())  # Use .size() for robust reshaping
+
+    # Create pad_tensor on the correct device
+    pad_tensor = torch.tensor(pad_value, dtype=audio_BxTxC.dtype, device=device)
+    # Create T tensor on the correct device for comparison
+    T_tensor = torch.tensor(T, device=device)
+    result_BxTxC = torch.where(t_idx_BxTxC >= T_tensor, pad_tensor, gathered_BxTxC)  # Changed np.where to torch.where
+
+    return result_BxTxC
 
 
 class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
@@ -1445,7 +1545,7 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
             )
         )
         processors.append(
-            DiaEOSCountdownLogitsProcessor(
+            DiaEOSDelayPatternLogitsProcessor(
                 delay_pattern=torch.tensor(self.config.delay_pattern, device=device, dtype=torch.long),
                 eos_value=self.config.eos_token_id,
                 pad_value=self.config.pad_token_id,
@@ -1646,6 +1746,75 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
+
+    def generate(
+        self,
+        inputs: Optional[torch.Tensor] = None,
+        generation_config: Optional[GenerationConfig] = None,
+        logits_processor: Optional[LogitsProcessorList] = None,
+        stopping_criteria: Optional[StoppingCriteriaList] = None,
+        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
+        synced_gpus: Optional[bool] = None,
+        assistant_model: Optional["PreTrainedModel"] = None,
+        streamer: Optional["BaseStreamer"] = None,
+        negative_prompt_ids: Optional[torch.Tensor] = None,
+        negative_prompt_attention_mask: Optional[torch.Tensor] = None,
+        use_model_defaults: Optional[bool] = None,
+        custom_generate: Optional[str] = None,
+        **kwargs,
+    ) -> Union[GenerateOutput, torch.LongTensor]:
+        return_dict_in_generate = generation_config.return_dict_in_generate
+        decoder_input_ids = kwargs.get("decoder_input_ids", None)
+        decoder_input_length = decoder_input_ids.shape[1] if decoder_input_ids is not None else 0
+
+        output = super().generate(
+            inputs=inputs,
+            generation_config=generation_config,
+            logits_processor=logits_processor,
+            stopping_criteria=stopping_criteria,
+            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+            synced_gpus=synced_gpus,
+            assistant_model=assistant_model,
+            streamer=streamer,
+            negative_prompt_ids=negative_prompt_ids,
+            negative_prompt_attention_mask=negative_prompt_attention_mask,
+            use_model_defaults=use_model_defaults,
+            custom_generate=custom_generate,
+            **kwargs,
+        )
+
+        if return_dict_in_generate:
+            output_sequences = output.sequences
+        else:
+            output_sequences = output
+
+        # 1 for bos token
+        output_sequences = output_sequences[:, 1 + decoder_input_length :]
+        delay_pattern = torch.tensor(self.config.delay_pattern, dtype=torch.long, device=output_sequences.device)
+        max_delay_pattern = delay_pattern.max().item()
+
+        delay_precomp = build_revert_indices(
+            B=output_sequences.shape[0],
+            T=output_sequences.shape[1],
+            C=self.config.decoder_config.num_channels,
+            delay_pattern=delay_pattern,
+        )
+        output_sequences = revert_audio_delay(
+            output_sequences,
+            pad_value=self.config.pad_token_id,
+            precomp=delay_precomp,
+            T=output_sequences.shape[1],
+        )
+
+        # see `DiaEosTokenCriteria` why we need to +1
+        output_sequences = output_sequences[:, -max_delay_pattern + 1 :]
+
+        if return_dict_in_generate:
+            output.sequences = output_sequences
+        else:
+            output = output_sequences
+
+        return output
 
 
 __all__ = [

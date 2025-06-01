@@ -23,7 +23,7 @@ from transformers.testing_utils import require_sentencepiece, require_torch, req
 
 
 if is_speech_available():
-    from transformers import DiaAudioProcessor, DiaProcessor
+    from transformers import DacFeatureExtractor, DiaProcessor
 
 
 TRANSCRIBE = 50358
@@ -35,14 +35,14 @@ NOTIMESTAMPS = 50362
 @require_sentencepiece
 class DiaProcessorTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint = "openai/dia-small.en"
+        self.checkpoint = "nari-labs/Dia-1.6B"
         self.tmpdirname = tempfile.mkdtemp()
 
     def get_tokenizer(self, **kwargs):
         return DiaTokenizer.from_pretrained(self.checkpoint, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
-        return DiaAudioProcessor.from_pretrained(self.checkpoint, **kwargs)
+        return DacFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -60,7 +60,7 @@ class DiaProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, DiaTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, DiaAudioProcessor)
+        self.assertIsInstance(processor.feature_extractor, DacFeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
         processor = DiaProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
@@ -77,7 +77,7 @@ class DiaProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, DiaTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, DiaAudioProcessor)
+        self.assertIsInstance(processor.feature_extractor, DacFeatureExtractor)
 
     def test_feature_extractor(self):
         feature_extractor = self.get_feature_extractor()
