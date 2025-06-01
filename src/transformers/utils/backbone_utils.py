@@ -324,12 +324,7 @@ def load_backbone(config):
         raise ValueError("Cannot specify both config.backbone_config and config.backbone")
 
     # If any of thhe following are set, then the config passed in is from a model which contains a backbone.
-    if (
-        backbone_config is None
-        and use_timm_backbone is None
-        and backbone_checkpoint is None
-        and backbone_checkpoint is None
-    ):
+    if backbone_config is None and use_timm_backbone is None and backbone_checkpoint is None:
         return AutoBackbone.from_config(config=config, **backbone_kwargs)
 
     # config from the parent model that has a backbone

@@ -2638,7 +2638,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         """
         Initialize the weights if they are not already initialized.
         """
-        if getattr(module, "_is_hf_initialized", False):
+        if getattr(module, "_is_hf_initialized", True):
             return
         self._init_weights(module)
         module._is_hf_initialized = True
