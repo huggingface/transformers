@@ -38,7 +38,6 @@ from ..dinov2.modeling_dinov2 import (
     Dinov2LayerScale,
     Dinov2MLP,
     Dinov2PatchEmbeddings,
-    eager_attention_forward,
 )
 from ..mask2former.modeling_mask2former import Mask2FormerHungarianMatcher, Mask2FormerLoss
 from ..siglip.modeling_siglip import SiglipAttention
@@ -139,6 +138,37 @@ class EoMTEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
 
         return embeddings
+
+
+# Copied from transformers.models.dinov2_with_registers.modeling_dinov2_with_registers.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+
+    # Normalize the attention scores to probabilities.
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+
+    # This is actually dropping out entire tokens to attend to, which might
+    # seem a bit unusual, but is taken from the original Transformer paper.
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    # Mask heads if we want to
+    if attention_mask is not None:
+        attn_weights = attn_weights * attention_mask
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
 
 
 class EoMTAttention(SiglipAttention):

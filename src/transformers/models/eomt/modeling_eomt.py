@@ -704,6 +704,7 @@ class EoMTEmbeddings(nn.Module):
         return embeddings
 
 
+# Copied from transformers.models.dinov2_with_registers.modeling_dinov2_with_registers.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
