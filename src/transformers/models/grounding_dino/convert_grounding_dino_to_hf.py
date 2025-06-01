@@ -402,7 +402,7 @@ def convert_grounding_dino_checkpoint(args):
         "grounding-dino-tiny": "https://huggingface.co/ShilongLiu/GroundingDino/resolve/main/groundingdino_swint_ogc.pth",
         "grounding-dino-base": "https://huggingface.co/ShilongLiu/GroundingDino/resolve/main/groundingdino_swinb_cogcoor.pth",
     }
-    # Define default GroundingDino configuation
+    # Define default GroundingDino configuration
     config = get_grounding_dino_config(model_name)
 
     # Load original checkpoint

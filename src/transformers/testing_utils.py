@@ -31,6 +31,7 @@ import sys
 import tempfile
 import threading
 import time
+import types
 import unittest
 from collections import UserDict, defaultdict
 from collections.abc import Generator, Iterable, Iterator, Mapping
@@ -70,6 +71,7 @@ from .utils import (
     is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
+    is_auto_round_available,
     is_av_available,
     is_bitsandbytes_available,
     is_bitsandbytes_multi_backend_available,
@@ -77,6 +79,7 @@ from .utils import (
     is_compressed_tensors_available,
     is_cv2_available,
     is_cython_available,
+    is_decord_available,
     is_detectron2_available,
     is_eetq_available,
     is_essentia_available,
@@ -94,6 +97,7 @@ from .utils import (
     is_grokadamw_available,
     is_hadamard_available,
     is_hqq_available,
+    is_huggingface_hub_greater_or_equal,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -239,6 +243,7 @@ def parse_int_from_env(key, default=None):
 
 
 _run_slow_tests = parse_flag_from_env("RUN_SLOW", default=False)
+_run_flaky_tests = parse_flag_from_env("RUN_FLAKY", default=True)
 _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=False)
 _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
@@ -538,6 +543,21 @@ def require_torch_greater_or_equal(version: str):
     return decorator
 
 
+def require_huggingface_hub_greater_or_equal(version: str):
+    """
+    Decorator marking a test that requires huggingface_hub version >= `version`.
+
+    These tests are skipped when huggingface_hub version is less than `version`.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(
+            is_huggingface_hub_greater_or_equal(version), f"test requires huggingface_hub version >= {version}"
+        )(test_case)
+
+    return decorator
+
+
 def require_flash_attn(test_case):
     """
     Decorator marking a test that requires Flash Attention.
@@ -557,21 +577,39 @@ def require_torch_sdpa(test_case):
     return unittest.skipUnless(is_torch_sdpa_available(), "test requires PyTorch SDPA")(test_case)
 
 
-def require_read_token(fn):
+def require_read_token(test_case):
     """
     A decorator that loads the HF token for tests that require to load gated models.
     """
     token = os.getenv("HF_HUB_READ_TOKEN")
 
-    @wraps(fn)
-    def _inner(*args, **kwargs):
-        if token is not None:
-            with patch("huggingface_hub.utils._headers.get_token", return_value=token):
-                return fn(*args, **kwargs)
-        else:  # Allow running locally with the default token env variable
-            return fn(*args, **kwargs)
+    if isinstance(test_case, type):
+        for attr_name in dir(test_case):
+            attr = getattr(test_case, attr_name)
+            if isinstance(attr, types.FunctionType):
+                if getattr(attr, "__require_read_token__", False):
+                    continue
+                wrapped = require_read_token(attr)
+                setattr(test_case, attr_name, wrapped)
+        return test_case
+    else:
+        if getattr(test_case, "__require_read_token__", False):
+            return test_case
 
-    return _inner
+        @functools.wraps(test_case)
+        def wrapper(*args, **kwargs):
+            if token is not None:
+                with patch("huggingface_hub.utils._headers.get_token", return_value=token):
+                    return test_case(*args, **kwargs)
+            else:  # Allow running locally with the default token env variable
+                # dealing with static/class methods and called by `self.xxx`
+                if "staticmethod" in inspect.getsource(test_case).strip():
+                    if len(args) > 0 and isinstance(args[0], unittest.TestCase):
+                        return test_case(*args[1:], **kwargs)
+                return test_case(*args, **kwargs)
+
+        wrapper.__require_read_token__ = True
+        return wrapper
 
 
 def require_peft(test_case):
@@ -1245,6 +1283,13 @@ def require_av(test_case):
     return unittest.skipUnless(is_av_available(), "test requires av")(test_case)
 
 
+def require_decord(test_case):
+    """
+    Decorator marking a test that requires decord
+    """
+    return unittest.skipUnless(is_decord_available(), "test requires decord")(test_case)
+
+
 def require_bitsandbytes(test_case):
     """
     Decorator marking a test that requires the bitsandbytes library. Will be skipped when the library or its hard dependency torch is not installed.
@@ -1295,6 +1340,13 @@ def require_auto_awq(test_case):
     Decorator for auto_awq dependency
     """
     return unittest.skipUnless(is_auto_awq_available(), "test requires autoawq")(test_case)
+
+
+def require_auto_round(test_case):
+    """
+    Decorator for auto_round dependency
+    """
+    return unittest.skipUnless(is_auto_round_available(), "test requires autoround")(test_case)
 
 
 def require_optimum_quanto(test_case):
@@ -2003,7 +2055,7 @@ class TestCasePlus(unittest.TestCase):
 
         """
         env = os.environ.copy()
-        paths = [self.src_dir_str]
+        paths = [self.repo_root_dir_str, self.src_dir_str]
         if "/examples" in self.test_file_dir_str:
             paths.append(self.examples_dir_str)
         else:
@@ -2606,7 +2658,7 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, d
 
             return test_func_ref(*args, **kwargs)
 
-        return wrapper
+        return unittest.skipUnless(_run_flaky_tests, "test is flaky")(wrapper)
 
     return decorator
 
@@ -2656,7 +2708,7 @@ def hub_retry(max_attempts: int = 5, wait_before_retry: Optional[float] = 2):
 def run_first(test_case):
     """
     Decorator marking a test with order(1). When pytest-order plugin is installed, tests marked with this decorator
-    are garanteed to run first.
+    are guaranteed to run first.
 
     This is especially useful in some test settings like on a Gaudi instance where a Gaudi device can only be used by a
     single process at a time. So we make sure all tests that run in a subprocess are launched first, to avoid device
@@ -2937,10 +2989,10 @@ def _device_agnostic_dispatch(device: str, dispatch_table: dict[str, Callable], 
 
     fn = dispatch_table[device]
 
-    # Some device agnostic functions return values. Need to guard against `None`
-    # instead at user level.
-    if fn is None:
-        return None
+    # Some device agnostic functions return values or None, will return then directly.
+    if not callable(fn):
+        return fn
+
     return fn(*args, **kwargs)
 
 
@@ -2962,29 +3014,76 @@ if is_torch_available():
         "cpu": lambda: 0,
         "default": lambda: 1,
     }
+    BACKEND_RESET_MAX_MEMORY_ALLOCATED = {
+        "cuda": torch.cuda.reset_max_memory_allocated,
+        "cpu": None,
+        "default": None,
+    }
+    BACKEND_MAX_MEMORY_ALLOCATED = {
+        "cuda": torch.cuda.max_memory_allocated,
+        "cpu": 0,
+        "default": 0,
+    }
+    BACKEND_RESET_PEAK_MEMORY_STATS = {
+        "cuda": torch.cuda.reset_peak_memory_stats,
+        "cpu": None,
+        "default": None,
+    }
+    BACKEND_MEMORY_ALLOCATED = {
+        "cuda": torch.cuda.memory_allocated,
+        "cpu": 0,
+        "default": 0,
+    }
+    BACKEND_SYNCHRONIZE = {
+        "cuda": torch.cuda.synchronize,
+        "cpu": None,
+        "default": None,
+    }
+    BACKEND_TORCH_ACCELERATOR_MODULE = {
+        "cuda": torch.cuda,
+        "cpu": None,
+        "default": None,
+    }
 else:
     BACKEND_MANUAL_SEED = {"default": None}
     BACKEND_EMPTY_CACHE = {"default": None}
     BACKEND_DEVICE_COUNT = {"default": lambda: 0}
+    BACKEND_RESET_MAX_MEMORY_ALLOCATED = {"default": None}
+    BACKEND_RESET_PEAK_MEMORY_STATS = {"default": None}
+    BACKEND_MAX_MEMORY_ALLOCATED = {"default": 0}
+    BACKEND_MEMORY_ALLOCATED = {"default": 0}
+    BACKEND_SYNCHRONIZE = {"default": None}
+    BACKEND_TORCH_ACCELERATOR_MODULE = {"default": None}
+
 
 if is_torch_hpu_available():
     BACKEND_MANUAL_SEED["hpu"] = torch.hpu.manual_seed
     BACKEND_DEVICE_COUNT["hpu"] = torch.hpu.device_count
+    BACKEND_TORCH_ACCELERATOR_MODULE["hpu"] = torch.hpu
 
 if is_torch_mlu_available():
     BACKEND_EMPTY_CACHE["mlu"] = torch.mlu.empty_cache
     BACKEND_MANUAL_SEED["mlu"] = torch.mlu.manual_seed
     BACKEND_DEVICE_COUNT["mlu"] = torch.mlu.device_count
+    BACKEND_TORCH_ACCELERATOR_MODULE["mlu"] = torch.mlu
 
 if is_torch_npu_available():
     BACKEND_EMPTY_CACHE["npu"] = torch.npu.empty_cache
     BACKEND_MANUAL_SEED["npu"] = torch.npu.manual_seed
     BACKEND_DEVICE_COUNT["npu"] = torch.npu.device_count
+    BACKEND_TORCH_ACCELERATOR_MODULE["npu"] = torch.npu
 
 if is_torch_xpu_available():
     BACKEND_EMPTY_CACHE["xpu"] = torch.xpu.empty_cache
     BACKEND_MANUAL_SEED["xpu"] = torch.xpu.manual_seed
     BACKEND_DEVICE_COUNT["xpu"] = torch.xpu.device_count
+    BACKEND_RESET_MAX_MEMORY_ALLOCATED["xpu"] = torch.xpu.reset_peak_memory_stats
+    BACKEND_RESET_PEAK_MEMORY_STATS["xpu"] = torch.xpu.reset_peak_memory_stats
+    BACKEND_MAX_MEMORY_ALLOCATED["xpu"] = torch.xpu.max_memory_allocated
+    BACKEND_MEMORY_ALLOCATED["xpu"] = torch.xpu.memory_allocated
+    BACKEND_SYNCHRONIZE["xpu"] = torch.xpu.synchronize
+    BACKEND_TORCH_ACCELERATOR_MODULE["xpu"] = torch.xpu
+
 
 if is_torch_xla_available():
     BACKEND_EMPTY_CACHE["xla"] = torch.cuda.empty_cache
@@ -3002,6 +3101,30 @@ def backend_empty_cache(device: str):
 
 def backend_device_count(device: str):
     return _device_agnostic_dispatch(device, BACKEND_DEVICE_COUNT)
+
+
+def backend_reset_max_memory_allocated(device: str):
+    return _device_agnostic_dispatch(device, BACKEND_RESET_MAX_MEMORY_ALLOCATED)
+
+
+def backend_reset_peak_memory_stats(device: str):
+    return _device_agnostic_dispatch(device, BACKEND_RESET_PEAK_MEMORY_STATS)
+
+
+def backend_max_memory_allocated(device: str):
+    return _device_agnostic_dispatch(device, BACKEND_MAX_MEMORY_ALLOCATED)
+
+
+def backend_memory_allocated(device: str):
+    return _device_agnostic_dispatch(device, BACKEND_MEMORY_ALLOCATED)
+
+
+def backend_synchronize(device: str):
+    return _device_agnostic_dispatch(device, BACKEND_SYNCHRONIZE)
+
+
+def backend_torch_accelerator_module(device: str):
+    return _device_agnostic_dispatch(device, BACKEND_TORCH_ACCELERATOR_MODULE)
 
 
 if is_torch_available():

@@ -107,10 +107,10 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         do_pad (`bool`, *optional*, defaults to `True`):
             Whether to apply pad the input.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overidden by `do_rescale` in
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
             `preprocess`.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overidden by `rescale_factor` in `preprocess`.
+            Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in `preprocess`.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
@@ -121,25 +121,25 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions. Can be overidden by `do_resize` in `preprocess`.
+            Whether to resize the image's (height, width) dimensions. Can be overridden by `do_resize` in `preprocess`.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 384, "width": 512}`):
             Size of the image after resizing. Size of the image after resizing. If `keep_aspect_ratio` is `True`,
             the image is resized by choosing the smaller of the height and width scaling factors and using it for both dimensions.
             If `ensure_multiple_of` is also set, the image is further resized to a size that is a multiple of this value.
-            Can be overidden by `size` in `preprocess`.
+            Can be overridden by `size` in `preprocess`.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
-            Defines the resampling filter to use if resizing the image. Can be overidden by `resample` in `preprocess`.
+            Defines the resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
         keep_aspect_ratio (`bool`, *optional*, defaults to `True`):
             If `True`, the image is resized by choosing the smaller of the height and width scaling factors and using it
             for both dimensions. This ensures that the image is scaled down as little as possible while still fitting
             within the desired output size. In case `ensure_multiple_of` is also set, the image is further resized to a
             size that is a multiple of this value by flooring the height and width to the nearest multiple of this value.
-            Can be overidden by `keep_aspect_ratio` in `preprocess`.
+            Can be overridden by `keep_aspect_ratio` in `preprocess`.
         ensure_multiple_of (`int`, *optional*, defaults to 32):
             If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works by flooring
             the height and width to the nearest multiple of this value.
 
-            Works both with and without `keep_aspect_ratio` being set to `True`. Can be overidden by `ensure_multiple_of`
+            Works both with and without `keep_aspect_ratio` being set to `True`. Can be overridden by `ensure_multiple_of`
             in `preprocess`.
     """
 
@@ -154,7 +154,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         keep_aspect_ratio: bool = True,
         ensure_multiple_of: int = 32,
@@ -348,7 +348,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
                 If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works by
                 flooring the height and width to the nearest multiple of this value.
 
-                Works both with and without `keep_aspect_ratio` being set to `True`. Can be overidden by
+                Works both with and without `keep_aspect_ratio` being set to `True`. Can be overridden by
                 `ensure_multiple_of` in `preprocess`.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
@@ -474,7 +474,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             outputs_flipped ([`ZoeDepthDepthEstimatorOutput`], *optional*):
                 Raw outputs of the model from flipped input (averaged out in the end).
             do_remove_padding (`bool`, *optional*):
-                By default ZoeDepth addes padding equal to `int(√(height / 2) * 3)` (and similarly for width) to fix the
+                By default ZoeDepth adds padding equal to `int(√(height / 2) * 3)` (and similarly for width) to fix the
                 boundary artifacts in the output depth map, so we need remove this padding during post_processing. The
                 parameter exists here in case the user changed the image preprocessing to not include padding.
 

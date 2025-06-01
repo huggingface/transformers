@@ -41,7 +41,7 @@ class BridgeTowerImageProcessingTester:
         self,
         parent,
         do_resize: bool = True,
-        size: dict[str, int] = None,
+        size: Optional[dict[str, int]] = None,
         size_divisor: int = 32,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,

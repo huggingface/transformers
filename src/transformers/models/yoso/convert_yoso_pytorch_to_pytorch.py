@@ -85,7 +85,7 @@ def convert_yoso_checkpoint(checkpoint_path, yoso_config_file, pytorch_dump_path
     model.eval()
     model.save_pretrained(pytorch_dump_path)
 
-    print(f"Checkpoint successfuly converted. Model saved at {pytorch_dump_path}")
+    print(f"Checkpoint successfully converted. Model saved at {pytorch_dump_path}")
 
 
 if __name__ == "__main__":

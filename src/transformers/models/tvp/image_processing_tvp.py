@@ -91,7 +91,7 @@ class TvpImageProcessor(BaseImageProcessor):
             `do_resize` parameter in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"longest_edge": 448}`):
             Size of the output image after resizing. The longest edge of the image will be resized to
-            `size["longest_edge"]` while maintaining the aspect ratio of the original image. Can be overriden by
+            `size["longest_edge"]` while maintaining the aspect ratio of the original image. Can be overridden by
             `size` in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
@@ -136,14 +136,14 @@ class TvpImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_center_crop: bool = True,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[Dict[str, int]] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_pad: bool = True,
-        pad_size: Dict[str, int] = None,
+        pad_size: Optional[Dict[str, int]] = None,
         constant_values: Union[float, Iterable[float]] = 0,
         pad_mode: PaddingMode = PaddingMode.CONSTANT,
         do_normalize: bool = True,
@@ -219,7 +219,7 @@ class TvpImageProcessor(BaseImageProcessor):
     def pad_image(
         self,
         image: np.ndarray,
-        pad_size: Dict[str, int] = None,
+        pad_size: Optional[Dict[str, int]] = None,
         constant_values: Union[float, Iterable[float]] = 0,
         pad_mode: PaddingMode = PaddingMode.CONSTANT,
         data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -267,15 +267,15 @@ class TvpImageProcessor(BaseImageProcessor):
         self,
         image: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_center_crop: Optional[bool] = None,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[Dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_pad: bool = True,
-        pad_size: Dict[str, int] = None,
-        constant_values: Union[float, Iterable[float]] = None,
+        pad_size: Optional[Dict[str, int]] = None,
+        constant_values: Optional[Union[float, Iterable[float]]] = None,
         pad_mode: PaddingMode = None,
         do_normalize: Optional[bool] = None,
         do_flip_channel_order: Optional[bool] = None,
@@ -341,15 +341,15 @@ class TvpImageProcessor(BaseImageProcessor):
         self,
         videos: Union[ImageInput, List[ImageInput], List[List[ImageInput]]],
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_center_crop: Optional[bool] = None,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[Dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_pad: Optional[bool] = None,
-        pad_size: Dict[str, int] = None,
-        constant_values: Union[float, Iterable[float]] = None,
+        pad_size: Optional[Dict[str, int]] = None,
+        constant_values: Optional[Union[float, Iterable[float]]] = None,
         pad_mode: PaddingMode = None,
         do_normalize: Optional[bool] = None,
         do_flip_channel_order: Optional[bool] = None,

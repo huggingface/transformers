@@ -740,7 +740,7 @@ class GraphormerPreTrainedModel(PreTrainedModel):
         Initialize the weights
         """
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # We might be missing part of the Linear init, dependant on the layer num
+            # We might be missing part of the Linear init, dependent on the layer num
             module.weight.data.normal_(mean=0.0, std=0.02)
             if module.bias is not None:
                 module.bias.data.zero_()

@@ -343,7 +343,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
                 )
 
             def _match_found():
-                # Finaly, runs the actual comparison. Can only be called if the previous comparisons do not yield
+                # Finally, runs the actual comparison. Can only be called if the previous comparisons do not yield
                 # an answer (otherwise we get indexing exceptions)
                 compare_len = self.bad_word_seqs_len[bad_word_seq_number] - 1
                 return tf.cond(

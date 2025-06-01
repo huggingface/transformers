@@ -1037,7 +1037,7 @@ REMBERT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare RemBERT Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare RemBERT Model transformer outputting raw hidden-states without any specific head on top.",
     REMBERT_START_DOCSTRING,
 )
 class TFRemBertModel(TFRemBertPreTrainedModel):

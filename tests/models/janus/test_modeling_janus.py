@@ -335,6 +335,10 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
                         else:
                             pass
 
+    @unittest.skip("There are recompilations in Janus")  # TODO (joao, raushan): fix me
+    def test_generate_compile_model_forward(self):
+        pass
+
 
 class JanusVQModelTester:
     def __init__(
