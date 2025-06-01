@@ -41,7 +41,6 @@ from ...generation.logits_process import (
 )
 from ...generation.stopping_criteria import (
     ConfidenceCriteria,
-    EosTokenCriteria,
     MaxTimeCriteria,
     StoppingCriteria,
     StoppingCriteriaList,
