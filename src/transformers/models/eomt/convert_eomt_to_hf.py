@@ -205,6 +205,8 @@ def convert_model(
 
     with open(os.path.join(input_path, "config.json"), "r") as f:
         config_data = json.load(f)
+    # Pop off unwanted keys
+    _ = config_data.pop("backbone", None)
 
     config = EoMTConfig(
         **{
