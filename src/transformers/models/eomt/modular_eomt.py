@@ -15,7 +15,7 @@
 """PyTorch EoMT model."""
 
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -24,9 +24,8 @@ from torch import Tensor, nn
 from ...activations import ACT2FN
 from ...file_utils import (
     ModelOutput,
-    requires_backends,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
     can_return_tuple,
@@ -90,19 +89,7 @@ class EoMTHungarianMatcher(Mask2FormerHungarianMatcher):
 
 class EoMTLoss(Mask2FormerLoss):
     def __init__(self, config: EoMTConfig, weight_dict: Dict[str, float]):
-        Mask2FormerLoss().__init__()
-        requires_backends(self, ["scipy"])
-        self.num_labels = config.num_labels
-        self.weight_dict = weight_dict
-        # Weight to apply to the null class
-        self.eos_coef = config.no_object_weight
-        empty_weight = torch.ones(self.num_labels + 1)
-        empty_weight[-1] = self.eos_coef
-        self.register_buffer("empty_weight", empty_weight)
-        # pointwise mask loss parameters
-        self.num_points = config.train_num_points
-        self.oversample_ratio = config.oversample_ratio
-        self.importance_sample_ratio = config.importance_sample_ratio
+        super().__init__()
         self.matcher = EoMTHungarianMatcher(
             cost_class=2.0,
             cost_dice=config.dice_weight,
@@ -152,78 +139,8 @@ class EoMTEmbeddings(nn.Module):
         return embeddings
 
 
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
-
-    if attention_mask is not None:
-        attn_weights = attn_weights * attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
 class EoMTAttention(SiglipAttention):
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-        **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        """Input shape: Batch x Time x Channel"""
-        batch_size, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-
-        # Expand attention mask to 4d mask.
-        if attention_mask is not None:
-            attention_mask = attention_mask[:, None, ...].expand(-1, self.num_heads, -1, -1)
-            attention_mask = attention_mask.to(dtype=query_states.dtype)
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
-            scaling=self.scaling,
-            is_causal=self.is_causal,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(batch_size, q_len, self.embed_dim)
-
-        attn_output = self.out_proj(attn_output)
-
-        output = (attn_output, attn_weights) if output_attentions else (attn_output, None)
-
-        return output
+    pass
 
 
 class EoMTMLP(Dinov2MLP):
@@ -523,6 +440,9 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
                     encoder_start_tokens=encoder_start_tokens,
                     device=attention_mask.device,
                 )
+
+                # Expand attention mask to 4d mask.
+                attention_mask = attention_mask[:, None, ...].expand(-1, self.config.num_attention_heads, -1, -1)
 
             layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
             hidden_states = layer_outputs[0]

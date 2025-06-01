@@ -31,7 +31,7 @@ from torch import Tensor, nn
 from ...activations import ACT2FN
 from ...file_utils import ModelOutput, is_scipy_available, requires_backends
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple, is_accelerate_available
+from ...utils import auto_docstring, can_return_tuple, is_accelerate_available, logging
 from .configuration_eomt import EoMTConfig
 
 
@@ -41,6 +41,9 @@ if is_scipy_available():
 if is_accelerate_available():
     from accelerate import PartialState
     from accelerate.utils import reduce
+
+
+logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -336,11 +339,13 @@ class EoMTLoss(nn.Module):
         requires_backends(self, ["scipy"])
         self.num_labels = config.num_labels
         self.weight_dict = weight_dict
+
         # Weight to apply to the null class
         self.eos_coef = config.no_object_weight
         empty_weight = torch.ones(self.num_labels + 1)
         empty_weight[-1] = self.eos_coef
         self.register_buffer("empty_weight", empty_weight)
+
         # pointwise mask loss parameters
         self.num_points = config.train_num_points
         self.oversample_ratio = config.oversample_ratio
@@ -708,14 +713,19 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
+    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
 
-    if attention_mask is not None:
-        attn_weights = attn_weights * attention_mask
-
+    # Normalize the attention scores to probabilities.
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
 
+    # This is actually dropping out entire tokens to attend to, which might
+    # seem a bit unusual, but is taken from the original Transformer paper.
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    # Mask heads if we want to
+    if attention_mask is not None:
+        attn_weights = attn_weights * attention_mask
 
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -751,47 +761,47 @@ class EoMTAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
-        batch_size, q_len, _ = hidden_states.size()
 
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
+        batch_size, seq_length, embed_dim = hidden_states.shape
 
-        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        queries = self.q_proj(hidden_states)
+        keys = self.k_proj(hidden_states)
+        values = self.v_proj(hidden_states)
 
-        # Expand attention mask to 4d mask.
-        if attention_mask is not None:
-            attention_mask = attention_mask[:, None, ...].expand(-1, self.num_heads, -1, -1)
-            attention_mask = attention_mask.to(dtype=query_states.dtype)
+        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
-            query_states,
-            key_states,
-            value_states,
+            queries,
+            keys,
+            values,
             attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
-            scaling=self.scaling,
             is_causal=self.is_causal,
-            **kwargs,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
         )
 
-        attn_output = attn_output.reshape(batch_size, q_len, self.embed_dim)
-
+        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        output = (attn_output, attn_weights) if output_attentions else (attn_output, None)
+        if not output_attentions:
+            attn_weights = None
 
-        return output
+        return attn_output, attn_weights
 
 
 class EoMTMLP(nn.Module):
@@ -1018,6 +1028,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
         super().__init__(config)
         self.config = config
         self.num_hidden_layers = config.num_hidden_layers
+        self.num_heads = config.num_attention_heads
         self.embeddings = EoMTEmbeddings(config)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -1174,6 +1185,9 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
                     encoder_start_tokens=encoder_start_tokens,
                     device=attention_mask.device,
                 )
+
+                # Expand attention mask to 4d mask.
+                attention_mask = attention_mask[:, None, ...].expand(-1, self.num_heads, -1, -1)
 
             layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
             hidden_states = layer_outputs[0]
