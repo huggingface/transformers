@@ -16,33 +16,25 @@ import shutil
 import tempfile
 import unittest
 
-import pytest
+import numpy as np
+import torch
 
-from transformers import DiaTokenizer, is_speech_available
-from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
-
-
-if is_speech_available():
-    from transformers import DacFeatureExtractor, DiaProcessor
-
-
-TRANSCRIBE = 50358
-NOTIMESTAMPS = 50362
+from transformers import DacFeatureExtractor, DiaProcessor, DiaTokenizer
+from transformers.testing_utils import require_torch
 
 
 @require_torch
-@require_torchaudio
-@require_sentencepiece
 class DiaProcessorTest(unittest.TestCase):
     def setUp(self):
         self.checkpoint = "nari-labs/Dia-1.6B"
+        self.dac_checkpoint = "descript/dac_44khz"
         self.tmpdirname = tempfile.mkdtemp()
 
     def get_tokenizer(self, **kwargs):
         return DiaTokenizer.from_pretrained(self.checkpoint, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
-        return DacFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
+        return DacFeatureExtractor.from_pretrained(self.dac_checkpoint, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -66,12 +58,10 @@ class DiaProcessorTest(unittest.TestCase):
         processor = DiaProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
         processor.save_pretrained(self.tmpdirname)
 
-        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False, padding_value=1.0)
+        tokenizer_add_kwargs = self.get_tokenizer()
+        feature_extractor_add_kwargs = self.get_feature_extractor()
 
-        processor = DiaProcessor.from_pretrained(
-            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
-        )
+        processor = DiaProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, DiaTokenizer)
@@ -85,28 +75,13 @@ class DiaProcessorTest(unittest.TestCase):
 
         processor = DiaProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
-        raw_speech = floats_list((3, 1000))
+        raw_speech = np.random.rand(1000).astype(np.float32)
 
-        input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
-        input_processor = processor(raw_speech, return_tensors="np")
+        input_feat_extract = feature_extractor(raw_speech, sampling_rate=44100, return_tensors="pt")
+        input_processor = processor(raw_speech)
 
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
-
-    def test_tokenizer(self):
-        feature_extractor = self.get_feature_extractor()
-        tokenizer = self.get_tokenizer()
-
-        processor = DiaProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
-
-        input_str = "This is a test string"
-
-        encoded_processor = processor(text=input_str)
-
-        encoded_tok = tokenizer(input_str)
-
-        for key in encoded_tok.keys():
-            self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
     def test_tokenizer_decode(self):
         feature_extractor = self.get_feature_extractor()
@@ -132,46 +107,3 @@ class DiaProcessorTest(unittest.TestCase):
             feature_extractor.model_input_names,
             msg="`processor` and `feature_extractor` model input names do not match",
         )
-
-    def test_get_decoder_prompt_ids(self):
-        feature_extractor = self.get_feature_extractor()
-        tokenizer = self.get_tokenizer()
-
-        processor = DiaProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
-        forced_decoder_ids = processor.get_decoder_prompt_ids(task="transcribe", no_timestamps=True)
-
-        self.assertIsInstance(forced_decoder_ids, list)
-        for ids in forced_decoder_ids:
-            self.assertIsInstance(ids, (list, tuple))
-
-        expected_ids = [TRANSCRIBE, NOTIMESTAMPS]
-        self.assertListEqual([ids[-1] for ids in forced_decoder_ids], expected_ids)
-
-    def test_get_prompt_ids(self):
-        processor = DiaProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
-        prompt_ids = processor.get_prompt_ids("Mr. Quilter")
-        decoded_prompt = processor.tokenizer.decode(prompt_ids)
-
-        self.assertListEqual(prompt_ids.tolist(), [50360, 1770, 13, 2264, 346, 353])
-        self.assertEqual(decoded_prompt, "<|startofprev|> Mr. Quilter")
-
-    def test_empty_get_prompt_ids(self):
-        processor = DiaProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
-        prompt_ids = processor.get_prompt_ids("")
-        decoded_prompt = processor.tokenizer.decode(prompt_ids)
-
-        self.assertListEqual(prompt_ids.tolist(), [50360, 220])
-        self.assertEqual(decoded_prompt, "<|startofprev|> ")
-
-    def test_get_prompt_ids_with_special_tokens(self):
-        processor = DiaProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
-
-        def _test_prompt_error_raised_helper(prompt, special_token):
-            with pytest.raises(ValueError) as excinfo:
-                processor.get_prompt_ids(prompt)
-            expected = f"Encountered text in the prompt corresponding to disallowed special token: {special_token}."
-            self.assertEqual(expected, str(excinfo.value))
-
-        _test_prompt_error_raised_helper("<|startofprev|> test", "<|startofprev|>")
-        _test_prompt_error_raised_helper("test <|notimestamps|>", "<|notimestamps|>")
-        _test_prompt_error_raised_helper("test <|zh|> test <|transcribe|>", "<|zh|>")

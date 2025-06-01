@@ -41,7 +41,6 @@ class DiaProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer, audio_model="descript/dac_44khz"):
         super().__init__(feature_extractor, tokenizer)
         self.audio_tokenizer = AutoModel.from_pretrained(audio_model)
-        print(vars(self))
 
     def __call__(self, *args, **kwargs):
         """
@@ -60,13 +59,11 @@ class DiaProcessor(ProcessorMixin):
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
 
         if audio is not None:
-            input_audio = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
+            input_audio = self.feature_extractor(
+                audio, *args, sampling_rate=sampling_rate, return_tensors="pt", **kwargs
+            )
             audio_tokens = self.audio_tokenizer.encode(input_audio["input_values"], **kwargs)
-            inputs = {
-                "input_values": input_audio["input_values"],
-                "attention_mask": input_audio["attention_mask"],
-                "audio_tokens": audio_tokens["input_ids"],
-            }
+            inputs = {"input_values": input_audio["input_values"], "audio_tokens": audio_tokens.audio_codes}
 
         if text is not None:
             encodings = self.tokenizer(text, **kwargs)
