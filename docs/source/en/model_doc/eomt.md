@@ -75,7 +75,7 @@ inputs = processor(
     return_tensors="pt",
 )
 
-# Remove Patche Offsets from inputs — only used later for post-processing.
+# Remove Patch Offsets from inputs — only used later for post-processing.
 patch_offsets = inputs.pop("patch_offsets")
 
 with torch.inference_mode():
