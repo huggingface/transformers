@@ -123,7 +123,7 @@ class DiaConfig(PretrainedConfig):
             Configuration for the encoder part of the model. If not provided, a default `DiaEncoderConfig` will be used.
         decoder_config (`DiaDecoderConfig`, *optional*):
             Configuration for the decoder part of the model. If not provided, a default `DiaDecoderConfig` will be used.
-        norm_eps (`float`, *optional*, defaults to 1e-5):
+        norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the normalization layers.
         pad_token_id (`int`, *optional*, defaults to 1025):
             Padding token id.
