@@ -14,6 +14,7 @@
 # limitations under the License.
 """PyTorch EoMT model."""
 
+import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -37,6 +38,7 @@ from ..dinov2.modeling_dinov2 import (
     Dinov2LayerScale,
     Dinov2MLP,
     Dinov2PatchEmbeddings,
+    eager_attention_forward,
 )
 from ..mask2former.modeling_mask2former import Mask2FormerHungarianMatcher, Mask2FormerLoss
 from ..siglip.modeling_siglip import SiglipAttention
@@ -252,12 +254,14 @@ class EoMTPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module) -> None:
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            nn.init.kaiming_uniform_(module.weight, a=math.sqrt(5))
             if module.bias is not None:
-                module.bias.data.zero_()
+                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(module.weight)
+                bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+                nn.init.uniform_(module.bias, -bound, bound)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:

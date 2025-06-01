@@ -20,6 +20,7 @@
 # limitations under the License.
 
 import collections.abc
+import math
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
@@ -41,6 +42,7 @@ if is_scipy_available():
 if is_accelerate_available():
     from accelerate import PartialState
     from accelerate.utils import reduce
+
 
 logger = logging.get_logger(__name__)
 
@@ -995,12 +997,14 @@ class EoMTPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: nn.Module) -> None:
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            nn.init.kaiming_uniform_(module.weight, a=math.sqrt(5))
             if module.bias is not None:
-                module.bias.data.zero_()
+                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(module.weight)
+                bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+                nn.init.uniform_(module.bias, -bound, bound)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+            module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:

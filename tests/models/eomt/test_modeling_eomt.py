@@ -13,10 +13,8 @@
 # limitations under the License.
 """Testing suite for the PyTorch EoMT model."""
 
-import tempfile
 import unittest
 
-import numpy as np
 import requests
 
 from transformers import AutoImageProcessor, EoMTConfig, EoMTForUniversalSegmentation
@@ -24,7 +22,7 @@ from transformers.testing_utils import require_torch, require_torch_accelerator,
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 
 
 if is_torch_available():
@@ -218,36 +216,6 @@ class EoMTForUniversalSegmentationTest(ModelTesterMixin, unittest.TestCase):
     def test_resize_tokens_embeddings(self):
         pass
 
-    def test_save_load(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            torch.manual_seed(2)
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            out_2 = outputs[0].cpu().numpy()
-            out_2[np.isnan(out_2)] = 0
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname)
-                model.to(torch_device)
-
-                torch.manual_seed(2)
-                with torch.no_grad():
-                    after_outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-                # Make sure we don't have nans
-                out_1 = after_outputs[0].cpu().numpy()
-                out_1[np.isnan(out_1)] = 0
-                max_diff = np.amax(np.abs(out_1 - out_2))
-                self.assertLessEqual(max_diff, 1e-5)
-
     def test_training(self):
         if not self.model_tester.is_training:
             self.skipTest(reason="ModelTester is not configured to run training tests")
@@ -262,6 +230,40 @@ class EoMTForUniversalSegmentationTest(ModelTesterMixin, unittest.TestCase):
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
+
+    def test_initialization(self):
+        # Apart from the below params, all other parameters are initialized using kaiming uniform.
+        non_uniform_init_parms = [
+            "layernorm.bias",
+            "layernorm.weight",
+            "norm1.bias",
+            "norm1.weight",
+            "norm2.bias",
+            "norm2.weight",
+            "layer_scale1.lambda1",
+            "layer_scale2.lambda1",
+            "register_tokens",
+            "cls_token",
+        ]
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    if any(x in name for x in non_uniform_init_parms):
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    else:
+                        self.assertTrue(
+                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
 
 
 @require_torch
@@ -295,7 +297,6 @@ class EoMTForUniversalSegmentationIntegrationTest(unittest.TestCase):
         # fmt: on
 
         output_slice = outputs.masks_queries_logits[0, 0, :5, :5]
-        print(output_slice)
         self.assertTrue(torch.allclose(output_slice, EXPECTED_SLICE, atol=1e-3))
 
         # fmt: off
