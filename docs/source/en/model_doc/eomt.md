@@ -33,6 +33,12 @@ The `EoMT` model uses a DINOv2-pretrained Vision Transformer with **register tok
 
 Architecturally, EoMT introduces a small set of **learned queries** and a lightweight **mask prediction module**. These queries are injected into the final encoder blocks, enabling **joint attention** between image patches and object queries. During training, **masked attention** is applied to constrain each query to focus on its corresponding region—effectively mimicking cross-attention. This constraint is gradually phased out via a **mask annealing strategy**, allowing for **efficient, decoder-free inference** without compromising segmentation performance.
 
+<div style="text-align: center;">
+  <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/eomt_architecture.png"
+       alt="drawing" width="500"/>
+</div>
+
+
 The model supports semantic, instance, and panoptic segmentation using a unified architecture and task-specific post-processing.
 
 ## Usage Examples
@@ -61,12 +67,11 @@ image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039
 # Preprocess the image for semantic segmentation by setting `segmentation_type` arg
 inputs = processor(
     images=image,
-    segmentation_type="semantic",
     return_tensors="pt",
 )
 
 # Remove crop offsets from inputs — used later for post-processing.
-crops_offset = inputs.pop("crops_offset")
+patch_offsets = inputs.pop("patch_offsets")
 
 with torch.inference_mode():
     outputs = model(**inputs)
@@ -77,7 +82,7 @@ original_image_sizes = [(image.height, image.width)]
 # Post-process the model outputs to get final segmentation prediction
 preds = processor.post_process_semantic_segmentation(
     outputs,
-    crops_offset=crops_offset,
+    patch_offsets=patch_offsets,
     original_image_sizes=original_image_sizes,
 )
 
@@ -111,7 +116,6 @@ image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039
 # Preprocess the image for semantic segmentation by setting `segmentation_type` arg
 inputs = processor(
     images=image,
-    segmentation_type="instance",
     return_tensors="pt",
 )
 
@@ -157,7 +161,6 @@ image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039
 # Preprocess the image for panoptic segmentation by setting `segmentation_type` arg
 inputs = processor(
     images=image,
-    segmentation_type="panoptic",
     return_tensors="pt",
 )
 
@@ -183,6 +186,10 @@ plt.show()
 ## EoMTImageProcessor
 
 [[autodoc]] EoMTImageProcessor
+
+## EoMTImageProcessorFast
+
+[[autodoc]] EoMTImageProcessorFast
 
 ## EoMTConfig
 

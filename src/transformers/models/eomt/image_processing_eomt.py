@@ -291,8 +291,6 @@ class EoMTImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
-                Size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
@@ -318,9 +316,9 @@ class EoMTImageProcessor(BaseImageProcessor):
     def _split_image(self, image: ImageInput, image_index: int) -> Tuple[List, List]:
         """Slices an image into overlapping crops for semantic segmentation."""
 
-        crops, crops_offset = [], []
+        patches, patch_offsets = [], []
 
-        image_size = get_image_size(image=image)
+        image_size = get_image_size(image)
         crop_size = self.size["shortest_edge"]
 
         longer_side = max(image_size)
@@ -337,10 +335,10 @@ class EoMTImageProcessor(BaseImageProcessor):
             else:
                 crop = image[:, :, start:end]
 
-            crops.append(crop)
-            crops_offset.append([image_index, start, end])
+            patches.append(crop)
+            patch_offsets.append([image_index, start, end])
 
-        return crops, crops_offset
+        return patches, patch_offsets
 
     def _pad(self, image):
         """Pads the image to the target size using zero padding."""
@@ -457,14 +455,14 @@ class EoMTImageProcessor(BaseImageProcessor):
                 for image in images
             ]
 
-        # crops_offset is only used for semantic segmentation.
-        processed_images, crops_offset = [], []
+        # patch_offsets is only used for semantic segmentation.
+        processed_images, patch_offsets = [], []
 
         if do_split_image:
             for idx, img in enumerate(images):
-                crops, offsets = self._split_image(img, idx)
-                processed_images.extend(crops)
-                crops_offset.extend(offsets)
+                patches, offsets = self._split_image(img, idx)
+                processed_images.extend(patches)
+                patch_offsets.extend(offsets)
         else:
             processed_images = [self._pad(img) for img in images]
 
@@ -487,8 +485,8 @@ class EoMTImageProcessor(BaseImageProcessor):
 
         output = {"pixel_values": images}
 
-        if do_split_image and crops_offset:
-            output["crops_offset"] = crops_offset
+        if do_split_image and patch_offsets:
+            output["patch_offsets"] = patch_offsets
 
         if mask_labels is not None:
             mask_labels = [self._pad(mask) for mask in mask_labels]
@@ -500,7 +498,7 @@ class EoMTImageProcessor(BaseImageProcessor):
     def _reverse_semantic_image_preprocessing(
         self,
         segmentation_logits: torch.Tensor,
-        crops_offset: List[Tuple[int, int, int]],
+        patch_offsets: List[Tuple[int, int, int]],
         original_image_sizes: List[Tuple[int, int]],
     ) -> List[torch.Tensor]:
         """
@@ -510,7 +508,7 @@ class EoMTImageProcessor(BaseImageProcessor):
             segmentation_logits (`torch.Tensor`):
                 A tensor of shape `(num_crops, num_classes, crop_height, crop_width)` representing predicted logits
                 for each image crop.
-            crops_offset (`List[Tuple[int, int, int]]`):
+            patch_offsets (`List[Tuple[int, int, int]]`):
                 A list of tuples where each tuple contains:
                 - `image_index` (int): Index of the original image this crop belongs to.
                 - `start` (int): Start pixel index of the crop along the long dimension (height or width).
@@ -530,7 +528,7 @@ class EoMTImageProcessor(BaseImageProcessor):
             crop_counts.append(torch.zeros((num_classes, height, width), device=segmentation_logits.device))
 
         # Stitch crops back into full-sized logit maps
-        for crop_idx, (image_idx, crop_start, crop_end) in enumerate(crops_offset):
+        for crop_idx, (image_idx, crop_start, crop_end) in enumerate(patch_offsets):
             if original_image_sizes[image_idx][0] > original_image_sizes[image_idx][1]:
                 aggregated_logits[image_idx][:, crop_start:crop_end, :] += segmentation_logits[crop_idx]
                 crop_counts[image_idx][:, crop_start:crop_end, :] += 1
@@ -576,7 +574,7 @@ class EoMTImageProcessor(BaseImageProcessor):
     def post_process_semantic_segmentation(
         self,
         outputs,
-        crops_offset: List[Tuple[int, int, int]],
+        patch_offsets: List[Tuple[int, int, int]],
         original_image_sizes: List[Tuple[int, int]],
     ) -> np.ndarray:
         """Post-processes model outputs into final semantic segmentation prediction."""
@@ -598,7 +596,7 @@ class EoMTImageProcessor(BaseImageProcessor):
         segmentation_logits = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
 
         output_logits = self._reverse_semantic_image_preprocessing(
-            segmentation_logits, crops_offset, original_image_sizes
+            segmentation_logits, patch_offsets, original_image_sizes
         )
 
         preds = [logit.detach().cpu().argmax(dim=0).numpy() for logit in output_logits]
