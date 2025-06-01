@@ -75,14 +75,14 @@ inputs = processor(
     return_tensors="pt",
 )
 
-# Remove crop offsets from inputs — used later for post-processing.
+# Remove Patche Offsets from inputs — only used later for post-processing.
 patch_offsets = inputs.pop("patch_offsets")
 
 with torch.inference_mode():
     outputs = model(**inputs)
 
 # Prepare the original image size in the format (height, width)
-original_image_sizes = [(image.height, image.width)]
+original_image_sizes = [image.size]
 
 # Post-process the model outputs to get final segmentation prediction
 preds = processor.post_process_semantic_segmentation(
@@ -133,7 +133,7 @@ with torch.inference_mode():
     outputs = model(**inputs)
 
 # Prepare the original image size in the format (height, width)
-original_image_sizes = [(image.height, image.width)]
+original_image_sizes = [image.size]
 
 # Post-process the model outputs to get final segmentation prediction
 preds = processor.post_process_instance_segmentation(
@@ -178,7 +178,7 @@ with torch.inference_mode():
     outputs = model(**inputs)
 
 # Prepare the original image size in the format (height, width)
-original_image_sizes = [(image.height, image.width)]
+original_image_sizes = [image.size]
 
 # Post-process the model outputs to get final segmentation prediction
 preds = processor.post_process_panoptic_segmentation(
