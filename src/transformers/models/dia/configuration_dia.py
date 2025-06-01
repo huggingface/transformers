@@ -14,7 +14,7 @@
 # limitations under the License.
 """Dia model configuration"""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -114,13 +114,13 @@ class DiaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        encoder_config: DiaEncoderConfig | None = None,
-        decoder_config: DiaDecoderConfig | None = None,
+        encoder_config: Optional[DiaEncoderConfig] = None,
+        decoder_config: Optional[DiaDecoderConfig] = None,
         norm_eps: float = 1e-5,
         pad_token_id: int = 1025,
         eos_token_id: int = 1024,
         bos_token_id: int = 1026,
-        delay_pattern: list[int] | None = None,
+        delay_pattern: Optional[List[int]] = None,
         **kwargs,
     ):
         if isinstance(encoder_config, dict):
