@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Llava model."""
 
+import copy
 import unittest
 
 import requests
@@ -23,6 +24,7 @@ from transformers import (
     AutoTokenizer,
     LlavaConfig,
     LlavaForConditionalGeneration,
+    LlavaModel,
     is_torch_available,
     is_vision_available,
 )
@@ -166,7 +168,14 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
     Model tester for `LlavaForConditionalGeneration`.
     """
 
-    all_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            LlavaModel,
+            LlavaForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {"image-to-text": LlavaForConditionalGeneration, "image-text-to-text": LlavaForConditionalGeneration}
         if is_torch_available()
@@ -238,16 +247,17 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
-            _ = model(**input_dict)  # successful forward with no modifications
+            curr_input_dict = copy.deepcopy(input_dict)  # in=place modifications further
+            _ = model(**curr_input_dict)  # successful forward with no modifications
 
             # remove one image but leave the image token in text
-            input_dict["pixel_values"] = input_dict["pixel_values"][-1:, ...]
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
             with self.assertRaises(ValueError):
-                _ = model(**input_dict)
+                _ = model(**curr_input_dict)
 
             # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = input_dict["input_ids"][:1]
-            pixel_values = input_dict["pixel_values"][:1]
+            input_ids = curr_input_dict["input_ids"][:1]
+            pixel_values = curr_input_dict["pixel_values"][:1]
             input_ids = torch.cat([input_ids, input_ids], dim=0)
 
             # one image and two image tokens raise an error
@@ -281,7 +291,8 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
             model = model_class(config).to(torch_device)
             # We should have the right number of input features,
             # and should be able to run a forward pass without exploding
-            assert model.multi_modal_projector.linear_1.in_features == expected_features
+            base_model = getattr(model, "model", model)
+            assert base_model.multi_modal_projector.linear_1.in_features == expected_features
             model(**input_dict)
 
     @unittest.skip(

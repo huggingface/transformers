@@ -25,10 +25,12 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_read_token,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -44,6 +46,7 @@ if is_torch_available():
 
     from transformers import (
         AyaVisionForConditionalGeneration,
+        AyaVisionModel,
     )
 
 
@@ -141,7 +144,6 @@ class AyaVisionVisionText2TextModelTester:
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
-        print("attention_mask", attention_mask.shape)
         # input_ids[:, -1] = self.pad_token_id
         input_ids[input_ids == self.image_token_index] = self.pad_token_id
         input_ids[:, : self.image_seq_length] = self.image_token_index
@@ -156,7 +158,14 @@ class AyaVisionVisionText2TextModelTester:
 
 @require_torch
 class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (AyaVisionForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            AyaVisionModel,
+            AyaVisionForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (AyaVisionForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -288,10 +297,6 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip("Cohere2's eager attn/sdpa attn outputs are expected to be different")
-    def test_sdpa_equivalence(self):
-        pass
-
     @unittest.skip(reason="SiglipVisionModel does not support standalone training")
     def test_training(self):
         pass
@@ -332,7 +337,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_small_model_integration_forward(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = AyaVisionForConditionalGeneration.from_pretrained(
@@ -356,7 +361,6 @@ class AyaVisionIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         actual_logits = output.logits[0, -1, :5].cpu()
-        print("actual_logits", actual_logits)
         expected_logits = torch.tensor([0.4109, 0.1532, 0.8018, 2.1328, 0.5483], dtype=torch.float16)
         self.assertTrue(
             torch.allclose(actual_logits, expected_logits, atol=0.1),
@@ -366,7 +370,8 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
+    @require_deterministic_for_xpu
     def test_small_model_integration_generate_text_only(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = AyaVisionForConditionalGeneration.from_pretrained(
@@ -389,12 +394,19 @@ class AyaVisionIntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        print("decoded_output", decoded_output)
-        expected_output = "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song."
+
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "Whispers on the breeze,\nLeaves dance under moonlit sky,\nNature's quiet song.",
+                ("cuda", 7): "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song.",
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
         self.assertEqual(decoded_output, expected_output)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_small_model_integration_generate_chat_template(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = AyaVisionForConditionalGeneration.from_pretrained(
@@ -418,12 +430,11 @@ class AyaVisionIntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        print("decoded_output", decoded_output)
         expected_output = "The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,"  # fmt: skip
         self.assertEqual(decoded_output, expected_output)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_small_model_integration_batched_generate(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = AyaVisionForConditionalGeneration.from_pretrained(
@@ -458,8 +469,14 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         # Check first output
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        print("decoded_output", decoded_output)
-        expected_output = "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene."  # fmt: skip
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
+                ("cuda", 7): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.",
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -468,7 +485,6 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        print("decoded_output", decoded_output)
         expected_output = 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a'  # fmt: skip
 
         self.assertEqual(
@@ -478,7 +494,8 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
+    @require_deterministic_for_xpu
     def test_small_model_integration_batched_generate_multi_image(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = AyaVisionForConditionalGeneration.from_pretrained(
@@ -523,8 +540,14 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         # Check first output
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
-        expected_output = "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene."  # fmt: skip
-        print("decoded_output", decoded_output)
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
+                ("cuda", 7): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.",
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -533,8 +556,13 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        print("decoded_output", decoded_output)
-        expected_output = "The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at a"  # fmt: skip
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ",
+                ("cuda", 7): "The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at a",
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
         self.assertEqual(
             decoded_output,
             expected_output,

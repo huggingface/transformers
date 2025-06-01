@@ -80,10 +80,10 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers CLI">
 
 ```bash
-echo -e "LLMs generate text through a process known as" | transformers-cli run --task text-generation --model google/gemma-2b --device 0
+echo -e "LLMs generate text through a process known as" | transformers run --task text-generation --model google/gemma-2b --device 0
 ```
 
 </hfoption>
@@ -114,8 +114,8 @@ model = AutoModelForCausalLM.from_pretrained(
 input_text = "LLMs generate text through a process known as."
 input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 outputs = model.generate(
-    **input_ids, 
-    max_new_tokens=50, 
+    **input_ids,
+    max_new_tokens=50,
     cache_implementation="static"
 )
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
@@ -127,7 +127,7 @@ Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/bl
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
 
 visualizer = AttentionMaskVisualizer("google/gemma-2b")
-visualizer("LLMs generate text through a process known as") 
+visualizer("LLMs generate text through a process known as")
 ```
 
 <div class="flex justify-center">

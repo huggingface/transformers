@@ -65,6 +65,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"layers.(\d+).feed_forward.w3.weight":                  r"language_model.model.layers.\1.feed_forward.up_proj.weight",                 # might need to be fused for efficiency?
     # r"layers.(\d+).feed_forward.mlp.fc1_weight":             r"language_model.model.layers.\1.feed_forward.gate_up_proj.weight",
     r"layers.(\d+).feed_forward.mlp.fc2_weight":             r"language_model.model.layers.\1.feed_forward.down_proj.weight",
+    r"layers.(\d+).feed_forward.w2.weight":                  r"language_model.model.layers.\1.feed_forward.down_proj.weight",
     r"layers.(\d+).feed_forward.mlp.layer_norm.weight":      r"language_model.model.layers.\1.post_attention_layernorm.weight",
 
     # Vision encoder mapping
@@ -166,8 +167,8 @@ def get_concat_dim(key):
     return 0
 
 
-def compute_intermediate_size(hidden_dim, multiple_of=1024, ffn_dim_multiplier=1.3):
-    hidden_dim = 4 * int(2 * hidden_dim / 3)
+def compute_intermediate_size(hidden_dim, ffn_exp=4, multiple_of=1024, ffn_dim_multiplier=1.2):
+    hidden_dim = ffn_exp * int(2 * hidden_dim / 3)
     hidden_dim = int(ffn_dim_multiplier * hidden_dim)
     hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
     return hidden_dim
@@ -203,6 +204,8 @@ def max_context_length(model_path, instruct=False):
     with open(os.path.join(model_path, "params.json"), "r") as f:
         params = json.load(f)
     params = params.get("model", params)
+    if params.get("moe_args") is None:
+        return 8192
     num_experts = params["moe_args"]["num_experts"]
     return 10485760 if num_experts == 16 else 1048576
 
@@ -242,24 +245,40 @@ def write_model(
         # some constants from original code
         rope_scaling = {
             "rope_type": "llama3",
-            "factor": 8.0,
+            "factor": params.get("rope_scaling_factor", 8.0),
             "low_freq_factor": 1.0,
-            "high_freq_factor": 4.0,
+            "high_freq_factor": params.get("rope_high_freq_factor", 4.0),
             "original_max_position_embeddings": 8192,
         }
         config_kwargs.update({"rope_scaling": rope_scaling})
 
+    if attention_chunk_size is None:
+        config_kwargs.update({"cache_implementation": "static"})
+
     # compute additional params for weight conversion
     num_heads_per_shard = num_heads // num_shards
     dim_per_head = dim // num_heads
-    # intermediate_size = compute_intermediate_size(dim, multiple_of=params["multiple_of"])
+    intermediate_size_mlp = compute_intermediate_size(
+        dim,
+        ffn_exp=params["ffn_exp"],
+        multiple_of=params["multiple_of"],
+        ffn_dim_multiplier=params["ffn_dim_multiplier"],
+    )
 
     num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
 
-    num_experts = params["moe_args"]["num_experts"]
-    interleave_moe_layer_step = params["moe_args"].get("interleave_moe_layer_step", 1)
+    if hasattr(params, "moe_args"):
+        num_experts = params["moe_args"]["num_experts"]
+        interleave_moe_layer_step = params["moe_args"].get("interleave_moe_layer_step", 1)
+    else:
+        # Dense model (possibly Llama Guard) - disable all moe layers
+        num_experts = 0
+        interleave_moe_layer_step = 0
+        config_kwargs.update({"moe_layers": []})
 
+    # Ensure all layers are rope if `nope_layer_interval` is None
     no_rope_layer_interval = params["nope_layer_interval"]
+    no_rope_layer_interval = num_heads * 2 if no_rope_layer_interval is None else no_rope_layer_interval
 
     bos_token_id = 200000
     eos_token_id = [200001, 200007, 200008] if instruct else 200001
@@ -273,7 +292,7 @@ def write_model(
         rope_theta=rope_theta,
         num_hidden_layers=num_layers,
         intermediate_size=8192,
-        intermediate_size_mlp=16384,
+        intermediate_size_mlp=intermediate_size_mlp,
         max_position_embeddings=max_context_length(input_base_path, instruct),
         num_local_experts=num_experts,
         interleave_moe_layer_step=interleave_moe_layer_step,
@@ -336,7 +355,7 @@ def write_model(
         sharded_keys = []
         for _key in all_keys_raw:
             try:
-                if (loaded[0][_key] == loaded[1][_key]).all():
+                if num_shards == 1 or (loaded[0][_key] == loaded[1][_key]).all():
                     repeated_keys.append(_key)
                 else:
                     sharded_keys.append(_key)
@@ -354,7 +373,7 @@ def write_model(
         for key in tqdm(all_keys, desc="Renaming and processing all keys", unit="key"):
             new_key = new_keys[key]
             print(key, new_key)
-            if not is_param_same_across_shards(new_key):
+            if num_shards > 1 and not is_param_same_across_shards(new_key):
                 current_parameter = [chunk.pop(key) for chunk in loaded if not isinstance(chunk[key], io.BytesIO)]
             else:
                 print(f"{key} (now {new_key}) is the same across all shards.")
@@ -565,8 +584,8 @@ LLAMA4_TEXT_POST_TRAIN_SPECIAL_TOKENS = [
     "<|python_end|>",
     "<|finetune_right_pad|>",
 ] + get_reserved_special_tokens(
-    "text_post_train", 61, 6
-)  # <|text_post_train_reserved_special_token_6|>, ..., <|text_post_train_reserved_special_token_66|>
+    "text_post_train", 61, 8
+)  # <|text_post_train_reserved_special_token_8|>, ..., <|text_post_train_reserved_special_token_68|>
 
 # 200080, ..., 201133
 LLAMA4_VISION_SPECIAL_TOKENS = [
@@ -620,15 +639,6 @@ class Llama4Converter(TikTokenConverter):
             model_max_length=model_max_length,
             **kwargs,
         )
-
-        # to check
-        # import tiktoken
-        # model = tiktoken.Encoding(
-        #     name=Path(model_path).name,
-        #     pat_str=self.O200K_PATTERN,
-        #     mergeable_ranks=mergeable_ranks,
-        #     special_tokens=self.special_tokens,
-        # )
 
         instruct = chat_template is not None
         self.update_post_processor(self.converted_tokenizer)
@@ -687,12 +697,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--input_dir",
         type=str,
-        default="/fsx/arthur/Llama-4-17B-Omni-Instruct-Original",
         help="Location of the local folder copied from the Hub.",
     )
     parser.add_argument(
         "--output_dir",
-        default="llama4_hf_vision",
         type=str,
         help="Location to write HF model and tokenizer",
     )

@@ -46,6 +46,7 @@ if is_torch_available():
     from transformers import (
         Emu3ForCausalLM,
         Emu3ForConditionalGeneration,
+        Emu3Model,
         Emu3Processor,
         Emu3TextModel,
     )
@@ -310,7 +311,14 @@ class Emu3Vision2TextModelTester:
 
 @require_torch
 class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (Emu3ForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            Emu3Model,
+            Emu3ForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = {}
     test_headmasking = False
     test_pruning = False
@@ -318,9 +326,7 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
 
     def setUp(self):
         self.model_tester = Emu3Vision2TextModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=Emu3Config, has_text_modality=False, common_properties=["vocabulary_map"]
-        )
+        self.config_tester = ConfigTester(self, config_class=Emu3Config, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -393,6 +399,10 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     @pytest.mark.generate
     @unittest.skip("Emu3 has dynamic control flow in vision backbone")
     def test_generate_with_static_cache(self):
+        pass
+
+    @unittest.skip("Emu3 doesn't support Flex attn yet!")
+    def test_flex_attention_with_grads(self):
         pass
 
 

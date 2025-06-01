@@ -152,8 +152,8 @@ def bbox2distance(points, bbox, max_num_bins, reg_scale, up, eps=0.1):
         points (Tensor): (n, 4) [x, y, w, h], where (x, y) is the center.
         bbox (Tensor): (n, 4) bounding boxes in "xyxy" format.
         max_num_bins (float): Maximum bin value.
-        reg_scale (float): Controling curvarture of W(n).
-        up (Tensor): Controling upper bounds of W(n).
+        reg_scale (float): Controlling curvarture of W(n).
+        up (Tensor): Controlling upper bounds of W(n).
         eps (float): Small value to ensure target < max_num_bins.
 
     Returns:

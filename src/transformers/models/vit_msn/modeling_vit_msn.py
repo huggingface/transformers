@@ -26,21 +26,11 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-    torch_int,
-)
+from ...utils import auto_docstring, logging, torch_int
 from .configuration_vit_msn import ViTMSNConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-_CONFIG_FOR_DOC = "ViTMSNConfig"
-_CHECKPOINT_FOR_DOC = "facebook/vit-msn-small"
 
 
 class ViTMSNEmbeddings(nn.Module):
@@ -453,12 +443,8 @@ class ViTMSNEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class ViTMSNPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = ViTMSNConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
@@ -487,48 +473,13 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
                 module.mask_token.data.zero_()
 
 
-VIT_MSN_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`ViTMSNConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-VIT_MSN_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
-            for details.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        interpolate_pos_encoding (`bool`, *optional*):
-            Whether to interpolate the pre-trained position encodings.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare ViTMSN Model outputting raw hidden-states without any specific head on top.",
-    VIT_MSN_START_DOCSTRING,
-)
+@auto_docstring
 class ViTMSNModel(ViTMSNPreTrainedModel):
     def __init__(self, config: ViTMSNConfig, use_mask_token: bool = False):
+        r"""
+        use_mask_token (`bool`, *optional*, defaults to `False`):
+            Whether to use a mask token for masked image modeling.
+        """
         super().__init__(config)
         self.config = config
 
@@ -551,8 +502,7 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(VIT_MSN_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -566,8 +516,6 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-
-        Returns:
 
         Examples:
 
@@ -630,12 +578,7 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
 
 # Caution: We don't have the weights for the classification head yet. This class
 # is here for the users that are interested to fine-tune the base model (ViTMSNModel).
-@add_start_docstrings(
-    """
-    ViTMSN Model with an image classification head on top e.g. for ImageNet.
-    """,
-    VIT_MSN_START_DOCSTRING,
-)
+@auto_docstring
 class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
     def __init__(self, config: ViTMSNConfig) -> None:
         super().__init__(config)
@@ -649,8 +592,7 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(VIT_MSN_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -662,8 +604,6 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ImageClassifierOutput]:
         r"""
-        Returns:
-
         Examples:
 
         ```python
