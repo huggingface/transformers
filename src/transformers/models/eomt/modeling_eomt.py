@@ -42,7 +42,6 @@ if is_accelerate_available():
     from accelerate import PartialState
     from accelerate.utils import reduce
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -1028,7 +1027,6 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
         super().__init__(config)
         self.config = config
         self.num_hidden_layers = config.num_hidden_layers
-        self.num_heads = config.num_attention_heads
         self.embeddings = EoMTEmbeddings(config)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -1187,7 +1185,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
                 )
 
                 # Expand attention mask to 4d mask.
-                attention_mask = attention_mask[:, None, ...].expand(-1, self.num_heads, -1, -1)
+                attention_mask = attention_mask[:, None, ...].expand(-1, self.config.num_attention_heads, -1, -1)
 
             layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
             hidden_states = layer_outputs[0]

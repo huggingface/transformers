@@ -56,6 +56,13 @@ if is_torchvision_available():
 
 
 class EoMTImageProcessorFastKwargs(DefaultFastImageProcessorKwargs):
+    """
+    do_split_image (`bool`, *optional*, defaults to `False`):
+            Whether to split the input images into overlapping crops for semantic segmentation. If set to `True`, the
+            input images will be split into crops of size `size["shortest_edge"]` with an overlap between crops.
+            Otherwise, the input images will be padded to the target size.
+    """
+
     do_split_image: bool
 
 
@@ -504,7 +511,7 @@ class EoMTImageProcessorFast(BaseImageProcessorFast):
             segmentation_logits, patch_offsets, original_image_sizes
         )
 
-        preds = [logit.detach().cpu().argmax(dim=0).numpy() for logit in output_logits]
+        preds = torch.stack(output_logits).argmax(dim=1)
         return preds
 
     def post_process_panoptic_segmentation(

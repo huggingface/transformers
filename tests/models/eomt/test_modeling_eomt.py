@@ -92,6 +92,11 @@ class EoMTForUniversalSegmentationTester:
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values, mask_labels, class_labels = self.prepare_config_and_inputs()
+        inputs_dict = {"pixel_values": pixel_values}
+        return config, inputs_dict
+
+    def prepare_config_and_inputs_for_training(self):
+        config, pixel_values, mask_labels, class_labels = self.prepare_config_and_inputs()
         inputs_dict = {"pixel_values": pixel_values, "mask_labels": mask_labels, "class_labels": class_labels}
         return config, inputs_dict
 
@@ -243,13 +248,20 @@ class EoMTForUniversalSegmentationTest(ModelTesterMixin, unittest.TestCase):
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
-    @unittest.skip(reason="Fix Me later")
-    def test_determinism(self):
-        pass
+    def test_training(self):
+        if not self.model_tester.is_training:
+            self.skipTest(reason="ModelTester is not configured to run training tests")
 
-    @unittest.skip(reason="Fix Me later")
-    def test_model_outputs_equivalence(self):
-        pass
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_training()
+            config.return_dict = True
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
 
 
 @require_torch
