@@ -2022,8 +2022,8 @@ class Qwen2_5OmniVisionFlashAttention2(nn.Module):
 
     def _apply_rotary_pos_emb_flashatt(self, tensor: torch.Tensor, freqs: torch.Tensor) -> torch.Tensor:
         tensor_ = tensor.float()
-        cos = freqs.cos()  # .type_as(tensor_)
-        sin = freqs.sin()  # .type_as(tensor_)
+        cos = freqs.cos().type_as(tensor_)
+        sin = freqs.sin().type_as(tensor_)
         output = apply_rotary_emb(tensor_, cos, sin).type_as(tensor)
         return output
 
