@@ -17,7 +17,6 @@ import tempfile
 import unittest
 
 import numpy as np
-import torch
 
 from transformers import DacFeatureExtractor, DiaProcessor, DiaTokenizer
 from transformers.testing_utils import require_torch
