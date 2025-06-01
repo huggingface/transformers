@@ -14,10 +14,10 @@
 
 
 import unittest
+from dataclasses import dataclass
 
 import numpy as np
 
-from transformers import ZoeDepthDepthEstimatorOutput
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
@@ -32,6 +32,11 @@ if is_vision_available():
 
     if is_torchvision_available():
         from transformers import ZoeDepthImageProcessorFast
+
+
+@dataclass
+class ZoeDepthDepthOutputProxy:
+    predicted_depth: torch.FloatTensor = None
 
 
 class ZoeDepthImageProcessingTester:
@@ -105,7 +110,7 @@ class ZoeDepthImageProcessingTester:
         )
         depth_tensors = [depth_tensor.squeeze(0) for depth_tensor in depth_tensors]
         stacked_depth_tensors = torch.stack(depth_tensors, dim=0)
-        return ZoeDepthDepthEstimatorOutput(predicted_depth=stacked_depth_tensors)
+        return ZoeDepthDepthOutputProxy(predicted_depth=stacked_depth_tensors)
 
 
 @require_torch
@@ -225,18 +230,20 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
 
-        source_sizes = [outputs[0].shape[1:]] * len(outputs) * self.image_processor_tester.batch_size
-        target_sizes = (
-            [torch.Size([outputs[0].shape[1] // 2, *(outputs[0].shape[2:])])]
-            * len(outputs)
-            * self.image_processor_tester.batch_size
-        )
+        source_sizes = [outputs.predicted_depth.shape[1:]] * self.image_processor_tester.batch_size
+        target_sizes = [
+            torch.Size([outputs.predicted_depth.shape[1] // 2, *(outputs.predicted_depth.shape[2:])])
+        ] * self.image_processor_tester.batch_size
 
         processed_fast = image_processor_fast.post_process_depth_estimation(
-            outputs, source_sizes=source_sizes, target_sizes=target_sizes
+            outputs,
+            source_sizes=source_sizes,
+            target_sizes=target_sizes,
         )
         processed_slow = image_processor_slow.post_process_depth_estimation(
-            outputs, source_sizes=source_sizes, target_sizes=target_sizes
+            outputs,
+            source_sizes=source_sizes,
+            target_sizes=target_sizes,
         )
         for pred_fast, pred_slow in zip(processed_fast, processed_slow):
             depth_fast = pred_fast["predicted_depth"]

@@ -1359,4 +1359,4 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
         )
 
 
-__all__ = ["ZoeDepthForDepthEstimation", "ZoeDepthPreTrainedModel", "ZoeDepthDepthEstimatorOutput"]
+__all__ = ["ZoeDepthForDepthEstimation", "ZoeDepthPreTrainedModel"]
