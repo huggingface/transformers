@@ -317,3 +317,89 @@ class EoMTForUniversalSegmentationIntegrationTest(unittest.TestCase):
 
         self.assertTrue(outputs.class_queries_logits.shape == (1, 200, 134))
         self.assertTrue(outputs.masks_queries_logits.shape == (1, 200, 160, 160))
+
+    @slow
+    def test_semantic_segmentation_inference(self):
+        model_id = "yaswanthgali/ade20k_semantic_eomt_large_512-hf"
+        model = EoMTForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
+        processor = AutoImageProcessor.from_pretrained(model_id)
+
+        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+
+        inputs = processor(images=image, return_tensors="pt").to(model.device)
+        patch_offsets = inputs.pop("patch_offsets", None)
+
+        with torch.inference_mode():
+            outputs = model(**inputs)
+
+        self.assertTrue(outputs.class_queries_logits.shape == (2, 100, 151))
+        self.assertTrue(outputs.masks_queries_logits.shape == (2, 100, 128, 128))
+
+        preds = processor.post_process_semantic_segmentation(
+            outputs, original_image_sizes=[image.size], patch_offsets=patch_offsets
+        )
+
+        self.assertTrue(preds.shape[1:] == (image.size[0], image.size[1]))
+
+        # fmt: off
+        EXPECTED_SLICE = torch.tensor([
+            [39, 39, 39, 39, 39, 39, 39, 39, 39, 39],
+            [39, 39, 39, 39, 39, 39, 39, 39, 39, 39],
+            [39, 39, 39, 39, 39, 39, 39, 39, 39, 39],
+            [39, 39, 39, 39, 39, 39, 39, 39, 39, 39],
+            [39, 39, 39, 39, 39, 39, 39, 39, 39, 39],
+            [39, 39, 39, 39, 39, 39, 39, 39, 39, 39],
+            [39, 39, 39, 39, 39, 39, 39, 39, 39, 39],
+            [39, 39, 39, 39, 39, 39, 39, 39, 39, 39],
+            [39, 39, 39, 39, 39, 39, 39, 39, 39, 39],
+            [39, 39, 39, 39, 39, 39, 39, 39, 39, 39]
+        ], device=model.device)
+        # fmt: on
+
+        output_slice = preds[0, :10, :10]
+        self.assertTrue(torch.allclose(output_slice, EXPECTED_SLICE, atol=1e-4))
+
+    @slow
+    def test_panoptic_segmentation_inference(self):
+        model = EoMTForUniversalSegmentation.from_pretrained(self.model_id, device_map="auto")
+        processor = AutoImageProcessor.from_pretrained(self.model_id)
+
+        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+
+        inputs = processor(images=image, return_tensors="pt").to(model.device)
+
+        with torch.inference_mode():
+            outputs = model(**inputs)
+
+        self.assertTrue(outputs.class_queries_logits.shape == (1, 200, 134))
+        self.assertTrue(outputs.masks_queries_logits.shape == (1, 200, 160, 160))
+
+        preds = processor.post_process_panoptic_segmentation(outputs, original_image_sizes=[image.size])[0]
+        segmentation, segments_info = preds["segmentation"], preds["segments_info"]
+
+        # fmt: off
+        EXPECTED_SLICE = torch.tensor([
+            [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+            [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+            [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+            [-1, -1, -1, -1, -1,  2,  2,  2,  2,  2],
+            [-1, -1, -1,  2,  2,  2,  2,  2,  2,  2],
+            [ 2,  2,  2,  2,  2,  2,  2,  2,  2,  2],
+            [ 2,  2,  2,  2,  2,  2,  2,  2,  2,  2],
+            [ 2,  2,  2,  2,  2,  2,  2,  2,  2,  2],
+            [ 2,  2,  2,  2,  2,  2,  2,  2,  2,  2],
+            [ 2,  2,  2,  2,  2,  2,  2,  2,  2,  2]
+        ], device=model.device)
+
+        EXPECTED_SEGMENTS_INFO = [
+            {"id": 0, "label_id": 15, "score": 0.99935},
+            {"id": 1, "label_id": 15, "score": 0.998688},
+            {"id": 2, "label_id": 57, "score": 0.954325},
+            {"id": 3, "label_id": 65, "score": 0.997285},
+            {"id": 4, "label_id": 65, "score": 0.99711}
+        ]
+        # fmt: on
+
+        output_slice = segmentation[:10, :10]
+        self.assertTrue(torch.allclose(output_slice, EXPECTED_SLICE, atol=1e-4))
+        self.assertEqual(segments_info, EXPECTED_SEGMENTS_INFO)
