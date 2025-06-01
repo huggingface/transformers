@@ -33,6 +33,8 @@ class DiaProcessor(ProcessorMixin):
             An instance of [`DiaAudioProcessor`]. The feature extractor is a required input.
         tokenizer (`DiaTokenizer`):
             An instance of [`DiaTokenizer`]. The tokenizer is a required input.
+        audio_model (`str`, *optional*, defaults to `"descript/dac_44khz"`):
+            The model to use for audio processing.
     """
 
     feature_extractor_class = "DacFeatureExtractor"

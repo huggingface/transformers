@@ -264,8 +264,8 @@ class DiaPreTrainedModel(PreTrainedModel):
     # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_cross_attn_mask
     def _update_cross_attn_mask(
         self,
-        encoder_hidden_states: Optional[torch.Tensor],
-        encoder_attention_mask: Optional[torch.Tensor],
+        encoder_hidden_states: Union[torch.Tensor, None],
+        encoder_attention_mask: Union[torch.Tensor, None],
         input_shape: torch.Size,
         inputs_embeds: torch.Tensor,
     ):

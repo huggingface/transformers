@@ -32,13 +32,15 @@ class DiaTokenizer(PreTrainedTokenizer):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        unk_token (`str`, *optional*, defaults to `"<unk>"`):
+        pad_token (`str`, *optional*, defaults to `<pad>`):
+            The token used for padding, for example when batching sequences of different lengths.
+        unk_token (`str`, *optional*, defaults to `<pad>`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (`str`, *optional*, defaults to `"<pad>"`):
-            The token used for padding, for example when batching sequences of different lengths.
-        max_length (`int`, *optional*, defaults to `1024`):
+        max_length (`int`, *optional*, defaults to 1024):
             The maximum length of the sequences when encoding. Sequences longer than this will be truncated.
+        offset (`int`, *optional*, defaults to 0):
+            The offset of the tokenizer.
     """
 
     model_input_names = ["input_ids", "attention_mask"]
