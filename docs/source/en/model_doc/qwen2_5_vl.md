@@ -240,6 +240,10 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 
 [[autodoc]] Qwen2_5_VLProcessor
 
+## Qwen2_5_VLTextModel
+
+[[autodoc]] Qwen2_5_VLTextModel
+    - forward
 
 ## Qwen2_5_VLModel
 

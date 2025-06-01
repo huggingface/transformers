@@ -648,7 +648,12 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
             self.messages[0],
             {
                 "role": "assistant",
-                "content": "The sound is glass shattering, and the dog appears to be a Labrador Retriever.",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "The sound is glass shattering, and the dog appears to be a Labrador Retriever.",
+                    }
+                ],
             },
             {
                 "role": "user",
@@ -687,7 +692,12 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         messages = [
             {
                 "role": "system",
-                "content": "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.",
+                    }
+                ],
             },
             {
                 "role": "user",
@@ -697,7 +707,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
         audio, _ = librosa.load(BytesIO(urlopen(audio_url).read()), sr=self.processor.feature_extractor.sampling_rate)
 
         text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text], audio=[audio], return_tensors="pt", padding=True).to(torch_device)
+        inputs = self.processor(text=text, audio=[audio], return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, thinker_temperature=0, thinker_do_sample=False)
 

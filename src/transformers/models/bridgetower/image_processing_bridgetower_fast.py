@@ -17,8 +17,6 @@
 from typing import Dict, Iterable, Optional, Tuple, Union
 
 from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     BatchFeature,
     DefaultFastImageProcessorKwargs,
@@ -31,7 +29,7 @@ from ...image_processing_utils_fast import (
     reorder_images,
 )
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
-from ...utils import add_start_docstrings, is_torch_available, is_torchvision_available, is_torchvision_v2_available
+from ...utils import auto_docstring, is_torch_available, is_torchvision_available, is_torchvision_v2_available
 
 
 if is_torch_available():
@@ -95,22 +93,21 @@ def get_resize_output_image_size(
 
 
 class BridgeTowerFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    size_divisor: Optional[int]
-    do_pad: Optional[bool]
-
-
-@add_start_docstrings(
-    "Constructs a fast BridgeTower image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     """
+    Args:
         size_divisor (`int`, *optional*, defaults to 32):
             The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
             is set to `True`. Can be overridden by the `size_divisor` parameter in the `preprocess` method.
         do_pad (`bool`, *optional*, defaults to `True`):
             Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
             the `do_pad` parameter in the `preprocess` method.
-    """,
-)
+    """
+
+    size_divisor: Optional[int]
+    do_pad: Optional[bool]
+
+
+@auto_docstring
 class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
@@ -129,17 +126,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[BridgeTowerFastImageProcessorKwargs]):
         super().__init__(**kwargs)
 
-    @add_start_docstrings(
-        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
-        """
-            size_divisor (`int`, *optional*, defaults to 32):
-                The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
-                is set to `True`. Can be overridden by the `size_divisor` parameter in the `preprocess` method.
-            do_pad (`bool`, *optional*, defaults to `True`):
-                Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
-                the `do_pad` parameter in the `preprocess` method.
-        """,
-    )
+    @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[BridgeTowerFastImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 

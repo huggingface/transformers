@@ -25,14 +25,12 @@ from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationConfig, GenerationMixin, LogitsProcessorList, StoppingCriteriaList
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import auto_docstring, logging
 from .configuration_rag import RagConfig
 from .retrieval_rag import RagRetriever
 
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "RagConfig"
 
 
 @dataclass
@@ -220,16 +218,16 @@ class RetrievAugLMOutput(ModelOutput):
     generator_cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
-class RagPreTrainedModel(PreTrainedModel):
-    r"""
+@auto_docstring(
+    custom_intro="""
     RAG models were released with the paper [Retrieval-Augmented Generation for Knowledge-Intensive NLP
     Tasks](https://arxiv.org/abs/2005.11401) by Patrick Lewis, Ethan Perez, Aleksandra Piktus et al.
 
     RAG is a retriever augmented model and encapsulate three components: a question encoder, a dataset retriever and a
     generator, the encoder and generator are trainable while the retriever is just an indexed dataset.
-
     """
-
+)
+class RagPreTrainedModel(PreTrainedModel):
     config_class = RagConfig
     base_model_prefix = "rag"
     _supports_flash_attn_2 = True
@@ -377,107 +375,7 @@ class RagPreTrainedModel(PreTrainedModel):
         return cls(question_encoder=question_encoder, generator=generator, config=config, retriever=retriever)
 
 
-RAG_START_DOCSTRING = r"""
-
-    RAG is a seq2seq model which encapsulates two core components: a question encoder and a generator. During a forward
-    pass, we encode the input with the question encoder and pass it to the retriever to extract relevant context
-    documents. The documents are then prepended to the input. Such contextualized inputs is passed to the generator.
-
-    The question encoder can be any *autoencoding* model, preferably [`DPRQuestionEncoder`], and the generator can be
-    any *seq2seq* model, preferably [`BartForConditionalGeneration`].
-
-    The model can be initialized with a [`RagRetriever`] for end-to-end generation or used in combination with the
-    outputs of a retriever in multiple steps---see examples for more details. The model is compatible any
-    *autoencoding* model as the `question_encoder` and any *seq2seq* model with language model head as the `generator`.
-    It has been tested with [`DPRQuestionEncoder`] as the `question_encoder` and [`BartForConditionalGeneration`] or
-    [`T5ForConditionalGeneration`] as the `generator`.
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-
-    Args:
-        config ([`RagConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-        question_encoder ([`PreTrainedModel`]):
-            An encoder model compatible with the faiss index encapsulated by the `retriever`.
-        generator ([`PreTrainedModel`]):
-            A seq2seq model used as the generator in the RAG architecture.
-        retriever ([`RagRetriever`]):
-            A retriever class encapsulating a faiss index queried to obtain context documents for current inputs.
-"""
-
-
-RAG_FORWARD_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. [`RagConfig`], used to initialize the model, specifies
-            which generator to use, it also specifies a compatible generator tokenizer. Use that tokenizer class to
-            obtain the indices.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*)
-            Tuple consists of (`generator_enc_last_hidden_state`, *optional*: `generator_enc_hidden_states`,
-            *optional*: `generator_enc_attentions`). `generator_enc_last_hidden_state` of shape `(batch_size, n_docs *
-            sequence_length, hidden_size)` is a sequence of hidden-states at the output of the last layer of the
-            generator's encoder.
-
-            Used by the ([`RagModel`]) model during decoding.
-        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Provide for generation tasks. `None` by default, construct as per instructions for the generator model
-            you're using with your RAG instance.
-        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size,  target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
-            be used by default.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`):
-            Tuple consists of two elements: `encoder_outputs` of the RAG model (see `encoder_outputs`) and
-            `past_key_values` of the underlying generator. Can be used to speed up decoding. `past_key_values` are used
-            in the ([`RagTokenForGeneration`]) model during decoding.
-        doc_scores (`torch.FloatTensor` of shape `(batch_size, config.n_docs)`):
-            Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
-            `question_encoder_last_hidden_state`. If the model has is not initialized with a `retriever` `doc_scores`
-            has to be provided to the forward pass. `doc_scores` can be computed via
-            `question_encoder_last_hidden_state` and `retrieved_doc_embeds`, see examples for more information.
-        context_input_ids (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
-            Input IDs post-processed from the retrieved documents and the question encoder `input_ids` by the
-            retriever. If the model was not initialized with a `retriever` ``context_input_ids` has to be provided to
-            the forward pass. `context_input_ids` are returned by [`~RagRetriever.__call__`].
-        context_attention_mask (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`,*optional*, returned when *output_retrieved=True*):
-            Attention mask post-processed from the retrieved documents and the question encoder `input_ids` by the
-            retriever. If the model has is not initialized with a `retriever` `context_attention_mask` has to be
-            provided to the forward pass. `context_attention_mask` are returned by [`~RagRetriever.__call__`].
-        use_cache (`bool`, *optional*, defaults to `True`):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        output_retrieved(`bool`, *optional*):
-            Whether or not to return the `retrieved_doc_embeds`, `retrieved_doc_ids`, `context_input_ids` and
-            `context_attention_mask`. See returned tensors for more detail.
-        n_docs (`int`, *optional*, defaults to `config.n_docs``)
-            Number of documents to retrieve and/or number of documents for which to generate an answer.
-"""
-
-
-@add_start_docstrings_to_model_forward(RAG_START_DOCSTRING)
+@auto_docstring
 class RagModel(RagPreTrainedModel):
     def __init__(
         self,
@@ -487,6 +385,14 @@ class RagModel(RagPreTrainedModel):
         retriever: Optional[RagRetriever] = None,  # or maybe just use a `set_retriever(...)` method
         **kwargs,
     ):
+        r"""
+        question_encoder (`PreTrainedModel`, *optional*):
+            The model responsible for encoding the question into hidden states for retrieval.
+        generator (`PreTrainedModel`, *optional*):
+            The model responsible for generating text based on retrieved documents.
+        retriever (`RagRetriever`, *optional*):
+            The component responsible for retrieving documents from a knowledge base given the encoded question.
+        """
         assert config is not None or (question_encoder is not None and generator is not None), (
             "Either a configuration or an question_encoder and a generator has to be provided."
         )
@@ -521,8 +427,7 @@ class RagModel(RagPreTrainedModel):
         self.ctx_encoder = None
         self.context_encoder_training = False
 
-    @add_start_docstrings_to_model_forward(RAG_FORWARD_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=RetrievAugLMOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -541,7 +446,43 @@ class RagModel(RagPreTrainedModel):
         n_docs: Optional[int] = None,
     ) -> Union[Tuple[torch.Tensor], RetrievAugLMOutput]:
         r"""
-        Returns:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. [`RagConfig`], used to initialize the model, specifies
+            which generator to use, it also specifies a compatible generator tokenizer. Use that tokenizer class to
+            obtain the indices.
+
+            [What are input IDs?](../glossary#input-ids)
+        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*)
+            Tuple consists of (`generator_enc_last_hidden_state`, *optional*: `generator_enc_hidden_states`,
+            *optional*: `generator_enc_attentions`). `generator_enc_last_hidden_state` of shape `(batch_size, n_docs *
+            sequence_length, hidden_size)` is a sequence of hidden-states at the output of the last layer of the
+            generator's encoder.
+
+            Used by the ([`RagModel`]) model during decoding.
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Provide for generation tasks. `None` by default, construct as per instructions for the generator model
+            you're using with your RAG instance.
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size,  target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        doc_scores (`torch.FloatTensor` of shape `(batch_size, config.n_docs)`):
+            Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
+            `question_encoder_last_hidden_state`. If the model has is not initialized with a `retriever` `doc_scores`
+            has to be provided to the forward pass. `doc_scores` can be computed via
+            `question_encoder_last_hidden_state` and `retrieved_doc_embeds`, see examples for more information.
+        context_input_ids (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
+            Input IDs post-processed from the retrieved documents and the question encoder `input_ids` by the
+            retriever. If the model was not initialized with a `retriever` ``context_input_ids` has to be provided to
+            the forward pass. `context_input_ids` are returned by [`~RagRetriever.__call__`].
+        context_attention_mask (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`,*optional*, returned when *output_retrieved=True*):
+            Attention mask post-processed from the retrieved documents and the question encoder `input_ids` by the
+            retriever. If the model has is not initialized with a `retriever` `context_attention_mask` has to be
+            provided to the forward pass. `context_attention_mask` are returned by [`~RagRetriever.__call__`].
+        output_retrieved (`bool`, *optional*):
+            Whether or not to return the `retrieved_doc_embeds`, `retrieved_doc_ids`, `context_input_ids` and
+            `context_attention_mask`. See returned tensors for more detail.
+        n_docs (`int`, *optional*):
+            The number of documents to retrieve.
 
         Example:
 
@@ -593,8 +534,8 @@ class RagModel(RagPreTrainedModel):
                         context_input_ids,
                         context_attention_mask,
                         retrieved_doc_embeds,
-                        retrived_doc_input_ids,
-                        retrived_doc_attention_mask,
+                        retrieved_doc_input_ids,
+                        retrieved_doc_attention_mask,
                         retrieved_doc_ids,
                     ) = (
                         retriever_outputs["context_input_ids"],
@@ -608,10 +549,10 @@ class RagModel(RagPreTrainedModel):
                     context_input_ids = context_input_ids.to(input_ids)
                     context_attention_mask = context_attention_mask.to(input_ids)
 
-                    retrived_doc_input_ids = retrived_doc_input_ids.to(input_ids)
-                    retrived_doc_attention_mask = retrived_doc_attention_mask.to(input_ids)
+                    retrieved_doc_input_ids = retrieved_doc_input_ids.to(input_ids)
+                    retrieved_doc_attention_mask = retrieved_doc_attention_mask.to(input_ids)
                     retrieved_doc_embeds = self.ctx_encoder(
-                        retrived_doc_input_ids, attention_mask=retrived_doc_attention_mask, return_dict=True
+                        retrieved_doc_input_ids, attention_mask=retrieved_doc_attention_mask, return_dict=True
                     ).pooler_output
                     retrieved_doc_embeds = retrieved_doc_embeds.view(
                         -1, n_docs, question_encoder_last_hidden_state.shape[1]
@@ -718,11 +659,10 @@ class RagModel(RagPreTrainedModel):
         )
 
 
-@add_start_docstrings_to_model_forward(
-    """
+@auto_docstring(
+    custom_intro="""
     A RAG-sequence model implementation. It performs RAG-sequence specific marginalization in the forward pass.
-    """,
-    RAG_START_DOCSTRING,
+    """
 )
 class RagSequenceForGeneration(RagPreTrainedModel):
     def __init__(
@@ -733,6 +673,14 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         retriever: Optional[RagRetriever] = None,
         **kwargs,
     ):
+        r"""
+        question_encoder (`PreTrainedModel`, *optional*):
+            The model responsible for encoding the question into hidden states for retrieval.
+        generator (`PreTrainedModel`, *optional*):
+            The model responsible for generating text based on retrieved documents.
+        retriever (`RagRetriever`, *optional*):
+            The component responsible for retrieving documents from a knowledge base given the encoded question.
+        """
         assert config is not None or (question_encoder is not None and generator is not None), (
             "Either a configuration or an encoder and a generator has to be provided."
         )
@@ -753,8 +701,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         self.rag.context_encoder_training = True
         self.rag.ctx_encoder = ctx_encoder
 
-    @add_start_docstrings_to_model_forward(RAG_FORWARD_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=RetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -777,16 +724,49 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         **kwargs,  # needs kwargs for generation
     ) -> RetrievAugLMMarginOutput:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. [`RagConfig`], used to initialize the model, specifies
+            which generator to use, it also specifies a compatible generator tokenizer. Use that tokenizer class to
+            obtain the indices.
+
+            [What are input IDs?](../glossary#input-ids)
+        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*)
+            Tuple consists of (`generator_enc_last_hidden_state`, *optional*: `generator_enc_hidden_states`,
+            *optional*: `generator_enc_attentions`). `generator_enc_last_hidden_state` of shape `(batch_size, n_docs *
+            sequence_length, hidden_size)` is a sequence of hidden-states at the output of the last layer of the
+            generator's encoder.
+
+            Used by the ([`RagModel`]) model during decoding.
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Provide for generation tasks. `None` by default, construct as per instructions for the generator model
+            you're using with your RAG instance.
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size,  target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        context_input_ids (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
+            Input IDs post-processed from the retrieved documents and the question encoder `input_ids` by the
+            retriever. If the model was not initialized with a `retriever` ``context_input_ids` has to be provided to
+            the forward pass. `context_input_ids` are returned by [`~RagRetriever.__call__`].
+        context_attention_mask (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`,*optional*, returned when *output_retrieved=True*):
+            Attention mask post-processed from the retrieved documents and the question encoder `input_ids` by the
+            retriever. If the model has is not initialized with a `retriever` `context_attention_mask` has to be
+            provided to the forward pass. `context_attention_mask` are returned by [`~RagRetriever.__call__`].
+        doc_scores (`torch.FloatTensor` of shape `(batch_size, config.n_docs)`):
+            Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
+            `question_encoder_last_hidden_state`. If the model has is not initialized with a `retriever` `doc_scores`
+            has to be provided to the forward pass. `doc_scores` can be computed via
+            `question_encoder_last_hidden_state` and `retrieved_doc_embeds`, see examples for more information.
+        output_retrieved (`bool`, *optional*):
+            Whether or not to return the `retrieved_doc_embeds`, `retrieved_doc_ids`, `context_input_ids` and
+            `context_attention_mask`. See returned tensors for more detail.
         exclude_bos_score (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the score of the BOS token is disregarded when computing
             the loss.
         reduce_loss (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the NLL loss is reduced using the `torch.Tensor.sum`
             operation.
-        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
-             Legacy dictionary, which is required so that model can use *generate()* function.
-
-        Returns:
+        n_docs (`int`, *optional*):
+            The number of documents to retrieve.
 
         Example:
 
@@ -1116,11 +1096,10 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         return output
 
 
-@add_start_docstrings_to_model_forward(
-    """
+@auto_docstring(
+    custom_intro="""
     A RAG-token model implementation. It performs RAG-token specific marginalization in the forward pass.
-    """,
-    RAG_START_DOCSTRING,
+    """
 )
 class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
     def __init__(
@@ -1131,6 +1110,14 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         retriever: Optional[RagRetriever] = None,
         **kwargs,
     ):
+        r"""
+        question_encoder (`PreTrainedModel`, *optional*):
+            The model responsible for encoding the question into hidden states for retrieval.
+        generator (`PreTrainedModel`, *optional*):
+            The model responsible for generating text based on retrieved documents.
+        retriever (`RagRetriever`, *optional*):
+            The component responsible for retrieving documents from a knowledge base given the encoded question.
+        """
         assert config is not None or (question_encoder is not None and generator is not None), (
             "Either a configuration or an encoder and a generator has to be provided."
         )
@@ -1224,8 +1211,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         log_prob_sum = seq_logprobs + doc_logprobs.unsqueeze(-1).unsqueeze(-1)
         return torch.logsumexp(log_prob_sum, dim=1)
 
-    @add_start_docstrings_to_model_forward(RAG_FORWARD_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=RetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1248,16 +1234,49 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         **kwargs,  # needs kwargs for generation
     ) -> RetrievAugLMMarginOutput:
         r"""
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. [`RagConfig`], used to initialize the model, specifies
+            which generator to use, it also specifies a compatible generator tokenizer. Use that tokenizer class to
+            obtain the indices.
+
+            [What are input IDs?](../glossary#input-ids)
+        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*)
+            Tuple consists of (`generator_enc_last_hidden_state`, *optional*: `generator_enc_hidden_states`,
+            *optional*: `generator_enc_attentions`). `generator_enc_last_hidden_state` of shape `(batch_size, n_docs *
+            sequence_length, hidden_size)` is a sequence of hidden-states at the output of the last layer of the
+            generator's encoder.
+
+            Used by the ([`RagModel`]) model during decoding.
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Provide for generation tasks. `None` by default, construct as per instructions for the generator model
+            you're using with your RAG instance.
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size,  target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+        context_input_ids (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
+            Input IDs post-processed from the retrieved documents and the question encoder `input_ids` by the
+            retriever. If the model was not initialized with a `retriever` ``context_input_ids` has to be provided to
+            the forward pass. `context_input_ids` are returned by [`~RagRetriever.__call__`].
+        context_attention_mask (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`,*optional*, returned when *output_retrieved=True*):
+            Attention mask post-processed from the retrieved documents and the question encoder `input_ids` by the
+            retriever. If the model has is not initialized with a `retriever` `context_attention_mask` has to be
+            provided to the forward pass. `context_attention_mask` are returned by [`~RagRetriever.__call__`].
+        doc_scores (`torch.FloatTensor` of shape `(batch_size, config.n_docs)`):
+            Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
+            `question_encoder_last_hidden_state`. If the model has is not initialized with a `retriever` `doc_scores`
+            has to be provided to the forward pass. `doc_scores` can be computed via
+            `question_encoder_last_hidden_state` and `retrieved_doc_embeds`, see examples for more information.
+        output_retrieved (`bool`, *optional*):
+            Whether or not to return the `retrieved_doc_embeds`, `retrieved_doc_ids`, `context_input_ids` and
+            `context_attention_mask`. See returned tensors for more detail.
         do_marginalize (`bool`, *optional*):
             If `True`, the logits are marginalized over all documents by making use of
             `torch.nn.functional.log_softmax`.
         reduce_loss (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the NLL loss is reduced using the `torch.Tensor.sum`
             operation.
-        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
-            Legacy dictionary, which is required so that model can use *generate()* function.
-
-        Returns:
+        n_docs (`int`, *optional*):
+            The number of documents to retrieve.
 
         Example:
 

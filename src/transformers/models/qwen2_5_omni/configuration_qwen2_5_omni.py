@@ -20,7 +20,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 
@@ -257,6 +257,8 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
             Sliding window attention (SWA) window size. If not specified, will default to `4096`.
         max_window_layers (`int`, *optional*, defaults to 28):
             The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         rope_scaling (`Dict`, *optional*):
@@ -358,6 +360,7 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
         use_sliding_window=False,
         sliding_window=32768,
         max_window_layers=28,
+        layer_types=None,
         attention_dropout=0.0,
         **kwargs,
     ):
@@ -372,7 +375,7 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window  # we check `use_sliding_window` in the modeling code
+        self.sliding_window = sliding_window if self.use_sliding_window else None
         self.max_window_layers = max_window_layers
 
         # for backward compatibility
@@ -392,8 +395,19 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
+
         if self.rope_scaling is None:
             self.rope_scaling = {"mrope_section": [16, 24, 24], "rope_type": "default", "type": "default"}
+
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention"
+                if self.sliding_window is not None and i >= self.max_window_layers
+                else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types)
 
 
 class Qwen2_5OmniThinkerConfig(PretrainedConfig):

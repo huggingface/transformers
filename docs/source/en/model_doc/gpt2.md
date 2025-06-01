@@ -73,6 +73,12 @@ echo -e "Hello, I'm a language model" | transformers run --task text-generation 
 </hfoption>
 </hfoptions>
 
+One can also serve the model using vLLM with the `transformers backend`.
+
+```
+vllm serve openai-community/gpt2 --model-imp transformers
+```
+
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
