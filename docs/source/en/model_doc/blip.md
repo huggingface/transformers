@@ -14,31 +14,78 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# BLIP
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?style=flat&logo=tensorflow&logoColor=white">
+    </div>
 </div>
 
-## Overview
+# BLIP
 
-The BLIP model was proposed in [BLIP: Bootstrapping Language-Image Pre-training for Unified Vision-Language Understanding and Generation](https://arxiv.org/abs/2201.12086) by Junnan Li, Dongxu Li, Caiming Xiong, Steven Hoi.
+[BLIP](https://huggingface.co/papers/2201.12086) BLIP (Bootstrapped Language-Image Pretraining) is a multimodal model that can understand and generate images and text together, and it is distinctive in that one model can handle various vision-language tasks such as image captioning, image-text matching, and VQA all together. Unlike existing VLP models that were specialized in only one of understanding or generation, BLIP is designed to be flexibly transferred to both domains. In particular, without using noisy image-text pairs collected from the web as they are, it introduces a ‘bootstrapping caption’ technique that generates sentences with its own captioner and goes through a filtering process to increase learning quality, thereby securing cleaner and more meaningful data. As a result, BLIP achieves high performance and excellent generalization despite little artificial manual labor, and can be effectively utilized for various multimodal tasks.
 
-BLIP is a model that is able to perform various multi-modal tasks including:
-- Visual Question Answering 
-- Image-Text retrieval (Image-text matching)
-- Image Captioning
 
-The abstract from the paper is the following:
+You can find all the original BLIP checkpoints under the [BLIP](https://huggingface.co/collections/Salesforce/blip-models-65242f40f1491fbf6a9e9472) collection.
 
-*Vision-Language Pre-training (VLP) has advanced the performance for many vision-language tasks. 
-However, most existing pre-trained models only excel in either understanding-based tasks or generation-based tasks. Furthermore, performance improvement has been largely achieved by scaling up the dataset with noisy image-text pairs collected from the web, which is a suboptimal source of supervision. In this paper, we propose BLIP, a new VLP framework which transfers flexibly to both vision-language understanding and generation tasks. BLIP effectively utilizes the noisy web data by bootstrapping the captions, where a captioner generates synthetic captions and a filter removes the noisy ones. We achieve state-of-the-art results on a wide range of vision-language tasks, such as image-text retrieval (+2.7% in average recall@1), image captioning (+2.8% in CIDEr), and VQA (+1.6% in VQA score). BLIP also demonstrates strong generalization ability when directly transferred to videolanguage tasks in a zero-shot manner. Code, models, and datasets are released.*
+> [!TIP]
+> Click on the BLIP models in the right sidebar for more examples of how to apply BLIP to different tasks.
+
+The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```python
+import torch
+from transformers import pipeline
+
+pipeline = pipeline(
+    task="visual-question-answering",
+    model="Salesforce/blip-vqa-base",
+    torch_dtype=torch.float16,
+    device=0
+)
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+print(pipeline(question="What is cat doing?", image=url))
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+import requests
+import torch
+from PIL import Image
+from transformers import AutoProcessor, AutoModelForVisualQuestionAnswering
+
+processor = AutoProcessor.from_pretrained("Salesforce/blip-vqa-base")
+model = AutoModelForVisualQuestionAnswering.from_pretrained(
+    "Salesforce/blip-vqa-base", 
+    torch_dtype=torch.float16,
+    device_map="auto"
+)
+
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+
+question = "What is cat doing?"
+inputs = processor(images=image, text=question, return_tensors="pt").to("cuda", torch.float16)
+
+output = model.generate(**inputs)
+print(processor.batch_decode(output, skip_special_tokens=True)[0])
+```
+
+</hfoption>
+
+</hfoptions>
 
 ![BLIP.gif](https://cdn-uploads.huggingface.co/production/uploads/1670928184033-62441d1d9fdefb55a0b7d12c.gif)
 
-This model was contributed by [ybelkada](https://huggingface.co/ybelkada).
-The original code can be found [here](https://github.com/salesforce/BLIP).
+## Notes
+
+- This model was contributed by [ybelkada](https://huggingface.co/ybelkada).
+- The original code can be found [here](https://github.com/salesforce/BLIP).
 
 ## Resources
 
