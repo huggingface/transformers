@@ -27,6 +27,44 @@ logger = logging.get_logger(__name__)
 
 
 class DiaEncoderConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`DiaEncoder`]. It is used to instantiate a Dia
+    encoder according to the specified arguments, defining the encoder architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        max_length (`int`, *optional*, defaults to 1024):
+            The maximum sequence length that this model might ever be used with.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        hidden_size (`int`, *optional*, defaults to 1024):
+            Dimensionality of the encoder layers and the pooler layer.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        num_key_value_heads (`int`, *optional*, defaults to 16):
+            Number of key and value heads for each attention layer in the Transformer encoder.
+        head_dim (`int`, *optional*, defaults to 128):
+            Dimensionality of the attention head.
+        intermediate_size (`int`, *optional*, defaults to 4096):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
+        norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the normalization layers.
+        vocab_size (`int`, *optional*, defaults to 256):
+            Vocabulary size of the Dia model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`DiaModel`].
+        dropout (`float`, *optional*, defaults to 0):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"swish"` and `"gelu_new"` are supported.
+        rope_min_timescale (`int`, *optional*, defaults to 1):
+            The minimum timescale for the rotary position embeddings.
+        rope_max_timescale (`int`, *optional*, defaults to 10000):
+            The maximum timescale for the rotary position embeddings.
+    """
+
     model_type = "dia_encoder"
 
     def __init__(
@@ -63,6 +101,54 @@ class DiaEncoderConfig(PretrainedConfig):
 
 
 class DiaDecoderConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`DiaDecoder`]. It is used to instantiate a Dia
+    decoder according to the specified arguments, defining the decoder architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        max_length (`int`, *optional*, defaults to 3072):
+            The maximum sequence length that this model might ever be used with.
+        num_hidden_layers (`int`, *optional*, defaults to 18):
+            Number of hidden layers in the Transformer decoder.
+        hidden_size (`int`, *optional*, defaults to 2048):
+            Dimensionality of the decoder layers and the pooler layer.
+        intermediate_size (`int`, *optional*, defaults to 8192):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer decoder.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        num_key_value_heads (`int`, *optional*, defaults to 4):
+            Number of key and value heads for each attention layer in the Transformer decoder.
+        head_dim (`int`, *optional*, defaults to 128):
+            Dimensionality of the attention head.
+        cross_num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each cross-attention layer in the Transformer decoder.
+        cross_head_dim (`int`, *optional*, defaults to 128):
+            Dimensionality of the cross-attention head.
+        cross_num_key_value_heads (`int`, *optional*, defaults to 8):
+            Number of key and value heads for each cross-attention layer in the Transformer decoder.
+        cross_hidden_size (`int`, *optional*, defaults to 1024):
+            Dimensionality of the cross-attention layers.
+        norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the normalization layers.
+        vocab_size (`int`, *optional*, defaults to 1028):
+            Vocabulary size of the Dia model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`DiaModel`].
+        dropout (`float`, *optional*, defaults to 0):
+            The dropout probability for all fully connected layers in the embeddings and decoder.
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the decoder. If string, `"gelu"`, `"relu"`,
+            `"swish"` and `"gelu_new"` are supported.
+        num_channels (`int`, *optional*, defaults to 9):
+            Number of channels for the Dia decoder.
+        rope_min_timescale (`int`, *optional*, defaults to 1):
+            The minimum timescale for the rotary position embeddings.
+        rope_max_timescale (`int`, *optional*, defaults to 10000):
+            The maximum timescale for the rotary position embeddings.
+    """
+
     model_type = "dia_decoder"
 
     def __init__(

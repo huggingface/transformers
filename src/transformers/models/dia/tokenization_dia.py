@@ -112,6 +112,10 @@ class DiaTokenizer(PreTrainedTokenizer):
 
 
 class DiaTokenizerFast(PreTrainedTokenizerFast):
+    """
+    This is the fast version of the Dia tokenizer.
+    """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
