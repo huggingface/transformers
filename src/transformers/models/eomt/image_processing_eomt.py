@@ -599,7 +599,7 @@ class EoMTImageProcessor(BaseImageProcessor):
             segmentation_logits, patch_offsets, original_image_sizes
         )
 
-        preds = [logit.detach().cpu().argmax(dim=0).numpy() for logit in output_logits]
+        preds = torch.stack(output_logits).argmax(dim=1)
         return preds
 
     def post_process_panoptic_segmentation(
