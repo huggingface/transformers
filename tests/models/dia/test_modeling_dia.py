@@ -378,7 +378,7 @@ class DiaModelTester:
 
 @require_torch
 class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (DiaForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (DiaModel, DiaForConditionalGeneration) if is_torch_available() else ()
     is_encoder_decoder = True
     fx_compatible = False
     test_pruning = False

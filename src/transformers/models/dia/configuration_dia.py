@@ -109,6 +109,47 @@ class DiaDecoderConfig(PretrainedConfig):
 
 
 class DiaConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`DiaModel`]. It is used to instantiate a
+    Dia model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the
+    [google/dia](https://huggingface.co/google/dia) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        encoder_config (`DiaEncoderConfig`, *optional*):
+            Configuration for the encoder part of the model. If not provided, a default `DiaEncoderConfig` will be used.
+        decoder_config (`DiaDecoderConfig`, *optional*):
+            Configuration for the decoder part of the model. If not provided, a default `DiaDecoderConfig` will be used.
+        norm_eps (`float`, *optional*, defaults to 1e-5):
+            The epsilon used by the normalization layers.
+        pad_token_id (`int`, *optional*, defaults to 1025):
+            Padding token id.
+        eos_token_id (`int`, *optional*, defaults to 1024):
+            End of stream token id.
+        bos_token_id (`int`, *optional*, defaults to 1026):
+            Beginning of stream token id.
+        delay_pattern (`List[int]`, *optional*, defaults to `[0, 8, 9, 10, 11, 12, 13, 14, 15]`):
+            The delay pattern for the decoder. The length of this list must match `decoder_config.num_channels`.
+
+    Example:
+
+    ```python
+    >>> from transformers import DiaConfig, DiaModel
+
+    >>> # Initializing a DiaConfig with default values
+    >>> configuration = DiaConfig()
+
+    >>> # Initializing a DiaModel (with random weights) from the configuration
+    >>> model = DiaModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+    """
+
     model_type = "dia"
     sub_configs = {"encoder_config": DiaEncoderConfig, "decoder_config": DiaDecoderConfig}
 
