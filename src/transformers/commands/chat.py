@@ -146,7 +146,7 @@ class RichInterface:
 
     async def stream_output(self, stream) -> tuple[str, int]:
         self._console.print(f"[bold blue]<{self.model_name}>:")
-        with Live(console=self._console, refresh_per_second=20) as live:
+        with Live(console=self._console, refresh_per_second=4) as live:
             text = ""
             async for token in await stream:
                 outputs = token.choices[0].delta.content
@@ -183,7 +183,7 @@ class RichInterface:
 
                 markdown = Markdown("".join(lines).strip(), code_theme="github-dark")
                 # Update the Live console output
-                live.update(markdown)
+                live.update(markdown, refresh=True)
         self._console.print()
 
         return text, request_id
@@ -776,7 +776,8 @@ class ChatCommand(BaseTransformersCLICommand):
 if __name__ == "__main__":
     args = ChatArguments()
     args.model_name_or_path_or_address = "meta-llama/Llama-3.2-3b-Instruct"
-    args.generate_flags = []
+    args.model_name_or_path_or_address = "http://localhost:8000"
+    # args.generate_flags = []
 
     chat = ChatCommand(args)
     chat.run()
