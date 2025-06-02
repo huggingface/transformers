@@ -32,7 +32,7 @@ rendered properly in your Markdown viewer.
 You can find all the original GPT-Neo checkpoints under the [EleutherAI](https://huggingface.co/EleutherAI?search_models=gpt-neo) organization.
 
 > [!TIP]
-> Click on the GPT Neo models in the right sidebar for more examples of how to apply GPT Neo to different language tasks.
+> Click on the GPT-Neo models in the right sidebar for more examples of how to apply GPT Neo to different language tasks.
 
 The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModel`], and from the command line.
 
