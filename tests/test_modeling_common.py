@@ -3638,6 +3638,8 @@ class ModelTesterMixin:
                 processed_inputs[model.main_input_name] = inputs_dict[model.main_input_name]
 
                 for key in getattr(self, "additional_model_inputs", []):
+                    # Some models don't have all `additional_model_inputs`, especially when we
+                    # craft cases to test model in different settings
                     if key in inputs_dict:
                         processed_inputs[key] = inputs_dict[key]
 
@@ -4598,6 +4600,10 @@ class ModelTesterMixin:
                 # Flex attention relies on triton on compilation
                 # However, triton cannot handle hidden dimensions of less than 16
                 # --> forcing at least a hidden dim of 16
+
+                # Update the head dim and try to update hidden size as well if present in config
+                # NOTE: some models may have none if the values in sub-config, thus we check for `Noneness`
+                head_dim = None
                 if hasattr(config, "head_dim") and config.head_dim is not None:
                     head_dim = config.head_dim
                     config.head_dim = max(16, config.head_dim)
@@ -4606,7 +4612,7 @@ class ModelTesterMixin:
                     getattr(config, "hidden_size", None) is not None
                     and getattr(config, "num_attention_heads", None) is not None
                 ):
-                    head_dim = config.hidden_size // config.num_attention_heads
+                    head_dim = head_dim if head_dim is not None else config.hidden_size // config.num_attention_heads
                     config.hidden_size *= max(16 // head_dim, 1)
 
                 if (
@@ -4629,6 +4635,8 @@ class ModelTesterMixin:
             # Elaborate workaround for encoder-decoder models as some do not specify their main input
             dummy_inputs = {model.main_input_name: inputs_dict[model.main_input_name].to(torch_device)}
             for key in getattr(self, "additional_model_inputs", []):
+                # Some models don't have all `additional_model_inputs`, especially when we
+                # craft cases to test model in different settings
                 if key in inputs_dict:
                     dummy_inputs[key] = inputs_dict[key].to(torch_device)
 
