@@ -22,8 +22,8 @@ from packaging import version
 from transformers import AutoTokenizer, Qwen3Config, is_torch_available, set_seed
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
-    backend_empty_cache,
     Expectations,
+    backend_empty_cache,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,

@@ -17,8 +17,8 @@ import unittest
 
 from transformers import XGLMConfig, is_torch_available
 from transformers.testing_utils import (
-    cleanup,
     Expectations,
+    cleanup,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -422,7 +422,6 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         input_ids = tokenized.input_ids
         output_ids = model.generate(input_ids, do_sample=True, num_beams=1)
         output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-
 
         expected_output_strings = Expectations(
             { # Here, rocm 9.5 diverge a lot from cuda, dont hesitate to change the expectation. TODO: investigate

@@ -3249,7 +3249,7 @@ class Expectations(UserDict[DeviceProperties, Any]):
         Find best matching expectation based on environment device properties.
         """
         return self.find_expectation(get_device_properties())
-    
+
     @staticmethod
     def unpack(key: DeviceProperties) -> tuple[Optional[str], Optional[int], Optional[int]]:
         """
