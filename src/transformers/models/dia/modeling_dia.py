@@ -31,6 +31,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
+    BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqModelOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -77,7 +78,7 @@ class DiaPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
             module.bias.data.zero_()
 
-    # TODO: refactor masks when merging with main --> new masking for causal etc
+    # TODO: new masking for causal fails atm (create_causal_masks)
 
     # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
     def _update_full_mask(
@@ -438,7 +439,7 @@ class DiaCrossAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
         cross_shape = (*cross_attention_states.shape[:-1], -1, self.head_dim)
@@ -496,7 +497,7 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         residual = hidden_states
         normed_states = self.pre_sa_norm(hidden_states)
 
@@ -558,11 +559,11 @@ class DiaEncoder(DiaPreTrainedModel):
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
-        # TODO: gradient ckpting
         for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
 
+            # TODO: check kwargs
             layer_outputs = encoder_layer(
                 hidden_states,
                 attention_mask,
@@ -610,7 +611,6 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DiaDecoderConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.dropout = config.dropout
         self.self_attention = DiaSelfAttention(config, layer_idx, is_causal=True)
         self.cross_attention = DiaCrossAttention(config, layer_idx)
         self.pre_sa_norm = RMSNorm(
@@ -630,45 +630,38 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        encoder_hidden_states: torch.Tensor,
-        encoder_attention_mask: torch.Tensor,
+        attention_mask: torch.Tensor,
         position_embeddings: torch.Tensor,
         cache_position: torch.LongTensor,
-        attention_mask: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        encoder_attention_mask: torch.Tensor,
         past_key_values: Optional[Cache] = None,
-        output_attentions: bool = False,
-    ) -> torch.Tensor:
-        # TODO: fix caching
-
+        **kwargs,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         residual = hidden_states
         normed_states = self.pre_sa_norm(hidden_states)
 
+        # TODO: are kwargs possible with correct gradient passing
         hidden_states, self_attn_weights = self.self_attention(
-            hidden_states=normed_states,
-            attention_mask=attention_mask,
-            position_embeddings=position_embeddings,
-            past_key_values=past_key_values,
-            cache_position=cache_position,
-            output_attentions=output_attentions,
+            normed_states,
+            attention_mask,
+            position_embeddings,
+            cache_position,
+            past_key_values,
+            **kwargs,
         )
-
-        # TODO: dropout isnt used anywhere
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
         residual = hidden_states
         hidden_states = self.pre_ca_norm(hidden_states)
+        # TODO: are kwargs possible with correct gradient passing
         cross_states, cross_attn_weights = self.cross_attention(
-            hidden_states=hidden_states,
-            cross_attention_states=encoder_hidden_states,
-            position_embeddings=position_embeddings,
-            attention_mask=encoder_attention_mask,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-            output_attentions=output_attentions,
+            hidden_states,
+            encoder_hidden_states,
+            encoder_attention_mask,
+            past_key_values,
+            **kwargs,
         )
-
-        cross_states = nn.functional.dropout(cross_states, p=self.dropout, training=self.training)
         hidden_states = residual + cross_states
 
         residual = hidden_states
@@ -676,21 +669,20 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         mlp_out = self.mlp(x_norm)
         hidden_states = residual + mlp_out
 
-        return hidden_states
+        return hidden_states, self_attn_weights, cross_attn_weights
 
 
 class DiaMultiChannelEmbed(nn.Module):
-    # TODO: fix description
-    """In order to efficiently compute the audio embedding from the 9 different channels
-    we vectorize the embedding process by using a single embedding layer, and an offset.
+    """In order to efficiently compute the audio embedding from the 9 different channels,
+    we vectorize the embedding process by using a single embedding layer and an offset.
     Example:
-    - num_embeds = 3
+    - num_embeds = 4
     - vocab_size = 8
-    - num_chanels = 4
-    We would have offsets = [0, 256, 512]
-    If audio_codes = [0, 1, 2, 3], [1, 3, 4, 7], [5, 6, 7, 8]
+    - num_channels = 3
+    We would have offsets = [0, 8, 16]
+    If audio_codes = [0, 1, 2, 3], [1, 3, 4, 7], [5, 6, 7, 8],
     then tokens = audio_codes + offsets
-                = [0, 1, 2, 3, 256, 259, 260, 263, 517, 5128, 519, 520]
+                = [0, 1, 2, 3, 9, 11, 12, 15, 21, 22, 23, 24]
     This allows us to use a single embedding layer for all channels.
     """
 
@@ -730,32 +722,18 @@ class DiaDecoder(DiaPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
-        cross_cache_position: Optional[torch.LongTensor] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
-        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
-    ) -> torch.Tensor:
-        if self.is_gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
-        #if use_cache and past_key_values is None:
-        if past_key_values is None:
-            past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
-
+        **kwargs,
+    ) -> Union[BaseModelOutputWithPastAndCrossAttentions, Tuple]:
         batch_size, seq_length = audio_codes.size()[:-1]
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         if cache_position is None:
             cache_position = torch.arange(
                 past_key_values_length, past_key_values_length + seq_length, device=audio_codes.device
             )[None, :]
-        if cross_cache_position is None:
-            cross_cache_position = torch.arange(encoder_hidden_states.shape[1], device=encoder_hidden_states.device)[None, :]
 
         # RoPE
         hidden_states = self.embeddings(audio_codes)
@@ -766,7 +744,6 @@ class DiaDecoder(DiaPreTrainedModel):
             mask_seq_length = past_key_values_length + seq_length
             attention_mask = torch.ones(batch_size, mask_seq_length, device=audio_codes.device)
 
-        # TODO: update to new mask function
         self_attn_cache = (
             past_key_values.self_attention_cache
             if isinstance(past_key_values, EncoderDecoderCache)
@@ -786,20 +763,54 @@ class DiaDecoder(DiaPreTrainedModel):
             hidden_states,
         )
 
-        for i, layer in enumerate(self.layers):
-            hidden_states = layer(
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
+        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
+
+        for layer in self.layers:
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            # TODO: check kwargs
+            layer_outputs = layer(
                 hidden_states,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask,
-                position_embeddings=position_embeddings,
-                cache_position=cache_position,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
+                attention_mask,
+                position_embeddings,
+                cache_position,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                past_key_values,
+                **kwargs,
             )
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_self_attns = all_self_attns + (layer_outputs[1],)
+
+                if encoder_hidden_states is not None:
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
         hidden_states = self.norm(hidden_states)
+
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        # TODO: move this out of decoder --> model for conditional gen
         last_hidden_states = self.logits_dense(hidden_states).view(-1, self.num_channels, self.vocab_size)
-        return last_hidden_states.to(torch.float32)
+
+        if not return_dict:
+            return tuple(
+                v
+                for v in [hidden_states, past_key_values, all_hidden_states, all_self_attns, all_cross_attentions]
+                if v is not None
+            )
+        return BaseModelOutputWithPastAndCrossAttentions(
+            last_hidden_state=last_hidden_states,
+            past_key_values=past_key_values,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+            cross_attentions=all_cross_attentions,
+        )
 
 
 class DiaModel(DiaGenerationMixin, DiaPreTrainedModel):
@@ -821,8 +832,8 @@ class DiaModel(DiaGenerationMixin, DiaPreTrainedModel):
         # TODO: rename back to input_ids and attention_mask
         audio_codes: Optional[Tuple[torch.FloatTensor]] = None,
         audio_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_input_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        encoder_input_ids: Optional[torch.LongTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
         encoder_cache_position: Optional[torch.LongTensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
@@ -842,6 +853,16 @@ class DiaModel(DiaGenerationMixin, DiaPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if self.is_gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
+        if use_cache and past_key_values is None:
+            past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+
         # TODO: CFG should be possible with logits processor --> move the CFG steps out to prepare inputs
         # batch size becomes 2 * batch_size using CFG (uncoditioned == 0 and conditioned input == text)
         if encoder_input_ids is not None:
@@ -854,7 +875,7 @@ class DiaModel(DiaGenerationMixin, DiaPreTrainedModel):
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                encoder_input_ids,
+                input_ids=encoder_input_ids,
                 attention_mask=encoder_attention_mask,
                 cache_position=encoder_cache_position,
                 output_attentions=output_attentions,
@@ -881,28 +902,29 @@ class DiaModel(DiaGenerationMixin, DiaPreTrainedModel):
 
         decoder_outputs = self.decoder(
             audio_codes=audio_codes,
-            attention_mask=None,  # TODO: if we prefix audio we will need a mask when left padding
+            attention_mask=None,  # TODO: if we prefix audio we will need a mask when left padding - `audio_attention_mask`
             cache_position=cache_position,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=encoder_attention_mask,
-            cross_cache_position=encoder_cache_position,
             past_key_values=past_key_values,
-            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
+        if not return_dict:
+            return decoder_outputs + encoder_outputs
+
         return Seq2SeqModelOutput(
-            last_hidden_state=decoder_outputs,
-            # past_key_values=decoder_outputs.past_key_values,
-            # decoder_hidden_states=decoder_outputs.hidden_states,
-            # decoder_attentions=decoder_outputs.attentions,
-            # cross_attentions=decoder_outputs.cross_attentions,
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
             encoder_last_hidden_state=encoder_outputs[0],
-            # encoder_hidden_states=encoder_outputs.hidden_states,
-            # encoder_attentions=encoder_outputs.attentions,
-        )#.to_tuple()
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+        )
 
 
 __all__ = [
