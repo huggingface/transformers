@@ -84,7 +84,7 @@ def write_model(
 ):
     os.makedirs(model_path, exist_ok=True)
     bos_token_id = 128000
-    eos_token_id = [128001, 128008, 128009] if instruct else 128001
+    eos_token_id = 199999 if not instruct else [199999, 200018]
     pad_token_id = 128004
 
     config = OpenaiConfig()
@@ -186,7 +186,7 @@ import tiktoken
 class OpenaiConverter(TikTokenConverter):
     def extract_vocab_merges_from_model(self, tiktoken_url: str):
         tokenizer = tiktoken.get_encoding(tiktoken_url)
-
+        self.pattern = tokenizer._pat_str
         bpe_ranks = tokenizer._mergeable_ranks
         byte_encoder = bytes_to_unicode()
 
@@ -213,18 +213,17 @@ class OpenaiConverter(TikTokenConverter):
     def __init__(
         self,
         vocab_file,
-        special_tokens: List[str],
-        pattern: str,
         model_max_length: int,
         chat_template: Optional[str] = None,
         **kwargs,
     ):
-        super().__init__(vocab_file, pattern=pattern)
+        super().__init__(vocab_file, pattern=None)
 
         # TODO 1st donwload the vocabfile!!!
         tokenizer = tiktoken.get_encoding(vocab_file)
-        special_tokens = tokenizer._special_tokens.keys()
-
+        self.additional_special_tokens = {}
+        # 199998 is not defined either
+        self.additional_special_tokens["<|reserved_199998|>"] = 199998
         self.additional_special_tokens = {'<|endoftext|>': 199999, '<|endofprompt|>': 200018}
         for k in range(199999, 200018):
             self.additional_special_tokens[f"<|reserved_{k}|>"] = k
@@ -242,9 +241,6 @@ class OpenaiConverter(TikTokenConverter):
 
 
 def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
-    pattern = r"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"  # noqa: W605
-    special_tokens = []
-
     # Chat template
     chat_template = (
         "{% for message in messages %}"
@@ -272,13 +268,8 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
 
     converter = OpenaiConverter(
         vocab_file=tokenizer_path,
-        pattern=pattern,
-        special_tokens=special_tokens,
         model_max_length=None,
         chat_template=chat_template if instruct else None,
-        bos_token="<|begin_of_text|>",
-        eos_token="<|end_of_text|>" if not instruct else "<|eot_id|>",
-        pad_token="<|finetune_right_pad_id|>",
     )
     tokenizer = converter.tokenizer
     tokenizer.save_pretrained(save_dir)
@@ -318,12 +309,12 @@ def main():
         help="Whether the model is an instruct model",
     )
     args = parser.parse_args()
-    write_model(
-        model_path=args.output_dir,
-        input_base_path=args.input_dir,
-        safe_serialization=args.safe_serialization,
-        instruct=args.instruct,
-    )
+    # write_model(
+    #     model_path=args.output_dir,
+    #     input_base_path=args.input_dir,
+    #     safe_serialization=args.safe_serialization,
+    #     instruct=args.instruct,
+    # )
 
     write_tokenizer(
         tokenizer_path="o200k_base",
