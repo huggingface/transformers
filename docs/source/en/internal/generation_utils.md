@@ -380,11 +380,6 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 [[autodoc]] HQQQuantizedCache
 
-[[autodoc]] SinkCache
-    - update
-    - get_seq_length
-    - reorder_cache
-
 [[autodoc]] OffloadedCache
     - update
     - prefetch_layer
@@ -446,4 +441,3 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 [[autodoc]] CompileConfig
     - __call__
-
