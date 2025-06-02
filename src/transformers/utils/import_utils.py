@@ -996,7 +996,7 @@ def is_torch_xpu_available(check_device=False):
 
 @lru_cache()
 def is_bitsandbytes_available():
-   return _bitsandbytes_available
+    return _bitsandbytes_available
 
 
 def is_bitsandbytes_multi_backend_available() -> bool:
