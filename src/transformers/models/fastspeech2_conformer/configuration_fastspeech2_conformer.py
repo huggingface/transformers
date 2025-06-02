@@ -14,7 +14,7 @@
 # limitations under the License.
 """FastSpeech2Conformer model configuration"""
 
-from typing import Dict
+from typing import Dict, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -142,7 +142,7 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
             speaker id embedding layer.
         num_languages (`int`, *optional*):
             Number of languages. If set to > 1, assume that the language ids will be provided as the input and use the
-            languge id embedding layer.
+            language id embedding layer.
         speaker_embed_dim (`int`, *optional*):
             Speaker embedding dimension. If set to > 0, assume that speaker_embedding will be provided as the input.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
@@ -459,8 +459,8 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
 
     def __init__(
         self,
-        model_config: Dict = None,
-        vocoder_config: Dict = None,
+        model_config: Optional[Dict] = None,
+        vocoder_config: Optional[Dict] = None,
         **kwargs,
     ):
         if model_config is None:

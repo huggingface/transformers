@@ -102,22 +102,22 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions. Can be overidden by `do_resize` in `preprocess`.
+            Whether to resize the image's (height, width) dimensions. Can be overridden by `do_resize` in `preprocess`.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 384, "width": 384}`):
-            Size of the image after resizing. Can be overidden by `size` in `preprocess`.
+            Size of the image after resizing. Can be overridden by `size` in `preprocess`.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-            Defines the resampling filter to use if resizing the image. Can be overidden by `resample` in `preprocess`.
+            Defines the resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
         keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
             If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
-            be overidden by `keep_aspect_ratio` in `preprocess`.
+            be overridden by `keep_aspect_ratio` in `preprocess`.
         ensure_multiple_of (`int`, *optional*, defaults to 1):
-            If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
+            If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overridden
             by `ensure_multiple_of` in `preprocess`.
         do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overidden by `do_rescale` in
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
             `preprocess`.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overidden by `rescale_factor` in `preprocess`.
+            Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in `preprocess`.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
@@ -142,7 +142,7 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,

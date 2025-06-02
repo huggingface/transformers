@@ -1496,7 +1496,7 @@ WAV2VEC2_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare TFWav2Vec2 Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare TFWav2Vec2 Model transformer outputting raw hidden-states without any specific head on top.",
     WAV2VEC2_START_DOCSTRING,
 )
 class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):

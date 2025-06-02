@@ -28,6 +28,8 @@ COMMON_ENV_VARIABLES = {
     "TRANSFORMERS_IS_CI": True,
     "PYTEST_TIMEOUT": 120,
     "RUN_PIPELINE_TESTS": False,
+    # will be adjust in `CircleCIJob.to_dict`.
+    "RUN_FLAKY": True,
 }
 # Disable the use of {"s": None} as the output is way too long, causing the navigation on CircleCI impractical
 COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "vvv": None, "rsfE":None}
@@ -108,6 +110,7 @@ class CircleCIJob:
             print(f"Using {self.docker_image} docker image")
         if self.install_steps is None:
             self.install_steps = ["uv venv && uv pip install ."]
+        self.install_steps.append("uv venv && uv pip install git+https://github.com/ydshieh/pytest.git@8.3.5-ydshieh git+https://github.com/ydshieh/pluggy.git@1.5.0-ydshieh")
         if self.pytest_options is None:
             self.pytest_options = {}
         if isinstance(self.tests_to_run, str):
@@ -126,6 +129,8 @@ class CircleCIJob:
 
     def to_dict(self):
         env = COMMON_ENV_VARIABLES.copy()
+        # Do not run tests decorated by @is_flaky on pull requests
+        env['RUN_FLAKY'] = os.environ.get("CIRCLE_PULL_REQUEST", "") == ""
         env.update(self.additional_env)
 
         job = {
@@ -393,7 +398,12 @@ def create_circleci_config(folder=None):
         "parameters": {
             # Only used to accept the parameters from the trigger
             "nightly": {"type": "boolean", "default": False},
-            "tests_to_run": {"type": "string", "default": ''},
+            # Only used to accept the parameters from GitHub Actions trigger
+            "GHA_Actor": {"type": "string", "default": ""},
+            "GHA_Action": {"type": "string", "default": ""},
+            "GHA_Event": {"type": "string", "default": ""},
+            "GHA_Meta": {"type": "string", "default": ""},
+            "tests_to_run": {"type": "string", "default": ""},
             **{j.job_name + "_test_list":{"type":"string", "default":''} for j in jobs},
             **{j.job_name + "_parallelism":{"type":"integer", "default":1} for j in jobs},
         },

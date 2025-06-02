@@ -1,0 +1,205 @@
+name: Process failed tests
+
+on:
+  workflow_call:
+    inputs:
+      docker:
+        required: true
+        type: string
+      start_sha:
+        required: true
+        type: string
+      job:
+        required: true
+        type: string
+      slack_report_channel:
+        required: true
+        type: string
+      ci_event:
+        required: true
+        type: string
+      report_repo_id:
+        required: true
+        type: string
+
+
+env:
+  HF_HOME: /mnt/cache
+  TRANSFORMERS_IS_CI: yes
+  OMP_NUM_THREADS: 8
+  MKL_NUM_THREADS: 8
+  RUN_SLOW: yes
+  # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access.
+  # This token is created under the bot `hf-transformers-bot`.
+  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
+  TF_FORCE_GPU_ALLOW_GROWTH: true
+  CUDA_VISIBLE_DEVICES: 0,1
+
+
+jobs:
+  check_new_failures:
+    name: " "
+    runs-on:
+      group: aws-g4dn-4xlarge-cache
+    container:
+      image: ${{ inputs.docker }}
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ci_results_${{ inputs.job }}
+          path: /transformers/ci_results_${{ inputs.job }}
+
+      - name: Check file
+        working-directory: /transformers
+        run: |
+          if [ -f ci_results_${{ inputs.job }}/new_failures.json ]; then
+            echo "`ci_results_${{ inputs.job }}/new_failures.json` exists, continue ..."
+            echo "process=true" >> $GITHUB_ENV
+          else
+            echo "`ci_results_${{ inputs.job }}/new_failures.json` doesn't exist, abort."
+            echo "process=false" >> $GITHUB_ENV
+          fi
+
+      - uses: actions/download-artifact@v4
+        if: ${{ env.process == 'true' }}
+        with:
+          pattern: setup_values*
+          path: setup_values
+          merge-multiple: true
+
+      - name: Prepare some setup values
+        if: ${{ env.process == 'true' }}
+        run: |
+          if [ -f setup_values/prev_workflow_run_id.txt ]; then
+            echo "PREV_WORKFLOW_RUN_ID=$(cat setup_values/prev_workflow_run_id.txt)" >> $GITHUB_ENV
+          else
+            echo "PREV_WORKFLOW_RUN_ID=" >> $GITHUB_ENV
+          fi
+
+          if [ -f setup_values/other_workflow_run_id.txt ]; then
+            echo "OTHER_WORKFLOW_RUN_ID=$(cat setup_values/other_workflow_run_id.txt)" >> $GITHUB_ENV
+          else
+            echo "OTHER_WORKFLOW_RUN_ID=" >> $GITHUB_ENV
+          fi
+
+      - name: Update clone
+        working-directory: /transformers
+        if: ${{ env.process == 'true' }}
+        run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Get target commit
+        working-directory: /transformers/utils
+        if: ${{ env.process == 'true' }}
+        run: |
+          echo "END_SHA=$(TOKEN=${{ secrets.ACCESS_REPO_INFO_TOKEN }} python3 -c 'import os; from get_previous_daily_ci import get_last_daily_ci_run_commit; commit=get_last_daily_ci_run_commit(token=os.environ["TOKEN"], workflow_run_id=os.environ["PREV_WORKFLOW_RUN_ID"]); print(commit)')" >> $GITHUB_ENV
+
+      - name: Checkout to `start_sha`
+        working-directory: /transformers
+        if: ${{ env.process == 'true' }}
+        run: git fetch && git checkout ${{ inputs.start_sha }}
+
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        if: ${{ env.process == 'true' }}
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
+      - name: NVIDIA-SMI
+        if: ${{ env.process == 'true' }}
+        run: |
+          nvidia-smi
+
+      - name: Environment
+        working-directory: /transformers
+        if: ${{ env.process == 'true' }}
+        run: |
+          python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        if: ${{ env.process == 'true' }}
+        run: pip freeze
+
+      - name: Check failed tests
+        working-directory: /transformers
+        if: ${{ env.process == 'true' }}
+        run: python3 utils/check_bad_commit.py --start_commit ${{ inputs.start_sha }} --end_commit ${{ env.END_SHA }} --file ci_results_${{ inputs.job }}/new_failures.json --output_file new_failures_with_bad_commit.json
+
+      - name: Show results
+        working-directory: /transformers
+        if: ${{ env.process == 'true' }}
+        run: |
+          ls -l new_failures_with_bad_commit.json
+          cat new_failures_with_bad_commit.json
+
+      - name: Checkout back
+        working-directory: /transformers
+        if: ${{ env.process == 'true' }}
+        run: |
+          git checkout ${{ inputs.start_sha }}
+
+      - name: Process report
+        shell: bash
+        working-directory: /transformers
+        if: ${{ env.process == 'true' }}
+        env:
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+          TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+          JOB_NAME: ${{ inputs.job }}
+          REPORT_REPO_ID: ${{ inputs.report_repo_id }}
+        run: |
+          python3 utils/process_bad_commit_report.py
+
+      - name: Process report
+        shell: bash
+        working-directory: /transformers
+        if: ${{ env.process == 'true' }}
+        env:
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+          TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+          JOB_NAME: ${{ inputs.job }}
+          REPORT_REPO_ID: ${{ inputs.report_repo_id }}
+        run: |
+          {
+            echo 'REPORT_TEXT<<EOF'
+            python3 utils/process_bad_commit_report.py
+            echo EOF
+          } >> "$GITHUB_ENV"
+
+      - name: Prepare Slack report title
+        working-directory: /transformers
+        if: ${{ env.process == 'true' }}
+        run: |
+          pip install slack_sdk
+          echo "title=$(python3 -c 'import sys; sys.path.append("utils"); from utils.notification_service import job_to_test_map; ci_event = "${{ inputs.ci_event }}"; job = "${{ inputs.job }}"; test_name = job_to_test_map[job]; title = f"New failed tests of {ci_event}" + ":" + f" {test_name}"; print(title)')" >> $GITHUB_ENV
+
+      - name: Send processed report
+        if: ${{ env.process == 'true' && !endsWith(env.REPORT_TEXT, '{}') }}
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
+        with:
+          # Slack channel id, channel name, or user id to post message.
+          # See also: https://api.slack.com/methods/chat.postMessage#channels
+          channel-id: '#${{ inputs.slack_report_channel }}'
+          # For posting a rich message using Block Kit
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "${{ env.title }}"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "${{ env.REPORT_TEXT }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}

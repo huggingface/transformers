@@ -27,14 +27,11 @@ from ...integrations.deepspeed import is_deepspeed_available
 from ...modeling_outputs import ModelOutput
 from ...utils import (
     ContextManagers,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     is_scipy_available,
     logging,
-    replace_return_docstrings,
 )
-from .configuration_esm import EsmConfig
-from .modeling_esm import ESM_START_DOCSTRING, EsmModel, EsmPreTrainedModel
+from .modeling_esm import EsmModel, EsmPreTrainedModel
 from .openfold_utils import (
     OFProtein,
     Rigid,
@@ -52,8 +49,6 @@ from .openfold_utils import (
 
 
 logger = logging.get_logger(__name__)
-_CHECKPOINT_FOR_DOC = "facebook/esmfold_v1"
-_CONFIG_FOR_DOC = "EsmConfig"
 
 
 @dataclass
@@ -135,39 +130,6 @@ class EsmForProteinFoldingOutput(ModelOutput):
     aligned_confidence_probs: Optional[torch.FloatTensor] = None
     predicted_aligned_error: Optional[torch.FloatTensor] = None
     max_predicted_aligned_error: Optional[torch.FloatTensor] = None
-
-
-ESMFOLD_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        masking_pattern (`torch.LongTensor` of shape `({0})`, *optional*):
-            Locations of tokens to mask during training as a form of regularization. Mask values selected in `[0, 1]`.
-        num_recycles (`int`, *optional*, defaults to `None`):
-            Number of times to recycle the input sequence. If `None`, defaults to `config.num_recycles`. "Recycling"
-            consists of passing the output of the folding trunk back in as input to the trunk. During training, the
-            number of recycles should vary with each batch, to ensure that the model learns to output valid predictions
-            after each recycle. During inference, num_recycles should be set to the highest value that the model was
-            trained with for maximum accuracy. Accordingly, when this value is set to `None`, config.max_recycles is
-            used.
-"""
 
 
 def is_fp16_enabled():
@@ -2008,17 +1970,17 @@ class EsmFoldingTrunk(nn.Module):
 #      the outputs for downstream use.
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     ESMForProteinFolding is the HuggingFace port of the original ESMFold model. It consists of an ESM-2 "stem" followed
     by a protein folding "head", although unlike most other output heads, this "head" is similar in size and runtime to
     the rest of the model combined! It outputs a dictionary containing predicted structural information about the input
     protein(s).
-    """,
-    ESM_START_DOCSTRING,
+    """
 )
 class EsmForProteinFolding(EsmPreTrainedModel):
     _no_split_modules = ["EsmFoldStructureModule", "EsmFoldTriangularSelfAttentionBlock"]
+    _supports_flash_attn_2 = False
 
     def __init__(self, config):
         super().__init__(config)
@@ -2081,8 +2043,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         esm_reorder = [vocab_list.index("<pad>")] + [vocab_list.index(v) for v in residue_constants.restypes_with_x]
         return torch.tensor(esm_reorder)
 
-    @add_start_docstrings_to_model_forward(ESMFOLD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=EsmForProteinFoldingOutput, config_class=EsmConfig)
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -2090,9 +2051,18 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         masking_pattern: Optional[torch.Tensor] = None,
         num_recycles: Optional[int] = None,
+        output_hidden_states: Optional[bool] = False,
     ) -> EsmForProteinFoldingOutput:
         r"""
-        Returns:
+        masking_pattern (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Locations of tokens to mask during training as a form of regularization. Mask values selected in `[0, 1]`.
+        num_recycles (`int`, *optional*, defaults to `None`):
+            Number of times to recycle the input sequence. If `None`, defaults to `config.num_recycles`. "Recycling"
+            consists of passing the output of the folding trunk back in as input to the trunk. During training, the
+            number of recycles should vary with each batch, to ensure that the model learns to output valid predictions
+            after each recycle. During inference, num_recycles should be set to the highest value that the model was
+            trained with for maximum accuracy. Accordingly, when this value is set to `None`, config.max_recycles is
+            used.
 
         Example:
 

@@ -21,6 +21,8 @@
       title: Adding a new model to Transformers
     - local: modular_transformers
       title: Modular Transformers
+    - local: auto_docstring
+      title: Document your models
     - local: task_summary
       title: What 🤗 Transformers can do
     - local: tasks_explained
@@ -37,6 +39,8 @@
       title: Tokenizers
     - local: image_processors
       title: Image processors
+    - local: video_processors
+      title: Video processors
     - local: backbones
       title: Backbones
     - local: feature_extractors
@@ -72,12 +76,12 @@
       title: Prompt engineering
     - local: llm_optims
       title: Optimizing inference
+    - local: cache_explanation
+      title: Caching
     - local: kv_cache
       title: KV cache strategies
     - local: serving
       title: Serving
-    - local: cache_explanation
-      title: Caching
     - local: llm_tutorial_optimization
       title: Getting the most out of LLMs
     - local: perplexity
@@ -125,8 +129,8 @@
       title: Hyperparameter search
     title: Trainer API
   - sections:
-    - local: gpu_selection
-      title: GPU selection
+    - local: accelerator_selection
+      title: Accelerator selection
     - local: accelerate
       title: Accelerate
     - local: fsdp
@@ -149,6 +153,8 @@
       title: TPU
     - local: perf_train_special
       title: Apple Silicon
+    - local: perf_train_gaudi
+      title: Intel Gaudi
     - local: perf_hardware
       title: Build your own machine
     title: Hardware
@@ -358,7 +364,9 @@
       title: Feature Extractor
     - local: main_classes/image_processor
       title: Image Processor
-    title: Main classes
+    - local: main_classes/video_processor
+      title: Video Processor
+    title: Main Classes
   - sections:
     - sections:
       - local: model_doc/albert
@@ -378,13 +386,15 @@
       - local: model_doc/bert-japanese
         title: BertJapanese
       - local: model_doc/bertweet
-        title: Bertweet
+        title: BERTweet
       - local: model_doc/big_bird
         title: BigBird
       - local: model_doc/bigbird_pegasus
         title: BigBirdPegasus
       - local: model_doc/biogpt
         title: BioGpt
+      - local: model_doc/bitnet
+        title: BitNet
       - local: model_doc/blenderbot
         title: Blenderbot
       - local: model_doc/blenderbot-small
@@ -445,6 +455,8 @@
         title: Falcon
       - local: model_doc/falcon3
         title: Falcon3
+      - local: model_doc/falcon_h1
+        title: FalconH1
       - local: model_doc/falcon_mamba
         title: FalconMamba
       - local: model_doc/flan-t5
@@ -491,12 +503,16 @@
         title: Granite
       - local: model_doc/granitemoe
         title: GraniteMoe
+      - local: model_doc/granitemoehybrid
+        title: GraniteMoeHybrid
       - local: model_doc/granitemoeshared
         title: GraniteMoeShared
       - local: model_doc/helium
         title: Helium
       - local: model_doc/herbert
         title: HerBERT
+      - local: model_doc/hgnet_v2
+        title: HGNet-V2
       - local: model_doc/ibert
         title: I-BERT
       - local: model_doc/jamba
@@ -526,7 +542,7 @@
       - local: model_doc/mamba
         title: Mamba
       - local: model_doc/mamba2
-        title: mamba2
+        title: Mamba2
       - local: model_doc/marian
         title: MarianMT
       - local: model_doc/markuplm
@@ -689,6 +705,8 @@
         title: ConvNeXTV2
       - local: model_doc/cvt
         title: CvT
+      - local: model_doc/d_fine
+        title: D-FINE
       - local: model_doc/dab-detr
         title: DAB-DETR
       - local: model_doc/deformable_detr
@@ -815,6 +833,8 @@
         title: Bark
       - local: model_doc/clap
         title: CLAP
+      - local: model_doc/csm
+        title: CSM
       - local: model_doc/dac
         title: dac
       - local: model_doc/encodec
@@ -1015,6 +1035,8 @@
         title: Qwen2VL
       - local: model_doc/sam
         title: Segment Anything
+      - local: model_doc/sam_hq
+        title: Segment Anything High Quality
       - local: model_doc/shieldgemma2
         title: ShieldGemma2
       - local: model_doc/siglip
@@ -1099,4 +1121,9 @@
     - local: internal/time_series_utils
       title: Utilities for Time Series
     title: Internal helpers
+  - sections:
+    - local: reference/environment_variables
+      title: Environment Variables
+    title: Reference
   title: API
+

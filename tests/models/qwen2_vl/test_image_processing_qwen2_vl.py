@@ -21,7 +21,7 @@ import requests
 from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.models.qwen2_vl.image_processing_qwen2_vl import smart_resize
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs, prepare_video_inputs
 
@@ -34,8 +34,8 @@ if is_vision_available():
 
     from transformers import Qwen2VLImageProcessor
 
-    if is_torchvision_available():
-        from transformers import Qwen2VLImageProcessorFast
+    # if is_torchvision_available():
+    #     from transformers import Qwen2VLImageProcessorFast
 
 
 class Qwen2VLImageProcessingTester:
@@ -118,7 +118,7 @@ class Qwen2VLImageProcessingTester:
 @require_vision
 class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Qwen2VLImageProcessor if is_vision_available() else None
-    fast_image_processing_class = Qwen2VLImageProcessorFast if is_torchvision_available() else None
+    # fast_image_processing_class = Qwen2VLImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -311,6 +311,24 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             prcocess_out = image_processor_loaded(image_inputs, return_tensors="pt")
             expected_output_video_shape = [112, 1176]
             self.assertListEqual(list(prcocess_out.pixel_values.shape), expected_output_video_shape)
+
+    def test_temporal_padding(self):
+        for image_processing_class in self.image_processor_list:
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # Create random video inputs with a number of frames not divisible by temporal_patch_size
+            image_processor_tester = Qwen2VLImageProcessingTester(self, num_frames=5, temporal_patch_size=4)
+            video_inputs = image_processor_tester.prepare_video_inputs(equal_resolution=True)
+
+            # Process the video inputs
+            process_out = image_processing(None, videos=video_inputs, return_tensors="pt")
+            encoded_video = process_out.pixel_values_videos
+
+            # Check the shape after padding
+            expected_output_video_shape = (102900, 1176)  # Adjusted based on padding
+            self.assertEqual(tuple(encoded_video.shape), expected_output_video_shape)
+            # Check divisibility by temporal_patch_size
+            self.assertEqual(encoded_video.shape[0] % 4, 0)
 
     @require_vision
     @require_torch

@@ -283,7 +283,7 @@ class HqqConfig(QuantizationConfigMixin):
         nbits (`int`, *optional*, defaults to 4):
             Number of bits. Supported values are (8, 4, 3, 2, 1).
         group_size (`int`, *optional*, defaults to 64):
-            Group-size value. Supported values are any value that is divisble by weight.shape[axis]).
+            Group-size value. Supported values are any value that is divisible by weight.shape[axis]).
         view_as_float (`bool`, *optional*, defaults to `False`):
             View the quantized weight as float (used in distributed training) if set to `True`.
         axis (`Optional[int]`, *optional*):
@@ -661,7 +661,7 @@ class GPTQConfig(QuantizationConfigMixin):
             Whether to quantize columns in order of decreasing activation size. Setting it to False can significantly
             speed up inference but the perplexity may become slightly worse. Also known as act-order.
         sym (`bool`, *optional*, defaults to `True`):
-            Whether to use symetric quantization.
+            Whether to use symmetric quantization.
         true_sequential (`bool`, *optional*, defaults to `True`):
             Whether to perform sequential quantization even within a single Transformer block. Instead of quantizing
             the entire block at once, we perform layer-wise quantization. As a result, each layer undergoes
@@ -1120,7 +1120,7 @@ class VptqLayerConfig(QuantizationConfigMixin):
         group_size (`int`, *optional*, defaults to `-1`): depends on out-features
         indices_as_float (`bool`, *optional*, defaults to `False`): for Finetuning
         is_indice_packed (`bool`, *optional*, defaults to `True`): should always be True
-        num_centroids (`list`, *optional*, defaults to `[-1, -1]`): centriod numbers of clusters
+        num_centroids (`list`, *optional*, defaults to `[-1, -1]`): centroid numbers of clusters
         num_res_centroids (`list`, *optional*, defaults to `[-1, -1]`): ditto for residual
         outlier_size (`int`, *optional*, defaults to `1`): outliers
         vector_lens (`list`, *optional*, defaults to `[-1, -1]`): centroid vector length in quantization
@@ -1308,13 +1308,13 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
     def __init__(
         self,
-        config_groups: Dict[str, Union["QuantizationScheme", List[str]]] = None,  # noqa: F821
+        config_groups: Optional[Dict[str, Union["QuantizationScheme", List[str]]]] = None,  # noqa: F821
         format: str = "dense",
         quantization_status: "QuantizationStatus" = "initialized",  # noqa: F821
         kv_cache_scheme: Optional["QuantizationArgs"] = None,  # noqa: F821
         global_compression_ratio: Optional[float] = None,
         ignore: Optional[List[str]] = None,
-        sparsity_config: Dict[str, Any] = None,
+        sparsity_config: Optional[Dict[str, Any]] = None,
         quant_method: str = "compressed-tensors",
         run_compressed: bool = True,
         **kwargs,
@@ -1357,13 +1357,15 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
     def post_init(self):
         if self.run_compressed:
             if self.is_sparsification_compressed:
-                logger.warn(
+                logger.warning(
                     "`run_compressed` is only supported for quantized_compressed models"
                     " and not for sparsified models. Setting `run_compressed=False`"
                 )
                 self.run_compressed = False
             elif not self.is_quantization_compressed:
-                logger.warn("`run_compressed` is only supported for compressed models. Setting `run_compressed=False`")
+                logger.warning(
+                    "`run_compressed` is only supported for compressed models. Setting `run_compressed=False`"
+                )
                 self.run_compressed = False
 
     @classmethod
@@ -1403,12 +1405,12 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         """
         quantization_config = {}
         if self.quantization_config is not None:
-            quantization_config = self.quantization_config.dict()
+            quantization_config = self.quantization_config.model_dump()
         else:
             quantization_config["quant_method"] = QuantizationMethod.COMPRESSED_TENSORS
 
         if self.sparsity_config is not None:
-            quantization_config["sparsity_config"] = self.sparsity_config.dict()
+            quantization_config["sparsity_config"] = self.sparsity_config.model_dump()
         else:
             quantization_config["sparsity_config"] = {}
 
@@ -1554,6 +1556,8 @@ class TorchAoConfig(QuantizationConfigMixin):
     quant_type: Union[str, "AOBaseConfig"]  # noqa: F821
     modules_to_not_convert: Optional[List]
     quant_type_kwargs: Dict[str, Any]
+    include_input_output_embeddings: bool
+    untie_embedding_weights: bool
 
     """This is a config class for torchao quantization/sparsity techniques.
 
@@ -1565,6 +1569,12 @@ class TorchAoConfig(QuantizationConfigMixin):
         modules_to_not_convert (`list`, *optional*, default to `None`):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
+        inlcude_embedding (`bool`, default to `False`):
+            Whether to include embedding in quantization or not, input embedding will be removed from
+            the module_not_to_convert list as well if this flag is set.
+        untie_embedding_weights (`bool`, default to `False`):
+            Whether to untie the weights when we are quantizing input embedding weights that is tied
+            to other weights.
         kwargs (`Dict[str, Any]`, *optional*):
             The keyword arguments for the chosen type of quantization, for example, int4_weight_only quantization supports two keyword arguments
             `group_size` and `inner_k_tiles` currently. More API examples and documentation of arguments can be found in
@@ -1609,12 +1619,16 @@ class TorchAoConfig(QuantizationConfigMixin):
         self,
         quant_type: Union[str, "AOBaseConfig"],  # noqa: F821
         modules_to_not_convert: Optional[List] = None,
+        include_input_output_embeddings: bool = False,
+        untie_embedding_weights: bool = False,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.TORCHAO
         self.quant_type = quant_type
         self.modules_to_not_convert = modules_to_not_convert
         self.quant_type_kwargs = kwargs.get("quant_type_kwargs", kwargs)
+        self.include_input_output_embeddings = include_input_output_embeddings
+        self.untie_embedding_weights = untie_embedding_weights
         self.post_init()
 
     @staticmethod
@@ -1699,9 +1713,23 @@ class TorchAoConfig(QuantizationConfigMixin):
                 and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0")
                 and quant_type_kwargs.get("layout", None) is None
             ):
-                from torchao.dtypes import Int4CPULayout
+                if torch.xpu.is_available():
+                    if version.parse(importlib.metadata.version("torchao")) >= version.parse(
+                        "0.11.0"
+                    ) and version.parse(importlib.metadata.version("torch")) > version.parse("2.7.9"):
+                        from torchao.dtypes import Int4XPULayout
+                        from torchao.quantization.quant_primitives import ZeroPointDomain
 
-                quant_type_kwargs["layout"] = Int4CPULayout()
+                        quant_type_kwargs["layout"] = Int4XPULayout()
+                        quant_type_kwargs["zero_point_domain"] = ZeroPointDomain.INT
+                    else:
+                        raise ValueError(
+                            "TorchAoConfig requires torchao >= 0.11.0 and torch >= 2.8.0 for XPU support. Please upgrade the version or use run on CPU with the cpu version pytorch."
+                        )
+                else:
+                    from torchao.dtypes import Int4CPULayout
+
+                    quant_type_kwargs["layout"] = Int4CPULayout()
 
             return methods[self.quant_type](**quant_type_kwargs)
         else:
@@ -1720,7 +1748,7 @@ class TorchAoConfig(QuantizationConfigMixin):
                         dataclasses.asdict(d["quant_type_kwargs"]["layout"]),
                     ]
                 if isinstance(d["quant_type_kwargs"]["layout"], list):
-                    assert len(d["quant_type_kwargs"]["layout"]) == 2, "layout saves layout name and layour kwargs"
+                    assert len(d["quant_type_kwargs"]["layout"]) == 2, "layout saves layout name and layout kwargs"
                     assert isinstance(d["quant_type_kwargs"]["layout"][0], str), "layout name must be a string"
                     assert isinstance(d["quant_type_kwargs"]["layout"][1], dict), "layout kwargs must be a dict"
                 else:
@@ -1729,7 +1757,7 @@ class TorchAoConfig(QuantizationConfigMixin):
             # Handle AOBaseConfig serialization
             from torchao.core.config import config_to_dict
 
-            # For now we assume there is 1 config per Transfomer, however in the future
+            # For now we assume there is 1 config per Transformer, however in the future
             # We may want to support a config per fqn.
             d["quant_type"] = {"default": config_to_dict(self.quant_type)}
 
@@ -1761,14 +1789,53 @@ class TorchAoConfig(QuantizationConfigMixin):
 
 
 @dataclass
-class BitNetConfig(QuantizationConfigMixin):
+class BitNetQuantConfig(QuantizationConfigMixin):
+    """
+    Configuration class for applying BitNet quantization.
+
+    Args:
+        modules_to_not_convert (`Optional[List]`, *optional*):
+            Optionally, provides a list of full paths of `nn.Linear` weight parameters
+            that shall not be quantized. Defaults to None.
+        linear_class (`str`, *optional*, defaults to `"bitlinear"`):
+            The type of linear class to use. Can be either `bitlinear` or `autobitlinear`.
+        quantization_mode (`str`, *optional*, defaults to `"offline"`):
+            The quantization mode to use. Can be either `online` or `offline`.
+            In `online` mode, the weight quantization parameters are calculated dynamically
+            during each forward pass (e.g., based on the current weight values). This can
+            adapt to weight changes during training (Quantization-Aware Training - QAT).
+            In `offline` mode, quantization parameters are pre-calculated *before* inference.
+            These parameters are then fixed and loaded into the quantized model. This
+            generally results in lower runtime overhead compared to online quantization.
+        use_rms_norm (`bool`, *optional*, defaults to `False`):
+            Whether to apply RMSNorm on the activations before quantization. This matches the original BitNet paper's approach
+            of normalizing activations before quantization/packing.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon value used in the RMSNorm layer for numerical stability.
+        kwargs (`Dict[str, Any]`, *optional*):
+            Additional keyword arguments that may be used by specific quantization
+            backends or future versions.
+    """
+
     def __init__(
         self,
         modules_to_not_convert: Optional[List] = None,
+        linear_class: Optional[str] = "bitlinear",
+        quantization_mode: Optional[str] = "offline",
+        use_rms_norm: Optional[bool] = False,
+        rms_norm_eps: Optional[float] = 1e-6,
         **kwargs,
     ):
+        if linear_class not in ["bitlinear", "autobitlinear"]:
+            raise ValueError(f"linear_class must be either 'bitlinear' or 'autobitlinear', but got {linear_class}")
+        if quantization_mode not in ["online", "offline"]:
+            raise ValueError(f"quantization_mode must be either 'online' or 'offline', but got {quantization_mode}")
         self.quant_method = QuantizationMethod.BITNET
         self.modules_to_not_convert = modules_to_not_convert
+        self.linear_class = linear_class
+        self.quantization_mode = quantization_mode
+        self.use_rms_norm = use_rms_norm
+        self.rms_norm_eps = rms_norm_eps
         self.post_init()
 
     def post_init(self):

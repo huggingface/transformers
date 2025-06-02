@@ -326,7 +326,7 @@ class TFMistralAttention(keras.layers.Layer):
         )
 
         if past_key_value is not None:
-            # resue k, v, self_attention
+            # reuse k, v, self_attention
             key_states = tf.concat([past_key_value[0], key_states], axis=2)
             value_states = tf.concat([past_key_value[1], value_states], axis=2)
 
