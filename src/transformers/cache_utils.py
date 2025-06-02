@@ -12,8 +12,6 @@ from packaging import version
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_6
 
 from .configuration_utils import PretrainedConfig
-
-# For backwards compatibility
 from .utils import is_hqq_available, is_optimum_quanto_available, is_torch_greater_or_equal, logging
 
 
