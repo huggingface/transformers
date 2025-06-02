@@ -18,7 +18,6 @@ from typing import Callable, Optional, Tuple, Union
 
 import torch
 from torch import nn
-from torch.nn import RMSNorm
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
@@ -275,6 +274,74 @@ class DiaPreTrainedModel(PreTrainedModel):
         return encoder_attention_mask
 
 
+class DiaMultiChannelEmbedding(nn.Module):
+    """In order to efficiently compute the audio embedding from the 9 different channels,
+    we vectorize the embedding process by using a single embedding layer and an offset.
+    Example:
+    - num_embeds = 4
+    - vocab_size = 8
+    - num_channels = 3
+    We would have offsets = [0, 8, 16]
+    If audio_codes = [0, 1, 2, 3], [1, 3, 4, 7], [5, 6, 7, 8],
+    then tokens = audio_codes + offsets
+                = [0, 1, 2, 3, 9, 11, 12, 15, 21, 22, 23, 24]
+    This allows us to use a single embedding layer for all channels.
+    """
+
+    def __init__(self, config: DiaConfig):
+        super().__init__()
+        self.embed = nn.Embedding(config.vocab_size * config.num_channels, config.hidden_size)
+        self.hidden_size = config.hidden_size
+        self.num_channels = config.num_channels
+        offsets = torch.arange(config.num_channels, dtype=torch.long) * config.vocab_size  # (C,)
+        self.register_buffer("offsets", offsets, persistent=False)
+
+    def forward(self, audio_codes: torch.Tensor) -> torch.Tensor:
+        tokens = (audio_codes + self.offsets.to(audio_codes.device)).squeeze(1)
+        embeds = self.embed(tokens).view(tokens.shape[0], audio_codes.shape[1], -1, self.hidden_size)
+        return embeds.sum(dim=2)
+
+
+# Copied from transformers.models.phi3.modular_phi3.Phi3MLP with Phi3->Dia
+class DiaMLP(nn.Module):  # Modular GlmMLP
+    def __init__(self, config):
+        super().__init__()
+
+        self.config = config
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+        self.activation_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
+        up_states = self.gate_up_proj(hidden_states)
+
+        gate, up_states = up_states.chunk(2, dim=-1)
+        up_states = up_states * self.activation_fn(gate)
+
+        return self.down_proj(up_states)
+
+
+# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Dia
+class DiaRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        LlamaRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
 def apply_rotary_pos_emb(tensor, position_embeddings, unsqueeze_dim=1):
     cos = position_embeddings[0]
     sin = position_embeddings[1]
@@ -326,7 +393,7 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
-    scaling: float,
+    scaling: Optional[float],
     **kwargs,
 ):
     if scaling is None:
@@ -334,9 +401,6 @@ def eager_attention_forward(
 
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
-
-    key_states = repeat_kv(key, query.shape[1] // key.shape[1])
-    value_states = repeat_kv(value, query.shape[1] // key.shape[1])
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
@@ -485,9 +549,9 @@ class DiaCrossAttention(nn.Module):
 class DiaEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DiaEncoderConfig, layer_idx):
         super().__init__()
-        self.pre_sa_norm = RMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.pre_sa_norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
         self.self_attention = DiaSelfAttention(config, layer_idx, is_causal=False)
-        self.post_sa_norm = RMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.post_sa_norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
         self.mlp = DiaMLP(config)
 
     def forward(
@@ -528,11 +592,7 @@ class DiaEncoder(DiaPreTrainedModel):
         self.layers = nn.ModuleList(
             [DiaEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = RMSNorm(
-            config.hidden_size,
-            eps=config.norm_eps,
-            dtype=torch.float32,
-        )
+        self.norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
         self.rotary_embeddings = DiaRotaryEmbedding(config)
 
     def forward(
@@ -588,42 +648,15 @@ class DiaEncoder(DiaPreTrainedModel):
         )
 
 
-class DiaMLP(nn.Module):  # Modular GlmMLP
-    def __init__(self, config):
-        super().__init__()
-
-        self.config = config
-        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
-        self.activation_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
-        up_states = self.gate_up_proj(hidden_states)
-
-        gate, up_states = up_states.chunk(2, dim=-1)
-        up_states = up_states * self.activation_fn(gate)
-
-        return self.down_proj(up_states)
-
-
 class DiaDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DiaDecoderConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attention = DiaSelfAttention(config, layer_idx, is_causal=True)
         self.cross_attention = DiaCrossAttention(config, layer_idx)
-        self.pre_sa_norm = RMSNorm(
-            config.hidden_size,
-            eps=config.norm_eps,
-        )
-        self.pre_ca_norm = RMSNorm(
-            config.hidden_size,
-            eps=config.norm_eps,
-        )
-        self.pre_mlp_norm = RMSNorm(
-            config.hidden_size,
-            eps=config.norm_eps,
-        )
+        self.pre_sa_norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.pre_ca_norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.pre_mlp_norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
         self.mlp = DiaMLP(config)
 
     def forward(
@@ -671,34 +704,6 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         return hidden_states, self_attn_weights, cross_attn_weights
 
 
-class DiaMultiChannelEmbedding(nn.Module):
-    """In order to efficiently compute the audio embedding from the 9 different channels,
-    we vectorize the embedding process by using a single embedding layer and an offset.
-    Example:
-    - num_embeds = 4
-    - vocab_size = 8
-    - num_channels = 3
-    We would have offsets = [0, 8, 16]
-    If audio_codes = [0, 1, 2, 3], [1, 3, 4, 7], [5, 6, 7, 8],
-    then tokens = audio_codes + offsets
-                = [0, 1, 2, 3, 9, 11, 12, 15, 21, 22, 23, 24]
-    This allows us to use a single embedding layer for all channels.
-    """
-
-    def __init__(self, config: DiaConfig):
-        super().__init__()
-        self.embed = nn.Embedding(config.vocab_size * config.num_channels, config.hidden_size)
-        self.hidden_size = config.hidden_size
-        self.num_channels = config.num_channels
-        offsets = torch.arange(config.num_channels, dtype=torch.long) * config.vocab_size  # (C,)
-        self.register_buffer("offsets", offsets, persistent=False)
-
-    def forward(self, audio_codes: torch.Tensor) -> torch.Tensor:
-        tokens = (audio_codes + self.offsets.to(audio_codes.device)).squeeze(1)
-        embeds = self.embed(tokens).view(tokens.shape[0], audio_codes.shape[1], -1, self.hidden_size)
-        return embeds.sum(dim=2)
-
-
 class DiaDecoder(DiaPreTrainedModel):
     """Transformer Decoder Stack using DenseGeneral."""
 
@@ -711,7 +716,7 @@ class DiaDecoder(DiaPreTrainedModel):
         self.layers = nn.ModuleList(
             [DiaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = RMSNorm(config.hidden_size, eps=config.norm_eps)
+        self.norm = DiaRMSNorm(config.hidden_size, eps=config.norm_eps)
 
     def forward(
         self,
