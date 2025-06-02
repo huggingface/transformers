@@ -73,7 +73,7 @@ class DiaDecoderConfig(PretrainedConfig):
         head_dim=128,
         cross_num_attention_heads=16,
         cross_head_dim=128,
-        cross_num_key_value_heads=8,
+        cross_num_key_value_heads=16,
         cross_hidden_size=1024,
         norm_eps=1e-5,
         vocab_size=1028,
@@ -93,6 +93,7 @@ class DiaDecoderConfig(PretrainedConfig):
         self.cross_num_key_value_heads = cross_num_key_value_heads
         self.cross_num_attention_heads = cross_num_attention_heads
         self.cross_head_dim = cross_head_dim
+        self.cross_hidden_size=cross_hidden_size
         self.norm_eps = norm_eps
         self.vocab_size = vocab_size
         self.dropout = dropout

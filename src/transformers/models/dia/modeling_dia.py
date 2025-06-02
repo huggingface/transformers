@@ -421,14 +421,14 @@ class DiaCrossAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.dropout = config.dropout
         self.hidden_size = config.hidden_size
+        self.cross_hidden_size = config.cross_hidden_size
         self.head_dim = config.cross_head_dim
         self.layer_idx = layer_idx
         self.scaling = 1
         self.is_causal = False
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
-        # TODO: fix projections' shape of kv
-        self.k_proj = nn.Linear(self.num_key_value_heads * self.head_dim, self.hidden_size, bias=False)
-        self.v_proj = nn.Linear(self.num_key_value_heads * self.head_dim, self.hidden_size, bias=False)
+        self.k_proj = nn.Linear(self.cross_hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(self.cross_hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
     def forward(
