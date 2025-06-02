@@ -154,6 +154,7 @@ def openai_flex_attention_forward(
     def attention_sink(score, b, h, q_idx, kv_idx):
         score = torch.cat([score, sinks], dim=-1)
         return score
+
     # TODO I need to remove the -1 sinks
     return flex_attention_forward(
         module,

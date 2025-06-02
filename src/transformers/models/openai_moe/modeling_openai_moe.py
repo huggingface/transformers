@@ -33,7 +33,8 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...integrations.flex_attention import flex_attention_forward
+from ...masking_utils import create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -83,9 +84,10 @@ class OpenaiExperts(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, router_indices = None, routing_weights=None) -> torch.Tensor:
         """
-        This should really not be run on a single machine, as we are reaching compute bound:
-        - the inputs are expected to be "sorted" per expert already.
-        - the weights are viewed with another dim, to match num_expert, 1, shape * num_tokens, shape
+        When training is is more efficient to just loop over the experts and compute the output for each expert
+        as otherwise the memory would explode. 
+
+        For inference we can sacrifice some memory and compute the output for all experts at once. By repeating the inputs.
 
         Args:
             hidden_states (torch.Tensor): (batch_size * token_num, hidden_size)
@@ -94,34 +96,32 @@ class OpenaiExperts(nn.Module):
         Returns:
             torch.Tensor
         """
-        # hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
-        final_hidden_states = torch.zeros_like(
-            hidden_states, dtype=hidden_states.dtype, device=hidden_states.device
-        )
-
-        # One hot encode the selected experts to create an expert mask
-        # this will be used to easily index which expert is going to be sollicitated
-        expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=self.num_experts).permute(2, 1, 0)
-
-        expert_hitted = (expert_mask.sum(dim=(-1, -2)) > 0).nonzero(as_tuple=True)[0].tolist()
-        for expert_idx in expert_hitted:
-            idx, top_x = torch.where(expert_mask[expert_idx])  # idx: top-1/top-2 indicator, top_x: token indices
-            current_state = hidden_states[top_x]  # (num_tokens, hidden_dim)
-            gate_up = current_state @ self.gate_up_proj[expert_idx] + self.gate_up_proj_bias[expert_idx]  # (num_tokens, 2 * interm_dim)
-            gate, up = gate_up.chunk(2, dim=-1)  # (num_tokens, interm_dim)
-            glu = gate * torch.sigmoid(gate * self.alpha)  # (num_tokens, interm_dim)
-            gated_output = (up + 1) * glu  # (num_tokens, interm_dim)
-            out = gated_output @ self.down_proj[expert_idx] + self.down_proj_bias[expert_idx]  # (num_tokens, hidden_dim)
-            weighted_output = out * routing_weights[top_x, idx].unsqueeze(-1)  # (num_tokens, hidden_dim)
-            final_hidden_states.index_add_(0, top_x, weighted_output.to(hidden_states.dtype))
-        return final_hidden_states
-    
-
-        gate_up = torch.bmm(hidden_states, self.gate_up_proj[router_indices, ...]) + self.gate_up_proj_bias[router_indices, ...,None, :]
-        gate, up = gate_up.chunk(2, dim=-1)  # not supported for DTensors
-        glu = gate * self.act_fn(gate * self.alpha)
-        next_states = torch.bmm(((up + 1) * glu), self.down_proj[router_indices, ...]) + self.down_proj_bias[router_indices, ..., None, :]
-        next_states = next_states.view(-1, self.hidden_size)
+        if self.training:
+            next_states = torch.zeros_like(
+                hidden_states, dtype=hidden_states.dtype, device=hidden_states.device
+            )
+            with torch.no_grad():
+                expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=self.num_experts).permute(2, 1, 0)
+                expert_hitted = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+            for expert_idx in expert_hitted:
+                with torch.no_grad():
+                    idx, top_x = torch.where(expert_mask[expert_idx][0])  # idx: top-1/top-2 indicator, top_x: token indices
+                current_state = hidden_states[top_x]  # (num_tokens, hidden_dim)
+                gate_up = current_state @ self.gate_up_proj[expert_idx] + self.gate_up_proj_bias[expert_idx]  # (num_tokens, 2 * interm_dim)
+                gate, up = gate_up.chunk(2, dim=-1)  # (num_tokens, interm_dim)
+                glu = gate * torch.sigmoid(gate * self.alpha)  # (num_tokens, interm_dim)
+                gated_output = (up + 1) * glu  # (num_tokens, interm_dim)
+                out = gated_output @ self.down_proj[expert_idx] + self.down_proj_bias[expert_idx]  # (num_tokens, hidden_dim)
+                weighted_output = out * routing_weights[top_x, idx, None]  # (num_tokens, hidden_dim) 
+                next_states.index_add_(0, top_x, weighted_output.to(hidden_states.dtype)[0])
+        else:
+            hidden_states = hidden_states.repeat(self.num_experts, 1)
+            hidden_states = hidden_states.view(self.num_experts, -1, self.hidden_size)
+            gate_up = torch.bmm(hidden_states, self.gate_up_proj) + self.gate_up_proj_bias[..., None, :]
+            gate, up = gate_up.chunk(2, dim=-1)  # not supported for DTensors
+            glu = gate * torch.sigmoid(gate * self.alpha)
+            next_states = torch.bmm(((up + 1) * glu), self.down_proj) + self.down_proj_bias[..., None, :]
+            next_states = next_states.view(-1, self.hidden_size)
         return next_states
 
 
@@ -145,12 +145,13 @@ class OpenaiMLP(nn.Module):
         router_scores = (
             torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value).transpose(0, 1)
         )
-        # routed_in = hidden_states.repeat(self.num_local_experts, 1)
         routed_out = self.experts(hidden_states, router_indices, router_top_value)
-        routed_out = routed_out.view(batch_size, -1, self.hidden_dim)
-        # routed_out = routed_out.view(self.num_local_experts, -1, self.hidden_dim) * router_scores[..., None]
-        # output_states = routed_out.view(self.num_local_experts, batch_size, -1, self.hidden_dim).sum(dim=0)
-        return routed_out, router_scores
+        if self.training:
+            output_states =  routed_out.view(batch_size, -1, self.hidden_dim)
+        else:
+            routed_out = routed_out.view(self.num_local_experts, -1, self.hidden_dim) * router_scores[..., None]
+            output_states = routed_out.view(self.num_local_experts, batch_size, -1, self.hidden_dim).sum(dim=0)
+        return output_states, router_scores
 
 
 class OpenaiRotaryEmbedding(nn.Module):
@@ -158,7 +159,8 @@ class OpenaiRotaryEmbedding(nn.Module):
     def __init__(self, config: OpenaiConfig, device=None):
         super().__init__()
         self.attention_scaling = 1.0
-        inv_freq = 1.0 / (config.rope_theta ** ( torch.arange(0, config.head_dim, 2, dtype=torch.float32)/ config.head_dim))
+        with torch.device("cpu"):
+            inv_freq = 1.0 / (config.rope_theta ** ( torch.arange(0, config.head_dim, 2, dtype=torch.float32)/ config.head_dim))
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
@@ -169,7 +171,6 @@ class OpenaiRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        self.inv_freq = 1.0 / (self.config.rope_theta ** ( torch.arange(0, self.config.head_dim, 2, dtype=torch.float32, device=x.device)/ self.config.head_dim))
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
 
@@ -236,6 +237,41 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def openai_flex_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    sinks = module.sinks.view(1, -1, 1, 1).expand(-1, -1, key.shape[-2],-1)
+
+    def attention_sink(score, b, h, q_idx, kv_idx):
+        score = torch.cat([score, sinks], dim=-1)
+        return score
+
+    # TODO I need to remove the -1 sinks
+    return flex_attention_forward(
+        module,
+        query,
+        key,
+        value,
+        attention_mask,
+        scaling=scaling,
+        dropout=dropout,
+        attention_sink=attention_sink,
+        score_mod=attention_sink,
+        **kwargs,
+    )
+
+
+ALL_ATTENTION_FUNCTIONS.register("openai_flex_attention", openai_flex_attention_forward)
+
+
+
 class OpenaiAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -261,7 +297,7 @@ class OpenaiAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.register_buffer("sinks", torch.empty(config.num_attention_heads), persistent=True)
+        self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
 
     def forward(
         self,
@@ -466,8 +502,7 @@ class OpenaiModel(OpenaiPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
-        causal_mask = mask_function(
+        causal_mask = create_sliding_window_causal_mask(
             config=self.config,
             input_embeds=inputs_embeds,
             attention_mask=attention_mask,

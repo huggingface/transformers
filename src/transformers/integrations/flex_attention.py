@@ -292,7 +292,7 @@ def flex_attention_forward(
         training=module.training,
     )
     # lse is returned in float32
-    attention_weights = attention_weights.to(value.dtype)
+    attention_weights = attention_weights.to(value.dtype)[:, :, :, : key.shape[-2]] # potential sink
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attention_weights
