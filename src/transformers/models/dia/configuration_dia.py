@@ -39,7 +39,6 @@ class DiaEncoderConfig(PretrainedConfig):
         intermediate_size=4096,
         norm_eps=1e-5,
         vocab_size=256,
-        dropout=0,
         hidden_act="silu",
         rope_min_timescale=1,
         rope_max_timescale=10_000,
@@ -53,7 +52,6 @@ class DiaEncoderConfig(PretrainedConfig):
         self.norm_eps = norm_eps
         self.vocab_size = vocab_size
         self.num_key_value_heads = num_key_value_heads
-        self.dropout = dropout
         self.hidden_act = hidden_act
         self.rope_min_timescale = rope_min_timescale
         self.rope_max_timescale = rope_max_timescale
@@ -77,7 +75,6 @@ class DiaDecoderConfig(PretrainedConfig):
         cross_hidden_size=1024,
         norm_eps=1e-5,
         vocab_size=1028,
-        dropout=0,
         hidden_act="silu",
         num_channels=9,
         rope_min_timescale=1,
@@ -96,7 +93,6 @@ class DiaDecoderConfig(PretrainedConfig):
         self.cross_hidden_size=cross_hidden_size
         self.norm_eps = norm_eps
         self.vocab_size = vocab_size
-        self.dropout = dropout
         self.hidden_act = hidden_act
         self.num_channels = num_channels
         self.rope_min_timescale = rope_min_timescale
