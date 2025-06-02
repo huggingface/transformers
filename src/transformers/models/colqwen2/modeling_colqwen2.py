@@ -42,7 +42,6 @@ class ColQwen2PreTrainedModel(PreTrainedModel):
     _no_split_modules = []
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _supports_flex_attn = True
     _supports_cache_class = True
 
     def _init_weights(self, module):
@@ -215,7 +214,8 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
 
         # L2 normalization
         embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)  # (batch_size, sequence_length, dim)
-        embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
+        if attention_mask is not None:
+            embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
 
         return ColQwen2ForRetrievalOutput(
             embeddings=embeddings,
