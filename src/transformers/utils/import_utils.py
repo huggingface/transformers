@@ -1814,7 +1814,7 @@ You can install the latest version with:
 ```
 pip install bitsandbytes
 ```
-Please note that you may need to restart your runtime after installation.
+If you are using a Jupyter notebook or Google Colab, you may need to restart the kernel/runtime after installation.
 """
 
 BACKENDS_MAPPING = OrderedDict(
