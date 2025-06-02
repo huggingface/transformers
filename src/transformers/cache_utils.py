@@ -17,6 +17,10 @@ from .utils import is_hqq_available, is_optimum_quanto_available, is_torch_great
 if is_hqq_available():
     from hqq.core.quantize import Quantizer as HQQQuantizer
 
+# For backwards compatibility
+from .models.mamba.cache_mamba import MambaCache  # noqa: F401
+
+
 logger = logging.get_logger(__name__)
 
 
