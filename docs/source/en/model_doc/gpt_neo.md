@@ -101,7 +101,7 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 ## Notes
 
-- Pad inputs on the right because GPT Neo uses absolute position embeddings.
+- Pad inputs on the right because GPT-Neo uses absolute position embeddings.
 
 ## GPTNeoConfig
 
