@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 ## GPT-Neo
 
-[GPTNeo](https://zenodo.org/records/5297715) is an open-source alternative to GPT-3, designed by EleutherAI to bring large-scale language modeling to the public. It’s based on the GPT-2 architecture, but with a twist — every other layer uses local attention (with a 256-token window), which helps it handle longer contexts more efficiently.
+[GPT-Neo](https://zenodo.org/records/5297715) is an open-source alternative to GPT-2 and GPT-3 models, built with Mesh TensorFlow for TPUs. GPT-Neo uses local attention in every other layer for more efficiency. It is trained on the [Pile](https://huggingface.co/datasets/EleutherAI/pile), a diverse dataset consisting of 22 smaller high-quality datasets.
 
 
 You can find all the original GPT Neo checkpoints under the [EleutherAI](https://huggingface.co/EleutherAI?search_models=gpt-neo) organization.
