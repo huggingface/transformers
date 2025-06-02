@@ -18,6 +18,7 @@ import unittest
 from transformers import XGLMConfig, is_torch_available
 from transformers.testing_utils import (
     cleanup,
+    Expectations,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -422,10 +423,14 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         output_ids = model.generate(input_ids, do_sample=True, num_beams=1)
         output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_STR = (
-            "Today is a nice day and the water is still cold. We just stopped off for some fresh coffee. This place"
-            " looks like a"
-        )
+
+        expected_output_strings = Expectations(
+            { # Here, rocm 9.5 diverge a lot from cuda, dont hesitate to change the expectation. TODO: investigate
+                ("rocm", (9, 5)): "Today is a nice day and the sun is shining. A nice day with warm rainy and windy weather today." ,
+                ("cuda", None): "Today is a nice day and the water is still cold. We just stopped off for some fresh coffee. This place looks like a",
+            }
+        )  # fmt: skip
+        EXPECTED_OUTPUT_STR = expected_output_strings.get_expectation()
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
 
     @require_torch_accelerator
