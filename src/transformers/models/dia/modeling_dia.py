@@ -297,16 +297,14 @@ class DiaRotaryEmbedding(nn.Module):
     @torch.no_grad()
     def forward(self, x, position_ids):
         position_ids_expanded = position_ids[:, :, None, None].float().repeat(x.shape[0], 1, 1, 1)
-        half_embedding_dim = self.embedding_dims // 2
-        fraction = (2.0 * torch.arange(0, half_embedding_dim)) / self.embedding_dims
-        freqs = (self.min_timescale * (self.max_timescale / self.min_timescale) ** fraction).to(torch.float32)
-
-        full_freqs = position_ids_expanded.float() / freqs.to(position_ids_expanded.device)
+        full_freqs = position_ids_expanded.float() / self.freqs.to(
+            device=position_ids_expanded.device, dtype=position_ids_expanded.dtype
+        )
         cos, sin = full_freqs.cos(), full_freqs.sin()
         return cos, sin
 
 
-# TODO: copy from llama
+# Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -328,13 +326,18 @@ def eager_attention_forward(
     scaling: float,
     **kwargs,
 ):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
     key_states = repeat_kv(key, query.shape[1] // key.shape[1])
     value_states = repeat_kv(value, query.shape[1] // key.shape[1])
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask[:, :, :, : key_states.shape[-2]]
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_output = torch.matmul(attn_weights, value_states)
@@ -346,11 +349,12 @@ def eager_attention_forward(
 class DiaSelfAttention(nn.Module):  # Modular : LlamaAttentions
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config, layer_idx: int, is_causal: bool = False):
+    def __init__(self, config: Union[DiaEncoderConfig, DiaDecoderConfig], layer_idx: int, is_causal: bool = False):
         super().__init__()
         self.config = config
         self.num_heads = self.config.num_attention_heads
         self.num_key_value_heads = self.config.num_key_value_heads or self.num_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.dropout = config.dropout
         self.hidden_size = config.hidden_size
         self.head_dim = getattr(config, "head_dim", config.hidden_size // self.num_heads)
@@ -365,12 +369,12 @@ class DiaSelfAttention(nn.Module):  # Modular : LlamaAttentions
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Cache] = None,
+        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
         cache_position: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[EncoderDecoderCache] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -382,12 +386,12 @@ class DiaSelfAttention(nn.Module):  # Modular : LlamaAttentions
         key_states = apply_rotary_pos_emb(key_states, position_embeddings, -2).transpose(1, 2)
 
         if past_key_values is not None:
-            key_states, value_states = past_key_values.update(
+            # save all key/value_states to cache to be re-used for fast auto-regressive generation
+            key_states, value_states = past_key_values.self_attention_cache.update(
                 key_states, value_states, self.layer_idx, {"cache_positions": cache_position}
             )
 
         attention_interface: Callable = eager_attention_forward
-
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
@@ -398,7 +402,6 @@ class DiaSelfAttention(nn.Module):  # Modular : LlamaAttentions
             value_states,
             attention_mask,
             scaling=self.scaling,
-            dropout=0.0 if not self.training else self.attention_dropout,
             **kwargs,
         )
 
@@ -410,52 +413,54 @@ class DiaSelfAttention(nn.Module):  # Modular : LlamaAttentions
 class DiaCrossAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(
-        self,
-        config: Optional[DiaDecoderConfig],
-        layer_idx: Optional[int] = None,
-    ):
+    def __init__(self, config: DiaDecoderConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.num_heads = self.config.cross_num_attention_heads
         self.num_key_value_heads = self.config.cross_num_key_value_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.dropout = config.dropout
         self.hidden_size = config.hidden_size
         self.head_dim = config.cross_head_dim
         self.layer_idx = layer_idx
         self.scaling = 1
+        self.is_causal = False
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
+        # TODO: fix projections' shape of kv
         self.k_proj = nn.Linear(self.num_key_value_heads * self.head_dim, self.hidden_size, bias=False)
         self.v_proj = nn.Linear(self.num_key_value_heads * self.head_dim, self.hidden_size, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        #self.num_key_value_heads = 16 TODO
 
     def forward(
         self,
         hidden_states: torch.Tensor,
+        cross_attention_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        cross_attention_states: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
+        past_key_values: Optional[EncoderDecoderCache] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
+        cross_shape = (*cross_attention_states.shape[:-1], -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        if cross_attention_states is not None:
-            cross_shape = (*cross_attention_states.shape[:-1], -1, self.head_dim)
+        is_updated = past_key_values.is_updated.get(self.layer_idx) if past_key_values is not None else False
+        if past_key_values is not None and is_updated:
+            # reuse k,v, cross_attentions
+            key_states = past_key_values.cross_attention_cache.key_cache[self.layer_idx]
+            value_states = past_key_values.cross_attention_cache.value_cache[self.layer_idx]
+        else:
             key_states = self.k_proj(cross_attention_states).view(cross_shape).transpose(1, 2)
             value_states = self.v_proj(cross_attention_states).view(cross_shape).transpose(1, 2)
+
             if past_key_values is not None:
-                # TODO: mark layer + general cache fixing + I dont think we need the cache positions anymore
-                key_states, value_states = past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_positions": cache_position}
+                # save all states to the cache
+                key_states, value_states = past_key_values.cross_attention_cache.update(
+                    key_states, value_states, self.layer_idx,
                 )
-        else:  # not prefill, make it compile compatible
-            key_states = past_key_values.key_cache[self.layer_idx]
-            value_states = past_key_values.value_cache[self.layer_idx]
+                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
+                past_key_values.is_updated[self.layer_idx] = True
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -468,21 +473,19 @@ class DiaCrossAttention(nn.Module):
             value_states,
             attention_mask,
             scaling=self.scaling,
-            dropout=0.0 if not self.training else self.attention_dropout,
             **kwargs,
         )
 
         attn_output = attn_output.reshape((*input_shape, -1)).contiguous()
         attn_output = self.o_proj(attn_output)
-
         return attn_output, attn_weights
 
 
 class DiaEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: DiaConfig, layer_idx):
+    def __init__(self, config: DiaEncoderConfig, layer_idx):
         super().__init__()
         self.pre_sa_norm = RMSNorm(config.hidden_size, eps=config.norm_eps)
-        self.self_attention = DiaSelfAttention(config, layer_idx)
+        self.self_attention = DiaSelfAttention(config, layer_idx, is_causal=False)
         self.post_sa_norm = RMSNorm(config.hidden_size, eps=config.norm_eps)
         self.mlp = DiaMLP(config)
 
@@ -490,18 +493,19 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
         normed_states = self.pre_sa_norm(hidden_states)
 
+        # TODO: are kwargs possible with correct gradient passing
         hidden_states, self_attn_weights = self.self_attention(
-            hidden_states=normed_states,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings,
+            normed_states,
+            attention_mask,
+            position_embeddings,
+            cache_position,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -538,7 +542,8 @@ class DiaEncoder(DiaPreTrainedModel):
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = None,
-    ) -> torch.Tensor:
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Union[BaseModelOutput, Tuple]:
         if cache_position is None:
             cache_position = torch.arange(input_ids.shape[-1], device=input_ids.device)[None, :]
 
@@ -554,15 +559,16 @@ class DiaEncoder(DiaPreTrainedModel):
         all_attentions = () if output_attentions else None
 
         # TODO: gradient ckpting
-        for idx, encoder_layer in enumerate(self.layers):
+        for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
 
             layer_outputs = encoder_layer(
                 hidden_states,
-                attention_mask=attention_mask,
-                cache_position=cache_position,
-                position_embeddings=position_embeddings,
+                attention_mask,
+                position_embeddings,
+                cache_position,
+                **kwargs,
             )
             hidden_states = layer_outputs[0]
 
@@ -605,7 +611,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.dropout = config.dropout
-        self.self_attention = DiaSelfAttention(config, layer_idx)
+        self.self_attention = DiaSelfAttention(config, layer_idx, is_causal=True)
         self.cross_attention = DiaCrossAttention(config, layer_idx)
         self.pre_sa_norm = RMSNorm(
             config.hidden_size,
@@ -641,7 +647,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
             hidden_states=normed_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
-            past_key_values=past_key_values.self_attention_cache,
+            past_key_values=past_key_values,
             cache_position=cache_position,
             output_attentions=output_attentions,
         )
@@ -658,7 +664,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
             position_embeddings=position_embeddings,
             attention_mask=encoder_attention_mask,
             cache_position=cache_position,
-            past_key_values=past_key_values.cross_attention_cache,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
         )
 
