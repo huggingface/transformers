@@ -842,7 +842,7 @@ class DiaModel(DiaGenerationMixin, DiaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,  # TODO: return dict
-    ) -> Union[Tuple[torch.Tensor], Seq2SeqModelOutput]:
+    ) -> Union[Tuple, Seq2SeqModelOutput]:
         if encoder_input_ids is None and encoder_outputs is None:
             raise ValueError("You should either provide text ids or the cached text encodings. Neither has been found.")
 
