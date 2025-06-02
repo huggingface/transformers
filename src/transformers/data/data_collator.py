@@ -2006,12 +2006,22 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         self._batch_dim_keys = {"labels", "position_ids", "input_ids", "seq_idx"}
         self._py_int_keys = {"max_length_q", "max_length_k"}
 
-    def __call__(self, features, return_tensors=None, separator_id=None):
+    def __call__(
+        self, features: list[dict[str, Any]], return_tensors: Optional[str] = None, separator_id: Optional[int] = None
+    ) -> dict[str, Any]:
+        """
+        Args:
+            features: list of dicts, each containing a "input_ids" key
+            return_tensors: str, one of "pt" or "np"
+            separator_id: int, the id to use as separator between sequences
+        """
         if return_tensors is None:
             return_tensors = self.return_tensors
         if separator_id is None:
             separator_id = self.separator_id
         is_labels_provided = "labels" in features[0]
+        # Used when packing is enabled (see trl.trainer.sft_trainer.py for more info)
+        is_sequence_length_provided = "sequence_length" in features[0]
         batch = {"input_ids": [], "labels": []}
         if self.return_position_ids:
             batch.update({"position_ids": []})
@@ -2028,7 +2038,14 @@ class DataCollatorWithFlattening(DefaultDataCollator):
             else:
                 batch["labels"] += [separator_id] + input_ids[1:]
             if self.return_position_ids:
-                batch["position_ids"] += list(range(len(input_ids)))
+                if is_sequence_length_provided:
+                    # for packing case, return position ids as arange(seq_length) for each sequence
+                    position_ids = []
+                    for seq_length in sample["sequence_length"]:
+                        position_ids.append(list(range(seq_length)))
+                    batch["position_ids"] += position_ids
+                else:
+                    batch["position_ids"] += list(range(len(input_ids)))
             if self.return_seq_idx:
                 batch["seq_idx"] += [seq_idx for _ in range(len(input_ids))]
             if self.return_flash_attn_kwargs:
