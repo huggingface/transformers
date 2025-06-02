@@ -294,15 +294,6 @@ class BatchEncoding(UserDict):
         if "encodings" in state:
             self._encodings = state["encodings"]
 
-    def keys(self):
-        return self.data.keys()
-
-    def values(self):
-        return self.data.values()
-
-    def items(self):
-        return self.data.items()
-
     # After this point:
     # Extended properties and methods only available for fast (Rust-based) tokenizers
     # provided by HuggingFace tokenizers library.
@@ -1206,7 +1197,7 @@ ENCODE_KWARGS_DOCSTRING = r"""
                 Activates and controls padding. Accepts the following values:
 
                 - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
+                  sequence is provided).
                 - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
                   acceptable input length for the model if that argument is not provided.
                 - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different

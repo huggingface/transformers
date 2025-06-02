@@ -22,12 +22,7 @@ from typing import List, Union
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import (
-    AddedToken,
-    BatchEncoding,
-    PreTokenizedInput,
-    TextInput,
-)
+from ...tokenization_utils_base import AddedToken, BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import logging
 from ..auto import AutoTokenizer
 
@@ -72,7 +67,6 @@ class InstructBlipProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer", "qformer_tokenizer"]
-    valid_kwargs = ["num_query_tokens"]
     image_processor_class = ("BlipImageProcessor", "BlipImageProcessorFast")
     tokenizer_class = "AutoTokenizer"
     qformer_tokenizer_class = "AutoTokenizer"
