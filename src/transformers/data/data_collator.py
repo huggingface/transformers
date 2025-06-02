@@ -2042,7 +2042,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
                     # for packing case, return position ids as arange(seq_length) for each sequence
                     position_ids = []
                     for seq_length in sample["sequence_length"]:
-                        position_ids.append(list(range(seq_length)))
+                        position_ids.extend(list(range(seq_length)))
                     batch["position_ids"] += position_ids
                 else:
                     batch["position_ids"] += list(range(len(input_ids)))
