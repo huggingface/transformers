@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 </div>
 
 
-## GPT Neo
+## GPT-Neo
 
 [GPTNeo](https://zenodo.org/records/5297715) is an open-source alternative to GPT-3, designed by EleutherAI to bring large-scale language modeling to the public. It’s based on the GPT-2 architecture, but with a twist — every other layer uses local attention (with a 256-token window), which helps it handle longer contexts more efficiently.
 
