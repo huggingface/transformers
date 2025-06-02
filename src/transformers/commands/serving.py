@@ -18,11 +18,12 @@ from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
 from logging import getLevelNamesMapping
 from threading import Thread
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Any
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
+from huggingface_hub import ChatCompletionInputTool
 from pydantic import BaseModel
 
 from .. import PreTrainedTokenizerFast, TextIteratorStreamer
@@ -55,7 +56,7 @@ class ChatCompletionInput(BaseModel):
     generation_config: Optional[dict] = None
     request_id: Optional[str] = None
     extra_body: Optional[Dict] = None
-
+    tools: Any = None,
 
 logger = logging.get_logger("transformers/serving")
 
@@ -202,11 +203,11 @@ class ServeCommand(BaseTransformersCLICommand):
 
             chat = req.messages
 
-            inputs = self.tokenizer.apply_chat_template(chat, return_tensors="pt", add_generation_prompt=True).to(
+            inputs = self.tokenizer.apply_chat_template(chat, return_tensors="pt", add_generation_prompt=True, tools=req.tools).to(
                 self.model.device
             )
 
-            generation_config = GenerationConfig(**req.generation_config)
+            generation_config = GenerationConfig(**(req.generation_config or {}))
 
             def stream_response(_inputs):
                 max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 256
@@ -232,19 +233,26 @@ class ServeCommand(BaseTransformersCLICommand):
     def generate(self, app):
         @app.post("/v1/chat/completions")
         def _serve(req: ChatCompletionInput):
+            from pprint import pprint
+            pprint(req.tools)
             if not req.stream:
                 return {"error": "Only streaming mode is supported."}
 
             chat = req.messages
             request_id = req.request_id if req.request_id is not None else "req_0"
 
-            inputs = self.tokenizer.apply_chat_template(chat, return_tensors="pt", add_generation_prompt=True).to(
+            inputs = self.tokenizer.apply_chat_template(chat, return_tensors="pt", add_generation_prompt=True, tools=req.tools).to(
                 self.model.device
             )
 
+            print(self.tokenizer.decode(inputs[0].cpu().numpy()))
+
+            if req.generation_config is None:
+                req.generation_config = {'max_new_tokens': 256, 'max_length': 256}
+
             attention_mask = torch.ones_like(inputs)
             generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
-            generation_config = GenerationConfig(**req.generation_config)
+            generation_config = GenerationConfig(**(req.generation_config or {}))
 
             generation_kwargs = {
                 "inputs": inputs,
@@ -304,6 +312,10 @@ class ServeCommand(BaseTransformersCLICommand):
         model = AutoModelForCausalLM.from_pretrained(
             args.model_name_or_path, trust_remote_code=args.trust_remote_code, **model_kwargs
         )
+
+        if model.generation_config.max_length is not None and model.generation_config.max_length < 256:
+            model.generation_config.max_length = 256
+            model.generation_config.max_new_tokens = 256
 
         if getattr(model, "hf_device_map", None) is None:
             model = model.to(args.device)
