@@ -414,13 +414,6 @@ class IsolatedParallel(TensorParallelLayer):
         # TODO: figure out dynamo support for instance method and switch this to instance method
         return outputs
 
-    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        param = param[...].to(param_casting_dtype)
-        if to_contiguous:
-            param = param.contiguous()
-        param = param / device_mesh.size()  # TODO should be optionable
-        return param
-
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         distribute_module(
             module,
@@ -428,6 +421,19 @@ class IsolatedParallel(TensorParallelLayer):
             partial(self._prepare_input_fn, None, None),
             partial(self._prepare_output_fn, None, None),
         )
+
+
+class ShardedBias(IsolatedParallel):
+    """
+    This will just partition the tensor to be replicated but scaled by the mesh dim!
+    """
+
+    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
+        param = param[...].to(param_casting_dtype)
+        if to_contiguous:
+            param = param.contiguous()
+        param = param / device_mesh.size()  # TODO should be optionable
+        return param
 
 
 class ReplicateParallel(TensorParallelLayer):
@@ -526,11 +532,28 @@ class ColwiseParallel(TensorParallelLayer):
 
 
 class PackedColwiseParallel(ColwiseParallel):
+    def __init__(
+        self,
+        *,
+        input_layouts: Optional[Placement] = None,
+        output_layouts: Optional[Placement] = None,
+        use_local_output: bool = True,
+        use_dtensor=True,
+        partition_dim=-2,
+    ):
+        super().__init__()
+        self.partition_dim = partition_dim
+        self.input_layouts = (input_layouts or Replicate(),)
+        self.output_layouts = (output_layouts or Shard(-1),)
+        self.desired_input_layouts = (Replicate(),)
+        self.use_local_output = use_local_output
+        self.use_dtensor = use_dtensor
+
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         # colwise shard weight/bias to Shard(0), weight be Shard(-2) (0 if you have 1 dim only)
         # means Colwise as Linear is input * weight^T + bias, where
         # weight would become Shard(1)
-        parameter = get_packed_weights(param, empty_param, device_mesh, rank, -2)
+        parameter = get_packed_weights(param, empty_param, device_mesh, rank, self.partition_dim)
         parameter = parameter.to(param_casting_dtype)
         if to_contiguous:
             parameter = parameter.contiguous()
@@ -752,6 +775,8 @@ class ParallelInterface(GeneralInterface):
             "local_packed_rowwise": PackedRowwiseParallel(use_dtensor=False),
             "sequence_parallel": SequenceParallel(),
             "replicate": ReplicateParallel(),
+            "bias": ShardedBias(),
+            "expert_colwise": PackedColwiseParallel(partition_dim=0),
         }
         if is_torch_greater_or_equal("2.5") and _torch_distributed_available
         else {}
