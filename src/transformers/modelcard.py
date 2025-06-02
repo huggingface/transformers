@@ -386,7 +386,12 @@ class TrainingSummary:
                 for tag in info.tags:
                     if tag.startswith("license:"):
                         self.license = tag[8:]
-            except (requests.exceptions.HTTPError, requests.exceptions.ConnectionError, HFValidationError, OfflineModeIsEnabled):
+            except (
+                requests.exceptions.HTTPError,
+                requests.exceptions.ConnectionError,
+                HFValidationError,
+                OfflineModeIsEnabled,
+            ):
                 pass
 
     def create_model_index(self, metric_mapping):
