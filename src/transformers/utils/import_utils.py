@@ -1804,7 +1804,7 @@ rich`. Please note that you may need to restart your runtime after installation.
 """
 
 BITSANDBYTES_IMPORT_ERROR = """
-{0} requires the bitsandbytes library but it was not found in your environment or could not be imported. 
+{0} requires the bitsandbytes library but it was not found in your environment or could not be imported.
 Note that:
 - bitsandbytes requires PyTorch to be installed first (`pip install torch`).
 - For bitsandbytes versions <0.43.1, CUDA must be available on your system.
