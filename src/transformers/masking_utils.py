@@ -640,11 +640,10 @@ def _preprocess_mask_arguments(
 
     # If using a cache, it can give all informations about mask sizes based on seen tokens
     if past_key_values is not None:
-        try:
+        if hasattr(past_key_values, "is_sliding") and isinstance(past_key_values.is_sliding, list):
             layer_idx = past_key_values.is_sliding.index(False)
-        except (ValueError, AttributeError):
+        else:
             layer_idx = 0
-
         kv_length, kv_offset = past_key_values.get_mask_sizes(cache_position, layer_idx)
     # Otherwise, the sizes are simply the input sizes
     else:
