@@ -18,6 +18,7 @@ import math
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import numpy as np
+import tensorflow as tf  #
 
 from ...image_processing_utils import INIT_SERVICE_KWARGS, BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
@@ -35,6 +36,7 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_batched,
+    is_pil_image,  #
     is_scaled_image,
     to_numpy_array,
     valid_images,
@@ -45,6 +47,9 @@ from ...utils import (
     IMAGENET_DEFAULT_STD,
     TensorType,
     filter_out_non_signature_kwargs,
+    is_jax_tensor,  #
+    is_numpy_array,  #
+    is_tf_tensor,  #
     is_torch_available,
     is_torch_tensor,
     logging,
@@ -569,6 +574,43 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             do_reduce_labels=do_reduce_labels,
         )
 
+    # Assume `segmentation_maps` and `images` are list at this point, and hasn't been attached to the model's AutoGrad yet
+    def filter_image_with_void_segmentation_map(segmentation_maps, ignore_index, images):
+        placeholder_ignore_index = ignore_index if ignore_index is not None else 0
+        for segmentation_map in enumerate(segmentation_maps):
+            if is_numpy_array(segmentation_map):
+                if (segmentation_map == placeholder_ignore_index).all():
+                    popped_idx = segmentation_maps.index(segmentation_map)
+                    segmentation_maps.pop(popped_idx)
+                    images.pop(popped_idx)
+
+            elif is_torch_tensor(segmentation_map):
+                if (segmentation_map == placeholder_ignore_index).all().item():
+                    popped_idx = segmentation_maps.index(segmentation_map)
+                    segmentation_maps.pop(popped_idx)
+                    images.pop(popped_idx)
+
+            elif is_pil_image(segmentation_map):
+                placeholder_segmentation_map = np.array(segmentation_map)
+                if (placeholder_segmentation_map == placeholder_ignore_index).all():
+                    popped_idx = segmentation_maps.index(segmentation_map)
+                    segmentation_maps.pop(popped_idx)
+                    images.pop(popped_idx)
+
+            elif is_tf_tensor(segmentation_map):
+                if bool(tf.reduce_all(tf.equal(segmentation_map, placeholder_ignore_index))):
+                    popped_idx = segmentation_maps.index(segmentation_map)
+                    segmentation_maps.pop(popped_idx)
+                    images.pop(popped_idx)
+
+            elif is_jax_tensor(segmentation_map):
+                if (segmentation_map == placeholder_ignore_index).all().item():
+                    popped_idx = segmentation_maps.index(segmentation_map)
+                    segmentation_maps.pop(popped_idx)
+                    images.pop(popped_idx)
+
+        return segmentation_maps, images
+
     def __call__(self, images, segmentation_maps=None, **kwargs) -> BatchFeature:
         return self.preprocess(images, segmentation_maps=segmentation_maps, **kwargs)
 
@@ -737,8 +779,13 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             images = [images]
             segmentation_maps = [segmentation_maps] if segmentation_maps is not None else None
 
-        if segmentation_maps is not None and len(images) != len(segmentation_maps):
-            raise ValueError("Images and segmentation maps must have the same length.")
+        if segmentation_maps is not None:
+            if len(images) != len(segmentation_maps):
+                raise ValueError("Images and segmentation maps must have the same length.")
+            else:
+                segmentation_maps, images = self.filter_image_with_void_segmentation_map(
+                    segmentation_maps, ignore_index, images
+                )
 
         images = [
             self._preprocess_image(
