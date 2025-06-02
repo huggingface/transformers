@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,6 +24,7 @@ from transformers import (
     AutoProcessor,
     LlavaOnevisionConfig,
     LlavaOnevisionForConditionalGeneration,
+    LlavaOnevisionModel,
     is_torch_available,
     is_vision_available,
 )
@@ -174,39 +174,6 @@ class LlavaOnevisionVisionText2TextModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_llava_onevision_model_fp16_forward(
-        self, config, input_ids, pixel_values, attention_mask, image_sizes
-    ):
-        model = LlavaOnevisionForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.half()
-        model.eval()
-        logits = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            image_sizes=image_sizes,
-            pixel_values=pixel_values.to(torch.bfloat16),
-            return_dict=True,
-        )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
-    def create_and_check_llava_onevision_model_fp16_autocast_forward(
-        self, config, input_ids, pixel_values, attention_mask, image_sizes
-    ):
-        config.torch_dtype = torch.float16
-        model = LlavaOnevisionForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                image_sizes=image_sizes,
-                pixel_values=pixel_values.to(torch.bfloat16),
-                return_dict=True,
-            )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
 
 @require_torch
 class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -214,7 +181,14 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     Model tester for `LlavaOnevisionForConditionalGeneration`.
     """
 
-    all_model_classes = (LlavaOnevisionForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            LlavaOnevisionModel,
+            LlavaOnevisionForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {"image-text-to-text": LlavaOnevisionForConditionalGeneration} if is_torch_available() else {}
     )
@@ -292,6 +266,28 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
 
+    def test_odd_sized_image(self):
+        # prepare model configuration
+        config = self.model_tester.get_config()
+
+        # prepare input
+        num_image_tokens = 10
+        pixel_values = floats_tensor([1, 2, 3, config.vision_config.image_size, config.vision_config.image_size])
+        input_ids = ids_tensor([1, 64], config.text_config.vocab_size - 2) + 2
+        input_ids[:, :num_image_tokens] = config.image_token_index
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "image_sizes": torch.tensor([[13, 16]]),  # odd-sized image
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+
+        # forward with odd-sized image input
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model(**inputs_dict)
+
     @parameterized.expand(
         [
             (-1,),
@@ -315,7 +311,8 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
             model = model_class(config).to(torch_device)
             # We should have the right number of input features,
             # and should be able to run a forward pass without exploding
-            assert model.multi_modal_projector.linear_1.in_features == expected_features
+            base_model = getattr(model, "model", model)
+            assert base_model.multi_modal_projector.linear_1.in_features == expected_features
             model(**input_dict)
 
     @unittest.skip(
@@ -336,18 +333,10 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
-    def test_flash_attn_2_fp32_ln(self):
-        pass
-
     @unittest.skip(
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @unittest.skip("LLaVA OneVision has dynamic control flow in unpadding")
-    def test_generate_compile_model_forward(self):
         pass
 
 
@@ -465,6 +454,33 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         # verify generation
         output = model.generate(**inputs, max_new_tokens=40)
         EXPECTED_DECODED_TEXT = "user\n\nWhat is the difference between these images?\nassistant\nThe images you've provided appear to be related to a graphical representation of a radar chart, which is a type of data visualization used to show the distribution of a particular variable across a geographic area. The"  # fmt: skip
+
+        self.assertEqual(
+            self.processor.decode(output[0], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    @require_bitsandbytes
+    def test_small_model_integration_test_multi_image_nested(self):
+        # related to (#34585)
+        model = LlavaOnevisionForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-onevision-qwen2-0.5b-ov-hf",
+            torch_dtype="float16",
+            device_map=torch_device,
+        )
+
+        url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        image = Image.open(requests.get(url, stream=True).raw)
+        prompt = (
+            "user\n<image><image>\nWhat is the difference between these images?<|im_end|>\n<|im_start|>assistant\n"
+        )
+        images_nested = [[self.image, image]]
+        inputs = self.processor(text=prompt, images=images_nested, return_tensors="pt").to(torch_device, torch.float16)
+
+        # verify generation
+        output = model.generate(**inputs, max_new_tokens=40)
+        EXPECTED_DECODED_TEXT = "user\n\nWhat is the difference between these images?\nassistant\nThe first image is a radar chart showing the performance of different models in a specific task, while the second image is a street scene with a stop sign in the foreground."  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),

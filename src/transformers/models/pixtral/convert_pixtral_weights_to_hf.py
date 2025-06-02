@@ -158,7 +158,6 @@ def convert_mistral_model(input_dir, output_dir):
             hidden_act="silu",
             sliding_window=None,
             tie_word_embeddings=False,
-            is_composition=True,
             rms_norm_eps=1e-5,
         )
     else:
@@ -188,7 +187,7 @@ def convert_mistral_model(input_dir, output_dir):
         vision_config,
         text_config,
         vision_feature_layer=-1,
-        image_token_index=10,
+        image_token_id=10,
         vision_feature_select_strategy="full",
         image_seq_length=1,
         multimodal_projector_bias=adapter_bias,

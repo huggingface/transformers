@@ -43,7 +43,7 @@ def make_linear_from_emb(emb):
 
 
 def convert_fairseq_m2m100_checkpoint_from_disk(checkpoint_path):
-    m2m_100 = torch.load(checkpoint_path, map_location="cpu")
+    m2m_100 = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     args = m2m_100["args"] or m2m_100["cfg"]["model"]
     state_dict = m2m_100["model"]
     remove_ignore_keys_(state_dict)

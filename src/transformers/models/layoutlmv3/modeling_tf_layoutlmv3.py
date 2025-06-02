@@ -231,7 +231,7 @@ class TFLayoutLMv3TextEmbeddings(keras.layers.Layer):
     def call(
         self,
         input_ids: tf.Tensor | None = None,
-        bbox: tf.Tensor = None,
+        bbox: Optional[tf.Tensor] = None,
         token_type_ids: tf.Tensor | None = None,
         position_ids: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +17,7 @@ import unittest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, HqqConfig
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_accelerate,
     require_hqq,
     require_torch_gpu,
@@ -51,7 +51,7 @@ class HQQLLMRunner:
 
 
 def cleanup():
-    torch.cuda.empty_cache()
+    backend_empty_cache(torch_device)
     gc.collect()
 
 
@@ -166,6 +166,39 @@ class HQQTestBias(unittest.TestCase):
         check_hqqlayer(self, hqq_runner.model.model.decoder.layers[0].self_attn.v_proj)
         check_forward(self, hqq_runner.model)
 
+    def test_save_and_load_quantized_model(self):
+        """
+        Test saving and loading a quantized model with bias
+        """
+        import tempfile
+
+        quant_config = HqqConfig(nbits=8, group_size=64)
+
+        hqq_runner = HQQLLMRunner(
+            model_id="facebook/opt-125m", quant_config=quant_config, compute_dtype=torch.float16, device=torch_device
+        )
+
+        input_tensor = torch.zeros((1, 8), dtype=torch.int32, device=torch_device)
+
+        # Get reference logits
+        with torch.no_grad():
+            logits_ref = hqq_runner.model.forward(input_tensor).logits
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            hqq_runner.model.save_pretrained(tmpdirname)
+
+            del hqq_runner.model
+            backend_empty_cache(torch_device)
+
+            model_loaded = AutoModelForCausalLM.from_pretrained(
+                tmpdirname, torch_dtype=torch.float16, device_map=torch_device
+            )
+
+            with torch.no_grad():
+                logits_loaded = model_loaded.forward(input_tensor).logits
+
+            self.assertEqual((logits_loaded - logits_ref).abs().mean().item(), 0)
+
 
 @slow
 @require_torch_gpu
@@ -196,7 +229,7 @@ class HQQSerializationTest(unittest.TestCase):
 
         # Remove old model
         del hqq_runner.model
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
         # Load and check if the logits match
         model_loaded = AutoModelForCausalLM.from_pretrained(

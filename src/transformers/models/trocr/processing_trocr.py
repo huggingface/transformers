@@ -81,7 +81,7 @@ class TrOCRProcessor(ProcessorMixin):
         When used in normal mode, this method forwards all its arguments to AutoImageProcessor's
         [`~AutoImageProcessor.__call__`] and returns its output. If used in the context
         [`~TrOCRProcessor.as_target_processor`] this method forwards all its arguments to TrOCRTokenizer's
-        [`~TrOCRTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more information.
+        [`~TrOCRTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
         """
         # For backward compatibility
         if self._in_target_context_manager:

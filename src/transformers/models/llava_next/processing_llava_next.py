@@ -18,10 +18,18 @@ Processor class for LLaVa-NeXT.
 
 from typing import List, Union
 
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import select_best_resolution
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
+from ...processing_utils import (
+    MultiModalData,
+    ProcessingKwargs,
+    ProcessorMixin,
+    Unpack,
+    _validate_images_text_input_order,
+)
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 
@@ -33,6 +41,7 @@ class LlavaNextProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_mm_token_type_ids": False,
         },
         "images_kwargs": {
             "do_pad": True,
@@ -56,7 +65,7 @@ class LlavaNextProcessor(ProcessorMixin):
             Patch size from the vision tower.
         vision_feature_select_strategy (`str`, *optional*):
             The feature selection strategy used to select the vision feature from the vision backbone.
-            Shoudl be same as in model's config
+            Should be same as in model's config
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
         image_token (`str`, *optional*, defaults to `"<image>"`):
@@ -67,13 +76,6 @@ class LlavaNextProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = [
-        "chat_template",
-        "patch_size",
-        "vision_feature_select_strategy",
-        "image_token",
-        "num_additional_image_tokens",
-    ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -92,6 +94,11 @@ class LlavaNextProcessor(ProcessorMixin):
         self.num_additional_image_tokens = num_additional_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.image_token_id = (
+            tokenizer.image_token_id
+            if getattr(tokenizer, "image_token_id", None)
+            else tokenizer.convert_tokens_to_ids(self.image_token)
+        )
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -106,7 +113,7 @@ class LlavaNextProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        LlavaNextImageProcessor's [`~LlavaNextImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        LlavaNextImageProcessor's [`~LlavaNextImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:
@@ -166,9 +173,18 @@ class LlavaNextProcessor(ProcessorMixin):
                 prompt_strings.append(sample)
             prompt_strings = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
 
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", None)
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
 
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def _get_number_of_features(self, orig_height: int, orig_width: int, height: int, width: int) -> int:
         image_grid_pinpoints = self.image_processor.image_grid_pinpoints
@@ -211,6 +227,48 @@ class LlavaNextProcessor(ProcessorMixin):
         unpadded_features = current_height * current_width
         newline_features = current_height
         return (unpadded_features, newline_features)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+        Args:
+            image_sizes (List[List[str]], *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (List[List[str]], *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+            audio_lengths (List[int], *optional*):
+                The input length formatted as per each audio.
+        Returns:
+            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
+            to a list containing the number of placeholder tokens required. If the model doesn't accept
+            a certain modality or no input sizes are provided, the dict value is set to an empty list.
+        """
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = LlavaNextProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+
+            size = images_kwargs.get("size", None) or self.image_processor.size
+            size = (
+                (size["shortest_edge"], size["shortest_edge"])
+                if "shortest_edge" in size
+                else (min(size["height"], size["width"]), min(size["height"], size["width"]))
+            )
+            processed_height, processed_width = size
+
+            batch_num_image_tokens = []
+            num_image_patches = [1] * len(image_sizes)  # llava-next doesn't batch pixels as Idefics, thus `1` patch`
+            for image_size in image_sizes:
+                orig_height, orig_width = image_size
+                num_image_tokens = self._get_number_of_features(
+                    orig_height, orig_width, processed_height, processed_width
+                )
+                if self.vision_feature_select_strategy == "default":
+                    num_image_tokens -= 1
+                batch_num_image_tokens.append(num_image_tokens)
+            vision_data.update({"num_image_tokens": batch_num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

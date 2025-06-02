@@ -189,7 +189,7 @@ def infer_shapes(nlp: Pipeline, framework: str) -> tuple[list[str], list[str], d
                     raise ValueError(f"Unable to infer tensor axes ({len(tensor.shape)})")
             else:
                 seq_axes = [dim for dim, shape in enumerate(tensor.shape) if shape == seq_len]
-                axes.update({dim: "sequence" for dim in seq_axes})
+                axes.update(dict.fromkeys(seq_axes, "sequence"))
 
         print(f"Found {'input' if is_input else 'output'} {name} with shape: {axes}")
         return axes

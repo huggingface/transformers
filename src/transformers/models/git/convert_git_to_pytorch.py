@@ -297,7 +297,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     if "large" in model_name and not is_video and "large-r" not in model_name:
         # large checkpoints take way too long to download
         checkpoint_path = model_name_to_path[model_name]
-        state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+        state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model"]
     else:
         checkpoint_url = model_name_to_url[model_name]
         state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", file_name=model_name)[

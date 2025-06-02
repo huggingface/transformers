@@ -50,6 +50,11 @@ A demo Space for image super-resolution with SwinSR can be found [here](https://
 [[autodoc]] Swin2SRImageProcessor
     - preprocess
 
+## Swin2SRImageProcessorFast
+
+[[autodoc]] Swin2SRImageProcessorFast
+    - preprocess
+
 ## Swin2SRConfig
 
 [[autodoc]] Swin2SRConfig

@@ -77,9 +77,9 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 
 [[autodoc]] TorchAoConfig
 
-## BitNetConfig
+## BitNetQuantConfig
 
-[[autodoc]] BitNetConfig
+[[autodoc]] BitNetQuantConfig
 
 ## SpQRConfig
 
@@ -92,3 +92,7 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 ## QuarkConfig
 
 [[autodoc]] QuarkConfig
+
+## AutoRoundConfig
+
+[[autodoc]] AutoRoundConfig

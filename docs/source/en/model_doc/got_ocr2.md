@@ -277,6 +277,10 @@ alt="drawing" width="600"/>
 
 [[autodoc]] GotOcr2Processor
 
+## GotOcr2Model
+
+[[autodoc]] GotOcr2Model
+
 ## GotOcr2ForConditionalGeneration
 
 [[autodoc]] GotOcr2ForConditionalGeneration

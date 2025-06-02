@@ -335,7 +335,8 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -547,10 +548,10 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     self.model_tester.num_labels,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
             else:
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
@@ -579,10 +580,10 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     self.model_tester.num_labels,
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
             else:
-                # Confirm out_indices was propogated to backbone
+                # Confirm out_indices was propagated to backbone
                 self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)

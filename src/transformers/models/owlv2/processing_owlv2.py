@@ -58,7 +58,7 @@ class Owlv2ProcessorKwargs(ProcessingKwargs, total=False):
 class Owlv2Processor(ProcessorMixin):
     r"""
     Constructs an Owlv2 processor which wraps [`Owlv2ImageProcessor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`] into
-    a single processor that interits both the image processor and tokenizer functionalities. See the
+    a single processor that inherits both the image processor and tokenizer functionalities. See the
     [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
 
     Args:
@@ -96,7 +96,7 @@ class Owlv2Processor(ProcessorMixin):
         Main method to prepare for the model one or several text(s) and image(s). This method forwards the `text` and
         `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode:
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
         of the above two methods for more information.
 
         Args:

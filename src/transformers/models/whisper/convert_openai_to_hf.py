@@ -157,7 +157,7 @@ def _download(url: str, root: str) -> Any:
     if os.path.isfile(download_target):
         model_bytes = open(download_target, "rb").read()
         if insecure_hashlib.sha256(model_bytes).hexdigest() == expected_sha256:
-            return torch.load(io.BytesIO(model_bytes))
+            return torch.load(io.BytesIO(model_bytes), weights_only=True)
         else:
             warnings.warn(f"{download_target} exists, but the SHA256 checksum does not match; re-downloading the file")
 
@@ -179,7 +179,7 @@ def _download(url: str, root: str) -> Any:
             "Model has been downloaded but the SHA256 checksum does not match. Please retry loading the model."
         )
 
-    return torch.load(io.BytesIO(model_bytes))
+    return torch.load(io.BytesIO(model_bytes), weights_only=True)
 
 
 def convert_openai_whisper_to_tfms(
@@ -190,7 +190,7 @@ def convert_openai_whisper_to_tfms(
         original_checkpoint = _download(_MODELS[checkpoint_path], root)
         openai_version = checkpoint_path
     else:
-        original_checkpoint = torch.load(checkpoint_path, map_location="cpu")
+        original_checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
         openai_version = None
 
     dimensions = original_checkpoint["dims"]

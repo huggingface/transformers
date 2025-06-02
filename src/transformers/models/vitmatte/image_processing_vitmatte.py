@@ -250,8 +250,10 @@ class VitMatteImageProcessor(BaseImageProcessor):
             ]
 
         # concatenate images and trimaps
+        axis = -1 if input_data_format == ChannelDimension.LAST else 0
         images = [
-            np.concatenate([image, np.expand_dims(trimap, axis=-1)], axis=-1) for image, trimap in zip(images, trimaps)
+            np.concatenate([image, np.expand_dims(trimap, axis=axis)], axis=axis)
+            for image, trimap in zip(images, trimaps)
         ]
 
         if do_pad:

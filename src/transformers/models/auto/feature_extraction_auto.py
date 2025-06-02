@@ -61,6 +61,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("encodec", "EncodecFeatureExtractor"),
         ("flava", "FlavaFeatureExtractor"),
         ("glpn", "GLPNFeatureExtractor"),
+        ("granite_speech", "GraniteSpeechFeatureExtractor"),
         ("groupvit", "CLIPFeatureExtractor"),
         ("hubert", "Wav2Vec2FeatureExtractor"),
         ("imagegpt", "ImageGPTFeatureExtractor"),
@@ -78,6 +79,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("nat", "ViTFeatureExtractor"),
         ("owlvit", "OwlViTFeatureExtractor"),
         ("perceiver", "PerceiverFeatureExtractor"),
+        ("phi4_multimodal", "Phi4MultimodalFeatureExtractor"),
         ("poolformer", "PoolFormerFeatureExtractor"),
         ("pop2piano", "Pop2PianoFeatureExtractor"),
         ("regnet", "ConvNextFeatureExtractor"),
@@ -369,17 +371,21 @@ class AutoFeatureExtractor:
 
         has_remote_code = feature_extractor_auto_map is not None
         has_local_code = feature_extractor_class is not None or type(config) in FEATURE_EXTRACTOR_MAPPING
-        trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
-        )
+        if has_remote_code:
+            if "--" in feature_extractor_auto_map:
+                upstream_repo = feature_extractor_auto_map.split("--")[0]
+            else:
+                upstream_repo = None
+            trust_remote_code = resolve_trust_remote_code(
+                trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
+            )
 
         if has_remote_code and trust_remote_code:
             feature_extractor_class = get_class_from_dynamic_module(
                 feature_extractor_auto_map, pretrained_model_name_or_path, **kwargs
             )
             _ = kwargs.pop("code_revision", None)
-            if os.path.isdir(pretrained_model_name_or_path):
-                feature_extractor_class.register_for_auto_class()
+            feature_extractor_class.register_for_auto_class()
             return feature_extractor_class.from_dict(config_dict, **kwargs)
         elif feature_extractor_class is not None:
             return feature_extractor_class.from_dict(config_dict, **kwargs)
@@ -405,3 +411,6 @@ class AutoFeatureExtractor:
             feature_extractor_class ([`FeatureExtractorMixin`]): The feature extractor to register.
         """
         FEATURE_EXTRACTOR_MAPPING.register(config_class, feature_extractor_class, exist_ok=exist_ok)
+
+
+__all__ = ["FEATURE_EXTRACTOR_MAPPING", "AutoFeatureExtractor"]

@@ -24,6 +24,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -317,7 +318,7 @@ class BlipTextOutput(nn.Module):
         return hidden_states
 
 
-class BlipTextLayer(nn.Module):
+class BlipTextLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_num):
         super().__init__()
         self.config = config
@@ -421,27 +422,15 @@ class BlipTextEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask,
+                layer_head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                past_key_value,
+                output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
             if use_cache:
@@ -633,7 +622,6 @@ class BlipTextModel(BlipTextPreTrainedModel):
                 seq_ids = torch.arange(seq_length, device=device)
                 causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
                 # in case past_key_values are used we need to add a prefix ones mask to the causal mask
-                # causal and attention masks must have same type with pytorch version < 1.3
                 causal_mask = causal_mask.to(attention_mask.dtype)
 
                 if causal_mask.shape[1] < attention_mask.shape[1]:
@@ -956,3 +944,6 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+
+__all__ = ["BlipTextModel", "BlipTextLMHeadModel", "BlipTextPreTrainedModel"]

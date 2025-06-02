@@ -36,7 +36,7 @@ class AlignProcessorKwargs(ProcessingKwargs, total=False):
 class AlignProcessor(ProcessorMixin):
     r"""
     Constructs an ALIGN processor which wraps [`EfficientNetImageProcessor`] and
-    [`BertTokenizer`]/[`BertTokenizerFast`] into a single processor that interits both the image processor and
+    [`BertTokenizer`]/[`BertTokenizerFast`] into a single processor that inherits both the image processor and
     tokenizer functionalities. See the [`~AlignProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more
     information.
     The preferred way of passing kwargs is as a dictionary per modality, see usage example below.
@@ -83,7 +83,7 @@ class AlignProcessor(ProcessorMixin):
         arguments to BertTokenizerFast's [`~BertTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` arguments to
         EfficientNetImageProcessor's [`~EfficientNetImageProcessor.__call__`] if `images` is not `None`. Please refer
-        to the doctsring of the above two methods for more information.
+        to the docstring of the above two methods for more information.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):

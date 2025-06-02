@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -503,7 +502,8 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -521,7 +521,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            # IDEFICS does not support outputting attention score becuase it uses SDPA under the hood
+            # IDEFICS does not support outputting attention score because it uses SDPA under the hood
             self.assertTrue(attentions[0] is None)
             out_len = len(outputs)
 
@@ -539,7 +539,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            # IDEFICS does not support outputting attention score becuase it uses SDPA under the hood
+            # IDEFICS does not support outputting attention score because it uses SDPA under the hood
             self.assertTrue(self_attentions[0] is None)
 
     def test_hidden_states_output(self):
@@ -839,10 +839,6 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
 
     @unittest.skip(reason="IDEFICS cannot compile due to dynamic control flow when checking inputs")
     def test_generate_with_static_cache(self):
-        pass
-
-    @unittest.skip(reason="IDEFICS cannot compile due to dynamic control flow when checking inputs")
-    def test_generate_compile_model_forward(self):
         pass
 
     @unittest.skip(reason="We only test the model that takes in multiple images")

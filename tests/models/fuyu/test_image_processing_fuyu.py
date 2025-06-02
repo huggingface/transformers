@@ -42,9 +42,9 @@ class TestFuyuImageProcessor(unittest.TestCase):
         expected_num_patches = self.processor.get_num_patches(image_height=self.height, image_width=self.width)
 
         patches_final = self.processor.patchify_image(image=self.image_input)
-        assert (
-            patches_final.shape[1] == expected_num_patches
-        ), f"Expected {expected_num_patches} patches, got {patches_final.shape[1]}."
+        assert patches_final.shape[1] == expected_num_patches, (
+            f"Expected {expected_num_patches} patches, got {patches_final.shape[1]}."
+        )
 
     def test_scale_to_target_aspect_ratio(self):
         # (h:450, w:210) fitting (160, 320) -> (160, 210*160/450)

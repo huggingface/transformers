@@ -247,7 +247,7 @@ def update_pipeline_and_auto_class_table(table: Dict[str, Tuple[str, str]]) -> D
                     model_names.extend(list(name))
 
             # Add pipeline tag and auto model class for those models
-            table.update({model_name: (pipeline_tag, cls) for model_name in model_names})
+            table.update(dict.fromkeys(model_names, (pipeline_tag, cls)))
 
     return table
 

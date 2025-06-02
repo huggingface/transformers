@@ -162,7 +162,7 @@ class TextStreamer(BaseStreamer):
 class TextIteratorStreamer(TextStreamer):
     """
     Streamer that stores print-ready text in a queue, to be used by a downstream application as an iterator. This is
-    useful for applications that benefit from acessing the generated text in a non-blocking way (e.g. in an interactive
+    useful for applications that benefit from accessing the generated text in a non-blocking way (e.g. in an interactive
     Gradio demo).
 
     <Tip warning={true}>
@@ -233,7 +233,7 @@ class TextIteratorStreamer(TextStreamer):
 class AsyncTextIteratorStreamer(TextStreamer):
     """
     Streamer that stores print-ready text in a queue, to be used by a downstream application as an async iterator.
-    This is useful for applications that benefit from acessing the generated text asynchronously (e.g. in an
+    This is useful for applications that benefit from accessing the generated text asynchronously (e.g. in an
     interactive Gradio demo).
 
     <Tip warning={true}>

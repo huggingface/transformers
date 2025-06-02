@@ -17,7 +17,6 @@
 import gc
 import json
 import os
-import re
 import warnings
 from functools import partial
 from pickle import UnpicklingError
@@ -83,23 +82,6 @@ ACT2FN = {
 }
 
 
-def dtype_byte_size(dtype):
-    """
-    Returns the size (in bytes) occupied by one parameter of type `dtype`. Example:
-    ```py
-    >>> dtype_byte_size(np.float32)
-    4
-    ```
-    """
-    if dtype is bool:
-        return 1 / 8
-    bit_search = re.search(r"[^\d](\d+)$", dtype.name)
-    if bit_search is None:
-        raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
-    bit_size = int(bit_search.groups()[0])
-    return bit_size // 8
-
-
 def flax_shard_checkpoint(params, max_shard_size="10GB"):
     """
     Splits a model state dictionary in sub-checkpoints so that the final size of each sub-checkpoint does not exceed a
@@ -131,7 +113,7 @@ def flax_shard_checkpoint(params, max_shard_size="10GB"):
     # flatten the weights to chunk
     weights = flatten_dict(params, sep="/")
     for item in weights:
-        weight_size = weights[item].size * dtype_byte_size(weights[item].dtype)
+        weight_size = weights[item].size * weights[item].dtype.itemsize
 
         # If this weight is going to tip up over the maximal size, we split.
         if current_block_size + weight_size > max_shard_size:
@@ -154,7 +136,7 @@ def flax_shard_checkpoint(params, max_shard_size="10GB"):
     weight_map = {}
     shards = {}
     for idx, shard in enumerate(sharded_state_dicts):
-        shard_file = FLAX_WEIGHTS_NAME.replace(".msgpack", f"-{idx+1:05d}-of-{len(sharded_state_dicts):05d}.msgpack")
+        shard_file = FLAX_WEIGHTS_NAME.replace(".msgpack", f"-{idx + 1:05d}-of-{len(sharded_state_dicts):05d}.msgpack")
         shards[shard_file] = shard
         for weight_name in shard.keys():
             weight_map[weight_name] = shard_file
@@ -720,7 +702,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if pretrained_model_name_or_path is not None:
             pretrained_model_name_or_path = str(pretrained_model_name_or_path)
             is_local = os.path.isdir(pretrained_model_name_or_path)
-            if os.path.isdir(pretrained_model_name_or_path):
+            if is_local:
                 if os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME)):
                     # Load from a Flax checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME)
@@ -728,6 +710,11 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                     # Load from a sharded Flax checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_INDEX_NAME)
                     is_sharded = True
+                elif is_safetensors_available() and os.path.isfile(
+                    os.path.join(pretrained_model_name_or_path, subfolder, SAFE_WEIGHTS_NAME)
+                ):
+                    # Load from a safetensors checkpoint
+                    archive_file = os.path.join(pretrained_model_name_or_path, subfolder, SAFE_WEIGHTS_NAME)
                 elif is_safetensors_available() and os.path.isfile(
                     os.path.join(pretrained_model_name_or_path, SAFE_WEIGHTS_NAME)
                 ):
@@ -1231,11 +1218,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         Register this class with a given auto class. This should only be used for custom models as the ones in the
         library are already mapped with an auto class.
 
-        <Tip warning={true}>
 
-        This API is experimental and may have some slight breaking changes in the next releases.
-
-        </Tip>
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"FlaxAutoModel"`):

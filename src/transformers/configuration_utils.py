@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -18,9 +17,8 @@
 import copy
 import json
 import os
-import re
 import warnings
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 from packaging import version
 
@@ -30,8 +28,6 @@ from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .utils import (
     CONFIG_NAME,
     PushToHubMixin,
-    add_model_info_to_auto_map,
-    add_model_info_to_custom_pipelines,
     cached_file,
     copy_func,
     download_url,
@@ -44,8 +40,6 @@ from .utils.generic import is_timm_config_dict
 
 
 logger = logging.get_logger(__name__)
-
-_re_configuration_file = re.compile(r"config\.(.*)\.json")
 
 
 class PretrainedConfig(PushToHubMixin):
@@ -65,9 +59,10 @@ class PretrainedConfig(PushToHubMixin):
 
     - **model_type** (`str`) -- An identifier for the model type, serialized into the JSON file, and used to recreate
       the correct object in [`~transformers.AutoConfig`].
-    - **is_composition** (`bool`) -- Whether the config class is composed of multiple sub-configs. In this case the
-      config has to be initialized from two or more configs of type [`~transformers.PretrainedConfig`] like:
-      [`~transformers.EncoderDecoderConfig`] or [`~RagConfig`].
+    - **has_no_defaults_at_init** (`bool`) -- Whether the config class can be initialized without providing input arguments.
+      Some configurations requires inputs to be defined at init and have no default values, usually these are composite configs,
+      (but not necessarily) such as [`~transformers.EncoderDecoderConfig`] or [`~RagConfig`]. They have to be initialized from
+      two or more configs of type [`~transformers.PretrainedConfig`].
     - **keys_to_ignore_at_inference** (`List[str]`) -- A list of keys to ignore by default when looking at dictionary
       outputs of the model during inference.
     - **attribute_map** (`Dict[str, str]`) -- A dict that maps model specific attribute names to the standardized
@@ -196,11 +191,11 @@ class PretrainedConfig(PushToHubMixin):
 
     model_type: str = ""
     base_config_key: str = ""
-    sub_configs: Dict[str, "PretrainedConfig"] = {}
-    is_composition: bool = False
-    attribute_map: Dict[str, str] = {}
-    base_model_tp_plan: Optional[Dict[str, Any]] = None
-    base_model_pp_plan: Optional[Dict[str, Tuple[List[str]]]] = None
+    sub_configs: dict[str, "PretrainedConfig"] = {}
+    has_no_defaults_at_init: bool = False
+    attribute_map: dict[str, str] = {}
+    base_model_tp_plan: Optional[dict[str, Any]] = None
+    base_model_pp_plan: Optional[dict[str, tuple[list[str]]]] = None
     _auto_class: Optional[str] = None
 
     def __setattr__(self, key, value):
@@ -217,7 +212,7 @@ class PretrainedConfig(PushToHubMixin):
         # Attributes with defaults
         self.return_dict = kwargs.pop("return_dict", True)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
-        self.output_attentions = kwargs.pop("output_attentions", False)
+        self._output_attentions = kwargs.pop("output_attentions", False)
         self.torchscript = kwargs.pop("torchscript", False)  # Only used by PyTorch models
         self.torch_dtype = kwargs.pop("torch_dtype", None)  # Only used by PyTorch models
         self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
@@ -335,6 +330,22 @@ class PretrainedConfig(PushToHubMixin):
         self._name_or_path = str(value)  # Make sure that name_or_path is a string (for JSON encoding)
 
     @property
+    def output_attentions(self):
+        """
+        `bool`: Whether or not the model should returns all attentions.
+        """
+        return self._output_attentions
+
+    @output_attentions.setter
+    def output_attentions(self, value):
+        if self._attn_implementation != "eager":
+            raise ValueError(
+                "The `output_attentions` attribute is not supported when using the `attn_implementation` set to "
+                f"{self._attn_implementation}. Please set it to 'eager' instead."
+            )
+        self._output_attentions = value
+
+    @property
     def use_return_dict(self) -> bool:
         """
         `bool`: Whether or not return [`~utils.ModelOutput`] instead of tuples.
@@ -410,6 +421,10 @@ class PretrainedConfig(PushToHubMixin):
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
             repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
+
+        # This attribute is important to know on load, but should not be serialized on save.
+        if "transformers_weights" in self:
+            delattr(self, "transformers_weights")
 
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
         # loaded from the Hub.
@@ -574,7 +589,7 @@ class PretrainedConfig(PushToHubMixin):
     @classmethod
     def get_config_dict(
         cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
-    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
         [`PretrainedConfig`] using `from_dict`.
@@ -609,7 +624,7 @@ class PretrainedConfig(PushToHubMixin):
     @classmethod
     def _get_config_dict(
         cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
-    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", None)
@@ -667,13 +682,13 @@ class PretrainedConfig(PushToHubMixin):
                 if resolved_config_file is None:
                     return None, kwargs
                 commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
-            except EnvironmentError:
+            except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
                 raise
             except Exception:
                 # For any other exception, we throw a generic error.
-                raise EnvironmentError(
+                raise OSError(
                     f"Can't load the configuration of '{pretrained_model_name_or_path}'. If you were trying to load it"
                     " from 'https://huggingface.co/models', make sure you don't have a local directory with the same"
                     f" name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory"
@@ -689,23 +704,12 @@ class PretrainedConfig(PushToHubMixin):
 
             config_dict["_commit_hash"] = commit_hash
         except (json.JSONDecodeError, UnicodeDecodeError):
-            raise EnvironmentError(
-                f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file."
-            )
+            raise OSError(f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file.")
 
         if is_local:
             logger.info(f"loading configuration file {resolved_config_file}")
         else:
             logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
-
-        if "auto_map" in config_dict and not is_local:
-            config_dict["auto_map"] = add_model_info_to_auto_map(
-                config_dict["auto_map"], pretrained_model_name_or_path
-            )
-        if "custom_pipelines" in config_dict and not is_local:
-            config_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
-                config_dict["custom_pipelines"], pretrained_model_name_or_path
-            )
 
         # timm models are not saved with the model_type in the config file
         if "model_type" not in config_dict and is_timm_config_dict(config_dict):
@@ -714,7 +718,7 @@ class PretrainedConfig(PushToHubMixin):
         return config_dict, kwargs
 
     @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any], **kwargs) -> "PretrainedConfig":
+    def from_dict(cls, config_dict: dict[str, Any], **kwargs) -> "PretrainedConfig":
         """
         Instantiates a [`PretrainedConfig`] from a Python dictionary of parameters.
 
@@ -792,7 +796,7 @@ class PretrainedConfig(PushToHubMixin):
 
     @classmethod
     def _dict_from_json_file(cls, json_file: Union[str, os.PathLike]):
-        with open(json_file, "r", encoding="utf-8") as reader:
+        with open(json_file, encoding="utf-8") as reader:
             text = reader.read()
         return json.loads(text)
 
@@ -803,24 +807,24 @@ class PretrainedConfig(PushToHubMixin):
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
     def __iter__(self):
-        for attr in self.__dict__:
-            yield attr
+        yield from self.__dict__
 
-    def to_diff_dict(self) -> Dict[str, Any]:
+    def to_diff_dict(self) -> dict[str, Any]:
         """
-        Removes all attributes from config which correspond to the default config attributes for better readability and
-        serializes to a Python dictionary.
+        Removes all attributes from the configuration that correspond to the default config attributes for
+        better readability, while always retaining the `config` attribute from the class. Serializes to a
+        Python dictionary.
 
         Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance,
+            Dict[str, Any]: Dictionary of all the attributes that make up this configuration instance.
         """
         config_dict = self.to_dict()
 
-        # get the default config dict
+        # Get the default config dict (from a fresh PreTrainedConfig instance)
         default_config_dict = PretrainedConfig().to_dict()
 
         # get class specific config dict
-        class_config_dict = self.__class__().to_dict() if not self.is_composition else {}
+        class_config_dict = self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
 
         serializable_config_dict = {}
 
@@ -838,6 +842,7 @@ class PretrainedConfig(PushToHubMixin):
                 if "model_type" in value:
                     # Needs to be set even if it's not in the diff
                     diff["model_type"] = value["model_type"]
+
                 serializable_config_dict[key] = diff
             elif (
                 key not in default_config_dict
@@ -848,33 +853,23 @@ class PretrainedConfig(PushToHubMixin):
             ):
                 serializable_config_dict[key] = value
 
+        self._remove_keys_not_serialized(serializable_config_dict)
+
+        # Key removed only in diff dict
+        if "_name_or_path" in serializable_config_dict:
+            del serializable_config_dict["_name_or_path"]
+
         if hasattr(self, "quantization_config"):
             serializable_config_dict["quantization_config"] = (
                 self.quantization_config.to_dict()
                 if not isinstance(self.quantization_config, dict)
                 else self.quantization_config
             )
-
-            # pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
-            _ = serializable_config_dict.pop("_pre_quantization_dtype", None)
-
         self.dict_torch_dtype_to_str(serializable_config_dict)
-
-        if "_attn_implementation_internal" in serializable_config_dict:
-            del serializable_config_dict["_attn_implementation_internal"]
-        # Do not serialize `base_model_tp_plan` for now
-        if "base_model_tp_plan" in serializable_config_dict:
-            del serializable_config_dict["base_model_tp_plan"]
-        # Do not serialize `base_model_pp_plan` for now
-        if "base_model_pp_plan" in serializable_config_dict:
-            del serializable_config_dict["base_model_pp_plan"]
-
-        if "_name_or_path" in serializable_config_dict:
-            del serializable_config_dict["_name_or_path"]
 
         return serializable_config_dict
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
 
@@ -884,18 +879,6 @@ class PretrainedConfig(PushToHubMixin):
         output = copy.deepcopy(self.__dict__)
         if hasattr(self.__class__, "model_type"):
             output["model_type"] = self.__class__.model_type
-        if "_auto_class" in output:
-            del output["_auto_class"]
-        if "_commit_hash" in output:
-            del output["_commit_hash"]
-        if "_attn_implementation_internal" in output:
-            del output["_attn_implementation_internal"]
-        # Do not serialize `base_model_tp_plan` for now
-        if "base_model_tp_plan" in output:
-            del output["base_model_tp_plan"]
-        # Do not serialize `base_model_pp_plan` for now
-        if "base_model_pp_plan" in output:
-            del output["base_model_pp_plan"]
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
@@ -908,16 +891,14 @@ class PretrainedConfig(PushToHubMixin):
 
             output[key] = value
 
+        self._remove_keys_not_serialized(output)
+
         if hasattr(self, "quantization_config"):
             output["quantization_config"] = (
                 self.quantization_config.to_dict()
                 if not isinstance(self.quantization_config, dict)
                 else self.quantization_config
             )
-
-            # pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
-            _ = output.pop("_pre_quantization_dtype", None)
-
         self.dict_torch_dtype_to_str(output)
 
         return output
@@ -954,7 +935,7 @@ class PretrainedConfig(PushToHubMixin):
         with open(json_file_path, "w", encoding="utf-8") as writer:
             writer.write(self.to_json_string(use_diff=use_diff))
 
-    def update(self, config_dict: Dict[str, Any]):
+    def update(self, config_dict: dict[str, Any]):
         """
         Updates attributes of this class with attributes from `config_dict`.
 
@@ -1002,7 +983,7 @@ class PretrainedConfig(PushToHubMixin):
 
             setattr(self, k, v)
 
-    def dict_torch_dtype_to_str(self, d: Dict[str, Any]) -> None:
+    def dict_torch_dtype_to_str(self, d: dict[str, Any]) -> None:
         """
         Checks whether the passed dictionary and its nested dicts have a *torch_dtype* key and if it's not None,
         converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
@@ -1017,17 +998,42 @@ class PretrainedConfig(PushToHubMixin):
             if isinstance(value, dict):
                 self.dict_torch_dtype_to_str(value)
 
+    def _remove_keys_not_serialized(self, d: dict[str, Any]) -> None:
+        """
+        Checks and removes if there are any keys in the dict that should not be serialized when saving the config.
+        Runs recursive check on the dict, to remove from all sub configs.
+        """
+        if hasattr(self, "quantization_config"):
+            # Pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
+            _ = d.pop("_pre_quantization_dtype", None)
+
+        if "_auto_class" in d:
+            del d["_auto_class"]
+        if "_output_attentions" in d:
+            d["output_attentions"] = d.pop("_output_attentions")
+        if "_commit_hash" in d:
+            del d["_commit_hash"]
+        if "_attn_implementation_internal" in d:
+            del d["_attn_implementation_internal"]
+        if "_attn_implementation_autoset" in d:
+            del d["_attn_implementation_autoset"]
+        # Do not serialize `base_model_tp_plan` for now
+        if "base_model_tp_plan" in d:
+            del d["base_model_tp_plan"]
+        # Do not serialize `base_model_pp_plan` for now
+        if "base_model_pp_plan" in d:
+            del d["base_model_pp_plan"]
+        for value in d.values():
+            if isinstance(value, dict):
+                self._remove_keys_not_serialized(value)
+
     @classmethod
     def register_for_auto_class(cls, auto_class="AutoConfig"):
         """
         Register this class with a given auto class. This should only be used for custom configurations as the ones in
         the library are already mapped with `AutoConfig`.
 
-        <Tip warning={true}>
 
-        This API is experimental and may have some slight breaking changes in the next releases.
-
-        </Tip>
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"AutoConfig"`):
@@ -1044,7 +1050,7 @@ class PretrainedConfig(PushToHubMixin):
         cls._auto_class = auto_class
 
     @staticmethod
-    def _get_global_generation_defaults() -> Dict[str, Any]:
+    def _get_global_generation_defaults() -> dict[str, Any]:
         return {
             "max_length": 20,
             "min_length": 0,
@@ -1073,7 +1079,7 @@ class PretrainedConfig(PushToHubMixin):
             "begin_suppress_tokens": None,
         }
 
-    def _get_non_default_generation_parameters(self) -> Dict[str, Any]:
+    def _get_non_default_generation_parameters(self) -> dict[str, Any]:
         """
         Gets the non-default generation parameters on the PretrainedConfig instance
         """
@@ -1122,7 +1128,9 @@ class PretrainedConfig(PushToHubMixin):
         Returns the config that is meant to be used with text IO. On most models, it is the original config instance
         itself. On specific composite models, it is under a set of valid names.
 
-        If `decoder` is set to `True`, then only search for decoder config names.
+        Args:
+            decoder (`Optional[bool]`, *optional*, defaults to `False`):
+                If set to `True`, then only search for decoder config names.
         """
         decoder_possible_text_config_names = ("decoder", "generator", "text_config")
         encoder_possible_text_config_names = ("text_encoder",)
@@ -1144,11 +1152,13 @@ class PretrainedConfig(PushToHubMixin):
                 "case, using `get_text_config()` would be ambiguous. Please specify the desied text config directly."
             )
         elif len(valid_text_config_names) == 1:
-            return getattr(self, valid_text_config_names[0])
-        return self
+            config_to_return = getattr(self, valid_text_config_names[0])
+        else:
+            config_to_return = self
+        return config_to_return
 
 
-def get_configuration_file(configuration_files: List[str]) -> str:
+def get_configuration_file(configuration_files: list[str]) -> str:
     """
     Get the configuration file to use for this version of transformers.
 
@@ -1160,9 +1170,8 @@ def get_configuration_file(configuration_files: List[str]) -> str:
     """
     configuration_files_map = {}
     for file_name in configuration_files:
-        search = _re_configuration_file.search(file_name)
-        if search is not None:
-            v = search.groups()[0]
+        if file_name.startswith("config.") and file_name.endswith(".json") and file_name != "config.json":
+            v = file_name.removeprefix("config.").removesuffix(".json")
             configuration_files_map[v] = file_name
     available_versions = sorted(configuration_files_map.keys())
 
@@ -1184,7 +1193,7 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
     Helper function to recursively take the diff between two nested dictionaries. The resulting diff only contains the
     values from `dict_a` that are different from values in `dict_b`.
 
-    dict_b : the default config dictionnary. We want to remove values that are in this one
+    dict_b : the default config dictionary. We want to remove values that are in this one
     """
     diff = {}
     default = config_obj.__class__().to_dict() if config_obj is not None else {}
@@ -1203,3 +1212,16 @@ if PretrainedConfig.push_to_hub.__doc__ is not None:
     PretrainedConfig.push_to_hub.__doc__ = PretrainedConfig.push_to_hub.__doc__.format(
         object="config", object_class="AutoConfig", object_files="configuration file"
     )
+
+
+ALLOWED_LAYER_TYPES = (
+    "full_attention",
+    "sliding_attention",
+    "chunked_attention",
+)
+
+
+def layer_type_validation(layer_types: list[str]):
+    """Check that each entry in `layer_types` are allowed."""
+    if not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layer_types):
+        raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES}")

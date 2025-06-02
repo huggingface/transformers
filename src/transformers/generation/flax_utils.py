@@ -63,7 +63,7 @@ class FlaxGreedySearchOutput(ModelOutput):
             The generated sequences.
     """
 
-    sequences: jnp.ndarray = None
+    sequences: Optional[jnp.ndarray] = None
 
 
 @flax.struct.dataclass
@@ -77,7 +77,7 @@ class FlaxSampleOutput(ModelOutput):
             The generated sequences.
     """
 
-    sequences: jnp.ndarray = None
+    sequences: Optional[jnp.ndarray] = None
 
 
 @flax.struct.dataclass
@@ -93,8 +93,8 @@ class FlaxBeamSearchOutput(ModelOutput):
             The scores (log probabilities) of the generated sequences.
     """
 
-    sequences: jnp.ndarray = None
-    scores: jnp.ndarray = None
+    sequences: Optional[jnp.ndarray] = None
+    scores: Optional[jnp.ndarray] = None
 
 
 @flax.struct.dataclass
@@ -171,8 +171,8 @@ class FlaxGenerationMixin:
     def _prepare_decoder_input_ids_for_generation(
         self,
         batch_size: int,
-        decoder_start_token_id: int = None,
-        bos_token_id: int = None,
+        decoder_start_token_id: Optional[int] = None,
+        bos_token_id: Optional[int] = None,
         model_kwargs: Optional[Dict[str, jnp.ndarray]] = None,
     ) -> jnp.ndarray:
         if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
@@ -183,7 +183,9 @@ class FlaxGenerationMixin:
         decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
         return jnp.array(decoder_start_token_id, dtype="i4").reshape(1, -1).repeat(batch_size, axis=0)
 
-    def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
+    def _get_decoder_start_token_id(
+        self, decoder_start_token_id: Optional[int] = None, bos_token_id: Optional[int] = None
+    ) -> int:
         # retrieve decoder_start_token_id for encoder-decoder models
         # fall back to bos_token_id if necessary
         decoder_start_token_id = (
@@ -529,13 +531,16 @@ class FlaxGenerationMixin:
                 if (input_ids_seq_length > 1 or generation_config.forced_bos_token_id is None)
                 else begin_index + 1
             )
-            if generation_config.forced_decoder_ids is not None and len(generation_config.forced_decoder_ids) > 0:
+            if (
+                getattr(generation_config, "forced_decoder_ids", None) is not None
+                and len(generation_config.forced_decoder_ids) > 0
+            ):
                 # generation starts after the last token that is forced
                 begin_index += generation_config.forced_decoder_ids[-1][0]
             processors.append(
                 FlaxSuppressTokensAtBeginLogitsProcessor(generation_config.begin_suppress_tokens, begin_index)
             )
-        if generation_config.forced_decoder_ids is not None:
+        if getattr(generation_config, "forced_decoder_ids", None) is not None:
             forced_decoder_ids = [
                 [input_ids_seq_length + i[0] - 1, i[1]] for i in generation_config.forced_decoder_ids
             ]

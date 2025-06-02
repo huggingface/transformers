@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -170,7 +169,7 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
     def test_call_pytorch_with_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
             target = json.loads(f.read())
 
         target = {"image_id": 39769, "annotations": target}
@@ -215,7 +214,7 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
     def test_call_pytorch_with_coco_panoptic_annotations(self):
         # prepare image, target and masks_path
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt", "r") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt") as f:
             target = json.loads(f.read())
 
         target = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}
@@ -268,7 +267,7 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         image_1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").resize((800, 800))
 
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
             target = json.loads(f.read())
 
         annotations_0 = {"image_id": 39769, "annotations": target}
@@ -388,7 +387,7 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         image_1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").resize((800, 800))
 
-        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt", "r") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt") as f:
             target = json.loads(f.read())
 
         annotation_0 = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}
@@ -613,7 +612,7 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
     def test_fast_processor_equivalence_cpu_gpu_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt", "r") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
             target = json.loads(f.read())
 
         target = {"image_id": 39769, "annotations": target}
@@ -671,7 +670,7 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
     def test_fast_processor_equivalence_cpu_gpu_coco_panoptic_annotations(self):
         # prepare image, target and masks_path
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt", "r") as f:
+        with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt") as f:
             target = json.loads(f.read())
 
         target = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": target}

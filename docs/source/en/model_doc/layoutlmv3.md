@@ -88,6 +88,11 @@ LayoutLMv3 is nearly identical to LayoutLMv2, so we've also included LayoutLMv2 
 [[autodoc]] LayoutLMv3ImageProcessor
     - preprocess
 
+## LayoutLMv3ImageProcessorFast
+
+[[autodoc]] LayoutLMv3ImageProcessorFast
+    - preprocess
+
 ## LayoutLMv3Tokenizer
 
 [[autodoc]] LayoutLMv3Tokenizer

@@ -717,9 +717,9 @@ class EfficientFormerForImageClassificationWithTeacherOutput(ModelOutput):
             the self-attention heads.
     """
 
-    logits: torch.FloatTensor = None
-    cls_logits: torch.FloatTensor = None
-    distillation_logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
+    cls_logits: Optional[torch.FloatTensor] = None
+    distillation_logits: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -797,3 +797,11 @@ class EfficientFormerForImageClassificationWithTeacher(EfficientFormerPreTrained
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "EfficientFormerForImageClassification",
+    "EfficientFormerForImageClassificationWithTeacher",
+    "EfficientFormerModel",
+    "EfficientFormerPreTrainedModel",
+]

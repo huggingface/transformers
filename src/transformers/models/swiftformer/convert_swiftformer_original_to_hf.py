@@ -125,7 +125,7 @@ def convert_swiftformer_checkpoint(swiftformer_name, pytorch_dump_folder_path, o
         if original_ckpt.startswith("https"):
             checkpoint = torch.hub.load_state_dict_from_url(original_ckpt, map_location="cpu", check_hash=True)
         else:
-            checkpoint = torch.load(original_ckpt, map_location="cpu")
+            checkpoint = torch.load(original_ckpt, map_location="cpu", weights_only=True)
     state_dict = checkpoint
 
     rename_keys = create_rename_keys(state_dict)

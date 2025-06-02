@@ -131,7 +131,7 @@ class ResnetModel(PreTrainedModel):
 </hfoption>
 <hfoption id="ResnetModelForImageClassification">
 
-The `forward` method needs to be rewrittten to calculate the loss for each logit if labels are available. Otherwise, the ResNet model class is the same.
+The `forward` method needs to be rewritten to calculate the loss for each logit if labels are available. Otherwise, the ResNet model class is the same.
 
 > [!TIP]
 > Add `config_class` to the model class to enable [AutoClass](#autoclass-support) support.

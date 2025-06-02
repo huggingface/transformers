@@ -24,7 +24,7 @@ from typing import ClassVar, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, make_flat_list_of_images
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import is_torch_available
 
@@ -90,7 +90,6 @@ class ColPaliProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
     image_processor_class = ("SiglipImageProcessor", "SiglipImageProcessorFast")
     tokenizer_class = ("GemmaTokenizer", "GemmaTokenizerFast")
 
@@ -118,8 +117,10 @@ class ColPaliProcessor(ProcessorMixin):
             tokens_to_add = {"additional_special_tokens": [image_token]}
             tokenizer.add_special_tokens(tokens_to_add)
             self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
+            self.image_token = IMAGE_TOKEN
         else:
             self.image_token_id = tokenizer.image_token_id
+            self.image_token = tokenizer.image_token
 
         tokenizer.add_tokens(EXTRA_TOKENS)
         tokenizer.add_bos_token = False
@@ -140,11 +141,11 @@ class ColPaliProcessor(ProcessorMixin):
         wrapper around the PaliGemmaProcessor's [`~PaliGemmaProcessor.__call__`] method adapted for the ColPali model. It cannot process
         both text and images at the same time.
 
-        When preparing the the text(s), this method forwards the `text` and `kwargs` arguments to LlamaTokenizerFast's
+        When preparing the text(s), this method forwards the `text` and `kwargs` arguments to LlamaTokenizerFast's
         [`~LlamaTokenizerFast.__call__`].
-        When preparing the the image(s), this method forwards the `images` and `kwargs` arguments to SiglipImageProcessor's
+        When preparing the image(s), this method forwards the `images` and `kwargs` arguments to SiglipImageProcessor's
         [`~SiglipImageProcessor.__call__`].
-        Please refer to the doctsring of the above two methods for more information.
+        Please refer to the docstring of the above two methods for more information.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -253,6 +254,25 @@ class ColPaliProcessor(ProcessorMixin):
             )
 
             return batch_query
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (List[List[str]], *optional*):
+                The input sizes formatted as (height, width) per each image.
+        Returns:
+            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
+            to a list containing the number of placeholder tokens required. If the model doesn't accept
+            a certain modality or no input sizes are provided, the dict value is set to an empty list.
+        """
+        vision_data = {}
+        if image_sizes is not None:
+            num_image_tokens = [self.image_seq_length] * len(image_sizes)
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+        return MultiModalData(**vision_data)
 
     def batch_decode(self, *args, **kwargs):
         """

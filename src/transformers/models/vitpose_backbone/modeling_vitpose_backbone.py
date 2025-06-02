@@ -30,20 +30,12 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import auto_docstring, logging
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_vitpose_backbone import VitPoseBackboneConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "VitPoseBackboneConfig"
 
 
 class VitPoseBackbonePatchEmbeddings(nn.Module):
@@ -413,12 +405,8 @@ class VitPoseBackboneEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class VitPoseBackbonePreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = VitPoseBackboneConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
@@ -448,47 +436,10 @@ class VitPoseBackbonePreTrainedModel(PreTrainedModel):
             ).to(module.position_embeddings.dtype)
 
 
-VITPOSE_BACKBONE_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`VitPoseBackboneConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-VITPOSE_BACKBONE_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values.
-
-        dataset_index (`torch.Tensor` of shape `(batch_size,)`):
-            Index to use in the Mixture-of-Experts (MoE) blocks of the backbone.
-
-            This corresponds to the dataset index used during training, e.g. index 0 refers to COCO.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The VitPose backbone useful for downstream tasks.",
-    VITPOSE_BACKBONE_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    The VitPose backbone useful for downstream tasks.
+    """
 )
 class VitPoseBackbone(VitPoseBackbonePreTrainedModel, BackboneMixin):
     def __init__(self, config: VitPoseBackboneConfig):
@@ -504,8 +455,7 @@ class VitPoseBackbone(VitPoseBackbonePreTrainedModel, BackboneMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(VITPOSE_BACKBONE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -515,8 +465,11 @@ class VitPoseBackbone(VitPoseBackbonePreTrainedModel, BackboneMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
-        """
-        Returns:
+        r"""
+        dataset_index (`torch.Tensor` of shape `(batch_size,)`):
+            Index to use in the Mixture-of-Experts (MoE) blocks of the backbone.
+
+            This corresponds to the dataset index used during training, e.g. index 0 refers to COCO.
 
         Examples:
 
@@ -574,3 +527,6 @@ class VitPoseBackbone(VitPoseBackbonePreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["VitPoseBackbonePreTrainedModel", "VitPoseBackbone"]

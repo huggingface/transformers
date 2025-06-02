@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -311,7 +310,7 @@ class FlaxEncoderDecoderMixin:
         self.check_encoder_decoder_model_generate(**input_ids_dict)
 
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
-        diff = np.abs((a - b)).max()
+        diff = np.abs(a - b).max()
         self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
 
     @slow

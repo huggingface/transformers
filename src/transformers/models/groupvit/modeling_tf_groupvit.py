@@ -253,11 +253,11 @@ class TFGroupViTModelOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits_per_image: tf.Tensor = None
-    logits_per_text: tf.Tensor = None
-    segmentation_logits: tf.Tensor = None
-    text_embeds: tf.Tensor = None
-    image_embeds: tf.Tensor = None
+    logits_per_image: Optional[tf.Tensor] = None
+    logits_per_text: Optional[tf.Tensor] = None
+    segmentation_logits: Optional[tf.Tensor] = None
+    text_embeds: Optional[tf.Tensor] = None
+    image_embeds: Optional[tf.Tensor] = None
     text_model_output: TFBaseModelOutputWithPooling = None
     vision_model_output: TFBaseModelOutputWithPooling = None
 
@@ -646,9 +646,9 @@ class TFGroupViTTextEmbeddings(keras.layers.Layer):
 
     def call(
         self,
-        input_ids: tf.Tensor = None,
-        position_ids: tf.Tensor = None,
-        inputs_embeds: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
     ) -> tf.Tensor:
         """
         Applies embedding based on inputs tensor.
@@ -898,10 +898,10 @@ class TFGroupViTAttention(keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        attention_mask: tf.Tensor = None,
-        causal_attention_mask: tf.Tensor = None,
-        output_attentions: bool = None,
-        encoder_hidden_states: tf.Tensor = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        causal_attention_mask: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        encoder_hidden_states: Optional[tf.Tensor] = None,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
         """Input shape: Batch x Time x Channel"""

@@ -19,7 +19,6 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_new_task_model import NewTaskModelConfig
 
@@ -60,7 +59,7 @@ class NewTaskModelCausalLMOutputWithPast(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    logits: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -114,23 +113,12 @@ class NewTaskModelPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         # important: this ported version of NewTaskModelisn't meant for training from scratch - only
         # inference and fine-tuning
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
-        )
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
 
-        if hasattr(module, "class_embedding"):
-            module.class_embedding.data.normal_(mean=0.0, std=std)
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
 
 NEW_TASK_MODEL_INPUTS_DOCSTRING = r"""
@@ -252,19 +240,22 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
     def _update_causal_mask(
         self,
         attention_mask,
-        token_type_ids,
-        past_key_values,
-        cache_position,
-        input_tensor,
-        is_training: bool = False,
+        token_type_ids=None,
+        past_key_values=None,
+        cache_position=None,
+        input_tensor=None,
+        is_training: Optional[bool] = None,
     ):
         if self.config.text_config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
-
+        is_training = is_training if is_training is not None else self.training
         using_static_cache = isinstance(past_key_values, StaticCache)
         min_dtype = torch.finfo(self.dtype).min
+        if input_tensor is None:
+            input_tensor = attention_mask
+
         inputs_lead_dim, sequence_length = input_tensor.shape[:2]
         if using_static_cache:
             target_length = past_key_values.get_max_cache_shape()
@@ -299,6 +290,8 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
 
             # First unmask prefix tokens during training
             if is_training:
+                if token_type_ids is None:
+                    raise ValueError("Token type ids must be provided during training")
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     token_type_ids[:, None, None, :].to(causal_mask.device) == 0, 0
                 )
@@ -328,7 +321,6 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
         image_features = image_features / (self.config.text_config.hidden_size**0.5)
         return image_features
 
-    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(NEW_TASK_MODEL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=NewTaskModelCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -337,7 +329,7 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -370,19 +362,19 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
         >>> import requests
         >>> from transformers import AutoProcessor, NewTaskModelForNewTask
 
-        >>> model = NewTaskModelForNewTask.from_pretrained("google/NewTaskModel-test-224px-hf")
-        >>> processor = AutoProcessor.from_pretrained("google/NewTaskModel-test-224px-hf")
+        >>> model = NewTaskModelForNewTask.from_pretrained("google/new_task_model2-3b-mix-224")
+        >>> processor = AutoProcessor.from_pretrained("google/new_task_model2-3b-mix-224")
 
-        >>> prompt = "answer en Where is the cow standing?"
-        >>> url = "https://huggingface.co/gv-hf/NewTaskModel-test-224px-hf/resolve/main/cow_beach_1.png"
+        >>> prompt = "Where is the cat standing?"
+        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(images=image, text=prompt,  return_tensors="pt")
 
         >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_length=30)
+        >>> generate_ids = model.generate(**inputs,)
         >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "answer en Where is the cow standing?\nbeach"
+        "Where is the cat standing?\nsnow"
         ```
         Returns:
         """

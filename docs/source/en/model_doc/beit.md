@@ -151,6 +151,12 @@ If you're interested in submitting a resource to be included here, please feel f
     - preprocess
     - post_process_semantic_segmentation
 
+## BeitImageProcessorFast
+
+[[autodoc]] BeitImageProcessorFast
+    - preprocess
+    - post_process_semantic_segmentation
+
 <frameworkcontent>
 <pt>
 

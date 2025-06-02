@@ -53,6 +53,11 @@ The model expects both the image and trimap (concatenated) as input. Use [`ViTMa
 [[autodoc]] VitMatteImageProcessor
     - preprocess
 
+## VitMatteImageProcessorFast
+
+[[autodoc]] VitMatteImageProcessorFast
+    - preprocess
+
 ## VitMatteForImageMatting
 
 [[autodoc]] VitMatteForImageMatting

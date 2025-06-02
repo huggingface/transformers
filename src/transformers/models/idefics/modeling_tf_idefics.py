@@ -91,7 +91,7 @@ class TFIdeficsBaseModelOutputWithPast(ModelOutput):
             image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
     """
 
-    last_hidden_state: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
     past_key_values: Optional[Tuple[Tuple[tf.Tensor]]] = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
@@ -133,7 +133,7 @@ class TFIdeficsCausalLMOutputWithPast(ModelOutput):
     """
 
     loss: Optional[tf.Tensor] = None
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     past_key_values: Optional[List[tf.Tensor]] = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None

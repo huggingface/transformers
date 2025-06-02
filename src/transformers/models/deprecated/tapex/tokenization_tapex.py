@@ -497,7 +497,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         self,
         table: Union["pd.DataFrame", List["pd.DataFrame"]] = None,
         query: Optional[Union[TextInput, List[TextInput]]] = None,
-        answer: Union[str, List[str]] = None,
+        answer: Optional[Union[str, List[str]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -574,7 +574,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         self,
         table: Union["pd.DataFrame", List["pd.DataFrame"]],
         query: Optional[Union[TextInput, List[TextInput]]] = None,
-        answer: Union[str, List[str]] = None,
+        answer: Optional[Union[str, List[str]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -662,10 +662,10 @@ class TapexTokenizer(PreTrainedTokenizer):
         self,
         table: Union["pd.DataFrame", List["pd.DataFrame"]],
         query: Optional[List[TextInput]] = None,
-        answer: List[str] = None,
+        answer: Optional[List[str]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str] = None,
+        truncation: Optional[Union[bool, str]] = None,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -884,7 +884,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         answer: Optional[str] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str] = None,
+        truncation: Optional[Union[bool, str]] = None,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -1053,7 +1053,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         answer: List[str],
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str] = None,
+        truncation: Optional[Union[bool, str]] = None,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -1197,7 +1197,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         answer: str,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str] = None,
+        truncation: Optional[Union[bool, str]] = None,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -1465,3 +1465,6 @@ class TapexTokenizer(PreTrainedTokenizer):
         # only when the drop ratio is too large, logging for warning.
         if "id" in table_content and len(drop_row_indices) > 0:
             logger.warning("Delete {:.2f} rows in table {}".format(len(drop_row_indices), table_content["id"]))
+
+
+__all__ = ["TapexTokenizer"]

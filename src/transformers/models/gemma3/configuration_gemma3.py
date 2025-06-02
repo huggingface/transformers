@@ -19,9 +19,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
+from typing import Any, Dict, Optional, Union
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 from ..siglip import SiglipVisionConfig
@@ -88,15 +88,16 @@ class Gemma3TextConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         query_pre_attn_scalar (`float`, *optional*, defaults to 256):
             Scaling factor used on the attention scores
-        sliding_window (`int`, *optional*, defaults to 4096): in Gemma3Text, every other layer uses sliding window attention. This is the
-            size of the sliding window.
+        sliding_window (`int`, *optional*, defaults to 4096):
+            In Gemma3Text, every other layer uses sliding window attention. This is the size of the sliding window.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
         final_logit_softcapping (`float`, *optional*):
             Scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*):
             Scaling factor when applying tanh softcapping on the attention scores.
-        cache_implementation (`str`, *optional*, defaults to `"hybrid"`): the cache type to be used with `generate`.
         rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings used in gloabl attention. NOTE: if you apply new rope type
+            Dictionary containing the scaling configuration for the RoPE embeddings used in global attention. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
             accordingly.
             Expected contents:
@@ -134,8 +135,6 @@ class Gemma3TextConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
         rope_local_base_freq (float, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings for local attention.
-        sliding_window_pattern (`int`, *optional*, defaults to 6):
-            Pattern for the sliding window attention.
 
     ```python
     >>> from transformers import Gemma3TextModel, Gemma3TextConfig
@@ -192,12 +191,11 @@ class Gemma3TextConfig(PretrainedConfig):
         attention_dropout=0.0,
         query_pre_attn_scalar=256,
         sliding_window=4096,
+        layer_types=None,
         final_logit_softcapping=None,
         attn_logit_softcapping=None,
-        cache_implementation="hybrid",
         rope_scaling=None,
         rope_local_base_freq=10_000.0,
-        sliding_window_pattern=6,
         **kwargs,
     ):
         super().__init__(
@@ -226,13 +224,20 @@ class Gemma3TextConfig(PretrainedConfig):
         self.sliding_window = sliding_window
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
-        self.cache_implementation = cache_implementation
+        self.layer_types = layer_types
 
         self.rope_local_base_freq = rope_local_base_freq
-        # For configuring HybridCache to work with 5:1 attention pattern
-        self.sliding_window_pattern = sliding_window_pattern
         self.rope_scaling = rope_scaling
         rope_config_validation(self)
+
+        if self.layer_types is None:
+            # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
+            sliding_window_pattern = getattr(self, "sliding_window_pattern", 6)
+            self.layer_types = [
+                "sliding_attention" if bool((i + 1) % sliding_window_pattern) else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types)
 
 
 class Gemma3Config(PretrainedConfig):
@@ -285,6 +290,11 @@ class Gemma3Config(PretrainedConfig):
     ```"""
 
     model_type = "gemma3"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+        "boi_token_id": "boi_token_index",
+        "eoi_token_id": "eoi_token_index",
+    }
     sub_configs = {
         "text_config": Gemma3TextConfig,
         "vision_config": SiglipVisionConfig,
@@ -292,8 +302,8 @@ class Gemma3Config(PretrainedConfig):
 
     def __init__(
         self,
-        text_config: Optional[Gemma3TextConfig] = None,
-        vision_config: Optional[SiglipVisionConfig] = None,
+        text_config: Optional[Union[Gemma3TextConfig, Dict[str, Any]]] = None,
+        vision_config: Optional[Union[SiglipVisionConfig, Dict[str, Any]]] = None,
         mm_tokens_per_image: int = 256,
         boi_token_index: int = 255_999,
         eoi_token_index: int = 256_000,
@@ -303,18 +313,15 @@ class Gemma3Config(PretrainedConfig):
     ):
         if text_config is None:
             text_config = Gemma3TextConfig()
-            logger.info("text_config is None, using default Gemma3TextConfig vision config.")
+            logger.info("text_config is None, using default Gemma3TextConfig text config.")
         elif isinstance(text_config, dict):
             text_config = Gemma3TextConfig(**text_config)
 
         if isinstance(vision_config, dict):
             vision_config = SiglipVisionConfig(**vision_config)
-        else:
+        elif vision_config is None:
             vision_config = SiglipVisionConfig()
-            logger.info(
-                "vision_config is None or incompatible with Gemma3VisionConfig intialization. Gemma3 will be limited "
-                "to text tasks."
-            )
+            logger.info("vision_config is None, using default SiglipVisionConfig vision config.")
 
         self.text_config = text_config
         self.vision_config = vision_config

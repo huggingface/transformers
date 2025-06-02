@@ -808,7 +808,7 @@ class TFFlaubertWithLMHeadModelOutput(ModelOutput):
             heads.
     """
 
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
 

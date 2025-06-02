@@ -19,17 +19,66 @@ from typing import Optional, TypedDict
 import torch
 import torch.nn.functional as F
 
-from .utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal, logging
+from .utils import (
+    is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal,
+    is_flash_attn_greater_or_equal_2_10,
+    is_torch_npu_available,
+    logging,
+)
 
 
 logger = logging.get_logger(__name__)
+flash_attn_func = None
 
 
 if is_flash_attn_2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
     from flash_attn import flash_attn_func, flash_attn_varlen_func
+    from flash_attn.layers.rotary import apply_rotary_emb  # noqa
 
+
+# patch functions in package `flash-attn` when using flash-attention on Ascend NPU.
+if is_torch_npu_available():
+    from torch_npu import npu_rotary_mul as apply_rotary_emb  # noqa
+
+    from .integrations.npu_flash_attention import index_first_axis, pad_input, unpad_input
+    from .integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_func
+    from .integrations.npu_flash_attention import npu_flash_attn_varlen_func as flash_attn_varlen_func
+
+
+if flash_attn_func:
     _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
+
+
+def is_flash_attn_available():
+    """Determine whether flash-attention can be used or not."""
+
+    # if package `flash-attn` is available, flash-attention can be used natively.
+    if is_flash_attn_2_available():
+        return True
+
+    # flash-attention can be used on Ascend NPU without package `flash-attn`
+    if is_torch_npu_available():
+        return True
+
+    return False
+
+
+def flash_attn_supports_top_left_mask():
+    """Determine whether flash-attention uses top-left or down-right mask"""
+
+    if is_flash_attn_2_available():
+        # top-left mask is used in package `flash-attn` with version lower than 2.1.0
+        return not is_flash_attn_greater_or_equal_2_10()
+
+    if is_torch_npu_available():
+        # down-right mask is used on Ascend NPU by default, set env `NPU_FA2_SPARSE_MODE=2` to activate top-left mask.
+        from .integrations.npu_flash_attention import is_npu_fa2_top_left_aligned_causal_mask
+
+        return is_npu_fa2_top_left_aligned_causal_mask()
+
+    return False
 
 
 def _get_unpad_data(attention_mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, int]:
@@ -99,6 +148,12 @@ def _upad_input(
             Maximum sequence length in batch (`max_seqlen_in_batch_q` for the target sequence i.e. query, `max_seqlen_in_batch_k` for the source sequence i.e. key/value).
     """
     indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
+
+    # With static caches, the k/v states may be larger than the mask -> we need to slice them to avoid generating garbage
+    # It's a bit of an anti-pattern, but otherwise we silently compute wrong attentions scores
+    if key_layer.shape[1] > (seq_len := attention_mask.shape[-1]):
+        key_layer, value_layer = key_layer[:, :seq_len, :, :], value_layer[:, :seq_len, :, :]
+
     batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
     key_layer = index_first_axis(key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k)
@@ -231,7 +286,7 @@ def _flash_attention_forward(
     query_states: torch.Tensor,
     key_states: torch.Tensor,
     value_states: torch.Tensor,
-    attention_mask: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
     query_length: int,
     is_causal: bool,
     dropout: float = 0.0,
@@ -240,7 +295,7 @@ def _flash_attention_forward(
     sliding_window: Optional[int] = None,
     use_top_left_mask: bool = False,
     softcap: Optional[float] = None,
-    deterministic: bool = None,
+    deterministic: Optional[bool] = None,
     cu_seq_lens_q: Optional[torch.LongTensor] = None,
     cu_seq_lens_k: Optional[torch.LongTensor] = None,
     max_length_q: Optional[int] = None,
@@ -259,7 +314,7 @@ def _flash_attention_forward(
             Input key states to be passed to Flash Attention API
         value_states (`torch.Tensor`):
             Input value states to be passed to Flash Attention API
-        attention_mask (`torch.Tensor`):
+        attention_mask (`torch.Tensor`, *optional*):
             The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
             position of padding tokens and 1 for the position of non-padding tokens.
         dropout (`float`):
@@ -372,9 +427,9 @@ class FlashAttentionKwargs(TypedDict, total=False):
     Keyword arguments for Flash Attention with Compile.
 
     Attributes:
-        cu_seq_lens_q (`torch.LongTensor`, *optional*)
+        cumulative_seqlens_q (`torch.LongTensor`, *optional*)
             Gets cumulative sequence length for query state.
-        cu_seq_lens_k (`torch.LongTensor`, *optional*)
+        cumulative_seqlens_k (`torch.LongTensor`, *optional*)
             Gets cumulative sequence length for key state.
         max_length_q (`int`, *optional*):
             Maximum sequence length for query state.
@@ -382,7 +437,7 @@ class FlashAttentionKwargs(TypedDict, total=False):
             Maximum sequence length for key state.
     """
 
-    cu_seq_lens_q: Optional[torch.LongTensor]
-    cu_seq_lens_k: Optional[torch.LongTensor]
+    cumulative_seqlens_q: Optional[torch.LongTensor]
+    cumulative_seqlens_k: Optional[torch.LongTensor]
     max_length_q: Optional[int]
     max_length_k: Optional[int]

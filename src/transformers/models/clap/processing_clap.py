@@ -46,7 +46,7 @@ class ClapProcessor(ProcessorMixin):
         and `kwargs` arguments to RobertaTokenizerFast's [`~RobertaTokenizerFast.__call__`] if `text` is not `None` to
         encode the text. To prepare the audio(s), this method forwards the `audios` and `kwrags` arguments to
         ClapFeatureExtractor's [`~ClapFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the
-        doctsring of the above two methods for more information.
+        docstring of the above two methods for more information.
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):

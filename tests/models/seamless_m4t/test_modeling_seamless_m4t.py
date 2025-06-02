@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -429,18 +428,8 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     def test_model_weights_reload_no_missing_tied_weights(self):
         pass
 
-    @unittest.skip(
-        reason="SeamlessM4TModel is base class but has actually a bigger architecture than seamlessM4T task-specific models."
-    )
-    def test_save_load_fast_init_to_base(self):
-        pass
-
     @unittest.skip(reason="SeamlessM4TModel can takes input_ids or input_features")
     def test_forward_signature(self):
-        pass
-
-    @unittest.skip(reason="SeamlessM4T has no base model")
-    def test_save_load_fast_init_from_base(self):
         pass
 
     @unittest.skip(
@@ -486,7 +475,8 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -683,16 +673,6 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, PipelineTesterMixin, u
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    @unittest.skip(
-        reason="SeamlessM4TModel is base class but has actually a bigger architecture than seamlessM4T task-specific models."
-    )
-    def test_save_load_fast_init_to_base(self):
-        pass
-
-    @unittest.skip(reason="SeamlessM4T has no base model")
-    def test_save_load_fast_init_from_base(self):
-        pass
 
     @unittest.skip(
         reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"

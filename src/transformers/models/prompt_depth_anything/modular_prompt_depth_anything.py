@@ -26,16 +26,9 @@ from transformers.models.depth_anything.modeling_depth_anything import (
 )
 from transformers.utils.generic import torch_int
 
-from ...file_utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
-
-
-_CONFIG_FOR_DOC = "PromptDepthAnythingConfig"
+from ...utils import auto_docstring
 
 
 class PromptDepthAnythingConfig(DepthAnythingConfig):
@@ -164,45 +157,8 @@ class PromptDepthAnythingDepthEstimationHead(DepthAnythingDepthEstimationHead):
         return predicted_depth
 
 
-PROMPT_DEPTH_ANYTHING_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`PromptDepthAnythingConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-PROMPT_DEPTH_ANYTHING_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`DPTImageProcessor.__call__`]
-            for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        prompt_depth (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
-            Prompt depth is the sparse or low-resolution depth obtained from multi-view geometry or a
-            low-resolution depth sensor. It generally has shape (height, width), where height
-            and width can be smaller than those of the images. It is optional and can be None, which means no prompt depth
-            will be used. If it is None, the output will be a monocular relative depth.
-            The values are recommended to be in meters, but this is not necessary.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
+@auto_docstring
 class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = PromptDepthAnythingConfig
     base_model_prefix = "prompt_depth_anything"
     main_input_name = "pixel_values"
@@ -210,15 +166,10 @@ class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
+        if isinstance(module, (nn.Conv2d, nn.ConvTranspose2d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
 
 
 class PromptDepthAnythingReassembleLayer(nn.Module):
@@ -277,15 +228,12 @@ class PromptDepthAnythingNeck(DepthAnythingNeck):
         return output
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Prompt Depth Anything Model with a depth estimation head on top (consisting of 3 convolutional layers) e.g. for KITTI, NYUv2.
-    """,
-    PROMPT_DEPTH_ANYTHING_START_DOCSTRING,
+    """
 )
 class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
-    @add_start_docstrings_to_model_forward(PROMPT_DEPTH_ANYTHING_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DepthEstimatorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -296,6 +244,15 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], DepthEstimatorOutput]:
         r"""
+        prompt_depth (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
+            Prompt depth is the sparse or low-resolution depth obtained from multi-view geometry or a
+            low-resolution depth sensor. It generally has shape (height, width), where height
+            and width can be smaller than those of the images. It is optional and can be None, which means no prompt depth
+            will be used. If it is None, the output will be a monocular relative depth.
+            The values are recommended to be in meters, but this is not necessary.
+
+        Example:
+
         ```python
         >>> from transformers import AutoImageProcessor, AutoModelForDepthEstimation
         >>> import torch
@@ -329,7 +286,8 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
         >>> depth = predicted_depth * 1000.
         >>> depth = depth.detach().cpu().numpy()
         >>> depth = Image.fromarray(depth.astype("uint16")) # mm
-        ```"""
+        ```
+        """
         loss = None
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")

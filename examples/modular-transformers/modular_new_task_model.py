@@ -1,4 +1,4 @@
-from typing import ClassVar, List, Optional, Union
+from typing import ClassVar, Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -29,7 +29,7 @@ class NewTaskModelForNewTask(PaliGemmaForConditionalGeneration):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
+        past_key_values: Optional[Union[list[torch.FloatTensor], Cache]] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,

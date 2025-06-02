@@ -132,6 +132,11 @@ audio classification, video classification, etc.
 [[autodoc]] PerceiverImageProcessor
     - preprocess
 
+## PerceiverImageProcessorFast
+
+[[autodoc]] PerceiverImageProcessorFast
+    - preprocess
+
 ## PerceiverTextPreprocessor
 
 [[autodoc]] models.perceiver.modeling_perceiver.PerceiverTextPreprocessor

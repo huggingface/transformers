@@ -28,8 +28,8 @@ from ...image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
-    is_batched,
     is_scaled_image,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -172,7 +172,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         size_divisor: int = 32,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
@@ -181,7 +181,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_center_crop: bool = True,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[Dict[str, int]] = None,
         do_pad: bool = True,
         **kwargs,
     ) -> None:
@@ -385,7 +385,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: Optional[bool] = None,
         do_center_crop: Optional[bool] = None,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[Dict[str, int]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -455,7 +455,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         do_pad = do_pad if do_pad is not None else self.do_pad
-        do_center_crop if do_center_crop is not None else self.do_center_crop
+        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         # For backwards compatibility. Initial version of this processor was cropping to the "size" argument, which
         # it should default to if crop_size is undefined.
         crop_size = (
@@ -464,9 +464,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
 
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
-
-        if not is_batched(images):
-            images = [images]
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

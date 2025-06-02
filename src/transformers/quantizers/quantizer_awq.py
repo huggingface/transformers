@@ -37,7 +37,7 @@ class AwqQuantizer(HfQuantizer):
     4-bit quantization for Activation-aware Weight Quantization(AWQ) (https://arxiv.org/abs/2306.00978)
     """
 
-    # AWQ requires data callibration - we support only inference
+    # AWQ requires data calibration - we support only inference
     requires_calibration = True
 
     required_packages = ["awq", "accelerate"]
@@ -92,6 +92,9 @@ class AwqQuantizer(HfQuantizer):
         if torch_dtype is None:
             torch_dtype = torch.float16
             logger.info("Loading the model in `torch.float16`. To overwrite it, set `torch_dtype` manually.")
+        elif torch_dtype == torch.bfloat16:
+            logger.warning("`torch.bfloat16` is not supported for AWQ kernels yet. Casting to `torch.float16`.")
+            torch_dtype = torch.float16
         elif torch_dtype != torch.float16:
             logger.warning("We suggest you to set `torch_dtype=torch.float16` for better efficiency with AWQ.")
         return torch_dtype
@@ -102,7 +105,7 @@ class AwqQuantizer(HfQuantizer):
         from ..integrations import replace_quantization_scales, replace_with_awq_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules, add_default_skips=True
         )
 
         model, has_been_replaced = replace_with_awq_linear(

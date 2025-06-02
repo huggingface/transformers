@@ -22,8 +22,10 @@ import numpy as np
 
 from ...processing_utils import ProcessorMixin
 from ...utils import to_numpy
+from ...utils.import_utils import requires
 
 
+@requires(backends=("torchaudio",))
 class MusicgenMelodyProcessor(ProcessorMixin):
     r"""
     Constructs a MusicGen Melody processor which wraps a Wav2Vec2 feature extractor - for raw audio waveform processing - and a T5 tokenizer into a single processor
@@ -54,7 +56,7 @@ class MusicgenMelodyProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `audio`
         and `kwargs` arguments to MusicgenMelodyFeatureExtractor's [`~MusicgenMelodyFeatureExtractor.__call__`] if `audio` is not
         `None` to pre-process the audio. It also forwards the `text` and `kwargs` arguments to
-        PreTrainedTokenizer's [`~PreTrainedTokenizer.__call__`] if `text` is not `None`. Please refer to the doctsring of the above two methods for more information.
+        PreTrainedTokenizer's [`~PreTrainedTokenizer.__call__`] if `text` is not `None`. Please refer to the docstring of the above two methods for more information.
 
         Args:
             audio (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -173,3 +175,6 @@ class MusicgenMelodyProcessor(ProcessorMixin):
         inputs["attention_mask"][:] = 0
 
         return inputs
+
+
+__all__ = ["MusicgenMelodyProcessor"]

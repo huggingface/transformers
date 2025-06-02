@@ -22,6 +22,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ...utils.import_utils import requires
 from .number_normalizer import EnglishNumberNormalizer
 
 
@@ -30,6 +31,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spm_char.model"}
 
 
+@requires(backends=("sentencepiece",))
 class SpeechT5Tokenizer(PreTrainedTokenizer):
     """
     Construct a SpeechT5 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
