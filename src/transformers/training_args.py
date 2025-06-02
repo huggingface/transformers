@@ -186,6 +186,7 @@ class OptimizerNames(ExplicitEnum):
     SCHEDULE_FREE_SGD = "schedule_free_sgd"
     APOLLO_ADAMW = "apollo_adamw"
     APOLLO_ADAMW_LAYERWISE = "apollo_adamw_layerwise"
+    STABLE_ADAMW = "stable_adamw"
 
 
 def _convert_str_dict(passed_value: dict):
