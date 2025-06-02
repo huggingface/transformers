@@ -272,5 +272,11 @@ class DiaConfig(PretrainedConfig):
             **kwargs,
         )
 
+    def get_text_config(self, decoder=False):
+        if decoder:
+            return self.decoder_config.get_text_config()
+        else:
+            return self.encoder_config.get_text_config()
+
 
 __all__ = ["DiaConfig", "DiaEncoderConfig", "DiaDecoderConfig"]

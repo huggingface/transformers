@@ -161,7 +161,7 @@ class DiaModelTester:
         decoder_head_dim=64,
         decoder_cross_attention_heads=4,
         decoder_cross_head_dim=64,
-        decoder_vocab_size=200,
+        decoder_vocab_size=100,
         # Common
         hidden_act="silu",
         hidden_dropout_prob=0.1,
@@ -169,9 +169,9 @@ class DiaModelTester:
         is_training=False,
         use_labels=False,
         # Special tokens
-        eos_token_id=98,
-        pad_token_id=99,
-        bos_token_id=100,
+        eos_token_id=97,
+        pad_token_id=98,
+        bos_token_id=99,
         # Other
         seq_length=30,
         num_conv_layers=1,

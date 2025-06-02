@@ -31,7 +31,6 @@ from ...generation.logits_process import (
     LogitsProcessor,
     LogitsProcessorList,
     MinPLogitsWarper,
-    RepetitionPenaltyLogitsProcessor,
     SuppressTokensAtBeginLogitsProcessor,
     SuppressTokensLogitsProcessor,
     TemperatureLogitsWarper,
@@ -41,6 +40,7 @@ from ...generation.logits_process import (
 )
 from ...generation.stopping_criteria import (
     ConfidenceCriteria,
+    MaxLengthCriteria,
     MaxTimeCriteria,
     StoppingCriteria,
     StoppingCriteriaList,
@@ -475,7 +475,15 @@ class DiaCrossAttention(nn.Module):
 
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        if cross_attention_states is not None:
+        # If already cached, use the cached key and value states
+        if (
+            past_key_values is not None
+            and len(past_key_values.key_cache) > self.layer_idx
+            and past_key_values.get_seq_length(self.layer_idx) > 0
+        ):
+            key_states = past_key_values.key_cache[self.layer_idx]
+            value_states = past_key_values.value_cache[self.layer_idx]
+        elif cross_attention_states is not None:
             cross_shape = (*cross_attention_states.shape[:-1], -1, self.head_dim)
             key_states = self.k_proj(cross_attention_states).view(cross_shape).transpose(1, 2)
             value_states = self.v_proj(cross_attention_states).view(cross_shape).transpose(1, 2)
@@ -484,9 +492,6 @@ class DiaCrossAttention(nn.Module):
                 key_states, value_states = past_key_values.update(
                     key_states, value_states, self.layer_idx, {"cache_positions": cache_position}
                 )
-        elif past_key_values is not None:  # not prefill, make it compile compatible
-            key_states = past_key_values.key_cache[self.layer_idx]  # ty: ignore[unresolved-attribute]
-            value_states = past_key_values.value_cache[self.layer_idx]  # ty: ignore[unresolved-attribute]
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -1006,7 +1011,7 @@ class DiaHangoverLogitsProcessor(LogitsProcessor):
             active_rows_N, active_cols_N = torch.where(hangover_mask)
             active_tokens_values_N = self.hangover[active_rows_N, self.step, active_cols_N]
 
-            scores[active_rows_N, active_cols_N, :] = float("-inf")
+            scores[active_rows_N, active_cols_N, :] = -torch.inf
             scores[active_rows_N, active_cols_N, active_tokens_values_N] = 0.0
 
             self.step += 1
@@ -1155,13 +1160,108 @@ class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
         # This is possible because we applied `DiaEOSFilterAndScaleLogitsProcessor`
         last_generated_tokens = torch.argmax(scores, dim=-1)[:, 0]  # Shape [B_orig]
         eos_start_mask = last_generated_tokens == self.eos_value
-        eos_start_mask |= step - self.max_delay_pattern == self.max_step
+        eos_start_mask |= step + self.max_delay_pattern >= self.max_step
         eos_start_mask &= self.eos_countup < 0
+
+        # Make sure that the EOS token is the only candidate for the first token
+        scores[eos_start_mask, 0, :] = -torch.inf
+        scores[eos_start_mask, 0, self.eos_value] = 0.0
 
         self.eos_countup[eos_start_mask] = 0
         self.eos_countup[self.eos_countup >= 0] += 1
 
         return scores
+
+
+class DiaRepetitionPenaltyLogitsProcessor(LogitsProcessor):
+    r"""
+    [`LogitsProcessor`] that prevents the repetition of previous tokens through a penalty. This penalty is applied at
+    most once per token. Note that, for decoder-only models like most LLMs, the considered tokens include the prompt
+    by default.
+
+    In the original [paper](https://arxiv.org/pdf/1909.05858.pdf), the authors suggest the use of a penalty of around
+    1.2 to achieve a good balance between truthful generation and lack of repetition. To penalize and reduce
+    repetition, use `penalty` values above 1.0, where a higher value penalizes more strongly. To reward and encourage
+    repetition, use `penalty` values between 0.0 and 1.0, where a lower value rewards more strongly.
+
+    Args:
+        penalty (`float`):
+            The parameter for repetition penalty. 1.0 means no penalty. Above 1.0 penalizes previously generated
+            tokens. Between 0.0 and 1.0 rewards previously generated tokens.
+        prompt_ignore_length (`int`, *optional*):
+            The original input ids sequence length, which if provided, will not be used in the penalty calculation.
+
+    Examples:
+
+    ```py
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, RepetitionPenaltyLogitsProcessor
+
+    >>> # Initializing the model and tokenizer for it
+    >>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
+    >>> inputs = tokenizer(["I'm not going to"], return_tensors="pt")
+
+    >>> # This shows a normal generate without any specific parameters
+    >>> summary_ids = model.generate(**inputs)
+    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True)[0])
+    I'm not going to be able to do that. I'm going to be able to do that
+
+    >>> # This generates a penalty for repeated tokens
+    >>> penalized_ids = model.generate(**inputs, repetition_penalty=1.1)
+    >>> print(tokenizer.batch_decode(penalized_ids, skip_special_tokens=True)[0])
+    I'm not going to be able to do that. I'll just have to go out and play
+
+    >>> # We can also exclude the input prompt by creating an instance of this class
+    >>> # with a `prompt_ignore_length` and passing it as a custom logit processor
+    >>> rep_pen_processor = RepetitionPenaltyLogitsProcessor(
+    ...     penalty=1.1,
+    ...     prompt_ignore_length=inputs["input_ids"].shape[-1]
+    ... )
+    >>> penalized_ids = model.generate(**inputs, logits_processor=[rep_pen_processor])
+    >>> print(tokenizer.batch_decode(penalized_ids, skip_special_tokens=True)[0])
+    I'm not going to be able to do that. I'm going to have to go through a lot of things, and
+    ```
+    """
+
+    def __init__(self, penalty: float, prompt_ignore_length: Optional[int] = None):
+        if not isinstance(penalty, float) or not (penalty > 0):
+            raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
+
+        if prompt_ignore_length is not None and (
+            not isinstance(prompt_ignore_length, int) or prompt_ignore_length < 0
+        ):
+            raise ValueError(f"`prompt_ignore_length` has to be a positive integer, but is {prompt_ignore_length}")
+
+        self.penalty = penalty
+        self.prompt_ignore_length = prompt_ignore_length
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        # input_ids: (batch_size, current_sequence_length, num_channels)
+        # scores: (batch_size, num_channels, vocab_size)
+
+        if self.penalty == 1.0:  # No penalty, no change to scores
+            return scores
+
+        # Determine which part of input_ids to use for penalty calculation
+        if self.prompt_ignore_length is not None and self.prompt_ignore_length > 0:
+            input_ids_to_penalize = input_ids[:, self.prompt_ignore_length :, :]
+        else:
+            input_ids_to_penalize = input_ids
+
+        if input_ids_to_penalize.shape[1] == 0:
+            return scores
+
+        input_ids_permuted = input_ids_to_penalize.permute(0, 2, 1)  # Shape: (B, C, S')
+
+        gathered_token_scores = torch.gather(scores, 2, input_ids_permuted)
+
+        penalized_token_scores = torch.where(
+            gathered_token_scores < 0, gathered_token_scores * self.penalty, gathered_token_scores / self.penalty
+        )
+
+        scores_processed = scores.scatter(2, input_ids_permuted, penalized_token_scores)
+
+        return scores_processed
 
 
 class DiaFlattenLogitsProcessor(LogitsProcessor):
@@ -1531,9 +1631,9 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
         if generation_config.exponential_decay_length_penalty is not None:
             processors.append(
                 DiaExponentialDecayLengthPenalty(
-                    generation_config.exponential_decay_length_penalty,
-                    self.config.eos_token_id,
-                    input_ids_seq_length,
+                    exponential_decay_length_penalty=generation_config.exponential_decay_length_penalty,
+                    eos_value=self.config.eos_token_id,
+                    input_ids_seq_length=input_ids_seq_length,
                     device=device,
                 )
             )
@@ -1564,7 +1664,7 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
             )
 
         if generation_config.repetition_penalty is not None and generation_config.repetition_penalty != 1.0:
-            processors.append(RepetitionPenaltyLogitsProcessor(penalty=generation_config.repetition_penalty))
+            processors.append(DiaRepetitionPenaltyLogitsProcessor(penalty=generation_config.repetition_penalty))
         if generation_config.remove_invalid_values is True:
             processors.append(InfNanRemoveLogitsProcessor())
         if generation_config.suppress_tokens is not None:
@@ -1665,11 +1765,14 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
         criteria = StoppingCriteriaList()
         if generation_config.max_time is not None:
             criteria.append(MaxTimeCriteria(max_time=generation_config.max_time))
+        if generation_config.max_length is not None:
+            criteria.append(
+                MaxLengthCriteria(max_length=generation_config.max_length + max(self.config.delay_pattern))
+            )
         criteria.append(
             DiaEosTokenCriteria(
                 eos_value=self.config.eos_token_id,
-                pad_value=self.config.pad_token_id,
-                num_channels=self.config.decoder_config.num_channels,
+                delay_pattern=torch.tensor(self.config.delay_pattern, device=self.device, dtype=torch.long),
                 device=self.device,
             )
         )
@@ -1763,7 +1866,6 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
         custom_generate: Optional[str] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
-        return_dict_in_generate = generation_config.return_dict_in_generate
         decoder_input_ids = kwargs.get("decoder_input_ids", None)
         decoder_input_length = decoder_input_ids.shape[1] if decoder_input_ids is not None else 0
 
@@ -1782,6 +1884,8 @@ class DiaForConditionalGeneration(GenerationMixin, DiaPreTrainedModel):
             custom_generate=custom_generate,
             **kwargs,
         )
+
+        return_dict_in_generate = not isinstance(output, torch.Tensor)
 
         if return_dict_in_generate:
             output_sequences = output.sequences
