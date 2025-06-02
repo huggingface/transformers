@@ -696,8 +696,7 @@ class YosoModel(YosoPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -794,8 +793,7 @@ class YosoForMaskedLM(YosoPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MaskedLMOutput]:
         r"""
@@ -885,8 +883,7 @@ class YosoForSequenceClassification(YosoPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, SequenceClassifierOutput]:
         r"""
@@ -968,8 +965,7 @@ class YosoForMultipleChoice(YosoPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MultipleChoiceModelOutput]:
         r"""
@@ -1075,8 +1071,7 @@ class YosoForTokenClassification(YosoPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
@@ -1153,8 +1148,7 @@ class YosoForQuestionAnswering(YosoPreTrainedModel):
         inputs_embeds: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, QuestionAnsweringModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

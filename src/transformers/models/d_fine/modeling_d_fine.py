@@ -1444,8 +1444,7 @@ class DFineModel(DFinePreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[List[dict]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], DFineModelOutput]:
         r"""
@@ -1713,8 +1712,7 @@ class DFineForObjectDetection(DFinePreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[List[dict]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **loss_kwargs,
     ) -> Union[Tuple[torch.FloatTensor], DFineObjectDetectionOutput]:

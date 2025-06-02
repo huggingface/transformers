@@ -770,8 +770,7 @@ class FlavaImageModel(FlavaPreTrainedModel):
         interpolate_pos_encoding: Optional[bool] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
@@ -865,8 +864,7 @@ class FlavaTextModel(FlavaPreTrainedModel):
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
@@ -973,8 +971,7 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
@@ -1084,8 +1081,7 @@ class FlavaModel(FlavaPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
@@ -1141,8 +1137,7 @@ class FlavaModel(FlavaPreTrainedModel):
         interpolate_pos_encoding: Optional[bool] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""

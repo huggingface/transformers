@@ -510,8 +510,7 @@ class DeiTModel(DeiTPreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
@@ -619,8 +618,7 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
     ) -> Union[tuple, MaskedImageModelingOutput]:
@@ -724,8 +722,7 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
     ) -> Union[tuple, ImageClassifierOutput]:
@@ -876,8 +873,7 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
         self,
         pixel_values: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
     ) -> Union[tuple, DeiTForImageClassificationWithTeacherOutput]:

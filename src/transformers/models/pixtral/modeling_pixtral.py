@@ -337,8 +337,7 @@ class PixtralTransformer(nn.Module):
         inputs_embeds,
         attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutput]:

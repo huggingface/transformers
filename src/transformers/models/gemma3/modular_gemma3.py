@@ -564,10 +564,9 @@ class Gemma3TextModel(Gemma2Model):
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -634,7 +633,7 @@ class Gemma3TextModel(Gemma2Model):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    partial(decoder_layer.__call__, **flash_attn_kwargs),
+                    partial(decoder_layer.__call__, **kwargs),
                     hidden_states,
                     position_embeddings_global,
                     position_embeddings_local,
@@ -656,7 +655,7 @@ class Gemma3TextModel(Gemma2Model):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
-                    **flash_attn_kwargs,
+                    **kwargs,
                 )
 
             hidden_states = layer_outputs[0]
@@ -775,8 +774,7 @@ class Gemma3Model(PaliGemmaModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         **lm_kwargs,
     ) -> Union[Tuple, Gemma3ModelOutputWithPast]:
@@ -886,8 +884,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,

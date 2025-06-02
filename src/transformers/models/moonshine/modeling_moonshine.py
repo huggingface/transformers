@@ -42,6 +42,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils.generic import check_model_inputs
 from .configuration_moonshine import MoonshineConfig
 
 
@@ -379,12 +380,7 @@ class MoonshineEncoderLayer(GradientCheckpointingLayer):
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        return outputs
+        return hidden_states, self_attn_weights
 
 
 class MoonshineDecoderLayer(GradientCheckpointingLayer):
@@ -556,7 +552,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
         Args:
@@ -631,7 +627,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
                 position_ids=position_ids,
                 output_attentions=output_attentions,
                 position_embeddings=position_embeddings,
-                **flash_attn_kwargs,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]
@@ -678,7 +674,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @can_return_tuple
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -693,7 +689,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         r"""
         encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
@@ -790,7 +786,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
-                **flash_attn_kwargs,
+                **kwargs,
             )
 
             hidden_states = layer_outputs[0]

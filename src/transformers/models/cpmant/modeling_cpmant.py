@@ -345,8 +345,7 @@ class CpmAntEncoder(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_bias: torch.Tensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         past_key_values: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         use_cache: Optional[bool] = None,
     ):
@@ -587,8 +586,7 @@ class CpmAntModel(CpmAntPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -714,8 +712,7 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = None,
         use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
         attention_mask: Optional[torch.Tensor] = None,  # dummy parameter for text-generation pipeline
