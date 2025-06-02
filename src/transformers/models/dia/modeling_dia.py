@@ -22,6 +22,7 @@ from torch.nn import RMSNorm
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
+from ...generation.utils import GenerationMixin
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
     _prepare_4d_attention_mask,
@@ -32,6 +33,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
+    Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -356,7 +358,6 @@ class DiaSelfAttention(nn.Module):  # Modular : LlamaAttentions
         self.num_heads = self.config.num_attention_heads
         self.num_key_value_heads = self.config.num_key_value_heads or self.num_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.dropout = config.dropout
         self.hidden_size = config.hidden_size
         self.head_dim = getattr(config, "head_dim", config.hidden_size // self.num_heads)
         self.layer_idx = layer_idx
@@ -420,7 +421,6 @@ class DiaCrossAttention(nn.Module):
         self.num_heads = self.config.cross_num_attention_heads
         self.num_key_value_heads = self.config.cross_num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.dropout = config.dropout
         self.hidden_size = config.hidden_size
         self.cross_hidden_size = config.cross_hidden_size
         self.head_dim = config.cross_head_dim
@@ -593,18 +593,17 @@ class DiaMLP(nn.Module):  # Modular GlmMLP
         super().__init__()
 
         self.config = config
-        # TODO gate_up_proj and down_proj name
-        self.wi_fused = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=False)
-        self.wo = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
         self.activation_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
-        up_states = self.wi_fused(hidden_states)
+        up_states = self.gate_up_proj(hidden_states)
 
         gate, up_states = up_states.chunk(2, dim=-1)
         up_states = up_states * self.activation_fn(gate)
 
-        return self.wo(up_states)
+        return self.down_proj(up_states)
 
 
 class DiaDecoderLayer(GradientCheckpointingLayer):
@@ -672,7 +671,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         return hidden_states, self_attn_weights, cross_attn_weights
 
 
-class DiaMultiChannelEmbed(nn.Module):
+class DiaMultiChannelEmbedding(nn.Module):
     """In order to efficiently compute the audio embedding from the 9 different channels,
     we vectorize the embedding process by using a single embedding layer and an offset.
     Example:
@@ -707,13 +706,12 @@ class DiaDecoder(DiaPreTrainedModel):
         super().__init__(config)
         self.num_channels = config.num_channels
         self.vocab_size = config.vocab_size
-        self.embeddings = DiaMultiChannelEmbed(config)
+        self.embeddings = DiaMultiChannelEmbedding(config)
         self.rotary_embeddings = DiaRotaryEmbedding(config)
         self.layers = nn.ModuleList(
             [DiaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = RMSNorm(config.hidden_size, eps=config.norm_eps)
-        self.logits_dense = nn.Linear(config.hidden_size, (self.num_channels * self.vocab_size), bias=False)
 
     def forward(
         self,
@@ -795,9 +793,6 @@ class DiaDecoder(DiaPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        # TODO: move this out of decoder --> model for conditional gen
-        last_hidden_states = self.logits_dense(hidden_states).view(-1, self.num_channels, self.vocab_size)
-
         if not return_dict:
             return tuple(
                 v
@@ -805,7 +800,7 @@ class DiaDecoder(DiaPreTrainedModel):
                 if v is not None
             )
         return BaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=last_hidden_states,
+            last_hidden_state=hidden_states,
             past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
@@ -826,6 +821,12 @@ class DiaModel(DiaGenerationMixin, DiaPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.decoder.embed_tokens = value
+
+    def get_encoder(self):
+        return self.encoder
+
+    def get_decoder(self):
+        return self.decoder
 
     def forward(
         self,
@@ -927,7 +928,85 @@ class DiaModel(DiaGenerationMixin, DiaPreTrainedModel):
         )
 
 
+class DiaForConditionalGeneration(DiaPreTrainedModel, GenerationMixin):
+    base_model_prefix = "model"
+
+    def __init__(self, config: DiaConfig):
+        super().__init__(config)
+        self.config = config
+        self.model = DiaModel(config)
+
+        self.num_channels = config.decoder_config.num_channels
+        self.vocab_size = config.decoder_config.vocab_size
+        self.logits_dense = nn.Linear(config.decoder_config.hidden_size, (self.num_channels * self.vocab_size), bias=False)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_encoder(self):
+        return self.model.get_encoder()
+
+    def get_decoder(self):
+        return self.model.get_decoder()
+
+    def forward(
+        self,
+        # TODO: rename back to input_ids and attention_mask
+        audio_codes: Optional[Tuple[torch.FloatTensor]] = None,
+        audio_attention_mask: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        encoder_input_ids: Optional[torch.LongTensor] = None,
+        encoder_attention_mask: Optional[torch.LongTensor] = None,
+        encoder_cache_position: Optional[torch.LongTensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[EncoderDecoderCache, Tuple[torch.FloatTensor]]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,  # TODO: return dict
+    ) -> Union[Tuple, Seq2SeqModelOutput]:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.model(
+            audio_codes,
+            audio_attention_mask=audio_attention_mask,
+            cache_position=cache_position,
+            encoder_input_ids=encoder_input_ids,
+            encoder_attention_mask=encoder_attention_mask,
+            encoder_cache_position=encoder_cache_position,
+            encoder_outputs=encoder_outputs,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        audio_logits = self.logits_dense(outputs[0]).view(-1, self.num_channels, self.vocab_size)
+
+        # TODO: loss calculations here
+        loss = None
+
+        if not return_dict:
+            output = (audio_logits,) + outputs[1:]
+            # loss
+            return output
+
+        return Seq2SeqLMOutput(
+            loss=loss,
+            logits=audio_logits,
+            past_key_values=outputs.past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+        )
+
+
 __all__ = [
     "DiaModel",
+    "DiaForConditionalGeneration",
     "DiaPreTrainedModel",
 ]

@@ -22,18 +22,24 @@ import torch
 from huggingface_hub import snapshot_download
 from safetensors.torch import load_file
 
-from transformers import DacFeatureExtractor, DiaConfig, DiaModel, DiaProcessor, DiaTokenizer
+from transformers import (
+    DacFeatureExtractor,
+    DiaConfig,
+    DiaForConditionalGeneration,
+    DiaProcessor,
+    DiaTokenizer,
+)
 from transformers.utils.import_utils import _is_package_available
 
 
 # Provide just the list of layer keys you want to fix
 shape_mappings = [
-    "encoder.layers.*.mlp.wi_fused.weight",
+    "encoder.layers.*.mlp.gate_up_proj.weight",
     "decoder.layers.*.cross_attention.k_proj.weight",
     "decoder.logits_dense.weight",
     "encoder.layers.*.self_attention.q_proj.weight",
-    "encoder.layers.*.mlp.wo.weight",
-    "decoder.layers.*.mlp.wo.weight",
+    "encoder.layers.*.mlp.down_proj.weight",
+    "decoder.layers.*.mlp.down_proj.weight",
     "decoder.layers.*.self_attention.v_proj.weight",
     "decoder.layers.*.self_attention.o_proj.weight",
     "encoder.embedding.weight",
@@ -44,9 +50,15 @@ shape_mappings = [
     "encoder.layers.*.self_attention.o_proj.weight",
     "decoder.layers.*.cross_attention.o_proj.weight",
     "encoder.layers.*.self_attention.v_proj.weight",
-    "decoder.layers.*.mlp.wi_fused.weight",
+    "decoder.layers.*.mlp.gate_up_proj.weight",
     "decoder.layers.*.cross_attention.v_proj.weight",
 ]
+
+# Provide renamings here
+rename_mapping = {
+    "mlp.wo": "mlp.down_proj",
+    "mlp.wi_fused": "mlp.gate_up_proj",
+}
 
 
 def reshape_or_transpose(tensor, target_tensor, key):
@@ -96,7 +108,8 @@ def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
     print(f"Downloaded checkpoint from Hugging Face Hub: {checkpoint_path}")
 
     with torch.device("meta"):
-        model_class = DiaModel(config=DiaConfig())
+        model_class = DiaForConditionalGeneration(config=DiaConfig())
+
     model_dict = model_class.state_dict()
     model_class_keys = model_dict.keys()
     files = os.listdir(checkpoint_path)
@@ -110,7 +123,26 @@ def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
     converted_state_dict = {}
     embeddings = {}
     for key, tensor in state_dict.items():
-        if re.sub(r"\d+", "*", key) in shape_mappings:
+        # add prefix
+        key = "model." + key
+
+        # rename some weights
+        for original, rename in rename_mapping.items():
+            if original in key:
+                key = re.sub(original, rename, key)
+
+        if "embeddings" in key:
+            embeddings_key = key.rsplit(".", 2)[0] + ".embed.weight"
+            if embeddings_key in embeddings:
+                embeddings[embeddings_key] += [tensor]
+            else:
+                embeddings[embeddings_key] = [tensor]
+            continue
+        elif re.sub(r"\d+", "*", key).removeprefix("model.") in shape_mappings:
+            # add exception to the head and mlps to be renamed immediately
+            if "logits_dense" in key:
+                key = re.sub("decoder.logits_dense", "logits_dense", key).removeprefix("model.")
+
             if key in model_class_keys:
                 target_shape = model_dict[key].shape
                 try:
@@ -119,17 +151,9 @@ def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
                     tensor = new_tensor
                 except Exception as e:
                     print(f"WARNING: Could not reshape {key}: {e}")
-            else:
-                print(f"WARNING: {key} not found in model class keys, skipping reshape.")
-            converted_state_dict[key] = tensor
-        elif "embeddings" in key:
-            embeddings_key = key.rsplit(".", 2)[0] + ".embed.weight"
-            if embeddings_key in embeddings:
-                embeddings[embeddings_key] += [tensor]
-            else:
-                embeddings[embeddings_key] = [tensor]
-        else:
-            converted_state_dict[key] = tensor
+
+        converted_state_dict[key] = tensor
+
     embeddings = {k: torch.cat(v, dim=0) for k, v in embeddings.items()}
     converted_state_dict.update(embeddings)
     print(f"Saved converted checkpoint to {pytorch_dump_folder_path}")
@@ -168,4 +192,4 @@ if __name__ == "__main__":
             processor = DiaProcessor(DacFeatureExtractor(), DiaTokenizer())
             processor.save_pretrained(args.pytorch_dump_folder_path)
 
-    model.save_pretrained("ArthurZ/Dia-1.6B")
+    model.save_pretrained("AntonV/Dia-1.6B")

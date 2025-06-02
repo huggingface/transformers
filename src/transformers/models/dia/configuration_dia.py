@@ -14,14 +14,9 @@
 # limitations under the License.
 """Dia model configuration"""
 
-from typing import TYPE_CHECKING
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.get_logger(__name__)
 
@@ -102,6 +97,7 @@ class DiaDecoderConfig(PretrainedConfig):
 
 class DiaConfig(PretrainedConfig):
     model_type = "dia"
+    keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {"encoder_config": DiaEncoderConfig, "decoder_config": DiaDecoderConfig}
 
     def __init__(
