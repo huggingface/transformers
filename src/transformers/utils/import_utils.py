@@ -996,7 +996,14 @@ def is_torch_xpu_available(check_device=False):
 
 @lru_cache()
 def is_bitsandbytes_available():
-    if not is_torch_available() or not _bitsandbytes_available:
+    if not _bitsandbytes_available:
+        return False
+
+    if not is_torch_available():
+        logger.warning_once(
+            "The bitsandbytes library requires PyTorch but it was not found in your environment. "
+            "You can install it with `pip install torch`."
+        )
         return False
 
     import torch
@@ -1004,6 +1011,11 @@ def is_bitsandbytes_available():
     # `bitsandbytes` versions older than 0.43.1 eagerly require CUDA at import time,
     # so those versions of the library are practically only available when CUDA is too.
     if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.1"):
+        if not torch.cuda.is_available():
+            logger.warning_once(
+                "The installed version of bitsandbytes (<0.43.1) requires CUDA, but CUDA is not available. "
+                "You may need to install PyTorch with CUDA support or upgrade bitsandbytes to >=0.43.1."
+            )
         return torch.cuda.is_available()
 
     # Newer versions of `bitsandbytes` can be imported on systems without CUDA.
@@ -1791,10 +1803,25 @@ RICH_IMPORT_ERROR = """
 rich`. Please note that you may need to restart your runtime after installation.
 """
 
+BITSANDBYTES_IMPORT_ERROR = """
+{0} requires the bitsandbytes library but it was not found in your environment or could not be imported. 
+Note that:
+- bitsandbytes requires PyTorch to be installed first (`pip install torch`).
+- For bitsandbytes versions <0.43.1, CUDA must be available on your system.
+- For bitsandbytes versions >=0.43.1, it can be imported on systems without CUDA.
+
+You can install the latest version with:
+```
+pip install bitsandbytes
+```
+Please note that you may need to restart your runtime after installation.
+"""
+
 BACKENDS_MAPPING = OrderedDict(
     [
         ("av", (is_av_available, AV_IMPORT_ERROR)),
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
+        ("bitsandbytes", (is_bitsandbytes_available, BITSANDBYTES_IMPORT_ERROR)),
         ("cv2", (is_cv2_available, CV2_IMPORT_ERROR)),
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
         ("decord", (is_decord_available, DECORD_IMPORT_ERROR)),
