@@ -291,7 +291,8 @@ class DogeAttention(nn.Module):
                 attn_mask, attn_mask.shape[-1] - keep_window_size, dim=-1, largest=False, sorted=False
             ).indices
             min_values = torch.full_like(topk_indices, min_dtype, dtype=hidden_states.dtype)
-            attn_mask = torch.scatter(attn_mask, dim=-1, index=topk_indices, src=min_values)
+            hard_mask = torch.scatter(attn_mask, dim=-1, index=topk_indices, src=min_values)
+            attn_mask = hard_mask.detach() + attn_mask - attn_mask.detach()
         if attention_mask is not None:
             if attention_mask.dtype == torch.bool:
                 dtype = hidden_states.dtype
