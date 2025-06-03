@@ -149,6 +149,7 @@ class RichInterface:
                 # Escapes single words encased in <>, e.g. <think> -> \<think\>, for proper rendering in Markdown.
                 # It only escapes single words that may have `_`, optionally following a `/` (e.g. </think>)
                 outputs = re.sub(r"<(/*)(\w*)>", r"\<\1\2\>", outputs)
+
                 text += outputs
                 # Render the accumulated text as Markdown
                 # NOTE: this is a workaround for the rendering "unstandard markdown"
@@ -173,8 +174,10 @@ class RichInterface:
                         lines.append("  \n")
 
                 markdown = Markdown("".join(lines).strip(), code_theme="github-dark")
+
                 # Update the Live console output
                 live.update(markdown, refresh=True)
+
         self._console.print()
 
         return text, request_id
@@ -350,6 +353,15 @@ class ChatCommand(BaseTransformersCLICommand):
         chat_parser.set_defaults(func=chat_command_factory)
 
     def __init__(self, args):
+        if not is_rich_available() and not is_torch_available():
+            raise ImportError(
+                "You need to install rich and torch to use the chat interface. (`pip install rich torch`)"
+            )
+        elif not is_rich_available():
+            raise ImportError("You need to install rich to use the chat interface. (`pip install rich`)")
+        elif not is_torch_available():
+            raise ImportError("You need to install torch to use the chat interface. (`pip install torch`)")
+
         args = self._handle_deprecated_args(args)
 
         if args.model_name_or_path_or_address is not None:
@@ -688,9 +700,7 @@ class ChatCommand(BaseTransformersCLICommand):
                 port=self.args.port,
                 log_level="error",
             )
-
             serve_args.model_name_or_path = self.args.model_name_or_path
-
             serve_command = ServeCommand(serve_args)
 
             thread = Thread(target=serve_command.run)
@@ -698,11 +708,6 @@ class ChatCommand(BaseTransformersCLICommand):
 
         host = "http://localhost" if self.args.host == "localhost" else self.args.host
         client = AsyncInferenceClient(f"{host}:{self.args.port}")
-
-        if not is_rich_available():
-            raise ImportError("You need to install rich to use the chat interface. (`pip install rich`)")
-        if not is_torch_available():
-            raise ImportError("You need to install torch to use the chat interface. (`pip install torch`)")
 
         args = self.args
         if args.examples_path is None:
@@ -769,7 +774,5 @@ if __name__ == "__main__":
     args = ChatArguments()
     args.model_name_or_path_or_address = "meta-llama/Llama-3.2-3b-Instruct"
     args.model_name_or_path_or_address = "http://localhost:8000"
-    # args.generate_flags = []
-
     chat = ChatCommand(args)
     chat.run()
