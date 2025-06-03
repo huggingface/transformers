@@ -4737,6 +4737,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # check if using kernels
         if use_kernels:
             from kernels import Device, kernelize
+
             kernelize(model, device=Device(type=model.device.type))
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
