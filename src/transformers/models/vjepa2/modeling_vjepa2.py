@@ -430,7 +430,7 @@ class VJEPA2ImageProcessor(BaseImageProcessor):
         **kwargs,
     ):
 
-        self.short_side_size = int(crop_size * 256 / 224)
+        self.short_side_size = crop_size
         self.size = [crop_size]
         self.crop_size = crop_size
         self.crop_size_dict = {"height": crop_size, "width": crop_size}
