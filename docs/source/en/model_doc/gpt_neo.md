@@ -78,7 +78,7 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quan
 
 ```py
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, pipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
