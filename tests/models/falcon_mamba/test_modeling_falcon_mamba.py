@@ -19,6 +19,7 @@ from unittest.util import safe_repr
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, FalconMambaConfig, is_torch_available
 from transformers.testing_utils import (
+    cleanup,
     require_bitsandbytes,
     require_torch,
     require_torch_accelerator,
@@ -451,6 +452,11 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         self.model_id = "tiiuae/falcon-mamba-7b"
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
         self.text = "Hello today"
+
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
 
     def test_generation_bf16(self):
         model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16, device_map="auto")
