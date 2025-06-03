@@ -995,8 +995,21 @@ def is_torch_xpu_available(check_device=False):
 
 
 @lru_cache()
-def is_bitsandbytes_available():
-    return _bitsandbytes_available
+def is_bitsandbytes_available(check_library_only=False) -> bool:
+    if not is_torch_available() or not _bitsandbytes_available:
+        return False
+
+    import torch
+
+    # `bitsandbytes` versions older than 0.43.1 eagerly require CUDA at import time,
+    # so those versions of the library are practically only available when CUDA is too.
+    if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.1"):
+        if check_library_only:
+            return True
+        return torch.cuda.is_available()
+
+    # Newer versions of `bitsandbytes` can be imported on systems without CUDA.
+    return True
 
 
 def is_bitsandbytes_multi_backend_available() -> bool:

@@ -72,7 +72,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             raise ImportError(
                 f"Using `bitsandbytes` 4-bit quantization requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
             )
-        if not is_bitsandbytes_available():
+        if not is_bitsandbytes_available(check_library_only=True):
             raise ImportError(
                 "Using `bitsandbytes` 4-bit quantization requires the latest version of bitsandbytes: `pip install -U bitsandbytes`"
             )
