@@ -68,7 +68,6 @@ from ...utils import (
     logging,
 )
 from .configuration_dia import DiaConfig, DiaDecoderConfig, DiaEncoderConfig
-from .generation_dia import DiaGenerationMixin
 
 
 if is_torch_flex_attn_available():
