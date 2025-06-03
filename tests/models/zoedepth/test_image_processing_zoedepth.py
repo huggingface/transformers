@@ -149,7 +149,6 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             modified_dict = self.image_processor_dict
             modified_dict["size"] = 42
             image_processor = image_processing_class(**modified_dict)
-            print(self.image_processor_dict)
             self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     def test_ensure_multiple_of(self):
@@ -226,7 +225,6 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     # extend this test to check if removal of padding works fine!
     def test_post_processing_equivalence(self):
         outputs = self.image_processor_tester.prepare_depth_outputs()
-        self.image_processor_tester.do_pad = True
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
 
@@ -251,5 +249,3 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             torch.testing.assert_close(depth_fast, depth_slow, atol=1e-1, rtol=1e-3)
             self.assertLessEqual(torch.mean(torch.abs(depth_fast.float() - depth_slow.float())).item(), 5e-3)
-
-        self.image_processor_tester.do_pad = True
