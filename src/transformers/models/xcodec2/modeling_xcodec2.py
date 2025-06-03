@@ -152,9 +152,9 @@ class XCodec2Attention(nn.Module):
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
+        self.scaling = None
         self.attention_dropout = config.attention_dropout
-        self.is_causal = True
+        self.is_causal = False
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -211,6 +211,7 @@ class XCodec2Attention(nn.Module):
             value_states,
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
+            is_causal=self.is_causal,
             scaling=self.scaling,
             **kwargs,
         )
@@ -1580,6 +1581,9 @@ class XCodec2PreTrainedModel(PreTrainedModel):
     config_class = XCodec2Config
     base_model_prefix = "xcodec2"
     main_input_name = "input_values"
+    supports_gradient_checkpointing = True
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1638,9 +1642,13 @@ class XCodec2Model(XCodec2PreTrainedModel):
         Returns:
           Reconstructed speech audio (Tensor)
         """
+        wav = input_values.squeeze(1)
+        pad_for_wav = 320 - (wav.shape[1] % 320)
+        wav = torch.nn.functional.pad(wav, (0, pad_for_wav))
+
         # 1) Feature extraction
         input_features = self.feature_extractor(
-            input_values.squeeze(1).cpu().numpy(),
+            F.pad(wav[0, :].cpu(), (160, 160)),
             sampling_rate=self.feature_extractor.sampling_rate,
             return_tensors="pt",
         ).input_features  # [batch, frames, feat_dim]
@@ -1652,24 +1660,21 @@ class XCodec2Model(XCodec2PreTrainedModel):
         semantic_encoded = self.SemanticEncoder_module(semantic_hidden_16)
 
         # 3) codec encoder
-        vq_emb = self.CodecEnc(input_values)  # [batch, time//down, 1024] Example only
+        vq_emb = self.CodecEnc(wav.unsqueeze(1))  # [batch, time//down, 1024] Example only
         vq_emb = vq_emb.transpose(1, 2)  # -> [batch, 1024, frames]
 
         # Align the time frames of the semantic vector, example processing only
-        # In the actual implementation, dimensions might need to be aligned first
         if vq_emb.shape[-1] != semantic_encoded.shape[-1]:
-            # Simple truncation or padding is acceptable, you need to decide
             min_len = min(vq_emb.shape[-1], semantic_encoded.shape[-1])
             vq_emb = vq_emb[:, :, :min_len]
             semantic_encoded = semantic_encoded[:, :, :min_len]
 
         # 4) Concatenation
-        concat_emb = torch.cat([semantic_encoded, vq_emb], dim=1)  # [batch, 1024 + 1024, frames]
+        concat_emb = torch.cat([semantic_encoded, vq_emb], dim=1)  # [batch, 2048, frames]
 
         # 5) fc_prior
         concat_emb = self.fc_prior(concat_emb.transpose(1, 2)).transpose(1, 2)
 
-        # 6) Quantization part of the decoder
         _, vq_code, _ = self.generator(concat_emb, vq=True)
         vq_post_emb = self.generator.quantizer.get_output_from_indices(vq_code.transpose(1, 2))
         vq_post_emb = vq_post_emb.transpose(1, 2)
@@ -1702,9 +1707,14 @@ class XCodec2Model(XCodec2PreTrainedModel):
         Returns:
           Encoded code (Tensor)
         """
+
+        wav = input_values.squeeze(1)
+        pad_for_wav = 320 - (wav.shape[1] % 320)
+        wav = torch.nn.functional.pad(wav, (0, pad_for_wav))
+
         # 1) Feature extraction
         input_features = self.feature_extractor(
-            input_values.squeeze(1).cpu().numpy(),
+            F.pad(wav[0, :].cpu(), (160, 160)),
             sampling_rate=self.feature_extractor.sampling_rate,
             return_tensors="pt",
         ).input_features  # [batch, frames, feat_dim]
@@ -1716,8 +1726,7 @@ class XCodec2Model(XCodec2PreTrainedModel):
         semantic_encoded = self.SemanticEncoder_module(semantic_hidden_16)
 
         # 3) codec encoder
-        # wav = input_waveform.unsqueeze(1).to(self.device)  # shape: [batch, 1, time]
-        vq_emb = self.CodecEnc(input_values)  # [batch, time//down, 1024] Example only
+        vq_emb = self.CodecEnc(wav.unsqueeze(1))  # [batch, time//down, 1024] Example only
         vq_emb = vq_emb.transpose(1, 2)  # -> [batch, 1024, frames]
 
         # Align the time frames of the semantic vector, example processing only
