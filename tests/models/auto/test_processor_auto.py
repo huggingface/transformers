@@ -20,8 +20,8 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
-import transformers
 from huggingface_hub import HfFolder, Repository
+import transformers
 from transformers import (
     AutoConfig,
     AutoFeatureExtractor,
@@ -71,10 +71,12 @@ class AutoFeatureExtractorTest(unittest.TestCase):
     def setUp(self):
         transformers.dynamic_module_utils.TIME_OUT_REMOTE_CODE = 0
 
+    @require_pyctcdecode
     def test_processor_from_model_shortcut(self):
         processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsInstance(processor, Wav2Vec2Processor)
 
+    @require_pyctcdecode
     def test_processor_from_local_directory_from_repo(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
             model_config = Wav2Vec2Config()
@@ -98,6 +100,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
         self.assertIsInstance(processor, Wav2Vec2Processor)
 
+    @require_pyctcdecode
     def test_processor_from_processor_class(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
             feature_extractor = Wav2Vec2FeatureExtractor()
@@ -126,6 +129,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
 
         self.assertIsInstance(processor, Wav2Vec2Processor)
 
+    @require_pyctcdecode
     def test_processor_from_feat_extr_processor_class(self):
         with tempfile.TemporaryDirectory() as tmpdirname:
             feature_extractor = Wav2Vec2FeatureExtractor()
