@@ -18,14 +18,9 @@ from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
 from logging import getLevelNamesMapping
 from threading import Thread
-from typing import Dict, Optional, List, Any
+from typing import Any, Dict, Optional
 
-import uvicorn
-from fastapi import FastAPI
-from fastapi.responses import StreamingResponse
-from huggingface_hub import ChatCompletionInputTool
-from huggingface_hub.inference._generated.types import BaseInferenceType
-from pydantic import BaseModel
+from transformers.utils.import_utils import is_fastapi_available, is_pydantic_available, is_uvicorn_available
 
 from .. import PreTrainedTokenizerFast, TextIteratorStreamer
 from ..generation.continuous_batching import ContinuousBatchingManager, RequestStatus
@@ -45,21 +40,27 @@ if is_torch_available():
     )
 
 
-class Message(BaseModel):
-    role: str
-    content: str
+if is_pydantic_available():
+    import uvicorn
+    from fastapi import FastAPI
+    from fastapi.responses import StreamingResponse
+    from pydantic import BaseModel
+
+    class Message(BaseModel):
+        role: str
+        content: str
+
+    class ChatCompletionInput(BaseModel):
+        messages: list[Message]
+        stream: Optional[bool] = False
+        model: Optional[str] = None
+        generation_config: Optional[dict] = None
+        request_id: Optional[str] = None
+        extra_body: Optional[Dict] = None
+        tools: Any = None
 
 
-class ChatCompletionInput(BaseModel):
-    messages: list[Message]
-    stream: Optional[bool] = False
-    model: Optional[str] = None
-    generation_config: Optional[dict] = None
-    request_id: Optional[str] = None
-    extra_body: Optional[Dict] = None
-    tools: Any = None,
-
-logger = logging.get_logger("transformers/serving")
+logger = logging.get_logger(__name__)
 
 
 def serve_command_factory(args: Namespace):
@@ -79,9 +80,6 @@ class ServeArguments:
     See the metadata arg for each argument's description -- the medatata will be printed with
     `transformers serve --help`
     """
-
-    # General settings
-    system_prompt: Optional[str] = field(default=None, metadata={"help": "System prompt."})
 
     # Model loading
     model_revision: str = field(
@@ -145,6 +143,9 @@ class ServeCommand(BaseTransformersCLICommand):
         serve_parser.set_defaults(func=serve_command_factory)
 
     def __init__(self, args: ServeArguments):
+        if not is_pydantic_available() or not is_fastapi_available() or not is_uvicorn_available():
+            raise ImportError("uvicorn, fastapi, and pydantic are required dependencies for the serving CLI.")
+
         self.args = args
         self.model, self.tokenizer = self.load_model_and_tokenizer(args)
         self.use_continuous_batching = self.args.attn_implementation == "sdpa_paged"
@@ -152,19 +153,7 @@ class ServeCommand(BaseTransformersCLICommand):
         cb_logger = logging.get_logger("transformers.generation.continuous_batching")
         cb_logger.setLevel(getLevelNamesMapping()[self.args.log_level.upper()])
 
-    def build_chunk(self, content: str, tool_call: str, request_id: str) -> str:
-
-        class ChatCompletionStreamOutputFunction(BaseInferenceType):
-            arguments: str
-            name: Optional[str] = None
-
-        class ChatCompletionStreamOutputDeltaToolCall(BaseInferenceType):
-            function: ChatCompletionStreamOutputFunction
-            id: str
-            index: int
-            type: str
-
-
+    def build_chunk(self, content: str, request_id: str, finish_reason: Optional[str] = None) -> str:
         payload = {
             "object": "chat.completion.chunk",
             "id": request_id,
@@ -174,9 +163,9 @@ class ServeCommand(BaseTransformersCLICommand):
             "choices": [
                 {
                     "index": 0,
-                    "delta": {"role": "assistant", "content": content, 'tool_calls': []},
+                    "delta": {"role": "assistant", "content": content, "tool_calls": []},
                     "logprobs": None,
-                    "finish_reason": None,
+                    "finish_reason": finish_reason,
                 }
             ],
         }
@@ -216,9 +205,9 @@ class ServeCommand(BaseTransformersCLICommand):
 
             chat = req.messages
 
-            inputs = self.tokenizer.apply_chat_template(chat, return_tensors="pt", add_generation_prompt=True, tools=req.tools).to(
-                self.model.device
-            )
+            inputs = self.tokenizer.apply_chat_template(
+                chat, return_tensors="pt", add_generation_prompt=True, tools=req.tools
+            ).to(self.model.device)
 
             generation_config = GenerationConfig(**(req.generation_config or {}))
 
@@ -234,7 +223,8 @@ class ServeCommand(BaseTransformersCLICommand):
                         else:
                             queue_is_flushed = True
 
-                    yield self.build_chunk(result.next_token, request_id=request_id)
+                    finish_reason = "stop" if result.status == RequestStatus.FINISHED else None
+                    yield self.build_chunk(result.next_token, request_id=request_id, finish_reason=finish_reason)
 
                     if result.status == RequestStatus.FINISHED:
                         break
@@ -246,69 +236,26 @@ class ServeCommand(BaseTransformersCLICommand):
     def generate(self, app):
         @app.post("/v1/chat/completions")
         def _serve(req: ChatCompletionInput):
-            from pprint import pprint
-            pprint(req.tools)
             if not req.stream:
                 return {"error": "Only streaming mode is supported."}
 
-            chat = req.messages
-            request_id = req.request_id if req.request_id is not None else "req_0"
-            text = self.tokenizer.apply_chat_template(chat, tools=req.tools, add_generation_prompt=True, tokenize=False)
-
-#             tools = [
-#                 {"function": {"name": "task_complete", "parameters": {"type": "object", "properties": {}}, "description": "Call this tool when the task given by the user is complete"}, "type": "function"},
-#                 {"function": {"name": "ask_question", "parameters": {"type": "object", "properties": {}}, "description": "Ask the user for more info required to solve or clarify their problem."}, "type": "function"},
-#                 {"function": {"name": "FLUX_1_dev_get_seed", "parameters": {"type": "object", "properties": {"randomize_seed": {"type": "boolean", "description": "If True, a random seed (an integer in [0, MAX_SEED)) is generated using NumPy's default random number generator. If False, the provided seed argument is returned as-is.", "default": True}, "seed": {"type": "number", "description": "The seed value to use if randomize_seed is False."}}}, "description": "Determine and return the random seed to use for model generation."}, "type": "function"},
-#                 {"function": {"name": "FLUX_1_dev_infer", "parameters": {"type": "object", "properties": {"prompt": {"type": "string", "description": "A text prompt in English to guide the image generation. Limited to 77 tokens."}, "seed": {"type": "number", "description": "The seed value used for reproducible image generation."}, "width": {"type": "number", "description": "Width of the output image in pixels. Defaults to 1024.", "default": 1024}, "height": {"type": "number", "description": "Height of the output image in pixels. Defaults to 1024.", "default": 1024}, "guidance_scale": {"type": "number", "description": "Controls how strongly the model follows the prompt.", "default": 3.5}, "num_inference_steps": {"type": "number", "description": "Number of denoising steps during generation. Higher values can improve quality. Defaults to 28.", "default": 28}}}, "description": "Generate an image from a text prompt using the FLUX.1 [dev] model. Note: - Prompts must be written in English. Other languages are not currently supported. - Prompts are limited to 77 tokens due to CLIP tokenizer constraints."}, "type": "function"}
-#             ]
-#             text ="""<|im_start|>system
-# You are an agent - please keep going until the user’s query is completely
-# resolved, before ending your turn and yielding back to the user. Only terminate
-# your turn when you are sure that the problem is solved, or if you need more
-# info from the user to solve the problem.
-# If you are not sure about anything pertaining to the user’s request, use your
-# tools to read files and gather the relevant information: do NOT guess or make
-# up an answer.
-# You MUST plan extensively before each function call, and reflect extensively
-# on the outcomes of the previous function calls. DO NOT do this entire process
-# by making function calls only, as this can impair your ability to solve the
-# problem and think insightfully.
-#
-# # Tools
-#
-# You may call one or more functions to assist with the user query.
-#
-# You are provided with function signatures within <tools></tools> XML tags:
-# <tools>
-# {"function": {"name": "task_complete", "parameters": {"type": "object", "properties": {}}, "description": "Call this tool when the task given by the user is complete"}, "type": "function"}
-# {"function": {"name": "ask_question", "parameters": {"type": "object", "properties": {}}, "description": "Ask the user for more info required to solve or clarify their problem."}, "type": "function"}
-# {"function": {"name": "FLUX_1_dev_get_seed", "parameters": {"type": "object", "properties": {"randomize_seed": {"type": "boolean", "description": "If True, a random seed (an integer in [0, MAX_SEED)) is generated using NumPy's default random number generator. If False, the provided seed argument is returned as-is.", "default": true}, "seed": {"type": "number", "description": "The seed value to use if randomize_seed is False."}}}, "description": "Determine and return the random seed to use for model generation."}, "type": "function"}
-# {"function": {"name": "FLUX_1_dev_infer", "parameters": {"type": "object", "properties": {"prompt": {"type": "string", "description": "A text prompt in English to guide the image generation. Limited to 77 tokens."}, "seed": {"type": "number", "description": "The seed value used for reproducible image generation."}, "width": {"type": "number", "description": "Width of the output image in pixels. Defaults to 1024.", "default": 1024}, "height": {"type": "number", "description": "Height of the output image in pixels. Defaults to 1024.", "default": 1024}, "guidance_scale": {"type": "number", "description": "Controls how strongly the model follows the prompt.", "default": 3.5}, "num_inference_steps": {"type": "number", "description": "Number of denoising steps during generation. Higher values can improve quality. Defaults to 28.", "default": 28}}}, "description": "Generate an image from a text prompt using the FLUX.1 [dev] model. Note: - Prompts must be written in English. Other languages are not currently supported. - Prompts are limited to 77 tokens due to CLIP tokenizer constraints."}, "type": "function"}
-# </tools>
-#
-# For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
-# <tool_call>
-# {"name": <function-name>, "arguments": <args-json-object>}
-# </tool_call><|im_end|>
-# <|im_start|>user
-# Generate me an image of a cat on the moon<|im_end|>
-# <|im_start|>assistant
-#             """
+            text = self.tokenizer.apply_chat_template(
+                req.messages, tools=req.tools, add_generation_prompt=True, tokenize=False
+            )
 
             inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)["input_ids"]
+            request_id = req.request_id if req.request_id is not None else "req_0"
 
-            print(self.tokenizer.decode(inputs[0].cpu().numpy()))
+            generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
 
             if req.generation_config is None:
-                req.generation_config = {'max_new_tokens': 1024, 'max_length': 1024}
+                req.generation_config = {}
 
-            attention_mask = torch.ones_like(inputs)
-            generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
-            generation_config = GenerationConfig(**(req.generation_config or {}))
+            generation_config = GenerationConfig(**req.generation_config)
 
             generation_kwargs = {
                 "inputs": inputs,
-                "attention_mask": attention_mask,
+                "attention_mask": torch.ones_like(inputs),
                 "streamer": generation_streamer,
                 "generation_config": generation_config,
             }
@@ -318,7 +265,6 @@ class ServeCommand(BaseTransformersCLICommand):
                 thread.start()
 
                 for result in streamer:
-                    print(result)
                     yield self.build_chunk(result, _request_id)
                 yield "data: [DONE]\n\n"
 
@@ -355,19 +301,19 @@ class ServeCommand(BaseTransformersCLICommand):
 
         torch_dtype = args.torch_dtype if args.torch_dtype in ["auto", None] else getattr(torch, args.torch_dtype)
         quantization_config = self.get_quantization_config(args)
+
         model_kwargs = {
             "revision": args.model_revision,
-            # "attn_implementation": "sdpa_paged",
+            "attn_implementation": args.attn_implementation,
             "torch_dtype": torch_dtype,
             "device_map": "auto",
             "quantization_config": quantization_config,
+            "trust_remote_code": args.trust_remote_code,
         }
-        model = AutoModelForCausalLM.from_pretrained(
-            args.model_name_or_path, trust_remote_code=args.trust_remote_code, **model_kwargs
-        )
 
-        if model.generation_config.max_length is not None and model.generation_config.max_length < 256:
-            model.generation_config.max_length = 256
+        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, **model_kwargs)
+
+        if model.generation_config.max_new_tokens is not None and model.generation_config.max_new_tokens < 256:
             model.generation_config.max_new_tokens = 256
 
         if getattr(model, "hf_device_map", None) is None:

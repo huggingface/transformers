@@ -28,7 +28,6 @@ from typing import Optional
 
 import yaml
 from huggingface_hub import AsyncInferenceClient
-from pydantic import BaseModel
 
 from transformers import (
     AutoTokenizer,
@@ -57,14 +56,6 @@ if is_torch_available():
         BitsAndBytesConfig,
         GenerationConfig,
     )
-
-
-class ChatCompletionInput(BaseModel):
-    model: str
-    max_tokens: int
-    stream: bool
-    messages: list
-
 
 ALLOWED_KEY_CHARS = set(string.ascii_letters + string.whitespace)
 ALLOWED_VALUE_CHARS = set(
@@ -695,6 +686,7 @@ class ChatCommand(BaseTransformersCLICommand):
                 use_bnb_nested_quant=self.args.use_bnb_nested_quant,
                 host=self.args.host,
                 port=self.args.port,
+                log_level="error",
             )
 
             serve_args.model_name_or_path = self.args.model_name_or_path
