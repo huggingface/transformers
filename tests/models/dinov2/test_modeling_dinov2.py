@@ -15,8 +15,6 @@
 
 import unittest
 
-import torch
-
 from transformers import Dinov2Config, Dinov2Model
 from transformers.testing_utils import (
     is_flaky,
@@ -345,6 +343,3 @@ class Dinov2BackboneTest(unittest.TestCase, BackboneTesterMixin):
 
     def setUp(self):
         self.model_tester = Dinov2ModelTester(self)
-
-
-
