@@ -55,7 +55,7 @@ class MiniCPMVSliceConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class ConditionalChatTTSConfig(PretrainedConfig):
+class MiniCPMConditionalTTSConfig(PretrainedConfig):
     model_type = "conditional_chattts"
 
     def __init__(
@@ -195,10 +195,10 @@ class MiniCPM_o_2_6Config(Qwen2Config):
             self.audio_config = audio_config
 
         if tts_config is None:
-            self.tts_config = ConditionalChatTTSConfig()
+            self.tts_config = MiniCPMConditionalTTSConfig()
         elif isinstance(tts_config, dict):
-            self.tts_config = ConditionalChatTTSConfig(**tts_config)
-        elif isinstance(tts_config, ConditionalChatTTSConfig):
+            self.tts_config = MiniCPMConditionalTTSConfig(**tts_config)
+        elif isinstance(tts_config, MiniCPMConditionalTTSConfig):
             self.tts_config = tts_config
 
         self.patch_size = self.vision_config.patch_size

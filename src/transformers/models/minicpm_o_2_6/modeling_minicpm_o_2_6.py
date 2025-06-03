@@ -63,7 +63,7 @@ try:
 except:
     _tts_deps = False
 
-from .configuration_minicpm_o_2_6 import ConditionalChatTTSConfig, MiniCPM_o_2_6Config
+from .configuration_minicpm_o_2_6 import MiniCPMConditionalTTSConfig, MiniCPM_o_2_6Config
 from .processing_minicpm_o_2_6 import NumberToTextConverter, sentence_end, VoiceChecker, MiniCPM_o_2_6Processor
 
 logger = logging.get_logger(__name__)
@@ -2661,10 +2661,10 @@ class ConditionalChatTTS(PreTrainedModel):
     5. Repeat steps `2,3,4` as needed in your streaming audio generation cases, but ensure usage complies with the following guidelines discussed above.
     """
 
-    config_class = ConditionalChatTTSConfig
+    config_class = MiniCPMConditionalTTSConfig
     _no_split_modules = []
 
-    def __init__(self, config: ConditionalChatTTSConfig):
+    def __init__(self, config: MiniCPMConditionalTTSConfig):
         super().__init__(config)
 
         self.use_speaker_embedding = config.use_speaker_embedding

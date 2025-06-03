@@ -38,19 +38,18 @@ from torch.nn.functional import *
 from torch.nn.init import _calculate_fan_in_and_fan_out, trunc_normal_
 from torch.nn.modules.activation import *
 from torch.nn.utils.parametrizations import weight_norm
-from transformers.utils import logging
+
 from huggingface_hub import hf_hub_download
 
 from transformers import AutoProcessor, BertTokenizerFast, LlamaConfig, LlamaModel, PreTrainedModel, Qwen2ForCausalLM, Qwen2PreTrainedModel, TextIteratorStreamer
 from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
-from transformers.utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, is_flash_attn_2_available, logging, replace_return_docstrings
+from transformers.utils import ModelOutput, logging, add_start_docstrings, add_start_docstrings_to_model_forward, is_flash_attn_2_available, replace_return_docstrings
 from transformers.cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
 from transformers.generation.logits_process import LogitsProcessor, TopKLogitsWarper, TopPLogitsWarper
 from transformers.models.siglip.configuration_siglip import SiglipVisionConfig
 from transformers.models.siglip.modeling_siglip import SIGLIP_START_DOCSTRING, SIGLIP_VISION_INPUTS_DOCSTRING, SiglipEncoderLayer, SiglipPreTrainedModel
 from transformers.models.idefics2.modeling_idefics2 import Idefics2Encoder
-from transformers.models.whisper.modeling_whisper import WHISPER_ATTENTION_CLASSES, WhisperConfig, WhisperEncoder
-from transformers.activations import ACT2FN
+from transformers.models.whisper.modeling_whisper import WhisperConfig, WhisperEncoder, WhisperEncoderLayer
 from transformers.modeling_attn_mask_utils import _prepare_4d_attention_mask
 from transformers.integrations import is_deepspeed_zero3_enabled
 
@@ -63,13 +62,27 @@ try:
 except:
     _tts_deps = False
 
-from .configuration_minicpm_o_2_6 import ConditionalChatTTSConfig, MiniCPM_o_2_6Config
+from .configuration_minicpm_o_2_6 import MiniCPMConditionalTTSConfig, MiniCPM_o_2_6Config
 from .processing_minicpm_o_2_6 import NumberToTextConverter, sentence_end, VoiceChecker, MiniCPM_o_2_6Processor
 
 logger = logging.get_logger(__name__)
 
 @dataclass
 class OmniOutput(ModelOutput):
+    """
+    Output class for the unified multimodal model (OmniOutput).
+    This class is used to encapsulate the output of the model, which may include text, speaker embeddings, audio waveform, and sampling rate.
+
+    Attributes:
+        text (Optional[Union[str, List[str], Iterator]]):
+            The generated text output. It can be a single string, a list of strings (for batch output), or an iterator (for streaming output).
+        spk_embeds (Optional[torch.FloatTensor]):
+            The speaker embedding tensor, typically used for voice cloning or speaker adaptation. Shape: (num_spk_emb, hidden_dim).
+        audio_wav (Optional[np.ndarray]):
+            The generated audio waveform as a numpy array. This is the raw audio data (e.g., after vocoder decoding).
+        sampling_rate (Optional[int]):
+            The sampling rate (Hz) of the generated audio waveform. For example, 24000 or 16000.
+    """
     text: Optional[Union[str, List[str], Iterator]] = None
     spk_embeds: Optional[torch.FloatTensor] = None
     audio_wav: Optional[np.ndarray] = None
@@ -1867,25 +1880,7 @@ class MiniCPM_o_2_6Model(MiniCPM_o_2_6PreTrainedModel):
 
 
 # Copied from transformers.models.whisper.modeling_whisper.WhisperEncoderLayer and add use_cache for streaming inference
-class MiniCPMWhisperEncoderLayer(nn.Module):
-    def __init__(self, config: WhisperConfig, layer_idx: int = None):
-        super().__init__()
-        self.embed_dim = config.d_model
-        self.self_attn = WHISPER_ATTENTION_CLASSES[config._attn_implementation](
-            embed_dim=self.embed_dim,
-            num_heads=config.encoder_attention_heads,
-            dropout=config.attention_dropout,
-            config=config,
-            layer_idx=layer_idx,
-        )
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
-        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
-
+class MiniCPMWhisperEncoderLayer(WhisperEncoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -2660,10 +2655,10 @@ class ConditionalChatTTS(PreTrainedModel):
     5. Repeat steps `2,3,4` as needed in your streaming audio generation cases, but ensure usage complies with the following guidelines discussed above.
     """
 
-    config_class = ConditionalChatTTSConfig
+    config_class = MiniCPMConditionalTTSConfig
     _no_split_modules = []
 
-    def __init__(self, config: ConditionalChatTTSConfig):
+    def __init__(self, config: MiniCPMConditionalTTSConfig):
         super().__init__(config)
 
         self.use_speaker_embedding = config.use_speaker_embedding
