@@ -462,8 +462,9 @@ class DogeCDMoE(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
         self.num_experts = config.num_experts
+        self.num_keys = math.floor(math.sqrt(self.num_experts))
         self.top_k = config.num_experts_per_tok
-        self.num_keys = int(math.sqrt(self.num_experts))
+        self.norm_topk_prob = config.norm_topk_prob
 
         # shared expert
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
@@ -487,7 +488,7 @@ class DogeCDMoE(nn.Module):
         # get routing logits with router gate
         router_logits = self.router_gate(hidden_states).view(2, bsz * seq_len, -1)
 
-        # get experts with the highest routing weights
+        # get experts with the highest routing logits
         (scores_x, scores_y), (indices_x, indices_y) = router_logits.topk(self.num_keys, dim=-1)
         all_scores = scores_x.unsqueeze(-1) + scores_y.unsqueeze(-2)
         all_indices = indices_x.unsqueeze(-1) * self.num_keys + indices_y.unsqueeze(-2)
@@ -495,12 +496,15 @@ class DogeCDMoE(nn.Module):
         all_indices = all_indices.view(*all_indices.shape[:-2], -1)
         scores, position_indices = all_scores.topk(self.top_k, dim=-1)
         indices = all_indices.gather(-1, position_indices)
+        routing_weights = F.softmax(scores, dim=-1)
+        if self.norm_topk_prob:
+            routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+
+        # mix routed experts states with shared expert states
         down_embed = self.down_embed(indices)
         up_embed = self.up_embed(indices)
-
-        # mix experts states with cross domain states
         experts_weights = torch.matmul(down_embed, hidden_states.view(bsz * seq_len, -1, 1)).view(bsz * seq_len, -1)
-        experts_weights = self.act_fn(experts_weights) * scores.softmax(dim=-1)
+        experts_weights = self.act_fn(experts_weights) * routing_weights
         experts_states = torch.matmul(experts_weights.view(bsz * seq_len, 1, -1), up_embed).view(bsz, seq_len, -1)
         hidden_states = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
         hidden_states = hidden_states + experts_states
