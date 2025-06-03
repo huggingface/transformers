@@ -14,7 +14,7 @@
 # limitations under the License.
 """QuasarV4 model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...transformers.configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
@@ -120,7 +120,7 @@ class QuasarV4Config(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "quasarv4"
+    model_type = "quasar_v4"
 
     def __init__(
         self,
