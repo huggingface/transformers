@@ -2884,6 +2884,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         split_special_tokens: bool = False,
         **kwargs,
     ) -> BatchEncoding:
+        # Check if is_split_into_words is used with add_prefix_space
+        if is_split_into_words and hasattr(self, "add_prefix_space") and not getattr(self, "add_prefix_space", False):
+            raise ValueError(
+                f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
+                "to use it with pretokenized inputs."
+            )
+
         # Input type checking for clearer error
         def _is_valid_text_input(t):
             if isinstance(t, str):
@@ -3247,7 +3254,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value.
 
-                This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
+                This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
                 `>= 7.5` (Volta).
             padding_side (`str`, *optional*):
                 The side on which the model should have padding applied. Should be selected between ['right', 'left'].
