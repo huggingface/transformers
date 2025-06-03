@@ -4689,16 +4689,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         if device_map is not None:
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer, torch_dtype, keep_in_fp32_regex)
 
-        # check if using kernels
-        if use_kernels:
-            from kernels import Device, kernelize
-
-            if torch.cuda.is_available():
-                kernelize(model, device=Device(type="cuda"))
-            # only cuda supported for now
-            else:
-                kernelize(model, device=Device(type="cpu"))
-
         # Finalize model weight initialization
         if from_tf:
             model, loading_info = cls._load_from_tf(model, config, checkpoint_files)
@@ -4743,6 +4733,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # Set model in evaluation mode to deactivate DropOut modules by default
         model.eval()
+
+        # check if using kernels
+        if use_kernels:
+            from kernels import Device, kernelize
+            kernelize(model, device=Device(type=model.device.type))
 
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
