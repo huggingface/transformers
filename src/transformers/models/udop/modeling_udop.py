@@ -21,7 +21,8 @@ import random
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
+from collections.abc import Sequence
 
 import torch
 from torch import Tensor, nn

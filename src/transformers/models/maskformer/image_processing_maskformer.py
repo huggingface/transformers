@@ -16,7 +16,8 @@
 
 import math
 import warnings
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union
+from collections.abc import Iterable
 
 import numpy as np
 

@@ -15,7 +15,8 @@
 
 import copy
 from dataclasses import dataclass
-from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
+from collections.abc import Iterable
 
 import numpy as np
 import torch

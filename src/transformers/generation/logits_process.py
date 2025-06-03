@@ -15,7 +15,8 @@
 
 import inspect
 import math
-from typing import TYPE_CHECKING, Callable, Iterable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Union
+from collections.abc import Iterable
 
 import numpy as np
 import torch

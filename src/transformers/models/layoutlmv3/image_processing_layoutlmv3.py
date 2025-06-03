@@ -14,7 +14,8 @@
 # limitations under the License.
 """Image processor class for LayoutLMv3."""
 
-from typing import Dict, Iterable, Optional, Union
+from typing import Dict, Optional, Union
+from collections.abc import Iterable
 
 import numpy as np
 

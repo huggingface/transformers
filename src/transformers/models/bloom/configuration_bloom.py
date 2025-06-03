@@ -15,7 +15,8 @@
 """Bloom configuration"""
 
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, List, Mapping, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
+from collections.abc import Mapping
 
 from packaging import version
 

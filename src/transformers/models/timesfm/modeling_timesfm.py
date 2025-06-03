@@ -21,7 +21,8 @@
 
 import math
 from dataclasses import dataclass
-from typing import Callable, Optional, Sequence, Union
+from typing import Callable, Optional, Union
+from collections.abc import Sequence
 
 import torch
 import torch.nn as nn

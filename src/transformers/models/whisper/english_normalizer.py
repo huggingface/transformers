@@ -16,7 +16,9 @@
 import re
 import unicodedata
 from fractions import Fraction
-from typing import Iterator, List, Match, Optional, Union
+from typing import List, Optional, Union
+from re import Match
+from collections.abc import Iterator
 
 import regex
 

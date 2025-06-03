@@ -15,7 +15,8 @@
 """LayoutLM model configuration"""
 
 from collections import OrderedDict
-from typing import Any, List, Mapping, Optional
+from typing import Any, List, Optional
+from collections.abc import Mapping
 
 from ... import PretrainedConfig, PreTrainedTokenizer
 from ...onnx import OnnxConfig, PatchingSpec

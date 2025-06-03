@@ -17,7 +17,8 @@
 from __future__ import annotations
 
 import math
-from typing import Dict, Optional, Sequence, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
+from collections.abc import Sequence
 
 import numpy as np
 import tensorflow as tf

@@ -16,7 +16,8 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
+from collections.abc import Sequence
 
 import numpy as np
 import torch

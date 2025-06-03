@@ -16,7 +16,8 @@ import copy
 import math
 import warnings
 import zlib
-from typing import Callable, Iterator, List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
+from collections.abc import Iterator
 
 import numpy as np
 import torch

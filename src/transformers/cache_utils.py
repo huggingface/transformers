@@ -3,7 +3,8 @@ import importlib.metadata
 import json
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
+from collections.abc import Iterable
 
 import torch
 from packaging import version

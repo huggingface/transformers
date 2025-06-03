@@ -14,7 +14,8 @@
 # limitations under the License.
 
 import math
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
+from collections.abc import Iterable
 
 import numpy as np
 

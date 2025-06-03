@@ -17,7 +17,8 @@ import os
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
+from collections.abc import Iterable
 from urllib.parse import urlparse
 
 import numpy as np

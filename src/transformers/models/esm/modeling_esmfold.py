@@ -16,7 +16,8 @@ import math
 import sys
 from dataclasses import dataclass
 from functools import partial
-from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
+from collections.abc import Sequence
 
 import numpy as np
 import torch

@@ -15,7 +15,8 @@
 """CodeGen model configuration"""
 
 from collections import OrderedDict
-from typing import Any, List, Mapping, Optional
+from typing import Any, List, Optional
+from collections.abc import Mapping
 
 from ... import PreTrainedTokenizer, TensorType, is_torch_available
 from ...configuration_utils import PretrainedConfig

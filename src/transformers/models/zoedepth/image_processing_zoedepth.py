@@ -15,7 +15,8 @@
 """Image processor class for ZoeDepth."""
 
 import math
-from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from collections.abc import Iterable
 
 import numpy as np
 

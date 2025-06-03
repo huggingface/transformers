@@ -15,7 +15,8 @@
 """MBART model configuration"""
 
 from collections import OrderedDict
-from typing import Any, Mapping, Optional
+from typing import Any, Optional
+from collections.abc import Mapping
 
 from ... import PreTrainedTokenizer
 from ...configuration_utils import PretrainedConfig

@@ -16,7 +16,8 @@
 
 import argparse
 from pathlib import Path
-from typing import Dict, OrderedDict, Tuple
+from typing import Dict, Tuple
+from collections import OrderedDict
 
 import torch
 from audiocraft.models import MusicGen
