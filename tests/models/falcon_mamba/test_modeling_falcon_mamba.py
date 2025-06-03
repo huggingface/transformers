@@ -26,7 +26,7 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
     slow,
-    torch_device,
+    torch_device, Expectations,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -502,10 +502,19 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         texts = ["Hello today", "Hello my name is Younes and today"]
 
-        EXPECTED_OUTPUT = [
-            'Hello today I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
-            'Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global',
-        ]
+        EXPECTED_OUTPUTS = Expectations(
+            {
+                ("cuda", 7): [
+                    'Hello today I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
+                    'Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global',
+                ],
+                ("cuda", 8): [
+                    'Hello today I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
+                    'Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global',
+                ],
+            }
+        )
+        EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
 
         inputs = tok(texts, return_tensors="pt", padding=True, return_token_type_ids=False).to(torch_device)
         model = AutoModelForCausalLM.from_pretrained(model_id, device_map=0, torch_dtype=torch.float16)
@@ -513,6 +522,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         out = model.generate(**inputs, max_new_tokens=20)
         out = tok.batch_decode(out, skip_special_tokens=True)
 
+        breakpoint()
         self.assertListEqual(out, EXPECTED_OUTPUT)
 
         # We test the same generations with inputs_embeds
@@ -523,10 +533,20 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         out = model.generate(**inputs, max_new_tokens=20)
         out = tok.batch_decode(out, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT = [
-            ' I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
-            ' I will be talking about the importance of the internet in our lives.\nThe internet is a global',
-        ]
+        EXPECTED_OUTPUTS = Expectations(
+            {
+                ("cuda", 7): [
+                    ' I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
+                    ' I will be talking about the importance of the internet in our lives.\nThe internet is a global',
+                ],
+                ("cuda", 8): [
+                    ' I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
+                    ' I will be talking about the importance of the internet in our lives.\nThe internet is a global',
+                ],
+            }
+        )
+        breakpoint()
+        EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
         self.assertListEqual(out, EXPECTED_OUTPUT)
 
     @require_torch_multi_accelerator
