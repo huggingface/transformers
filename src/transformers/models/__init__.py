@@ -299,6 +299,7 @@ from . import (
     vitpose_backbone,
     vits,
     vivit,
+    vjepa2,
     wav2vec2,
     wav2vec2_bert,
     wav2vec2_conformer,
