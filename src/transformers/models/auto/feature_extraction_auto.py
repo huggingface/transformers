@@ -109,6 +109,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("wav2vec2", "Wav2Vec2FeatureExtractor"),
         ("wav2vec2-bert", "Wav2Vec2FeatureExtractor"),
         ("wav2vec2-conformer", "Wav2Vec2FeatureExtractor"),
+        ("wav2vec2_with_lm", "Wav2Vec2FeatureExtractor"),
         ("wavlm", "Wav2Vec2FeatureExtractor"),
         ("whisper", "WhisperFeatureExtractor"),
         ("xclip", "CLIPFeatureExtractor"),

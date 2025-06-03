@@ -37,8 +37,9 @@ from transformers import (
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
     Wav2Vec2Processor,
+    Wav2Vec2ProcessorWithLM
 )
-from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
+from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test, require_pyctcdecode
 from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
 from transformers.utils import (
     FEATURE_EXTRACTOR_NAME,
@@ -405,6 +406,24 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             processor.save_pretrained(tmp_dir)
             second_processor = AutoProcessor.from_pretrained(tmp_dir)
             self.assertEqual(second_processor.__class__.__name__, processor.__class__.__name__)
+
+    @require_pyctcdecode
+    def test_processor_with_lm_from_model_shortcut(self):
+        processor = AutoProcessor.from_pretrained("patrickvonplaten/wav2vec2-base-960h-with-lm")
+        self.assertIsInstance(processor, Wav2Vec2ProcessorWithLM)
+
+    @require_pyctcdecode
+    def test_processor_with_lm_from_local_directory(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model_config = Wav2Vec2Config()
+            processor = AutoProcessor.from_pretrained("patrickvonplaten/wav2vec2-base-960h-with-lm")
+
+            # save in new folder
+            model_config.save_pretrained(tmpdirname)
+            processor.save_pretrained(tmpdirname)
+
+            processor = AutoProcessor.from_pretrained(tmpdirname)
+            self.assertIsInstance(processor, Wav2Vec2ProcessorWithLM)
 
 
 @is_staging_test

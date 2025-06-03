@@ -4,3 +4,4 @@ torchaudio
 librosa
 jiwer
 evaluate
+pyctcdecode
