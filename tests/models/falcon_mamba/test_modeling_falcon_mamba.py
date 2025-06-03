@@ -526,8 +526,8 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         out = tok.batch_decode(out, skip_special_tokens=True)
 
         EXPECTED_OUTPUT = [
-            ' I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe'
-            ' I will be talking about the importance of the internet in our lives.\nThe internet is a global'
+            ' I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
+            ' I will be talking about the importance of the internet in our lives.\nThe internet is a global',
         ]
         self.assertListEqual(out, EXPECTED_OUTPUT)
 
