@@ -615,7 +615,7 @@ class Message:
                         pattern = r"<(https://github.com/huggingface/transformers/actions/runs/.+?/job/.+?)\|(.+?)>"
                         items = re.findall(pattern, line)
                     elif "tests/" in line:
-                        # TODO: Remove `quantization` from the matrix for `Model CI` job, and improve the condition here.
+                        # TODO: Improve the condition here.
                         if "tests/models/" in line or (
                             "tests/quantization/" in line and job_name == "run_quantization_torch_gpu"
                         ):
