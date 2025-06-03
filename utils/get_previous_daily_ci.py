@@ -57,8 +57,8 @@ def get_last_daily_ci_run(token, workflow_run_id=None, workflow_id=None, commit_
         if commit_sha in [None, ""] and run["status"] == "completed":
             workflow_run = run
             break
-        # if `commit_sha` is specified, and `workflow_run["head_sha"]` matches it, return it.
-        elif commit_sha not in [None, ""] and run["head_sha"] == commit_sha:
+        # if `commit_sha` is specified, return the latest completed run with `workflow_run["head_sha"]` matching the specified sha.
+        elif commit_sha not in [None, ""] and run["head_sha"] == commit_sha and run["status"] == "completed":
             workflow_run = run
             break
 
