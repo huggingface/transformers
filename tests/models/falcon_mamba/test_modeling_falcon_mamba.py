@@ -509,8 +509,8 @@ class FalconMambaIntegrationTests(unittest.TestCase):
                     'Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global',
                 ],
                 ("cuda", 8): [
-                    'Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n'
-                    'Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global'
+                    'Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
+                    'Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global',
                 ],
             }
         )
