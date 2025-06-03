@@ -17,37 +17,34 @@
 """PyTorch Doge model."""
 
 import math
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
-from transformers.models.llama.modeling_llama import (
-    LlamaForCausalLM,
+from ...activations import ACT2FN
+from ...cache_utils import Cache
+from ...configuration_utils import PretrainedConfig
+from ...integrations.flex_attention import compile_friendly_flex_attention
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_rope_utils import rope_config_validation
+from ...modeling_utils import AttentionInterface
+from ...processing_utils import Unpack
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
+from ...utils import LossKwargs, is_torch_flex_attn_available, logging
+from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaMLP,
-    LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-
-from ...activations import ACT2FN
-from ...cache_utils import Cache, StaticCache
-from ...configuration_utils import PretrainedConfig
-from ...generation import GenerationMixin
-from ...integrations.flex_attention import compile_friendly_flex_attention
-from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_rope_utils import rope_config_validation
-from ...modeling_utils import AttentionInterface
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
-from ...utils import (
-    is_torch_flex_attn_available,
-    logging,
-)
+from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel
 
 
 if is_torch_flex_attn_available():
@@ -62,22 +59,20 @@ _CONFIG_FOR_DOC = "DogeConfig"
 class DogeConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DogeModel`]. It is used to instantiate an Doge
-    model according to the specified arguments, defining the model architecture like [SmallDoge/Doge-20M](https://huggingface.co/SmallDoge/Doge-20M).
+    model according to the specified arguments, defining the model architecture like [SmallDoge/Doge-320M](https://huggingface.co/SmallDoge/Doge-320M).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32768):
-            Vocabulary size of the Doge model. Defines the number of different tokens that can be represented by the `inputs_ids` passed when calling [`DogeModel`]
+            Vocabulary size of the Doge2 model. Defines the number of different tokens that can be represented by the `inputs_ids` passed when calling [`DogeModel`]
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 2048):
+        intermediate_size (`int`, *optional*, defaults to 4096):
             Dimension of the MLP representations.
         num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer decoder.
-        hidden_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in the hidden layers.
         hidden_dropout (`float`, *optional*, defaults to 0.0):
             Dropout probability for each sequence transformation and state transformation module.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
@@ -89,14 +84,8 @@ class DogeConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        bos_token_id (`int`, *optional*, defaults to 0):
-            Beginning of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 1):
-            End of stream token id.
-        pad_token_id (`int`, *optional*, defaults to 2):
-            Padding token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
+            Whether the model's input and output word embeddings should be tied.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with.
         rope_theta (`float`, *optional*, defaults to 10000.0):
@@ -143,18 +132,27 @@ class DogeConfig(PretrainedConfig):
             When converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed by meanpooling all the original heads within that group.
             For more details checkout [this paper](https://arxiv.org/pdf/2305.13245.pdf).
             If it is not specified, will default to `num_attention_heads`.
+        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
+            Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        mlp_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         keep_window_size (`int`, *optional*, defaults to 2048):
             The window size of tokens that are not dynamically masked, and dynamic masking is only performed when the sequence length exceeds this value.
-        dynamic_mask_ratio (`float`, *optional*, defaults to 0.0):
-            The ratio to control the proportion of the dynamic mask filled with the minimum value.
         is_moe (`bool`, *optional*, defaults to `False`):
             Whether to use the Cross Domain Mixture of Experts, if `True`, the MoE will inherit the MLP to initialize.
         num_experts (`int`, *optional*, defaults to 16384):
-            Number of Experts for the Cross Domain Mixture of Experts.
+            Number of routed experts in the model. This is only used when `is_moe=True`.
         num_experts_per_tok (`int`, *optional*, defaults to 64):
             Number of selected experts to route per-token.
+        norm_topk_prob (`bool`, *optional*, defaults to `False`):
+            Whether to normalize the topk probabilities.
+        output_router_logits (`bool`, *optional*, defaults to `False`):
+            Whether or not the router logits should be returned by the model. Enabeling this will also
+            allow the model to output the auxiliary loss, including load balancing loss and router z-loss.
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
+            The aux loss factor for the total loss.
 
     ```python
     >>> from transformers import DogeConfig, DogeModel
@@ -178,12 +176,22 @@ class DogeConfig(PretrainedConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.dt_proj": "rowwise",
         "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.input_layernorm.weight": "sequence_parallel",
+        "layers.*.input_residual.weight": "sequence_parallel",
+        "layers.*.post_attention_layernorm.weight": "sequence_parallel",
+        "layers.*.post_attention_residual.weight": "sequence_parallel",
+        "norm.weight": "sequence_parallel",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
         "layers.*.mlp.router_gate": "colwise_rep",
         "layers.*.mlp.down_embed": "rowwise_rep",
         "layers.*.mlp.up_embed": "rowwise_rep",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
     }
 
     def __init__(
@@ -192,27 +200,27 @@ class DogeConfig(PretrainedConfig):
         hidden_size=1024,
         intermediate_size=2048,
         num_hidden_layers=32,
-        hidden_bias=False,
         hidden_dropout=0.0,
         hidden_act="silu",
         initializer_range=0.02,
         rms_norm_eps=1e-06,
         use_cache=True,
-        bos_token_id=0,
-        eos_token_id=1,
-        pad_token_id=2,
         tie_word_embeddings=False,
         max_position_embeddings=2048,
         rope_theta=10000.0,
         rope_scaling=None,
         num_attention_heads=8,
         num_key_value_heads=None,
+        attention_bias=False,
         attention_dropout=0.0,
+        mlp_bias=False,
         keep_window_size=2048,
-        dynamic_mask_ratio=0.0,
         is_moe=False,
         num_experts=16384,
         num_experts_per_tok=64,
+        norm_topk_prob=False,
+        output_router_logits=False,
+        router_aux_loss_coef=0.001,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -220,7 +228,6 @@ class DogeConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
 
-        self.hidden_bias = hidden_bias
         self.hidden_dropout = hidden_dropout
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
@@ -232,12 +239,16 @@ class DogeConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
+        self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self.mlp_bias = mlp_bias
         self.keep_window_size = keep_window_size
-        self.dynamic_mask_ratio = dynamic_mask_ratio
         self.is_moe = is_moe
         self.num_experts = num_experts
         self.num_experts_per_tok = num_experts_per_tok
+        self.norm_topk_prob = norm_topk_prob
+        self.output_router_logits = output_router_logits
+        self.router_aux_loss_coef = router_aux_loss_coef
 
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, copy it it to 'rope_type'.
@@ -250,9 +261,6 @@ class DogeConfig(PretrainedConfig):
             self.num_key_value_heads = num_attention_heads
 
         super().__init__(
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            pad_token_id=pad_token_id,
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
@@ -332,24 +340,23 @@ class DogeAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.keep_window_size = config.keep_window_size
-        self.dynamic_mask_ratio = config.dynamic_mask_ratio
 
         self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.hidden_bias
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
         self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.hidden_bias
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
         self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.hidden_bias
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
         # dynamic mask for the QK^T attention weights matrix
         self.A = nn.Parameter(torch.zeros(config.num_attention_heads))
         self.dt_proj = nn.Linear(
-            config.num_key_value_heads * self.head_dim, config.num_attention_heads, bias=config.hidden_bias
+            config.num_key_value_heads * self.head_dim, config.num_attention_heads, bias=config.attention_bias
         )
         self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.hidden_bias
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
     def forward(
@@ -380,24 +387,17 @@ class DogeAttention(nn.Module):
         dt_states = self.dt_proj(
             value_states.transpose(1, 2).reshape(value_states.shape[0], value_states.shape[-2], -1)
         )
-        dynamic_mask = torch.exp(self.A * F.softplus(dt_states)).transpose(-1, -2)
+        dt_states = torch.exp(self.A * F.softplus(dt_states)).transpose(-1, -2)
         attn_mask = self.prepare_dynamic_mask(
             hidden_states=hidden_states,
-            dynamic_mask=dynamic_mask,
+            dt_states=dt_states,
             keep_window_size=self.keep_window_size,
-            dynamic_mask_ratio=self.dynamic_mask_ratio,
             attention_mask=attention_mask,
         )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -417,46 +417,41 @@ class DogeAttention(nn.Module):
     def prepare_dynamic_mask(
         self,
         hidden_states: torch.Tensor,
-        dynamic_mask: torch.Tensor,
+        dt_states: torch.Tensor,
         keep_window_size: int = 2048,
-        dynamic_mask_ratio: float = 0.0,
         attention_mask: Optional[torch.Tensor] = None,
     ):
         """
         The core idea of DMA is to calculate the dynamic attention mask to mask the tokens that should be masked, so as to form sparse attention.
 
-        Combine `dynamic_mask` with `attention_mask` to generate the final `attn_mask`.
+        Combine `dt_states` with `attention_mask` to generate the final `attn_mask`.
 
         Args:
             hidden_states (`torch.Tensor`): The input hidden_states, used to determine the minimum value of the current input precision.
-            dynamic_mask (`torch.Tensor`): dynamic mask of shape `(batch_size, num_heads, key_sequence_length)`.
+            dt_states (`torch.Tensor`): dt_states of shape `(batch_size, num_heads, key_sequence_length)`.
             keep_window_size (`int`): The window size of tokens that are not dynamically masked, and dynamic masking is only performed when the sequence length exceeds this value.
-            dynamic_mask_ratio (`float`): Ratio from 0.0 to 1.0 used to control the proportion of the dynamic mask filled with the minimum value.
             attention_mask (`torch.Tensor`, *optional*): attention mask of shape `(batch_size, 1, query_sequence_length, key_sequence_length)`.
         """
-        attn_mask = dynamic_mask[:, :, None, :]
-        if dynamic_mask.shape[-1] > keep_window_size:
-            if 0.0 < dynamic_mask_ratio <= 1.0:
-                min_type = torch.finfo(hidden_states.dtype).min
-                num_dynamic_mask = int((attn_mask.shape[-1] - keep_window_size) * dynamic_mask_ratio)
-                if num_dynamic_mask > 0:
-                    rate_value = torch.kthvalue(attn_mask, num_dynamic_mask, dim=-1, keepdim=True).values
-                    attn_mask = attn_mask.masked_fill(attn_mask < rate_value, min_type)
-            else:
-                ValueError("`dynamic_mask_ratio` should be in the range (0.0, 1.0)")
+        min_dtype = torch.finfo(hidden_states.dtype).min
+        attn_mask = dt_states[:, :, None, :]
+        if attn_mask.shape[-1] > keep_window_size:
+            topk_indices = torch.topk(
+                attn_mask, attn_mask.shape[-1] - keep_window_size, dim=-1, largest=False, sorted=False
+            ).indices
+            min_values = torch.full_like(topk_indices, min_dtype, dtype=hidden_states.dtype)
+            attn_mask = torch.scatter(attn_mask, dim=-1, index=topk_indices, src=min_values)
         if attention_mask is not None:
-            attn_mask = attn_mask + attention_mask[:, :, :, : attn_mask.shape[-1]]
-
+            if attention_mask.dtype == torch.bool:
+                dtype = hidden_states.dtype
+                attention_mask = torch.where(
+                    attention_mask, torch.tensor(0.0, device=attention_mask.device, dtype=dtype), min_dtype
+                )
+            attn_mask = attn_mask.masked_fill(attention_mask[:, :, :, : attn_mask.shape[-1]] != 0, min_dtype)
         return attn_mask
 
 
 class DogeMLP(LlamaMLP):
-    def __init__(self, config: DogeConfig):
-        super().__init__()
-
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.hidden_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.hidden_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.hidden_bias)
+    pass
 
 
 class DogeCDMoE(nn.Module):
@@ -471,9 +466,9 @@ class DogeCDMoE(nn.Module):
         self.num_keys = int(math.sqrt(self.num_experts))
 
         # shared expert
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.hidden_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.hidden_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.hidden_bias)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
 
         # router gate for retrieval experts
         self.router_gate = nn.Linear(self.hidden_size, self.num_keys * 2, bias=False)
@@ -489,11 +484,11 @@ class DogeCDMoE(nn.Module):
     ) -> torch.Tensor:
         bsz, seq_len, _ = hidden_states.shape
 
-        # get routing weights with router gate
-        routing_weights = self.router_gate(hidden_states).view(2, bsz * seq_len, -1)
+        # get routing logits with router gate
+        router_logits = self.router_gate(hidden_states).view(2, bsz * seq_len, -1)
 
         # get experts with the highest routing weights
-        (scores_x, scores_y), (indices_x, indices_y) = routing_weights.topk(self.num_keys, dim=-1)
+        (scores_x, scores_y), (indices_x, indices_y) = router_logits.topk(self.num_keys, dim=-1)
         all_scores = scores_x.unsqueeze(-1) + scores_y.unsqueeze(-2)
         all_indices = indices_x.unsqueeze(-1) * self.num_keys + indices_y.unsqueeze(-2)
         all_scores = all_scores.view(*all_scores.shape[:-2], -1)
@@ -509,10 +504,10 @@ class DogeCDMoE(nn.Module):
         experts_states = torch.matmul(experts_weights.view(bsz * seq_len, 1, -1), up_embed).view(bsz, seq_len, -1)
         hidden_states = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
         hidden_states = hidden_states + experts_states
-        return hidden_states
+        return hidden_states, router_logits
 
 
-class DogeDecoderLayer(nn.Module):
+class DogeDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DogeConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.hidden_dropout = config.hidden_dropout
@@ -530,13 +525,39 @@ class DogeDecoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
+        output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor] = None,
-        **kwargs,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
+                `(batch, sequence_length)` where padding elements are indicated by 0.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            output_router_logits (`bool`, *optional*):
+                Whether or not to return the logits of all the routers. They are useful for computing the router loss,
+                and should not be returned during inference.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence.
+            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
+            kwargs (`dict`, *optional*):
+                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
+                into the model
+        """
+
         # sequence transformation
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
@@ -559,12 +580,20 @@ class DogeDecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
+        if isinstance(hidden_states, tuple):
+            hidden_states, router_logits = hidden_states
+        else:
+            router_logits = None
         hidden_states = F.dropout(hidden_states, p=self.hidden_dropout, training=self.training)
         hidden_states = self.post_attention_residual * residual + hidden_states
 
         outputs = (hidden_states,)
+
         if output_attentions:
             outputs += (self_attn_weights,)
+
+        if output_router_logits:
+            outputs += (router_logits,)
 
         return outputs
 
@@ -584,58 +613,222 @@ class DogePreTrainedModel(LlamaPreTrainedModel):
     _supports_attention_backend = True
 
 
-class DogeModel(DogePreTrainedModel, LlamaModel):
-    def _update_causal_mask(
-        self,
-        attention_mask: Union[torch.Tensor, "BlockMask"],
-        input_tensor: torch.Tensor,
-        cache_position: torch.Tensor,
-        past_key_values: Cache,
-        output_attentions: bool = False,
-    ):
-        # We have to provide attention_mask for dynamic mask computation
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-        using_static_cache = isinstance(past_key_values, StaticCache)
-
-        dtype, device = input_tensor.dtype, input_tensor.device
-        sequence_length = input_tensor.shape[1]
-        if using_static_cache:
-            target_length = past_key_values.get_max_cache_shape()
-        else:
-            target_length = (
-                attention_mask.shape[-1]
-                if isinstance(attention_mask, torch.Tensor)
-                else past_seen_tokens + sequence_length + 1
-            )
-
-        # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
-        causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
-            attention_mask,
-            sequence_length=sequence_length,
-            target_length=target_length,
-            dtype=dtype,
-            device=device,
-            cache_position=cache_position,
-            batch_size=input_tensor.shape[0],
+class DogeModel(DogePreTrainedModel, MixtralModel):
+    def __init__(self, config: DogeConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [DogeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
-        if (
-            self.config._attn_implementation == "sdpa"
-            and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
-            and not output_attentions
-        ):
-            # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
-            # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
-            # Details: https://github.com/pytorch/pytorch/issues/110213
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
 
-        return causal_mask
+def load_balancing_loss_func(
+    router_logits: Union[torch.Tensor, Tuple[torch.Tensor], None],
+    num_experts: Optional[int] = None,
+    num_keys: Optional[int] = None,
+    top_k: int = 2,
+    attention_mask: Optional[torch.Tensor] = None,
+) -> Union[torch.Tensor, int]:
+    r"""
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+
+    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
+    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
+    experts is too unbalanced.
+
+    Args:
+        router_logits:
+            Logits from the `router_gate`, should be a tuple of model.config.num_hidden_layers tensors of
+            shape [2, batch_size * sequence_length, num_keys].
+        num_experts:
+            Number of experts
+        num_keys:
+            Number of keys
+        top_k:
+            The number of experts to route per-token, can be also interpreted as the `top-k` routing
+            parameter.
+        attention_mask (`torch.Tensor`, *optional*):
+            The attention_mask used in forward function
+            shape [batch_size X sequence_length] if not None.
+
+    Returns:
+        The auxiliary loss.
+    """
+    if router_logits is None or not isinstance(router_logits, tuple):
+        return 0
+
+    compute_dtype = router_logits[0].dtype
+    compute_device = router_logits[0].device
+    all_expert_indices = []
+    all_routing_weights = []
+
+    for layer_router_logits in router_logits:
+        layer_router_logits = layer_router_logits.to(compute_device)
+
+        (scores_x, scores_y), (indices_x, indices_y) = layer_router_logits.topk(num_keys, dim=-1)
+
+        all_scores = scores_x.unsqueeze(-1) + scores_y.unsqueeze(-2)
+        all_indices = indices_x.unsqueeze(-1) * num_keys + indices_y.unsqueeze(-2)
+        all_scores = all_scores.view(*all_scores.shape[:-2], -1)
+        all_indices = all_indices.view(*all_indices.shape[:-2], -1)
+
+        _, position_indices = all_scores.topk(top_k, dim=-1)
+        expert_indices = all_indices.gather(-1, position_indices)
+
+        routing_weights = F.softmax(all_scores, dim=-1)
+
+        all_expert_indices.append(expert_indices)
+        all_routing_weights.append(routing_weights)
+    all_expert_indices = torch.cat(all_expert_indices, dim=0)
+    all_routing_weights = torch.cat(all_routing_weights, dim=0)
+
+    if attention_mask is None:
+        # Compute the percentage of tokens routed to each experts
+        all_expert_indices = all_expert_indices.view(-1)
+        tokens_per_expert = torch.zeros(num_experts, dtype=compute_dtype, device=compute_device)
+        pad = torch.ones_like(all_expert_indices, dtype=compute_dtype, device=compute_device)
+        tokens_per_expert = tokens_per_expert.scatter_add_(0, all_expert_indices, pad) / all_expert_indices.shape[0]
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.mean(all_routing_weights, dim=0)
+    else:
+        batch_size, sequence_length = attention_mask.shape
+        num_hidden_layers = len(router_logits)
+
+        #  Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
+        expert_attention_mask = (
+            attention_mask[None, :, :, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, top_k))
+            .reshape(-1)
+            .to(compute_device)
+        )
+        all_expert_indices = all_expert_indices.view(-1)[expert_attention_mask.bool()]
+
+        # Compute the percentage of tokens routed to each experts
+        tokens_per_expert = torch.zeros(num_experts, dtype=compute_dtype, device=compute_device)
+        pad = torch.ones_like(all_expert_indices, dtype=compute_dtype, device=compute_device)
+        tokens_per_expert = tokens_per_expert.scatter_add_(0, all_expert_indices, pad) / torch.sum(
+            expert_attention_mask
+        )
+
+        # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
+        router_per_expert_attention_mask = (
+            attention_mask[None, :, :, None]
+            .expand((num_hidden_layers, batch_size, sequence_length, num_experts))
+            .reshape(-1, num_experts)
+            .to(compute_device)
+        )
+
+        # Compute the average probability of routing to these experts
+        router_prob_per_expert = torch.sum(all_routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
+            router_per_expert_attention_mask, dim=0
+        )
+
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert)
+    return overall_loss * num_experts
 
 
-class DogeForCausalLM(DogePreTrainedModel, GenerationMixin, LlamaForCausalLM):
-    pass
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+
+
+class DogeForCausalLM(DogePreTrainedModel, MixtralForCausalLM):
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = DogeModel(config)
+        self.num_experts = config.num_experts
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs: Unpack[KwargsForCausalLM],
+    ) -> MoeCausalLMOutputWithPast:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, DogeForCausalLM
+
+        >>> model = DogeForCausalLM.from_pretrained("SmallDoge/Doge-320M")
+        >>> tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-320M")
+
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ```"""
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
+
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        outputs: MoeModelOutputWithPast = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            output_router_logits=output_router_logits,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
+
+        aux_loss = None
+        if output_router_logits:
+            aux_loss = load_balancing_loss_func(
+                outputs.router_logits,
+                self.num_experts,
+                math.floor(math.sqrt(self.num_experts)),
+                self.num_experts_per_tok,
+                attention_mask,
+            )
+            if labels is not None:
+                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+
+        return MoeCausalLMOutputWithPast(
+            loss=loss,
+            aux_loss=aux_loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
+        )
 
 
 class DogeForSequenceClassification(LlamaForSequenceClassification):
@@ -646,6 +839,6 @@ __all__ = [
     "DogeConfig",
     "DogeForCausalLM",
     "DogeModel",
-    "DogePreTrainedModel",
+    "DogePreTrainedModel",  # noqa: F822
     "DogeForSequenceClassification",
 ]
