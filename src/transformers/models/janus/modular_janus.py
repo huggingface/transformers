@@ -892,10 +892,6 @@ class JanusModel(JanusPreTrainedModel):
     def __init__(self, config: JanusConfig):
         super().__init__(config)
         self.config = config
-
-        # Language model is initialized first to get the correct device map
-        self.language_model = AutoModel.from_config(config=config.text_config)
-
         # This is necessary for backward compatibility, see SiglipModel initialization
         self.vision_model = JanusVisionModel._from_config(config.vision_config)
         self.aligner = JanusVisionAlignerMLP(self.vision_model.config)
@@ -907,6 +903,8 @@ class JanusModel(JanusPreTrainedModel):
         self.generation_embeddings = nn.Embedding(self.vqmodel.config.num_embeddings, self.vqmodel.config.embed_dim)
         self.generation_aligner = JanusVQVAEAlignerMLP(self.vqmodel.config)
         self.generation_head = JanusVQVAEHead(self.vqmodel.config)
+
+        self.language_model = AutoModel.from_config(config=config.text_config)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing.
@@ -1236,15 +1234,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         attention_mask = attention_mask.repeat(2, 1)
         model_kwargs["attention_mask"] = attention_mask
 
-        # Get BOI token ID
-        if hasattr(generation_config, "generation_kwargs"):
-            boi_token_id = generation_config.generation_kwargs.get("boi_token_id", generation_config.bos_token_id)
-        else:
-            boi_token_id = kwargs.get("boi_token_id", generation_config.bos_token_id)
-
         # Mask all the tokens that are neither BOS nor BOI with pad token in the unconditional logits.
         mask = (input_tokens[batch_size:, :] != generation_config.bos_token_id) & (
-            input_tokens[batch_size:, :] != boi_token_id
+            input_tokens[batch_size:, :] != generation_config.generation_kwargs["boi_token_id"]
         )
         input_tokens[batch_size:, :].masked_fill_(mask, generation_config.pad_token_id)
 
