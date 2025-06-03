@@ -1,4 +1,5 @@
-<!--Copyright 2024 The HuggingFace Team. All rights reserved.
+<!--Copyright 2025 The HuggingFace Team. All rights reserved.
+
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
 
@@ -8,8 +9,9 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
+
 -->
 
 <div style="float: right;">
@@ -18,16 +20,16 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-# ColPali
+# ColQwen2
 
-[ColPali](https://huggingface.co/papers/2407.01449) is a model designed to retrieve documents by analyzing their visual features. Unlike traditional systems that rely heavily on text extraction and OCR, ColPali treats each page as an image. It uses [Paligemma-3B](./paligemma) to capture not only text, but also the layout, tables, charts, and other visual elements to create detailed multi-vector embeddings that can be used for retrieval by computing pairwise late interaction similarity scores. This offers a more comprehensive understanding of documents and enables more efficient and accurate retrieval.
+[ColQwen2](https://doi.org/10.48550/arXiv.2407.01449) is a variant of the [ColPali](./colpali) model designed to retrieve documents by analyzing their visual features. Unlike traditional systems that rely heavily on text extraction and OCR, ColQwen2 treats each page as an image. It uses the [Qwen2-VL](./qwen2_vl) backbone to capture not only text, but also the layout, tables, charts, and other visual elements to create detailed multi-vector embeddings that can be used for retrieval by computing pairwise late interaction similarity scores. This offers a more comprehensive understanding of documents and enables more efficient and accurate retrieval.
 
 This model was contributed by [@tonywu71](https://huggingface.co/tonywu71) (ILLUIN Technology) and [@yonigozlan](https://huggingface.co/yonigozlan) (HuggingFace).
 
 You can find all the original ColPali checkpoints under Vidore's [Hf-native ColVision Models](https://huggingface.co/collections/vidore/hf-native-colvision-models-6755d68fc60a8553acaa96f7) collection.
 
 > [!TIP]
-> Click on the ColPali models in the right sidebar for more examples of how to use ColPali for image retrieval.
+> Click on the ColQwen2 models in the right sidebar for more examples of how to use ColQwen2 for image retrieval.
 
 <hfoptions id="usage">
 <hfoption id="image retrieval">
@@ -37,18 +39,20 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import ColPaliForRetrieval, ColPaliProcessor
+from transformers import ColQwen2ForRetrieval, ColQwen2Processor
+from transformers.utils.import_utils import is_flash_attn_2_available
 
 
 # Load the model and the processor
-model_name = "vidore/colpali-v1.3-hf"
+model_name = "vidore/colqwen2-v1.0-hf"
 
-model = ColPaliForRetrieval.from_pretrained(
+model = ColQwen2ForRetrieval.from_pretrained(
     model_name,
     torch_dtype=torch.bfloat16,
     device_map="auto",  # "cpu", "cuda", or "mps" for Apple Silicon
+    attn_implementation="flash_attention_2" if is_flash_attn_2_available() else "sdpa",
 )
-processor = ColPaliProcessor.from_pretrained(model_name)
+processor = ColQwen2Processor.from_pretrained(model_name)
 
 # The document page screenshots from your corpus
 url1 = "https://upload.wikimedia.org/wikipedia/commons/8/89/US-original-Declaration-1776.jpg"
@@ -102,10 +106,10 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import BitsAndBytesConfig, ColPaliForRetrieval, ColPaliProcessor
+from transformers import BitsAndBytesConfig, ColQwen2ForRetrieval, ColQwen2Processor
 
 
-model_name = "vidore/colpali-v1.3-hf"
+model_name = "vidore/colqwen2-v1.0-hf"
 
 # 4-bit quantization configuration
 bnb_config = BitsAndBytesConfig(
@@ -115,13 +119,13 @@ bnb_config = BitsAndBytesConfig(
     bnb_4bit_compute_dtype=torch.float16,
 )
 
-model = ColPaliForRetrieval.from_pretrained(
+model = ColQwen2ForRetrieval.from_pretrained(
     model_name,
     quantization_config=bnb_config,
     device_map="cuda",
-)
+).eval()
 
-processor = ColPaliProcessor.from_pretrained(model_name)
+processor = ColQwen2Processor.from_pretrained(model_name)
 
 url1 = "https://upload.wikimedia.org/wikipedia/commons/8/89/US-original-Declaration-1776.jpg"
 url2 = "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Romeoandjuliet1597.jpg/500px-Romeoandjuliet1597.jpg"
@@ -154,17 +158,19 @@ print(scores)
 
 ## Notes
 
-- [`~ColPaliProcessor.score_retrieval`] returns a 2D tensor where the first dimension is the number of queries and the second dimension is the number of images. A higher score indicates more similarity between the query and image.
+- [`~ColQwen2Processor.score_retrieval`] returns a 2D tensor where the first dimension is the number of queries and the second dimension is the number of images. A higher score indicates more similarity between the query and image.
+- Unlike ColPali, ColQwen2 supports arbitrary image resolutions and aspect ratios, which means images are not resized into fixed-size squares. This preserves more of the original input signal.
+- Larger input images generate longer multi-vector embeddings, allowing users to adjust image resolution to balance performance and memory usage.
 
-## ColPaliConfig
+## ColQwen2Config
 
-[[autodoc]] ColPaliConfig
+[[autodoc]] ColQwen2Config
 
-## ColPaliProcessor
+## ColQwen2Processor
 
-[[autodoc]] ColPaliProcessor
+[[autodoc]] ColQwen2Processor
 
-## ColPaliForRetrieval
+## ColQwen2ForRetrieval
 
-[[autodoc]] ColPaliForRetrieval
+[[autodoc]] ColQwen2ForRetrieval
     - forward
