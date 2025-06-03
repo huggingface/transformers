@@ -2277,8 +2277,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 if not isinstance(requested_attn_implementation, dict)
                 else requested_attn_implementation.get(key, None)
             )
-            # For models with backbone sub-config might be not initialized
-            if sub_config is not None:
+            # For models with backbone sub-config might be not initialized. Set the requested att
+            # if the config hasn't got any attn pre-set and the requested attn in not `None` (i.e not the default attn)
+            if (
+                sub_config is not None
+                and sub_config._attn_implementation_internal is None
+                and curr_attn_implementation is not None
+            ):
                 sub_config._attn_implementation_internal = curr_attn_implementation
 
         if config._attn_implementation == "flash_attention_2":

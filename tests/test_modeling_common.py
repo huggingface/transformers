@@ -3425,6 +3425,13 @@ class ModelTesterMixin:
                         f"The eager model should not have SDPA/FA2 attention layers but got `{class_name}.config._attn_implementation={submodule.config._attn_implementation}`"
                     )
 
+            # Set the attention to default `None` but the text config to `eager`
+            # The model should load encoders in SDPA but not the text attention
+            config._attn_implementation = None
+            config.get_text_config(decoder=True)._attn_implementation = "eager"
+            model = model_class(config)
+            self.assertTrue(model.config.get_text_config(decoder=True)._attn_implementation == "eager")
+
     @require_torch_sdpa
     def test_sdpa_can_dispatch_non_composite_models(self):
         """
