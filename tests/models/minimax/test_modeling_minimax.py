@@ -52,9 +52,9 @@ class MiniMaxModelTester(CausalLMModelTester):
         token_class = MiniMaxForTokenClassification
         question_answering_class = MiniMaxForQuestionAnswering
 
-    def __init__(self, parent, layer_type_list=[1, 0], block_size=3):
+    def __init__(self, parent, layer_types=None, block_size=3):
         super().__init__(parent)
-        self.layer_type_list = layer_type_list
+        self.layer_types = layer_types
         self.block_size = block_size
 
 
@@ -166,7 +166,7 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
                 prompt_length + generated_length,
             )
             for layer_idx, layer_attention in enumerate(iter_attentions):
-                if config.layer_type_list[layer_idx] == 1:
+                if config.layer_types[layer_idx] == "full_attention":
                     self.assertEqual(layer_attention.shape, expected_shape)
 
     def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
@@ -188,11 +188,11 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
         )
 
         for layer_idx in range(config.num_hidden_layers):
-            if config.layer_type_list[layer_idx] == 0:
-                self.assertEqual(decoder_past_key_values[layer_idx][0].shape, linear_cache_expected_shape)
-            else:
+            if config.layer_types[layer_idx] == "full_attention":
                 self.assertEqual(decoder_past_key_values[layer_idx][0].shape, key_value_cache_expected_shape)
                 self.assertEqual(decoder_past_key_values[layer_idx][1].shape, key_value_cache_expected_shape)
+            else:
+                self.assertEqual(decoder_past_key_values[layer_idx][0].shape, linear_cache_expected_shape)
 
     @pytest.mark.generate
     def test_past_key_values_format(self, custom_all_cache_shapes=None):

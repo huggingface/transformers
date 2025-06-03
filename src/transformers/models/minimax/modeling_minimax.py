@@ -497,11 +497,11 @@ class MiniMaxDecoderLayer(nn.Module):
         self.post_attention_layernorm = MiniMaxRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.layer_idx = layer_idx
-        self.layer_type = config.layer_type_list[layer_idx]
+        self.layer_type = config.layer_types[layer_idx]
         self.mlp_alpha_factor = config.mlp_alpha_factor
         self.mlp_beta_factor = config.mlp_beta_factor
 
-        if self.layer_type == 0:
+        if self.layer_type == "linear_attention":
             self.self_attn = MiniMaxLightningAttention(config, layer_idx)
             self.attn_alpha_factor = config.linear_attn_alpha_factor
             self.attn_beta_factor = config.linear_attn_beta_factor
@@ -745,11 +745,11 @@ class MiniMaxModel(MiniMaxPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if decoder_layer.layer_type == 0:
+            if decoder_layer.layer_type == "full_attention":
+                input_attention_mask = causal_mask
+            else:
                 # lightning attention uses original attention_mask, and uses it only for the first step
                 input_attention_mask = attention_mask
-            else:
-                input_attention_mask = causal_mask
 
             layer_outputs = decoder_layer(
                 hidden_states,

@@ -19,8 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 
 
 class MiniMaxConfig(PretrainedConfig):
@@ -94,9 +93,8 @@ class MiniMaxConfig(PretrainedConfig):
             The aux loss factor for the total loss.
         router_jitter_noise (`float`, *optional*, defaults to 0.0):
             Amount of noise to add to the router.
-        layer_type_list (`List[int]`, *optional*, defaults to `[0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1]`):
-            List of attention types for each layer. `0` for linear (lightning) attention
-            and `1` for full (normal) attention.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
         block_size (`int`, *optional*, defaults to 256):
             The length of each attention block, determining how queries, keys, and values
             are grouped and processed for intra- and inter-block attention.
@@ -170,7 +168,7 @@ class MiniMaxConfig(PretrainedConfig):
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         router_jitter_noise=0.0,
-        layer_type_list=None,
+        layer_types=None,
         block_size=256,
         full_attn_alpha_factor=1,
         full_attn_beta_factor=1,
@@ -213,7 +211,7 @@ class MiniMaxConfig(PretrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
-        self.layer_type_list = [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1] if layer_type_list is None else layer_type_list
+        self.layer_types = layer_types
         self.block_size = block_size
         self.full_attn_alpha_factor = full_attn_alpha_factor
         self.full_attn_beta_factor = full_attn_beta_factor
@@ -221,6 +219,12 @@ class MiniMaxConfig(PretrainedConfig):
         self.linear_attn_beta_factor = linear_attn_beta_factor
         self.mlp_alpha_factor = mlp_alpha_factor
         self.mlp_beta_factor = mlp_beta_factor
+
+        if self.layer_types is None:
+            self.layer_types = [
+                "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types)
 
 
 __all__ = ["MiniMaxConfig"]

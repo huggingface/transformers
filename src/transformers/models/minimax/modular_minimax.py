@@ -23,6 +23,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -117,9 +118,8 @@ class MiniMaxConfig(MixtralConfig):
             The aux loss factor for the total loss.
         router_jitter_noise (`float`, *optional*, defaults to 0.0):
             Amount of noise to add to the router.
-        layer_type_list (`List[int]`, *optional*, defaults to `[0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1]`):
-            List of attention types for each layer. `0` for linear (lightning) attention
-            and `1` for full (normal) attention.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
         block_size (`int`, *optional*, defaults to 256):
             The length of each attention block, determining how queries, keys, and values
             are grouped and processed for intra- and inter-block attention.
@@ -151,7 +151,7 @@ class MiniMaxConfig(MixtralConfig):
 
     def __init__(
         self,
-        layer_type_list=None,
+        layer_types=None,
         block_size=256,
         full_attn_alpha_factor=1,
         full_attn_beta_factor=1,
@@ -162,7 +162,7 @@ class MiniMaxConfig(MixtralConfig):
         **super_kwargs,
     ):
         super().__init__(**super_kwargs)
-        self.layer_type_list = [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1] if layer_type_list is None else layer_type_list
+        self.layer_types = layer_types
         self.block_size = block_size
         self.full_attn_alpha_factor = full_attn_alpha_factor
         self.full_attn_beta_factor = full_attn_beta_factor
@@ -170,6 +170,12 @@ class MiniMaxConfig(MixtralConfig):
         self.linear_attn_beta_factor = linear_attn_beta_factor
         self.mlp_alpha_factor = mlp_alpha_factor
         self.mlp_beta_factor = mlp_beta_factor
+
+        if self.layer_types is None:
+            self.layer_types = [
+                "full_attention" if bool((i + 1) % 2) else "linear_attention" for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types)
 
 
 class MiniMaxRMSNorm(MixtralRMSNorm):
@@ -380,11 +386,11 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
         super().__init__(config, layer_idx)
 
         self.layer_idx = layer_idx
-        self.layer_type = config.layer_type_list[layer_idx]
+        self.layer_type = config.layer_types[layer_idx]
         self.mlp_alpha_factor = config.mlp_alpha_factor
         self.mlp_beta_factor = config.mlp_beta_factor
 
-        if self.layer_type == 0:
+        if self.layer_type == "linear_attention":
             self.self_attn = MiniMaxLightningAttention(config, layer_idx)
             self.attn_alpha_factor = config.linear_attn_alpha_factor
             self.attn_beta_factor = config.linear_attn_beta_factor
@@ -546,11 +552,11 @@ class MiniMaxModel(MixtralModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            if decoder_layer.layer_type == 0:
+            if decoder_layer.layer_type == "full_attention":
+                input_attention_mask = causal_mask
+            else:
                 # lightning attention uses original attention_mask, and uses it only for the first step
                 input_attention_mask = attention_mask
-            else:
-                input_attention_mask = causal_mask
 
             layer_outputs = decoder_layer(
                 hidden_states,
