@@ -1152,3 +1152,71 @@ class ProcessorTesterMixin:
         self.assertEqual(len(out_dict["attention_mask"]), 1)  # batch-size=1
         self.assertEqual(len(out_dict[self.audio_input_name]), 1)  # 1 audio in the conversation
         self.assertEqual(len(out_dict[self.videos_input_name]), 1)  # 1 video in the conversation
+
+    @require_torch
+    def test_apply_chat_template_assistant_mask(self):
+        processor = self.get_processor()
+
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What is the capital of France?"},
+                    ],
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "The capital of France is Paris."},
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What about Italy?"},
+                    ],
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "The capital of Italy is Rome."},
+                    ],
+                },
+            ]
+        ]
+
+        dummy_template = (
+            "{% for message in messages %}"
+            "{% if (message['role'] != 'assistant') %}"
+            "{{'<|im_start|>' + message['role'] + '\n' + message['content'][0]['text'] + '<|im_end|>' + '\n'}}"
+            "{% elif (message['role'] == 'assistant')%}"
+            "{{'<|im_start|>' + message['role'] + '\n'}}"
+            "{% generation %}"
+            "{{message['content'][0]['text'] + '<|im_end|>'}}"
+            "{% endgeneration %}"
+            "{{'\n'}}"
+            "{% endif %}"
+            "{% endfor %}"
+        )
+
+        inputs = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=False,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            return_assistant_tokens_mask=True,
+            chat_template=dummy_template,
+        )
+        self.assertTrue("assistant_masks" in inputs)
+        self.assertEqual(len(inputs["assistant_masks"]), len(inputs["input_ids"]))
+
+        mask = inputs["assistant_masks"].bool()
+        assistant_ids = inputs["input_ids"][mask]
+
+        assistant_text = "The capital of France is Paris.<|im_end|>\nThe capital of Italy is Rome.<|im_end|>\n"
+        self.assertEqual(assistant_text, processor.decode(assistant_ids))

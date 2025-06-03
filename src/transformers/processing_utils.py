@@ -15,6 +15,7 @@
 Processing saving/loading class for common processors.
 """
 
+import bisect
 import copy
 import inspect
 import json
@@ -1602,21 +1603,29 @@ class ProcessorMixin(PushToHubMixin):
                 images=batch_images if batch_images else None,
                 videos=batch_videos if batch_videos else None,
                 audio=batch_audios if batch_audios else None,
+                return_offsets_mapping=True,
                 **kwargs,
             )
+
             if return_dict:
                 if processed_kwargs["template_kwargs"].get("return_assistant_tokens_mask", False):
                     assistant_masks = []
                     input_ids = out["input_ids"]
                     for i in range(len(input_ids)):
                         current_mask = [0] * len(input_ids[i])
+                        offsets = out["offset_mapping"][i]
+                        offset_starts = [start for start, end in offsets]
                         for assistant_start_char, assistant_end_char in generation_indices[i]:
-                            start_token = out.char_to_token(i, assistant_start_char)
-                            end_token = out.char_to_token(i, assistant_end_char - 1)
-                            if start_token is None:
+                            start_pos = bisect.bisect_right(offset_starts, assistant_start_char) - 1
+                            end_pos = bisect.bisect_right(offset_starts, assistant_end_char) - 1
+
+                            if not (
+                                start_pos >= 0
+                                and offsets[start_pos][0] <= assistant_start_char < offsets[start_pos][1]
+                            ):
                                 # start_token is out of bounds maybe due to truncation.
-                                break
-                            for token_id in range(start_token, end_token + 1 if end_token else len(input_ids[i])):
+                                continue
+                            for token_id in range(start_pos, end_pos + 1 if end_pos else len(input_ids[i])):
                                 current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
                     out["assistant_masks"] = assistant_masks
