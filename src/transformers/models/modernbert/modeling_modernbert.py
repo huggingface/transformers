@@ -615,7 +615,6 @@ class ModernBertPreTrainedModel(PreTrainedModel):
     def _autoset_attn_implementation(
         cls,
         config,
-        use_flash_attention_2: bool = False,
         torch_dtype: Optional[torch.dtype] = None,
         device_map: Optional[Union[str, Dict[str, int]]] = None,
         check_device_map: bool = True,
@@ -638,8 +637,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
                 config._attn_implementation_internal = None
         return super()._autoset_attn_implementation(
             config,
-            use_flash_attention_2=use_flash_attention_2,
-            torch_dtype=torch.float16,
+            torch_dtype=torch_dtype,
             device_map=device_map,
             check_device_map=check_device_map,
         )
