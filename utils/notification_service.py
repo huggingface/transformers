@@ -616,7 +616,9 @@ class Message:
                         items = re.findall(pattern, line)
                     elif "tests/" in line:
                         # TODO: Remove `quantization` from the matrix for `Model CI` job, and improve the condition here.
-                        if "tests/models/" in line or ("tests/quantization/" in line and job_name == "run_quantization_torch_gpu"):
+                        if "tests/models/" in line or (
+                            "tests/quantization/" in line and job_name == "run_quantization_torch_gpu"
+                        ):
                             model = line.split("/")[2]
                         else:
                             model = line.split("/")[1]
