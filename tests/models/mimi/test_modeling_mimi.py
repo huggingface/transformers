@@ -41,6 +41,7 @@ if is_torch_available():
     import torch
 
     from transformers import MimiModel
+    from transformers.models.mimi.modeling_mimi import MimiConv1dPaddingCache
 
 
 # Copied from transformers.tests.encodec.test_modeling_encodec.prepare_inputs_dict
@@ -107,14 +108,14 @@ class MimiModelTester:
         self.sliding_window = sliding_window
         self.use_cache = use_cache
 
-    def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
+    def prepare_config_and_inputs(self, input_values_length=None):
+        input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size if input_values_length is None else input_values_length], scale=1.0)
         config = self.get_config()
         inputs_dict = {"input_values": input_values}
         return config, inputs_dict
 
-    def prepare_config_and_inputs_for_common(self):
-        config, inputs_dict = self.prepare_config_and_inputs()
+    def prepare_config_and_inputs_for_common(self, input_values_length=None):
+        config, inputs_dict = self.prepare_config_and_inputs(input_values_length=input_values_length)
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_model_class(self, model_class):
@@ -442,6 +443,26 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     def test_sdpa_can_compile_dynamic(self):
         pass
 
+    def test_encode_with_padding_cache(self):
+        frame_size = 64
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common(input_values_length=frame_size * 3)
+        model = MimiModel(config)
+        model.to(torch_device)
+        model.eval()
+        input_values = inputs_dict['input_values']
+
+        # first forward pass
+        encoded_frames = model.encode(input_values)
+
+        # in a streaming fashion
+        padding_cache = MimiConv1dPaddingCache()
+        encoded_frames_list = []
+        for start in range(0, input_values.shape[-1], frame_size):
+            input_values_chunk = input_values[:, :, start:start + frame_size]
+            encoded_frames_list.append(model.encode(input_values_chunk, padding_cache=padding_cache))
+
+        print()
+
 
 # Copied from transformers.tests.encodec.test_modeling_encodec.normalize
 def normalize(arr):
@@ -507,6 +528,42 @@ class MimiIntegrationTest(unittest.TestCase):
                 audio_output_entire_context.squeeze().cpu().numpy(),
             )
             self.assertTrue(rmse < 1e-3)
+
+    def test_integration_encode_with_padding_cache(self):
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+
+        model_id = "kyutai/mimi"
+
+        model = MimiModel.from_pretrained(model_id, use_cache=True).to(torch_device)
+        processor = AutoFeatureExtractor.from_pretrained(model_id)
+
+        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+        audio_sample = librispeech_dummy[-1]["audio"]["array"]
+
+        inputs = processor(
+            raw_audio=audio_sample,
+            sampling_rate=processor.sampling_rate,
+            return_tensors="pt",
+        ).to(torch_device)
+
+        frame_size = 1920
+        audio_codes = model.encode(inputs["input_values"]).audio_codes
+
+        # streaming chunk by chunk
+        encoder_past_key_values = None
+        padding_cache = MimiConv1dPaddingCache()
+        encoded_frames_list = []
+
+        for start in range(0, inputs["input_values"].shape[-1], frame_size):
+            input_values_chunk = inputs["input_values"][:, :, start:start + frame_size]
+            encoder_outputs = model.encode(input_values_chunk, padding_cache=padding_cache, encoder_past_key_values=encoder_past_key_values)
+            encoder_past_key_values = encoder_outputs.encoder_past_key_values
+            encoded_frames_list.append(encoder_outputs.audio_codes)
+
+        streamed_audio_codes = torch.cat(encoded_frames_list, dim=-1)
+
+        torch.testing.assert_close(streamed_audio_codes, audio_codes)
+
 
     def test_integration(self):
         expected_rmses = {

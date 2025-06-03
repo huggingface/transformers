@@ -95,6 +95,7 @@ class MimiEncoderOutput(ModelOutput):
 
     audio_codes: Optional[torch.LongTensor] = None
     encoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
+    padding_cache: Optional[MimiConv1dPaddingCache] = None
 
 
 @dataclass
@@ -117,6 +118,45 @@ class MimiDecoderOutput(ModelOutput):
     decoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
 
 
+class MimiConv1dPaddingCache:
+    """
+    Padding cache for MimiConv1d causal convolutions in order to support streaming via cache padding.
+    See: https://arxiv.org/pdf/2005.06720 & https://arxiv.org/pdf/2204.07064
+
+    A padding cache is a list of cached partial hidden states for each convolution layer.
+    Hidden states are cached from the previous call to the MimiConv1d forward pass, given the padding size.
+    """
+    def __init__(self):
+        self.padding_cache: List[torch.Tensor] = []
+
+    def update(
+        self,
+        padding_states: torch.Tensor,
+        layer_idx: int,
+    ):
+        """
+        Updates the padding cache with the new padding states for the layer `layer_idx` and returns the current cache.
+        If cache was not yet initialized, it is initialized with the padding states and None is returned.
+
+        Parameters:
+            padding_states (`torch.Tensor`):
+                The new padding states to cache.
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+        Returns:
+            `torch.Tensor` or `None`, the current padding cache.
+        """
+        if len(self.padding_cache) <= layer_idx:
+            current_cache = None
+            self.padding_cache.append(padding_states)
+        else:
+            current_cache = self.padding_cache[layer_idx]
+    
+        self.padding_cache[layer_idx] = padding_states
+
+        return current_cache
+
+
 class MimiConv1d(nn.Module):
     """Conv1d with asymmetric or causal padding and normalization."""
 
@@ -129,12 +169,14 @@ class MimiConv1d(nn.Module):
         stride: int = 1,
         dilation: int = 1,
         groups: int = 1,
-        pad_mode=None,
+        pad_mode: Optional[str] = None,
         bias: bool = True,
+        layer_idx: Optional[int] = None,
     ):
         super().__init__()
         self.causal = config.use_causal_conv
         self.pad_mode = config.pad_mode if pad_mode is None else pad_mode
+        self.layer_idx = layer_idx
 
         # warn user on unusual setup between dilation and stride
         if stride > 1 and dilation > 1:
@@ -231,15 +273,49 @@ class MimiConv1d(nn.Module):
         ) // self.conv.stride[0] + 1
         return output_lenght
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, padding_cache=None):
         extra_padding = self._get_extra_padding_for_conv1d(hidden_states)
 
-        if self.causal:
+        if not self.causal and padding_cache is not None:
+            raise ValueError("`padding_cache` is not supported for non-causal convolutions.")
+
+        if self.causal and padding_cache is not None:
+            layer_padding_cache = padding_cache.update(
+                hidden_states[:, :, -self.padding_total:] if self.padding_total > 0 else torch.tensor([]),
+                self.layer_idx
+            )
+
+            if layer_padding_cache is None:
+                if self.pad_mode == "constant":
+                    layer_padding_cache = torch.zeros(
+                        hidden_states.shape[0],
+                        self.conv.in_channels,
+                        self.padding_total,
+                        device=hidden_states.device,
+                        dtype=hidden_states.dtype
+                    )
+                elif self.pad_mode == "replicate":
+                    layer_padding_cache = torch.ones(
+                        hidden_states.shape[0],
+                        self.conv.in_channels,
+                        self.padding_total,
+                        device=hidden_states.device,
+                        dtype=hidden_states.dtype
+                    ) * hidden_states[:, :, :1]
+                else:
+                    raise ValueError("`padding_cache` is not supported for convolutions using other than `constant` or `replicate` padding mode.")
+
+            hidden_states = torch.cat([layer_padding_cache, hidden_states], dim=2)
+
+        elif self.causal:
             # Left padding for causal
             hidden_states = self._pad1d(hidden_states, (self.padding_total, extra_padding), mode=self.pad_mode)
+
         else:
             hidden_states = self._pad1d(
-                hidden_states, (self.padding_left, self.padding_right + extra_padding), mode=self.pad_mode
+                hidden_states,
+                (self.padding_left, self.padding_right + extra_padding),
+                mode=self.pad_mode
             )
 
         hidden_states = self.conv(hidden_states)
@@ -330,12 +406,21 @@ class MimiResnetBlock(nn.Module):
         else:
             self.shortcut = nn.Identity()
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, padding_cache=None):
         residual = hidden_states
-        for layer in self.block:
-            hidden_states = layer(hidden_states)
 
-        return self.shortcut(residual) + hidden_states
+        for layer in self.block:
+            if isinstance(layer, MimiConv1d):
+                hidden_states = layer(hidden_states, padding_cache=padding_cache)
+            else:
+                hidden_states = layer(hidden_states)
+
+        if isinstance(self.shortcut, MimiConv1d):
+            residual = self.shortcut(residual, padding_cache=padding_cache)
+        else:
+            residual = self.shortcut(residual)
+
+        return residual + hidden_states
 
 
 class MimiEncoder(nn.Module):
@@ -369,10 +454,17 @@ class MimiEncoder(nn.Module):
         self.layers = nn.ModuleList(model)
         self._mimiconv1d_layer_names = mimiconv1d_layer_names
 
-    # Copied from transformers.models.encodec.modeling_encodec.EncodecEncoder.forward
-    def forward(self, hidden_states):
+        # initialize layer_idx for MimiConv1d submodules, necessary for padding_cache
+        for layer_idx, layername in enumerate(self._mimiconv1d_layer_names):
+            conv_layer = self.get_submodule(layername)
+            setattr(conv_layer, "layer_idx", layer_idx)
+
+    def forward(self, hidden_states, padding_cache=None):
         for layer in self.layers:
-            hidden_states = layer(hidden_states)
+            if isinstance(layer, (MimiConv1d, MimiResnetBlock)):
+                hidden_states = layer(hidden_states, padding_cache=padding_cache)
+            else:
+                hidden_states = layer(hidden_states)
         return hidden_states
 
 
@@ -774,6 +866,16 @@ class MimiSdpaAttention(MimiAttention):
         # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         is_causal = True if causal_mask is None and q_len > 1 else False
+
+        # is_causal=True with e.g. q_len=2 will use an attention mask in the upper left form while we need lower right
+        if is_causal and q_len > 1 and q_len != key_states.shape[-2]:
+            causal_mask = torch.tril(
+                torch.ones(
+                    q_len, key_states.shape[-2], device=query_states.device, dtype=torch.bool
+                ),
+                diagonal=key_states.shape[-2] - q_len,
+            )
+            is_causal = False
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
@@ -1482,6 +1584,7 @@ class MimiModel(MimiPreTrainedModel):
                 stride=2,
                 bias=False,
                 pad_mode="replicate",
+                layer_idx=len(self.encoder._mimiconv1d_layer_names),
             )
 
             self.upsample = MimiConvTranspose1d(
@@ -1518,12 +1621,13 @@ class MimiModel(MimiPreTrainedModel):
         num_quantizers: int,
         padding_mask: int,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        padding_cache: Optional[MimiConv1dPaddingCache] = None,
         return_dict: Optional[bool] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Encodes the given input using the underlying VQVAE. The padding mask is required to compute the correct scale.
         """
-        embeddings = self.encoder(input_values)
+        embeddings = self.encoder(input_values, padding_cache=padding_cache)
         encoder_outputs = self.encoder_transformer(
             embeddings.transpose(1, 2), past_key_values=past_key_values, return_dict=return_dict
         )
@@ -1532,11 +1636,11 @@ class MimiModel(MimiPreTrainedModel):
         elif len(encoder_outputs) > 1:
             past_key_values = encoder_outputs[1]
         embeddings = encoder_outputs[0].transpose(1, 2)
-        embeddings = self.downsample(embeddings)
+        embeddings = self.downsample(embeddings, padding_cache=padding_cache)
 
         codes = self.quantizer.encode(embeddings, num_quantizers)
         codes = codes.transpose(0, 1)
-        return codes, past_key_values
+        return codes, past_key_values, padding_cache
 
     def get_encoded_length(self, input_length: torch.LongTensor) -> torch.LongTensor:
         """
@@ -1576,6 +1680,7 @@ class MimiModel(MimiPreTrainedModel):
         padding_mask: Optional[torch.Tensor] = None,
         num_quantizers: Optional[float] = None,
         encoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        padding_cache: Optional[MimiConv1dPaddingCache] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor, Optional[torch.Tensor]], MimiEncoderOutput]:
         """
@@ -1620,11 +1725,12 @@ class MimiModel(MimiPreTrainedModel):
         if padding_mask is None:
             padding_mask = torch.ones_like(input_values).bool()
 
-        encoded_frames, encoder_past_key_values = self._encode_frame(
+        encoded_frames, encoder_past_key_values, padding_cache = self._encode_frame(
             input_values,
             num_quantizers,
             padding_mask.bool(),
             past_key_values=encoder_past_key_values,
+            padding_cache=padding_cache,
             return_dict=return_dict,
         )
 
@@ -1632,9 +1738,10 @@ class MimiModel(MimiPreTrainedModel):
             return (
                 encoded_frames,
                 encoder_past_key_values,
+                padding_cache,
             )
 
-        return MimiEncoderOutput(encoded_frames, encoder_past_key_values)
+        return MimiEncoderOutput(encoded_frames, encoder_past_key_values, padding_cache)
 
     def _decode_frame(
         self,
