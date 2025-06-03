@@ -250,7 +250,10 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         videos: VideoInput,
         **kwargs: Unpack[VideosKwargs],
     ) -> BatchFeature:
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_kwargs.__annotations__.keys())
+        validate_kwargs(
+            captured_kwargs=kwargs.keys(),
+            valid_processor_keys=list(self.valid_kwargs.__annotations__.keys()) + ["return_tensors"],
+        )
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
         for kwarg_name in self.valid_kwargs.__annotations__:
