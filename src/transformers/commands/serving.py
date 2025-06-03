@@ -77,7 +77,7 @@ class ServeArguments:
     r"""
     Arguments for the serve CLI.
 
-    See the metadata arg for each argument's description -- the medatata will be printed with
+    See the metadata arg for each argument's description -- the metadata will be printed with
     `transformers serve --help`
     """
 
