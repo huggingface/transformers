@@ -14,11 +14,11 @@
 # limitations under the License.
 import sys
 from argparse import ArgumentParser
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from pprint import pformat
 from typing import Any, Dict, List, Set, Tuple
-from collections.abc import Iterator
 
 import requests
 import torch

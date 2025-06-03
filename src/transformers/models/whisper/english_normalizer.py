@@ -15,10 +15,10 @@
 
 import re
 import unicodedata
-from fractions import Fraction
-from typing import List, Optional, Union
-from re import Match
 from collections.abc import Iterator
+from fractions import Fraction
+from re import Match
+from typing import List, Optional, Union
 
 import regex
 

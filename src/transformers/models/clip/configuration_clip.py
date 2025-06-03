@@ -15,8 +15,8 @@
 """CLIP model configuration"""
 
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Optional
 from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Optional
 
 
 if TYPE_CHECKING:

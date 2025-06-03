@@ -18,11 +18,11 @@ Speech processor class for Wav2Vec2
 
 import os
 import warnings
+from collections.abc import Iterable
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from multiprocessing import Pool, get_context, get_start_method
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
-from collections.abc import Iterable
 
 import numpy as np
 

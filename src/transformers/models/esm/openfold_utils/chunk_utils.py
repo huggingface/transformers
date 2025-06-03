@@ -13,9 +13,9 @@
 # limitations under the License.
 import logging
 import math
+from collections.abc import Iterable, Sequence
 from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
-from collections.abc import Iterable, Sequence
 
 import torch
 

@@ -19,10 +19,10 @@ from __future__ import annotations
 import collections.abc
 import math
 import warnings
+from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
-from collections.abc import Iterable
 
 import tensorflow as tf
 

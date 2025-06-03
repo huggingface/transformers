@@ -2,9 +2,9 @@ import copy
 import importlib.metadata
 import json
 import os
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
-from collections.abc import Iterable
 
 import torch
 from packaging import version

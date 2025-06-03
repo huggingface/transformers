@@ -15,9 +15,9 @@
 """Convert MusicGen checkpoints from the original repository."""
 
 import argparse
+from collections import OrderedDict
 from pathlib import Path
 from typing import Dict, Tuple
-from collections import OrderedDict
 
 import torch
 from audiocraft.models import MusicGen

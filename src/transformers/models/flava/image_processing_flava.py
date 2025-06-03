@@ -16,9 +16,9 @@
 
 import math
 import random
+from collections.abc import Iterable
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple, Union
-from collections.abc import Iterable
 
 import numpy as np
 

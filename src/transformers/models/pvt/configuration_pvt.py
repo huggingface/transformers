@@ -17,8 +17,8 @@
 """Pvt model configuration"""
 
 from collections import OrderedDict
-from typing import Callable, List
 from collections.abc import Mapping
+from typing import Callable, List
 
 from packaging import version
 

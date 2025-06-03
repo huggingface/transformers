@@ -22,9 +22,9 @@ import math
 import os
 import re
 import unicodedata
+from collections.abc import Generator
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple, Union
-from collections.abc import Generator
 
 import numpy as np
 
