@@ -213,6 +213,7 @@ class DogeConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
+        self.sliding_window = sliding_window
         self.keep_window_size = keep_window_size
         self.is_moe = is_moe
         self.num_experts = num_experts
