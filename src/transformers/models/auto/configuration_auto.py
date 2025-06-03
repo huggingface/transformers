@@ -753,7 +753,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("wav2vec2-bert", "Wav2Vec2-BERT"),
         ("wav2vec2-conformer", "Wav2Vec2-Conformer"),
         ("wav2vec2_phoneme", "Wav2Vec2Phoneme"),
-        ("wav2vec2_with_lm", "Wav2Vec2-With-LM"),
+        ("wav2vec2_with_lm", "Wav2Vec2WithLM"),
         ("wavlm", "WavLM"),
         ("whisper", "Whisper"),
         ("xclip", "X-CLIP"),
