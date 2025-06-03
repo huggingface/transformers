@@ -200,14 +200,22 @@ class FuyuModel(FuyuPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
-            if image_patches is not None and past_key_values is None:
-                patch_embeddings = self.get_image_features(image_patches)
-                patch_embeddings = torch.cat(patch_embeddings, dim=0)
 
-                special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
-                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-                patch_embeddings = patch_embeddings.to(inputs_embeds.device, inputs_embeds.dtype)
-                inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, patch_embeddings)
+        if image_patches is not None:
+            patch_embeddings = self.get_image_features(image_patches)
+            patch_embeddings = torch.cat(patch_embeddings, dim=0)
+
+            if input_ids is None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                special_image_mask = special_image_mask.all(-1)
+            else:
+                special_image_mask = input_ids == self.config.image_token_id
+
+            special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+            patch_embeddings = patch_embeddings.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, patch_embeddings)
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
