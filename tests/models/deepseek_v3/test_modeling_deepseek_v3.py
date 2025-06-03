@@ -26,7 +26,7 @@ from transformers.testing_utils import (
     require_torch_accelerator,
     require_torch_sdpa,
     slow,
-    torch_device,
+    torch_device, require_torch_large_accelerator,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -443,6 +443,7 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         ]
         super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
 
+    @require_torch_large_accelerator
     @require_torch_sdpa
     @slow
     def test_eager_matches_sdpa_generate(self):
