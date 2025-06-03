@@ -85,6 +85,8 @@ KEYS_TO_MODIFY_MAPPING = {
     "fuser": "memory_fuser",
     "point_embeddings": "point_embed",
     "pe_layer.positional_encoding_gaussian_matrix": "shared_embedding.positional_embedding",
+    "obj_ptr_tpos_proj": "temporal_positional_encoding_projection_layer",
+    "no_obj_embed_spatial": "occlusion_spatial_embedding_parameter",
     "vision_encoder": "image_encoder",
     "sam_prompt_encoder": "prompt_encoder",
     "sam_mask_decoder": "mask_decoder",
@@ -211,7 +213,7 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
 
         with torch.no_grad():
             output = hf_model(**inputs)
-        scores = output.iou_scores.squeeze()
+        scores = output.ious.squeeze()
 
         assert torch.allclose(scores, torch.tensor([0.0314, 0.9649, 0.1026]).cuda(), atol=1e-4)
 
