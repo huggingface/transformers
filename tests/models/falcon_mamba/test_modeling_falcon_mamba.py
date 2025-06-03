@@ -19,6 +19,7 @@ from unittest.util import safe_repr
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, FalconMambaConfig, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_bitsandbytes,
     require_torch,
@@ -26,7 +27,7 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
     slow,
-    torch_device, Expectations,
+    torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -469,7 +470,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
                 ("cuda", 7): "Hello today I am going to show you how to make a simple and easy to make paper plane.\nStep",
                 ("cuda", 8): 'Hello today Iava,\n\nI am writing to you today to discuss the importance of maintaining a healthy lifestyle',
             }
-        )
+        )  # fmt: skip
         EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
 
         self.assertEqual(
@@ -499,7 +500,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
 
         self.assertEqual(
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
-            'Hello today Iava,\n\nI am writing to you today to discuss the importance of maintaining a healthy lifestyle'
+            "Hello today Iava,\n\nI am writing to you today to discuss the importance of maintaining a healthy lifestyle",
         )
 
     def test_batched_generation(self):
@@ -520,7 +521,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
                     'Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global',
                 ],
             }
-        )
+        )  # fmt: skip
         EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
 
         inputs = tok(texts, return_tensors="pt", padding=True, return_token_type_ids=False).to(torch_device)
@@ -550,7 +551,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
                     ' I will be talking about the importance of the internet in our lives.\nThe internet is a global'
                 ],
             }
-        )
+        )  # fmt: skip
         EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
         self.assertListEqual(out, EXPECTED_OUTPUT)
 
