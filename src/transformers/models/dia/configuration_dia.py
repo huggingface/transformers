@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The Nari Labs and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,14 +14,11 @@
 # limitations under the License.
 """Dia model configuration"""
 
-from typing import TYPE_CHECKING, List, Optional
+from typing import List, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.get_logger(__name__)
 
@@ -54,8 +51,6 @@ class DiaEncoderConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 256):
             Vocabulary size of the Dia model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`DiaModel`].
-        dropout (`float`, *optional*, defaults to 0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"swish"` and `"gelu_new"` are supported.
@@ -78,7 +73,6 @@ class DiaEncoderConfig(PretrainedConfig):
         intermediate_size: int = 4096,
         norm_eps: float = 1e-5,
         vocab_size: int = 256,
-        dropout: float = 0,
         hidden_act: str = "silu",
         rope_min_timescale: int = 1,
         rope_max_timescale: int = 10_000,
@@ -93,7 +87,6 @@ class DiaEncoderConfig(PretrainedConfig):
         self.norm_eps = norm_eps
         self.vocab_size = vocab_size
         self.num_key_value_heads = num_key_value_heads
-        self.dropout = dropout
         self.hidden_act = hidden_act
         self.rope_min_timescale = rope_min_timescale
         self.rope_max_timescale = rope_max_timescale
@@ -127,7 +120,7 @@ class DiaDecoderConfig(PretrainedConfig):
             Number of attention heads for each cross-attention layer in the Transformer decoder.
         cross_head_dim (`int`, *optional*, defaults to 128):
             Dimensionality of the cross-attention head.
-        cross_num_key_value_heads (`int`, *optional*, defaults to 8):
+        cross_num_key_value_heads (`int`, *optional*, defaults to 16):
             Number of key and value heads for each cross-attention layer in the Transformer decoder.
         cross_hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the cross-attention layers.
@@ -136,8 +129,6 @@ class DiaDecoderConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 1028):
             Vocabulary size of the Dia model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`DiaModel`].
-        dropout (`float`, *optional*, defaults to 0):
-            The dropout probability for all fully connected layers in the embeddings and decoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder. If string, `"gelu"`, `"relu"`,
             `"swish"` and `"gelu_new"` are supported.
@@ -162,11 +153,10 @@ class DiaDecoderConfig(PretrainedConfig):
         head_dim: int = 128,
         cross_num_attention_heads: int = 16,
         cross_head_dim: int = 128,
-        cross_num_key_value_heads: int = 8,
+        cross_num_key_value_heads: int = 16,
         cross_hidden_size: int = 1024,
         norm_eps: float = 1e-5,
         vocab_size: int = 1028,
-        dropout: float = 0,
         hidden_act: str = "silu",
         num_channels: int = 9,
         rope_min_timescale: int = 1,
@@ -186,7 +176,6 @@ class DiaDecoderConfig(PretrainedConfig):
         self.cross_hidden_size = cross_hidden_size
         self.norm_eps = norm_eps
         self.vocab_size = vocab_size
-        self.dropout = dropout
         self.hidden_act = hidden_act
         self.num_channels = num_channels
         self.rope_min_timescale = rope_min_timescale
@@ -199,7 +188,7 @@ class DiaConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`DiaModel`]. It is used to instantiate a
     Dia model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
-    [google/dia](https://huggingface.co/google/dia) architecture.
+    [nari-labs/Dia-1.6B](https://huggingface.co/nari-labs/Dia-1.6B) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -211,6 +200,8 @@ class DiaConfig(PretrainedConfig):
             Configuration for the decoder part of the model. If not provided, a default `DiaDecoderConfig` will be used.
         norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the normalization layers.
+        is_encoder_decoder (`bool`, *optional*, default to `True`):
+            Indicating that this model uses an encoder-decoder architecture.
         pad_token_id (`int`, *optional*, defaults to 1025):
             Padding token id.
         eos_token_id (`int`, *optional*, defaults to 1024):
@@ -237,6 +228,7 @@ class DiaConfig(PretrainedConfig):
     """
 
     model_type = "dia"
+    keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs = {"encoder_config": DiaEncoderConfig, "decoder_config": DiaDecoderConfig}
 
     def __init__(
@@ -244,6 +236,7 @@ class DiaConfig(PretrainedConfig):
         encoder_config: Optional[DiaEncoderConfig] = None,
         decoder_config: Optional[DiaDecoderConfig] = None,
         norm_eps: float = 1e-5,
+        is_encoder_decoder: bool = True,
         pad_token_id: int = 1025,
         eos_token_id: int = 1024,
         bos_token_id: int = 1026,
@@ -258,7 +251,6 @@ class DiaConfig(PretrainedConfig):
         self.decoder_config = decoder_config if decoder_config is not None else DiaDecoderConfig()
         self.norm_eps = norm_eps
         self.delay_pattern = delay_pattern if delay_pattern is not None else [0, 8, 9, 10, 11, 12, 13, 14, 15]
-        self.is_encoder_decoder = True
 
         assert self.decoder_config.num_channels == len(self.delay_pattern), (
             "Number of channels must match delay pattern length."
@@ -268,7 +260,7 @@ class DiaConfig(PretrainedConfig):
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             bos_token_id=bos_token_id,
-            is_encoder_decoder=True,
+            is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
 
