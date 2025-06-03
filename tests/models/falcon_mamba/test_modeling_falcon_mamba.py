@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
     require_torch_accelerator,
+    require_torch_large_accelerator,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
     slow,
@@ -459,6 +460,8 @@ class FalconMambaIntegrationTests(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    # On T4, get `NotImplementedError: Cannot copy out of meta tensor; no data!`
+    @require_torch_large_accelerator
     def test_generation_fp16(self):
         model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16, device_map="auto")
 
