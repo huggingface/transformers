@@ -404,7 +404,7 @@ class Sam2ImageEncoder(nn.Module):
             self.blocks.append(block)
 
         self.neck = Sam2VisionNeck(config)
-        self.num_feature_levels = 3
+        self.num_feature_levels = config.num_feature_levels
 
     def _get_pos_embed(self, hw: Tuple[int, int]) -> torch.Tensor:
         h, w = hw
@@ -455,6 +455,7 @@ class Sam2ImageEncoder(nn.Module):
 
         # Forward through backbone
         fpn_hidden_states, fpn_position_encoding = self.neck(intermediate_hidden_states)
+        # Select last `num_feature_levels` feature levels from FPN and reverse order to get features from high to low resolution
         fpn_hidden_states, fpn_position_encoding = (
             fpn_hidden_states[-self.num_feature_levels :][::-1],
             fpn_position_encoding[-self.num_feature_levels :][::-1],
@@ -2075,7 +2076,6 @@ class Sam2Model(Sam2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.shared_image_embedding = Sam2PositionalEmbedding(config.prompt_encoder_config)
-
         # For single image inference
         self.image_encoder = Sam2ImageEncoder(config.image_encoder_config)
         self.prompt_encoder = Sam2PromptEncoder(config.prompt_encoder_config, self.shared_image_embedding)
@@ -2084,7 +2084,8 @@ class Sam2Model(Sam2PreTrainedModel):
         self.memory_attention = Sam2MemoryAttention(config.memory_attention_config)
         self.memory_encoder = Sam2MemoryEncoder(config.memory_encoder_config)
 
-        self.num_feature_levels = 3
+        self.num_feature_levels = config.image_encoder_config.num_feature_levels
+        self.backbone_feature_sizes = config.image_encoder_config.backbone_feature_sizes
         # memory encoder related part
         # a single token to indicate no memory embedding from previous frames
         self.no_memory_embedding = torch.nn.Parameter(torch.zeros(1, 1, config.image_encoder_config.fpn_hidden_size))
@@ -2124,6 +2125,26 @@ class Sam2Model(Sam2PreTrainedModel):
         self.occlusion_spatial_embedding_parameter = None  # compatibility with Sam2
         if config.enable_occlusion_spatial_embedding:
             self.occlusion_spatial_embedding_parameter = torch.nn.Parameter(torch.zeros(1, self.mem_dim))
+
+        # Video Inference specific parameters
+        self.sigmoid_scale_for_mem_enc = config.sigmoid_scale_for_mem_enc
+        self.sigmoid_bias_for_mem_enc = config.sigmoid_bias_for_mem_enc
+        # Additional configuration for video tracking
+        self.non_overlap_masks = config.non_overlap_masks
+        self.fill_hole_area = config.fill_hole_area
+        self.multimask_output_in_sam = config.multimask_output_in_sam
+        self.multimask_min_pt_num = config.multimask_min_pt_num
+        self.multimask_max_pt_num = config.multimask_max_pt_num
+        self.non_overlap_masks_for_mem_enc = config.non_overlap_masks_for_mem_enc
+        self.max_object_pointers_in_encoder = config.max_object_pointers_in_encoder
+        self.enable_temporal_pos_encoding_for_object_pointers = (
+            config.enable_temporal_pos_encoding_for_object_pointers
+        )  # Compatibility with SAM2
+        self.binarize_mask_from_pts_for_mem_enc = config.binarize_mask_from_pts_for_mem_enc
+        self.preserve_temporal_direction_in_object_pointers = (
+            config.preserve_temporal_direction_in_object_pointers
+        )  # Compatibility with SAM2
+        self.multimask_output_for_tracking = config.multimask_output_for_tracking
 
         # if torch.cuda.is_available():
         #     try:
@@ -2198,24 +2219,20 @@ class Sam2Model(Sam2PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
         feature_maps = vision_outputs[1]
-        vision_embeddings = vision_outputs[2]
+        feature_maps_position_embeddings = vision_outputs[2]
+
+        vision_hidden_states = vision_outputs[3] if output_hidden_states else None
+        vision_attentions = vision_outputs[-1] if output_attentions else None
 
         # precompute projected level 0 and level 1 features in SAM decoder
         # to avoid running it again on every SAM click
         feature_maps = list(feature_maps)
         feature_maps[0] = self.mask_decoder.conv_s0(feature_maps[0])
         feature_maps[1] = self.mask_decoder.conv_s1(feature_maps[1])
-        image_embeddings = feature_maps
 
-        feature_maps = feature_maps[-self.num_feature_levels :]
-        vision_embeddings = vision_embeddings[-self.num_feature_levels :]
-
-        # flatten NxCxHxW to HWxNxC
-        feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
-        vision_embeddings = [vision_embedding.flatten(2).permute(2, 0, 1) for vision_embedding in vision_embeddings]
-
-        return image_embeddings, vision_outputs
+        return feature_maps, feature_maps_position_embeddings, vision_hidden_states, vision_attentions
 
     @auto_docstring
     def forward(
@@ -2227,6 +2244,7 @@ class Sam2Model(Sam2PreTrainedModel):
         input_masks: Optional[torch.LongTensor] = None,
         image_embeddings: Optional[torch.FloatTensor] = None,
         multimask_output: bool = True,
+        video_inference: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -2301,40 +2319,28 @@ class Sam2Model(Sam2PreTrainedModel):
         vision_hidden_states = None
 
         if pixel_values is not None:
-            image_embeddings, vision_outputs = self.get_image_features(
-                pixel_values,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+            feature_maps, feature_maps_position_embeddings, vision_hidden_states, vision_attentions = (
+                self.get_image_features(
+                    pixel_values,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    return_dict=return_dict,
+                )
             )
-            feature_maps = vision_outputs[1]
-            vision_embeddings = vision_outputs[2]
-
-            if output_hidden_states:
-                vision_hidden_states = vision_outputs[-2]
-            if output_attentions:
-                vision_attentions = vision_outputs[-1]
-
-            # precompute projected level 0 and level 1 features in SAM decoder
-            # to avoid running it again on every SAM click
-            feature_maps = list(feature_maps)
-            feature_maps[0] = self.mask_decoder.conv_s0(feature_maps[0])
-            feature_maps[1] = self.mask_decoder.conv_s1(feature_maps[1])
-
-            feature_maps = feature_maps[-self.num_feature_levels :]
-            vision_embeddings = vision_embeddings[-self.num_feature_levels :]
-
             # flatten NxCxHxW to HWxNxC
             feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
-            vision_embeddings = [
-                vision_embedding.flatten(2).permute(2, 0, 1) for vision_embedding in vision_embeddings
+            feature_maps_position_embeddings = [
+                feature_map_position_embedding.flatten(2).permute(2, 0, 1)
+                for feature_map_position_embedding in feature_maps_position_embeddings
             ]
 
+            # add no memory embedding to the last feature map
             feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding
 
+            # reshape feature maps to the same shape as the backbone feature sizes
             image_embeddings = [
                 feat.permute(1, 2, 0).view(1, -1, *feat_size)
-                for feat, feat_size in zip(feature_maps, self.config._bb_feat_sizes)
+                for feat, feat_size in zip(feature_maps, self.backbone_feature_sizes)
             ]
 
         if input_points is not None and input_labels is None:
@@ -2375,7 +2381,7 @@ class Sam2Model(Sam2PreTrainedModel):
             input_boxes=input_boxes,
             input_masks=input_masks,
         )
-        low_res_masks, ious, sam_output_tokens, object_score_logits = self.mask_decoder(
+        low_res_multimasks, ious, sam_output_tokens, object_score_logits = self.mask_decoder(
             image_embeddings=image_embeddings[-1],
             image_positional_embeddings=image_positional_embeddings,
             sparse_prompt_embeddings=sparse_embeddings,
@@ -2383,19 +2389,52 @@ class Sam2Model(Sam2PreTrainedModel):
             multimask_output=multimask_output,
             high_resolution_features=image_embeddings[:-1],
         )
+        if video_inference:
+            is_obj_appearing = object_score_logits > 0
+            # Mask used for spatial memories is always a *hard* choice between obj and no obj,
+            # consistent with the actual mask prediction
+            low_res_multimasks = torch.where(
+                is_obj_appearing[:, None, None],
+                low_res_multimasks,
+                NO_OBJ_SCORE,
+            )
 
-        # convert masks from possibly bfloat16 (or float16) to float32
-        # (older PyTorch versions before 2.1 don't support `interpolate` on bf16)
-        low_res_masks = low_res_masks.float()
-        high_res_masks = F.interpolate(
-            low_res_masks.squeeze(1),
-            size=(self.image_size, self.image_size),
-            mode="bilinear",
-            align_corners=False,
-        ).unsqueeze(1)
+            # convert masks from possibly bfloat16 (or float16) to float32
+            # (older PyTorch versions before 2.1 don't support `interpolate` on bf16)
+            low_res_multimasks = low_res_multimasks.float()
+            high_res_multimasks = F.interpolate(
+                low_res_multimasks.squeeze(1),
+                size=(self.image_size, self.image_size),
+                mode="bilinear",
+                align_corners=False,
+            ).unsqueeze(1)
+            sam_output_token = sam_output_tokens[:, :, 0]
+            if multimask_output:
+                # take the best mask prediction (with the highest IoU estimation)
+                best_iou_inds = torch.argmax(ious, dim=-1)
+                batch_inds = torch.arange(batch_size, device=high_res_multimasks.device)
+                point_batch_inds = torch.arange(point_batch_size, device=high_res_multimasks.device)
+                low_res_masks = low_res_multimasks[batch_inds, point_batch_inds, best_iou_inds]
+                high_res_masks = high_res_multimasks[batch_inds, point_batch_inds, best_iou_inds]
+                if sam_output_tokens.size(2) > 1:
+                    sam_output_token = sam_output_tokens[batch_inds, point_batch_inds, best_iou_inds]
+            else:
+                low_res_masks, high_res_masks = low_res_multimasks, high_res_multimasks
+
+            # Extract object pointer from the SAM output token (with occlusion handling)
+            obj_ptr = self.object_pointer_proj(sam_output_token)
+            lambda_is_obj_appearing = is_obj_appearing.float()
+
+            obj_ptr = lambda_is_obj_appearing * obj_ptr
+            obj_ptr = obj_ptr + (1 - lambda_is_obj_appearing) * self.no_object_pointer
+
+        else:
+            low_res_masks = low_res_multimasks.float()
+            high_res_masks = None
+            obj_ptr = None
 
         if not return_dict:
-            output = (ious, low_res_masks, high_res_masks, None, object_score_logits, image_embeddings)
+            output = (ious, low_res_masks, high_res_masks, obj_ptr, object_score_logits, image_embeddings)
             if output_hidden_states:
                 output = output + (vision_hidden_states,)
 
@@ -2407,7 +2446,7 @@ class Sam2Model(Sam2PreTrainedModel):
             ious=ious,
             low_res_masks=low_res_masks,
             high_res_masks=high_res_masks,
-            object_pointer=None,
+            object_pointer=obj_ptr,
             object_score_logits=object_score_logits,
             image_embeddings=image_embeddings,
             vision_hidden_states=vision_hidden_states,
@@ -2415,39 +2454,7 @@ class Sam2Model(Sam2PreTrainedModel):
             mask_decoder_attentions=None,
         )
 
-
-@auto_docstring(custom_intro="SAM2Model for object tracking in videos.")
-class Sam2ForVideoInference(Sam2Model):
-    """
-    Sam2ForVideoInference model handles video object tracking and propagation.
-    This model is designed to work with preprocessed inputs from Sam2Processor.
-    """
-
-    _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
-
-    def __init__(self, config: Sam2Config):
-        super().__init__(config)
-        self.sigmoid_scale_for_mem_enc = config.sigmoid_scale_for_mem_enc
-        self.sigmoid_bias_for_mem_enc = config.sigmoid_bias_for_mem_enc
-        # Additional configuration for video tracking
-        self.non_overlap_masks = config.non_overlap_masks
-        self.fill_hole_area = config.fill_hole_area
-        self.multimask_output_in_sam = config.multimask_output_in_sam
-        self.multimask_min_pt_num = config.multimask_min_pt_num
-        self.multimask_max_pt_num = config.multimask_max_pt_num
-        self.non_overlap_masks_for_mem_enc = config.non_overlap_masks_for_mem_enc
-        self.max_object_pointers_in_encoder = config.max_object_pointers_in_encoder
-        self.enable_temporal_pos_encoding_for_object_pointers = (
-            config.enable_temporal_pos_encoding_for_object_pointers
-        )  # Compatibility with SAM2
-        self.binarize_mask_from_pts_for_mem_enc = config.binarize_mask_from_pts_for_mem_enc
-        self.preserve_temporal_direction_in_object_pointers = (
-            config.preserve_temporal_direction_in_object_pointers
-        )  # Compatibility with SAM2
-        self.multimask_output_for_tracking = config.multimask_output_for_tracking
-        # Initialize weights
-        self.post_init()
-
+    # Video Inference specific functions
     def _obj_idx_to_id(self, inference_state, obj_idx):
         """Map model-side object index to client-side object id."""
         return inference_state["obj_idx_to_id"][obj_idx]
@@ -2753,26 +2760,16 @@ class Sam2ForVideoInference(Sam2Model):
             cached = inference_state["cached_features"][frame_idx]
             vision_feats = cached["vision_feats"]
             vision_pos_embeds = cached["vision_pos_embeds"]
-            feat_sizes = cached["feat_sizes"]
         else:
             # Compute features using image encoder
             image_batch = inference_state["images"][frame_idx].unsqueeze(0)  # Add batch dimension
-            image_embeddings, vision_outputs = self.get_image_features(image_batch)
-            # repeat with batch size
-            batch_size = image_batch.shape[0]
-
-            vision_feats = image_embeddings
-            vision_pos_embeds = vision_outputs.fpn_position_encoding
-            vision_feats = vision_feats[-self.num_feature_levels :]
-            vision_pos_embeds = vision_pos_embeds[-self.num_feature_levels :]
-            feat_sizes = self.config._bb_feat_sizes
-            vision_feats = [x.flatten(2).permute(2, 0, 1) for x in vision_feats]
-            vision_pos_embeds = [x.flatten(2).permute(2, 0, 1) for x in vision_pos_embeds]
+            feature_maps, feature_maps_position_embeddings, _, _ = self.get_image_features(image_batch)
+            vision_feats = [x.flatten(2).permute(2, 0, 1) for x in feature_maps]
+            vision_pos_embeds = [x.flatten(2).permute(2, 0, 1) for x in feature_maps_position_embeddings]
             # Cache features
             inference_state["cached_features"][frame_idx] = {
                 "vision_feats": vision_feats,
                 "vision_pos_embeds": vision_pos_embeds,
-                "feat_sizes": feat_sizes,
             }
 
         # Expand to batch size if needed
@@ -2780,7 +2777,7 @@ class Sam2ForVideoInference(Sam2Model):
             vision_feats = vision_feats.expand(batch_size, -1, -1, -1)
             vision_pos_embeds = [pe.expand(batch_size, -1, -1, -1) for pe in vision_pos_embeds]
 
-        return vision_feats, vision_pos_embeds, feat_sizes
+        return vision_feats, vision_pos_embeds
 
     def _run_memory_encoder(
         self,
@@ -2797,12 +2794,9 @@ class Sam2ForVideoInference(Sam2Model):
         memory also need to be computed again with the memory encoder.
         """
         # Retrieve correct image features
-        current_vision_feats, current_vision_pos_embeds, feat_sizes = self._prepare_vision_features(
-            inference_state, frame_idx, batch_size
-        )
+        current_vision_feats, _ = self._prepare_vision_features(inference_state, frame_idx, batch_size)
         maskmem_features, maskmem_pos_enc = self._encode_new_memory(
             current_vision_feats=current_vision_feats,
-            feat_sizes=feat_sizes,
             pred_masks_high_res=high_res_masks,
             object_score_logits=object_score_logits,
             is_mask_from_pts=is_mask_from_pts,
@@ -2855,7 +2849,7 @@ class Sam2ForVideoInference(Sam2Model):
         """Run tracking on a single frame based on current inputs and previous memory."""
         # Retrieve correct image features
 
-        current_vision_feats, current_vision_pos_embeds, feat_sizes = self._prepare_vision_features(
+        current_vision_feats, current_vision_pos_embeds = self._prepare_vision_features(
             inference_state, frame_idx, batch_size
         )
         # point and mask should not appear as input simultaneously on the same frame
@@ -2865,7 +2859,6 @@ class Sam2ForVideoInference(Sam2Model):
             is_init_cond_frame=is_init_cond_frame,
             current_vision_feats=current_vision_feats,
             current_vision_pos_embeds=current_vision_pos_embeds,
-            feat_sizes=feat_sizes,
             point_inputs=point_inputs,
             mask_inputs=mask_inputs,
             output_dict=output_dict,
@@ -2976,6 +2969,7 @@ class Sam2ForVideoInference(Sam2Model):
             backbone_features=backbone_features,
             mask_inputs=self.mask_downsample(mask_inputs_float),
             high_res_features=high_res_features,
+            video_inference=True,
         )
         # In this method, we are treating mask_input as output, e.g. using it directly to create spatial mem;
         # Below, we follow the same design axiom to use mask_input to decide if obj appears or not instead of relying
@@ -3004,7 +2998,6 @@ class Sam2ForVideoInference(Sam2Model):
         is_initial_conditioning_frame: bool,
         current_vision_features: List[torch.Tensor],
         current_vision_positional_embeddings: List[torch.Tensor],
-        feature_map_sizes: List[Tuple[int, int]],
         output_history: Dict[str, Dict[int, Dict[str, torch.Tensor]]],
         num_total_frames: int,
         track_in_reverse_time: bool = False,
@@ -3022,7 +3015,7 @@ class Sam2ForVideoInference(Sam2Model):
         # Get dimensions from the highest-level (lowest-resolution) feature map
         batch_size = current_vision_features[-1].size(1)
         num_channels = self.hidden_dim
-        height, width = feature_map_sizes[-1]
+        height, width = self.backbone_feature_sizes[-1]
         device = current_vision_features[-1].device
 
         # If memory is disabled (e.g., for single image SAM), return current features directly.
@@ -3206,7 +3199,6 @@ class Sam2ForVideoInference(Sam2Model):
     def _encode_new_memory(
         self,
         current_vision_feats,
-        feat_sizes,
         pred_masks_high_res,
         object_score_logits,
         is_mask_from_pts,
@@ -3214,7 +3206,7 @@ class Sam2ForVideoInference(Sam2Model):
         """Encode the current image and its prediction into a memory feature."""
         B = current_vision_feats[-1].size(1)  # batch size on this frame
         C = self.hidden_dim
-        H, W = feat_sizes[-1]  # top-level (lowest-resolution) feature size
+        H, W = self.backbone_feature_sizes[-1]  # top-level (lowest-resolution) feature size
         # top-level feature, (HW)BC => BCHW
         pix_feat = current_vision_feats[-1].permute(1, 2, 0).view(B, C, H, W)
         if self.non_overlap_masks_for_mem_enc and not self.training:
@@ -3256,7 +3248,6 @@ class Sam2ForVideoInference(Sam2Model):
         is_init_cond_frame,
         current_vision_feats,
         current_vision_pos_embeds,
-        feat_sizes,
         point_inputs,
         mask_inputs,
         output_dict,
@@ -3269,14 +3260,14 @@ class Sam2ForVideoInference(Sam2Model):
         if len(current_vision_feats) > 1:
             high_res_features = [
                 x.permute(1, 2, 0).view(x.size(1), x.size(2), *s)
-                for x, s in zip(current_vision_feats[:-1], feat_sizes[:-1])
+                for x, s in zip(current_vision_feats[:-1], self.backbone_feature_sizes[:-1])
             ]
         else:
             high_res_features = None
         if mask_inputs is not None:
             # We directly output the mask input (see it as a GT mask) without using a SAM prompt encoder + mask decoder.
             pix_feat = current_vision_feats[-1].permute(1, 2, 0)
-            pix_feat = pix_feat.view(-1, self.hidden_dim, *feat_sizes[-1])
+            pix_feat = pix_feat.view(-1, self.hidden_dim, *self.backbone_feature_sizes[-1])
             sam_outputs = self._use_mask_as_output(pix_feat, high_res_features, mask_inputs)
         else:
             # fused the visual feature with previous memory features in the memory bank
@@ -3285,7 +3276,6 @@ class Sam2ForVideoInference(Sam2Model):
                 is_initial_conditioning_frame=is_init_cond_frame,
                 current_vision_features=current_vision_feats[-1:],
                 current_vision_positional_embeddings=current_vision_pos_embeds[-1:],
-                feature_map_sizes=feat_sizes[-1:],
                 output_history=output_dict,
                 num_total_frames=num_frames,
                 track_in_reverse_time=track_in_reverse,
@@ -3305,6 +3295,7 @@ class Sam2ForVideoInference(Sam2Model):
                 input_masks=mask_inputs,
                 image_embeddings=high_res_features + [pix_feat],
                 multimask_output=multimask_output,
+                video_inference=True,
             )
 
         return current_out, sam_outputs, high_res_features, pix_feat
@@ -3312,7 +3303,6 @@ class Sam2ForVideoInference(Sam2Model):
     def _encode_memory_in_output(
         self,
         current_vision_feats,
-        feat_sizes,
         point_inputs,
         run_mem_encoder,
         high_res_masks,
@@ -3323,7 +3313,6 @@ class Sam2ForVideoInference(Sam2Model):
             high_res_masks_for_mem_enc = high_res_masks
             maskmem_features, maskmem_pos_enc = self._encode_new_memory(
                 current_vision_feats=current_vision_feats,
-                feat_sizes=feat_sizes,
                 pred_masks_high_res=high_res_masks_for_mem_enc,
                 object_score_logits=object_score_logits,
                 is_mask_from_pts=(point_inputs is not None),
@@ -3340,7 +3329,6 @@ class Sam2ForVideoInference(Sam2Model):
         is_init_cond_frame,
         current_vision_feats,
         current_vision_pos_embeds,
-        feat_sizes,
         point_inputs,
         mask_inputs,
         output_dict,
@@ -3360,7 +3348,6 @@ class Sam2ForVideoInference(Sam2Model):
             is_init_cond_frame,
             current_vision_feats,
             current_vision_pos_embeds,
-            feat_sizes,
             point_inputs,
             mask_inputs,
             output_dict,
@@ -3385,7 +3372,6 @@ class Sam2ForVideoInference(Sam2Model):
         # it into a new memory feature (that can be used in future frames)
         self._encode_memory_in_output(
             current_vision_feats,
-            feat_sizes,
             point_inputs,
             run_mem_encoder,
             high_res_masks,
@@ -3425,214 +3411,5 @@ class Sam2ForVideoInference(Sam2Model):
         pred_masks = torch.where(keep, pred_masks, torch.clamp(pred_masks, max=-10.0))
         return pred_masks
 
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        input_points: Optional[torch.FloatTensor] = None,
-        input_labels: Optional[torch.LongTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_masks: Optional[torch.LongTensor] = None,
-        image_embeddings: Optional[torch.FloatTensor] = None,
-        multimask_output: bool = True,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        **kwargs,
-    ) -> Sam2ImageSegmentationOutput:
-        r"""
-        Forward pass for the Sam2ForVideoInference model.
 
-        This method processes pixel values or image embeddings, along with various prompt types (points, boxes, masks),
-        to produce segmentation masks and associated scores. It's an extension of the base Sam2Model's forward pass,
-        tailored for video inference by incorporating object pointers and handling object appearance scores.
-
-        Args:
-            pixel_values (`torch.FloatTensor`, *optional*):
-                Pixel values of the input image(s), shape `(batch_size, num_channels, height, width)`.
-            input_points (`torch.FloatTensor`, *optional*):
-                2D spatial point prompts, shape `(batch_size, point_batch_size, num_points_per_image, 2)`.
-            input_labels (`torch.LongTensor`, *optional*):
-                Labels for input points, shape `(batch_size, point_batch_size, num_points_per_image)`.
-            input_boxes (`torch.FloatTensor`, *optional*):
-                Bounding box prompts, shape `(batch_size, num_boxes_per_image, 4)`.
-            input_masks (`torch.LongTensor`, *optional*):
-                Mask prompts, shape `(batch_size, 1, image_size, image_size)`.
-            image_embeddings (`torch.FloatTensor`, *optional*):
-                Pre-computed image embeddings. If provided, `pixel_values` are ignored.
-                Shape `(batch_size, embedding_dim, height, width)`.
-            multimask_output (`bool`, *optional*, defaults to `True`):
-                If `True`, the model outputs multiple masks per prompt. Otherwise, a single best mask is returned.
-            output_attentions (`bool`, *optional*):
-                Whether to return attention tensors.
-            output_hidden_states (`bool`, *optional*):
-                Whether to return hidden states.
-            return_dict (`bool`, *optional*):
-                Whether to return a `Sam2ImageSegmentationOutput` object.
-
-        Returns:
-            `Sam2ImageSegmentationOutput`: An object containing the predicted masks, IoU scores, object pointers,
-            object score logits, and optionally image embeddings, vision hidden states, and attentions.
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if pixel_values is None and image_embeddings is None:
-            raise ValueError("Either pixel_values or image_embeddings must be provided.")
-
-        if pixel_values is not None and image_embeddings is not None:
-            raise ValueError("Only one of pixel_values and image_embeddings can be provided.")
-
-        if input_points is not None and len(input_points.shape) != 4:
-            raise ValueError(
-                "The input_points must be a 4D tensor. Of shape `batch_size`, `point_batch_size`, `nb_points_per_image`, `2`.",
-                " got {}.".format(input_points.shape),
-            )
-        if input_boxes is not None and len(input_boxes.shape) != 3:
-            raise ValueError(
-                "The input_points must be a 3D tensor. Of shape `batch_size`, `nb_boxes`, `4`.",
-                " got {}.".format(input_boxes.shape),
-            )
-        if input_points is not None and input_boxes is not None:
-            point_batch_size = input_points.shape[1]
-            box_batch_size = input_boxes.shape[1]
-            if point_batch_size != box_batch_size:
-                raise ValueError(
-                    "You should provide as many bounding boxes as input points per box. Got {} and {}.".format(
-                        point_batch_size, box_batch_size
-                    )
-                )
-        else:
-            point_batch_size = 1
-            box_batch_size = 1
-
-        image_positional_embeddings = self.get_image_wide_positional_embeddings()
-        # repeat with batch size
-        batch_size = pixel_values.shape[0] if pixel_values is not None else image_embeddings[-1].shape[0]
-        image_positional_embeddings = image_positional_embeddings.repeat(batch_size, 1, 1, 1)
-
-        vision_attentions = None
-        vision_hidden_states = None
-
-        if pixel_values is not None:
-            image_embeddings, vision_outputs = self.get_image_features(
-                pixel_values,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-            vision_hidden_states = vision_outputs[-2]
-            vision_attentions = vision_outputs[-1]
-
-        if input_points is not None and input_labels is None:
-            input_labels = torch.ones_like(input_points[:, :, :, 0], dtype=torch.int, device=input_points.device)
-
-        # if input_points is not None and image_embeddings[-1].shape[1] != input_points.shape[0]:
-        #     raise ValueError(
-        #         "The batch size of the image embeddings and the input points must be the same. ",
-        #         "Got {} and {} respectively.".format(image_embeddings[-1].shape[1], input_points.shape[0]),
-        #         " if you want to pass multiple points for the same image, make sure that you passed ",
-        #         " input_points of shape (batch_size, point_batch_size, num_points_per_image, 3) and ",
-        #         " input_labels of shape (batch_size, point_batch_size, num_points_per_image)",
-        #     )
-        if input_points is None:
-            # If no points are provide, pad with an empty point (with label -1)
-            input_points = torch.zeros(batch_size, point_batch_size, 1, 2, device=image_embeddings[-1].device)
-            input_labels = -torch.ones(
-                batch_size, point_batch_size, 1, dtype=torch.int32, device=image_embeddings[-1].device
-            )
-
-        # b) Handle mask prompts
-        if input_masks is not None:
-            # If mask_inputs is provided, downsize it into low-res mask input if needed
-            # and feed it as a dense mask prompt into the SAM mask encoder
-            assert len(input_masks.shape) == 4 and input_masks.shape[:2] == (batch_size, 1)
-            if input_masks.shape[-2:] != self.prompt_encoder.image_embedding_size:
-                input_masks = F.interpolate(
-                    input_masks.float(),
-                    size=self.prompt_encoder.image_embedding_size,
-                    align_corners=False,
-                    mode="bilinear",
-                    antialias=True,  # use antialias for downsampling
-                )
-
-        sparse_embeddings, dense_embeddings = self.prompt_encoder(
-            input_points=input_points,
-            input_labels=input_labels,
-            input_boxes=input_boxes,
-            input_masks=input_masks,
-        )
-        low_res_multimasks, ious, sam_output_tokens, object_score_logits = self.mask_decoder(
-            image_embeddings=image_embeddings[-1],
-            image_positional_embeddings=image_positional_embeddings,
-            sparse_prompt_embeddings=sparse_embeddings,
-            dense_prompt_embeddings=dense_embeddings,
-            multimask_output=multimask_output,
-            high_resolution_features=image_embeddings[:-1],
-        )
-
-        is_obj_appearing = object_score_logits > 0
-
-        # Mask used for spatial memories is always a *hard* choice between obj and no obj,
-        # consistent with the actual mask prediction
-        low_res_multimasks = torch.where(
-            is_obj_appearing[:, None, None],
-            low_res_multimasks,
-            NO_OBJ_SCORE,
-        )
-
-        # convert masks from possibly bfloat16 (or float16) to float32
-        # (older PyTorch versions before 2.1 don't support `interpolate` on bf16)
-        low_res_multimasks = low_res_multimasks.float()
-        high_res_multimasks = F.interpolate(
-            low_res_multimasks.squeeze(1),
-            size=(self.image_size, self.image_size),
-            mode="bilinear",
-            align_corners=False,
-        ).unsqueeze(1)
-        sam_output_token = sam_output_tokens[:, :, 0]
-        if multimask_output:
-            # take the best mask prediction (with the highest IoU estimation)
-            best_iou_inds = torch.argmax(ious, dim=-1)
-            batch_inds = torch.arange(batch_size, device=high_res_multimasks.device)
-            point_batch_inds = torch.arange(point_batch_size, device=high_res_multimasks.device)
-            low_res_masks = low_res_multimasks[batch_inds, point_batch_inds, best_iou_inds]
-            high_res_masks = high_res_multimasks[batch_inds, point_batch_inds, best_iou_inds]
-            if sam_output_tokens.size(2) > 1:
-                sam_output_token = sam_output_tokens[batch_inds, point_batch_inds, best_iou_inds]
-        else:
-            low_res_masks, high_res_masks = low_res_multimasks, high_res_multimasks
-
-        # Extract object pointer from the SAM output token (with occlusion handling)
-        obj_ptr = self.object_pointer_proj(sam_output_token)
-        lambda_is_obj_appearing = is_obj_appearing.float()
-
-        obj_ptr = lambda_is_obj_appearing * obj_ptr
-        obj_ptr = obj_ptr + (1 - lambda_is_obj_appearing) * self.no_object_pointer
-
-        if not return_dict:
-            output = (ious, low_res_masks, high_res_masks, obj_ptr, object_score_logits, image_embeddings)
-            if output_hidden_states:
-                output = output + (vision_hidden_states,)
-
-            # if output_attentions:
-            # output = output + (vision_attentions, mask_decoder_attentions)
-            return output
-
-        return Sam2ImageSegmentationOutput(
-            ious=ious,
-            low_res_masks=low_res_masks,
-            high_res_masks=high_res_masks,
-            object_pointer=obj_ptr,
-            object_score_logits=object_score_logits,
-            image_embeddings=image_embeddings,
-            vision_hidden_states=vision_hidden_states,
-            vision_attentions=vision_attentions,
-            mask_decoder_attentions=None,
-        )
-
-
-__all__ = ["Sam2Model", "Sam2PreTrainedModel", "Sam2ForVideoInference"]
+__all__ = ["Sam2Model", "Sam2PreTrainedModel"]

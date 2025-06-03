@@ -421,12 +421,14 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
         window_spec=(8, 4, 14, 7),
         global_attention_blocks=(5, 7, 9),
         backbone_channel_list=[768, 384, 192, 96],
+        backbone_feature_sizes=[[256, 256], [128, 128], [64, 64]],
         fpn_hidden_size=256,
         fpn_kernel_size=1,
         fpn_stride=1,
         fpn_padding=0,
         fpn_top_down_levels=[2, 3],
         fpn_interpolation_mode="nearest",
+        num_feature_levels=3,
         fuse_type="sum",
         hidden_act="gelu",
         layer_norm_eps=1e-6,
@@ -456,6 +458,7 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
 
         # Neck
         self.backbone_channel_list = backbone_channel_list
+        self.backbone_feature_sizes = backbone_feature_sizes
         self.fpn_hidden_size = fpn_hidden_size
         self.fpn_kernel_size = fpn_kernel_size
         self.fpn_stride = fpn_stride
@@ -463,6 +466,7 @@ class Sam2ImageEncoderConfig(PretrainedConfig):
         self.fpn_top_down_levels = fpn_top_down_levels
         self.fpn_interpolation_mode = fpn_interpolation_mode
         self.fuse_type = fuse_type
+        self.num_feature_levels = num_feature_levels
 
         self.hidden_act = hidden_act
         self.layer_norm_eps = layer_norm_eps
@@ -609,14 +613,6 @@ class Sam2Config(PretrainedConfig):
         # with spatial positional encoding (only relevant when both `use_object_pointers_in_encoder=True` and `enable_temporal_pos_encoding_for_object_pointers=True`)
         self.project_temporal_pos_encoding_in_object_pointers = True
         self.preserve_temporal_direction_in_object_pointers = True
-
-        # extra arguments used to construct the SAM mask decoder; if not None it should be a dict of kwargs to be passed into `MaskDecoder` class.
-
-        self._bb_feat_sizes = [
-            (256, 256),
-            (128, 128),
-            (64, 64),
-        ]
 
         # Video inference specific parameters
         self.fill_hole_area = 8  # area threshold for filling holes in masks
