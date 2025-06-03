@@ -739,7 +739,6 @@ class ModelTesterMixin:
             model = model_class(config)
             model.to(torch_device)
             model.eval()
-            print(model_class)
             with torch.no_grad():
                 first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
                 second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
@@ -4268,24 +4267,28 @@ class ModelTesterMixin:
             if not model_class._supports_flash_attn_2:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
 
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             # TODO: to change it in the future with other relevant auto classes
             fa2_model = model_class._from_config(
-                config, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16
+                config, attn_implementation="flash_attention_2", torch_dtype=torch.float16
             ).to(torch_device)
 
-            dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
-            dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
+            dummy_input = inputs_dict[fa2_model.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+            dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
 
-            if config.is_encoder_decoder:
+            if fa2_model.config.is_encoder_decoder:
+                dummy_decoder_input_ids = inputs_dict["decoder_input_ids"]
+                dummy_decoder_attention_mask = inputs_dict["decoder_attention_mask"]
                 _ = fa2_model(
-                    input_ids=dummy_input,
+                    dummy_input,
                     attention_mask=dummy_attention_mask,
-                    decoder_input_ids=dummy_input.clone(),
-                    decoder_attention_mask=dummy_attention_mask.clone(),
+                    decoder_input_ids=dummy_decoder_input_ids,
+                    decoder_attention_mask=dummy_decoder_attention_mask,
                 )
             else:
-                _ = fa2_model(input_ids=dummy_input, attention_mask=dummy_attention_mask)
+                _ = fa2_model(dummy_input, attention_mask=dummy_attention_mask)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 fa2_model.save_pretrained(tmpdirname)

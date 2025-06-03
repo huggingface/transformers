@@ -41,7 +41,7 @@ from transformers.models.qwen2_audio.configuration_qwen2_audio import Qwen2Audio
 from transformers.models.qwen2_audio.modeling_qwen2_audio import Qwen2AudioEncoderLayer
 from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLRotaryEmbedding
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_rope_utils import rope_config_validation
@@ -298,6 +298,8 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
             Sliding window attention (SWA) window size. If not specified, will default to `4096`.
         max_window_layers (`int`, *optional*, defaults to 28):
             The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         rope_scaling (`Dict`, *optional*):
@@ -399,6 +401,7 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
         use_sliding_window=False,
         sliding_window=32768,
         max_window_layers=28,
+        layer_types=None,
         attention_dropout=0.0,
         **kwargs,
     ):
@@ -436,6 +439,16 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
 
         if self.rope_scaling is None:
             self.rope_scaling = {"mrope_section": [16, 24, 24], "rope_type": "default", "type": "default"}
+
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention"
+                if self.sliding_window is not None and i >= self.max_window_layers
+                else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types)
 
 
 class Qwen2_5OmniThinkerConfig(PretrainedConfig):
@@ -1104,7 +1117,7 @@ class Qwen2_5OmniConfig(PretrainedConfig):
 
 class Qwen2_5OmniPreTrainedModel(Qwen2_5_VLPreTrainedModel):
     config_class = Qwen2_5OmniConfig
-    _supports_static_cache = True
+    _supports_static_cache = False
 
     def _init_weights(self, module):
         # important: this ported version of Qwen2.5OmniThinker isn't meant for training from scratch - only
@@ -2009,8 +2022,8 @@ class Qwen2_5OmniVisionFlashAttention2(nn.Module):
 
     def _apply_rotary_pos_emb_flashatt(self, tensor: torch.Tensor, freqs: torch.Tensor) -> torch.Tensor:
         tensor_ = tensor.float()
-        cos = freqs.cos()  # .type_as(tensor_)
-        sin = freqs.sin()  # .type_as(tensor_)
+        cos = freqs.cos().type_as(tensor_)
+        sin = freqs.sin().type_as(tensor_)
         output = apply_rotary_emb(tensor_, cos, sin).type_as(tensor)
         return output
 
@@ -2184,11 +2197,13 @@ class Qwen2_5OmniAttention(Qwen2_5_VLAttention, nn.Module):
         self.is_causal = True
         self.attention_dropout = config.attention_dropout
         self.rope_scaling = config.rope_scaling
+        self.scaling = self.head_dim**-0.5
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
         self.rotary_emb = Qwen2_5OmniRotaryEmbedding(config=config)
 
@@ -2449,9 +2464,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 )
                 video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
-
-            if attention_mask is not None:
-                attention_mask = attention_mask.to(inputs_embeds.device)
 
         if feature_attention_mask is not None:
             audio_feature_lengths = torch.sum(feature_attention_mask, dim=1)
