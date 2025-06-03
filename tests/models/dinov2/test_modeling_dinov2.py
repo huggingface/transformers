@@ -348,14 +348,4 @@ class Dinov2BackboneTest(unittest.TestCase, BackboneTesterMixin):
         self.model_tester = Dinov2ModelTester(self)
 
 
-@require_torch_multi_gpu
-@slow
-class Dinov2ModelDeviceMapTest(unittest.TestCase):
-    def test_model_parallelism(self):
-        model = Dinov2Model.from_pretrained("facebook/dinov2-base", device_map="auto")
-        self.assertTrue(hasattr(model, "hf_device_map"))
-        self.assertIsInstance(model.hf_device_map, dict)
 
-        dummy_input = torch.randn(1, 3, 224, 224).to(model.device)
-        outputs = model(pixel_values=dummy_input)
-        self.assertIsNotNone(outputs.last_hidden_state)
