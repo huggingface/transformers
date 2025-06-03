@@ -21,7 +21,6 @@ from transformers import Dinov2Config, Dinov2Model
 from transformers.testing_utils import (
     is_flaky,
     require_torch,
-    require_torch_multi_gpu,
     require_vision,
     slow,
     torch_device,
