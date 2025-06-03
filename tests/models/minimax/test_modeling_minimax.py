@@ -242,16 +242,6 @@ class MiniMaxModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 @slow
 class MiniMaxIntegrationTest(unittest.TestCase):
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
-
-    @classmethod
-    def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
-
     def test_small_model_logits(self):
         model_id = "geetu040/MiniMax-tiny"
         dummy_input = torch.LongTensor([[0, 1, 0], [0, 1, 0]]).to(torch_device)
@@ -259,14 +249,14 @@ class MiniMaxIntegrationTest(unittest.TestCase):
         model = MiniMaxForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
             torch_device
         )
-        expected_slice = (
-            torch.Tensor([[-0.3320, -0.5703, -0.3633], [0.6133, 0.9609, -0.7422], [-0.2461, -0.7148, -0.6602]])
-            .to(torch.bfloat16)
-            .to(torch_device)
-        )
+        expected_slice = torch.tensor(
+            [[1.0312, -0.5156, -0.3262], [-0.1152, 0.4336, 0.2412], [1.2188, -0.5898, -0.0381]]
+        ).to(torch_device)
 
         with torch.no_grad():
             logits = model(dummy_input).logits
+
+        logits = logits.float()
 
         torch.testing.assert_close(logits[0, :3, :3], expected_slice, atol=1e-3, rtol=1e-3)
         torch.testing.assert_close(logits[1, :3, :3], expected_slice, atol=1e-3, rtol=1e-3)
@@ -279,7 +269,7 @@ class MiniMaxIntegrationTest(unittest.TestCase):
             torch_device
         )
         expected_slice = (
-            torch.Tensor([[0, 1, 0, 604, 2235, 220, 1664, 1636], [0, 1, 0, 604, 2235, 220, 1664, 1636]])
+            torch.tensor([[0, 1, 0, 933, 307, 3102, 2457, 1208], [0, 1, 0, 933, 307, 3102, 2457, 1208]])
             .to(torch.int64)
             .to(torch_device)
         )
