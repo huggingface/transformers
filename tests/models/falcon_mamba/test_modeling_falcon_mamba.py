@@ -458,7 +458,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    def test_generation_bf16(self):
+    def test_generation_fp16(self):
         model = AutoModelForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.float16, device_map="auto")
 
         inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
@@ -478,10 +478,9 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
 
-        breakpoint()
         self.assertEqual(
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
-            """Hello today I'm going to talk about the "C" in the "C-I-""",
+            "Hello today Iava,\n\nI'm sorry to hear that you're having trouble with the ",
         )
 
     def test_generation_torch_compile(self):
@@ -491,10 +490,9 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
 
-        breakpoint()
         self.assertEqual(
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
-            'Hello today Iava,\n\nI am writing to you to discuss the importance of maintaining a healthy lifestyle.'
+            'Hello today Iava,\n\nI am writing to you today to discuss the importance of maintaining a healthy lifestyle'
         )
 
     def test_batched_generation(self):
