@@ -596,6 +596,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("wav2vec2-bert", ("Wav2Vec2CTCTokenizer", None)),
         ("wav2vec2-conformer", ("Wav2Vec2CTCTokenizer", None)),
         ("wav2vec2_phoneme", ("Wav2Vec2PhonemeCTCTokenizer", None)),
+        ("wav2vec2_with_lm", ("Wav2Vec2CTCTokenizer", None)),
         ("whisper", ("WhisperTokenizer", "WhisperTokenizerFast" if is_tokenizers_available() else None)),
         ("xclip", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
         (

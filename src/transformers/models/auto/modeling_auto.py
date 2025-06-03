@@ -1428,6 +1428,7 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
         ("wav2vec2", "Wav2Vec2ForCTC"),
         ("wav2vec2-bert", "Wav2Vec2BertForCTC"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerForCTC"),
+        ("wav2vec2_with_lm", "Wav2Vec2ForCTC"),
         ("wavlm", "WavLMForCTC"),
     ]
 )
