@@ -147,6 +147,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        self.eos_token_id = self.eos_token_id.to(scores.device)
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
         eos_token_mask = isin_mps_friendly(vocab_tensor, self.eos_token_id)
         scores_processed = scores.clone()
@@ -217,6 +218,7 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        self.eos_token_id = self.eos_token_id.to(scores.device)
         new_tokens_length = input_ids.shape[-1] - self.prompt_length_to_skip
         scores_processed = scores.clone()
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
@@ -849,6 +851,7 @@ class EtaLogitsWarper(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        self.epsilon = self.epsilon.to(scores.device)
         probabilities = scores.softmax(dim=-1)
         entropy = torch.distributions.Categorical(logits=scores).entropy()
         eta = torch.min(self.epsilon, torch.sqrt(self.epsilon) * torch.exp(-entropy))[..., None]
@@ -1626,6 +1629,7 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        self.eos_token_id = self.eos_token_id.to(scores.device)
         cur_len = input_ids.shape[-1]
         scores_processed = scores
         if cur_len == self.max_length - 1:
@@ -1837,6 +1841,7 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        self.begin_suppress_tokens = self.begin_suppress_tokens.to(scores.device)
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
         suppress_token_mask = isin_mps_friendly(vocab_tensor, self.begin_suppress_tokens)
         scores_processed = scores
@@ -1880,6 +1885,7 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        self.suppress_tokens = self.suppress_tokens.to(scores.device)
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
         suppress_token_mask = isin_mps_friendly(vocab_tensor, self.suppress_tokens)
         scores = torch.where(suppress_token_mask, -float("inf"), scores)
@@ -2343,6 +2349,7 @@ class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        self.eos_token_id = self.eos_token_id.to(scores.device)
         scores_processed = scores
         if self.min_eos_p:
             probs = torch.nn.functional.softmax(scores.float(), dim=-1)
