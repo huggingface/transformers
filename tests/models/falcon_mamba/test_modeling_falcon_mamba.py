@@ -464,6 +464,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
 
+        breakpoint()
         self.assertEqual(
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
             "Hello today I am going to show you how to make a simple and easy to make paper plane.\nStep",
@@ -477,6 +478,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
 
+        breakpoint()
         self.assertEqual(
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
             """Hello today I'm going to talk about the "C" in the "C-I-""",
@@ -489,6 +491,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         inputs = self.tokenizer(self.text, return_tensors="pt").to(torch_device)
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False)
 
+        breakpoint()
         self.assertEqual(
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
             "Hello today I am going to show you how to make a simple and easy to make paper plane.\nStep",
@@ -512,6 +515,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         out = model.generate(**inputs, max_new_tokens=20)
         out = tok.batch_decode(out, skip_special_tokens=True)
 
+        breakpoint()
         self.assertListEqual(out, EXPECTED_OUTPUT)
 
         # We test the same generations with inputs_embeds
@@ -522,6 +526,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         out = model.generate(**inputs, max_new_tokens=20)
         out = tok.batch_decode(out, skip_special_tokens=True)
 
+        breakpoint()
         self.assertListEqual(out, EXPECTED_OUTPUT)
 
     @require_torch_multi_accelerator
