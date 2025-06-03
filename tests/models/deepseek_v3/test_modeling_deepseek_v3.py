@@ -24,9 +24,10 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_accelerator,
+    require_torch_large_accelerator,
     require_torch_sdpa,
     slow,
-    torch_device, require_torch_large_accelerator,
+    torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -533,7 +534,9 @@ class DeepseekV3IntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
 
         # Static Cache
-        generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static")
+        generated_ids = model.generate(
+            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
+        )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
