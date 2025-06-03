@@ -69,7 +69,7 @@ class DogeConfig(PretrainedConfig):
             Vocabulary size of the Doge2 model. Defines the number of different tokens that can be represented by the `inputs_ids` passed when calling [`DogeModel`]
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 4096):
+        intermediate_size (`int`, *optional*, defaults to 2048):
             Dimension of the MLP representations.
         num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer decoder.
