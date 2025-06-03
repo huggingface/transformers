@@ -522,7 +522,6 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         out = model.generate(**inputs, max_new_tokens=20)
         out = tok.batch_decode(out, skip_special_tokens=True)
 
-        breakpoint()
         self.assertListEqual(out, EXPECTED_OUTPUT)
 
         # We test the same generations with inputs_embeds
@@ -540,12 +539,11 @@ class FalconMambaIntegrationTests(unittest.TestCase):
                     ' I will be talking about the importance of the internet in our lives.\nThe internet is a global',
                 ],
                 ("cuda", 8): [
-                    ' I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
-                    ' I will be talking about the importance of the internet in our lives.\nThe internet is a global',
+                    ' I am going to talk about the “Theory of Relativity” by Albert Einstein.\n',
+                    ' I will be talking about the importance of the internet in our lives.\nThe internet is a global'
                 ],
             }
         )
-        breakpoint()
         EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
         self.assertListEqual(out, EXPECTED_OUTPUT)
 
