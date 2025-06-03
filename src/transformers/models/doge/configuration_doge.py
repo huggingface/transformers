@@ -106,6 +106,8 @@ class DogeConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
+        sliding_window (`int`, *optional*):
+            Sliding window attention window size. If not specified, will default to `None`.
         keep_window_size (`int`, *optional*, defaults to 2048):
             The window size of tokens that are not dynamically masked, and dynamic masking is only performed when the sequence length exceeds this value.
         is_moe (`bool`, *optional*, defaults to `False`):
@@ -182,6 +184,7 @@ class DogeConfig(PretrainedConfig):
         attention_bias=False,
         attention_dropout=0.0,
         mlp_bias=False,
+        sliding_window=None,
         keep_window_size=2048,
         is_moe=False,
         num_experts=16384,
