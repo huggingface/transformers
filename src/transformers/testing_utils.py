@@ -116,6 +116,7 @@ from .utils import (
     is_peft_available,
     is_phonemizer_available,
     is_pretty_midi_available,
+    is_psutil_available,
     is_pyctcdecode_available,
     is_pytesseract_available,
     is_pytest_available,
@@ -130,6 +131,7 @@ from .utils import (
     is_seqio_available,
     is_soundfile_available,
     is_spacy_available,
+    is_speech_available,
     is_spqr_available,
     is_sudachi_available,
     is_sudachi_projection_available,
@@ -1052,6 +1054,19 @@ def require_torch_gpu(test_case):
     return unittest.skipUnless(torch_device == "cuda", "test requires CUDA")(test_case)
 
 
+def require_large_cpu_ram(test_case, memory: float = 80):
+    """Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory."""
+    if not is_psutil_available():
+        return test_case
+
+    import psutil
+
+    return unittest.skipUnless(
+        psutil.virtual_memory().total / 1024**3 > memory,
+        f"test requires a machine with more than {memory} GiB of CPU RAM memory",
+    )(test_case)
+
+
 def require_torch_large_gpu(test_case, memory: float = 20):
     """Decorator marking a test that requires a CUDA GPU with more than `memory` GiB of memory."""
     if torch_device != "cuda":
@@ -1474,6 +1489,13 @@ def require_tiktoken(test_case):
     Decorator marking a test that requires TikToken. These tests are skipped when TikToken isn't installed.
     """
     return unittest.skipUnless(is_tiktoken_available(), "test requires TikToken")(test_case)
+
+
+def require_speech(test_case):
+    """
+    Decorator marking a test that requires speech. These tests are skipped when speech isn't available.
+    """
+    return unittest.skipUnless(is_speech_available(), "test requires torchaudio")(test_case)
 
 
 def get_gpu_count():

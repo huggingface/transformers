@@ -1270,9 +1270,14 @@ class ContinuousBatchingManager:
                 self.model.dtype,
             )
 
-            scheduler = SCHEDULER_MAPPING.get(self.generation_config.scheduler)
-            if scheduler is None:
-                logger.warning(f"Scheduler '{scheduler}' not found. Defaulting to FIFO.")
+            scheduler = None
+            if hasattr(self.generation_config, "scheduler"):
+                scheduler = SCHEDULER_MAPPING.get(self.generation_config.scheduler)
+                if scheduler is None:
+                    logger.warning(f"Scheduler '{scheduler}' not found. Defaulting to FIFO.")
+                    scheduler = FIFOScheduler
+            else:
+                # Default to fifo
                 scheduler = FIFOScheduler
 
             batch_processor = ContinuousBatchProcessor(
