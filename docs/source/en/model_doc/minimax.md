@@ -30,7 +30,7 @@ alt="drawing" width="600"/>
 
 <small> Text benchmark for MiniMax. Taken from the <a href="https://github.com/MiniMax-AI/MiniMax-01" target="_blank">official code</a>. </small>
 
-This model was contributed by [Armaghan](https://github.com/geetu040) and [Shakib](https://github.com/Shakib-IO). The original code can be found [here](https://huggingface.co/MiniMaxAI/MiniMax-Text-01/tree/main).
+This model was contributed by [Armaghan](https://github.com/geetu040) and [Shakib](https://github.com/Shakib-IO). The original code can be found [here](https://huggingface.co/MiniMaxAI/MiniMax-Text-01-hf/tree/main).
 
 ### Architectural details
 
@@ -65,8 +65,8 @@ The pre-trained model can be used as follows:
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("MiniMaxAI/MiniMax-Text-01", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-Text-01")
+>>> model = AutoModelForCausalLM.from_pretrained("MiniMaxAI/MiniMax-Text-01-hf", device_map="auto")
+>>> tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-Text-01-hf")
 
 >>> messages = [
 ...     {"role": "user", "content": "What is your favourite condiment?"},
@@ -101,8 +101,8 @@ To load and run a model using Flash Attention-2, refer to the snippet below:
 >>> import torch
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("MiniMaxAI/MiniMax-Text-01", torch_dtype=torch.float16, attn_implementation="flash_attention_2", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-Text-01")
+>>> model = AutoModelForCausalLM.from_pretrained("MiniMaxAI/MiniMax-Text-01-hf", torch_dtype=torch.float16, attn_implementation="flash_attention_2", device_map="auto")
+>>> tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-Text-01-hf")
 
 >>> prompt = "My favourite condiment is"
 
@@ -138,8 +138,8 @@ Quantizing a model is as simple as passing a `quantization_config` to the model.
 ...         bnb_4bit_compute_dtype="torch.float16",
 ... )
 
->>> model = AutoModelForCausalLM.from_pretrained("MiniMaxAI/MiniMax-Text-01", quantization_config=True, device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-Text-01")
+>>> model = AutoModelForCausalLM.from_pretrained("MiniMaxAI/MiniMax-Text-01-hf", quantization_config=True, device_map="auto")
+>>> tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-Text-01-hf")
 
 >>> prompt = "My favourite condiment is"
 
@@ -157,7 +157,7 @@ Quantizing a model is as simple as passing a `quantization_config` to the model.
 ```
 
 This model was contributed by [geetu040](https://github.com/geetu040).
-The original code can be found [here](https://huggingface.co/MiniMaxAI/MiniMax-Text-01/blob/main/modeling_minimax.py).
+The original code can be found [here](https://huggingface.co/MiniMaxAI/MiniMax-Text-01-hf/blob/main/modeling_minimax.py).
 
 ## Resources
 
