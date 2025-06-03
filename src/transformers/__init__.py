@@ -886,6 +886,7 @@ _import_structure = {
         "VitsTokenizer",
     ],
     "models.vivit": ["VivitConfig"],
+    "models.vjepa2": ["VJEPA2Config", "VJEPA2ImageProcessor"],
     "models.wav2vec2": [
         "Wav2Vec2Config",
         "Wav2Vec2CTCTokenizer",
@@ -3979,6 +3980,12 @@ else:
             "VivitPreTrainedModel",
         ]
     )
+    _import_structure["models.vjepa2"].extend(
+        [
+            "VJEPA2Model",
+            "VJEPA2PreTrainedModel",
+        ]
+    )
     _import_structure["models.wav2vec2"].extend(
         [
             "Wav2Vec2ForAudioFrameClassification",
@@ -6147,6 +6154,7 @@ if TYPE_CHECKING:
         VitsTokenizer,
     )
     from .models.vivit import VivitConfig
+    from .models.vjepa2 import VJEPA2Config, VJEPA2ImageProcessor
     from .models.wav2vec2 import (
         Wav2Vec2Config,
         Wav2Vec2CTCTokenizer,
@@ -8693,6 +8701,10 @@ if TYPE_CHECKING:
             VivitForVideoClassification,
             VivitModel,
             VivitPreTrainedModel,
+        )
+        from .models.vjepa2 import (
+            VJEPA2Model,
+            VJEPA2PreTrainedModel,
         )
         from .models.wav2vec2 import (
             Wav2Vec2ForAudioFrameClassification,

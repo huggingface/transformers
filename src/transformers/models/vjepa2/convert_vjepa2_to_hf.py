@@ -10,10 +10,12 @@ import torch.nn as nn
 from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
-from .modeling_vjepa2 import VJEPA2Config, VJEPA2Model, VJEPA2ImageProcessor, ClipToTensor, apply_masks
+from transformers import VJEPA2Config, VJEPA2Model, VJEPA2ImageProcessor
+
+from ...models.vjepa2.modeling_vjepa2 import ClipToTensor, apply_masks
 from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
-HUB_REPO = ""
+HUB_REPO = "/home/koustuvs/mlp/jepa-oss"
 HUB_SOURCE = "local"
 
 
