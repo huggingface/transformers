@@ -824,7 +824,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
     tokenizer: PreTrainedTokenizerBase
     mlm: bool = True
-    mlm_probability: float = 0.15
+    mlm_probability: Optional[float] = 0.15
     mask_replace_prob: float = 0.8
     random_replace_prob: float = 0.1
     pad_to_multiple_of: Optional[int] = None
