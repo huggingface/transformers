@@ -20,26 +20,31 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
-from huggingface_hub import HfFolder, Repository
-
 import transformers
+from huggingface_hub import HfFolder, Repository
 from transformers import (
-    CONFIG_MAPPING,
-    FEATURE_EXTRACTOR_MAPPING,
-    PROCESSOR_MAPPING,
-    TOKENIZER_MAPPING,
     AutoConfig,
     AutoFeatureExtractor,
     AutoProcessor,
     AutoTokenizer,
     BertTokenizer,
+    CONFIG_MAPPING,
+    FEATURE_EXTRACTOR_MAPPING,
+    PROCESSOR_MAPPING,
     ProcessorMixin,
+    TOKENIZER_MAPPING,
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
     Wav2Vec2Processor,
-    Wav2Vec2ProcessorWithLM
+    Wav2Vec2ProcessorWithLM,
 )
-from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test, require_pyctcdecode
+from transformers.testing_utils import (
+    TOKEN,
+    TemporaryHubRepo,
+    get_tests_dir,
+    is_staging_test,
+    require_pyctcdecode,
+)
 from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
 from transformers.utils import (
     FEATURE_EXTRACTOR_NAME,
@@ -47,13 +52,12 @@ from transformers.utils import (
     is_tokenizers_available,
 )
 
-
 sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
 
-from test_module.custom_configuration import CustomConfig  # noqa E402
-from test_module.custom_feature_extraction import CustomFeatureExtractor  # noqa E402
-from test_module.custom_processing import CustomProcessor  # noqa E402
-from test_module.custom_tokenization import CustomTokenizer  # noqa E402
+from test_module.custom_configuration import CustomConfig  # noqa: E402
+from test_module.custom_feature_extraction import CustomFeatureExtractor  # noqa: E402
+from test_module.custom_processing import CustomProcessor  # noqa: E402
+from test_module.custom_tokenization import CustomTokenizer  # noqa: E402
 
 
 SAMPLE_PROCESSOR_CONFIG = get_tests_dir("fixtures/dummy_feature_extractor_config.json")
