@@ -830,6 +830,7 @@ class ChameleonPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_static_cache = True
     _supports_param_buffer_assignment = False
+    _supports_flex_attn = True
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -918,6 +919,19 @@ class ChameleonModel(ChameleonPreTrainedModel):
         bpe_toks = self.vocabulary_mapping.convert_img2bpe(image_toks)
         bpe_toks = bpe_toks.view(batch_size, -1)
         return bpe_toks
+
+    def get_image_features(self, pixel_values: torch.FloatTensor):
+        """
+        Tokenizes images into discrete tokens with VQGAN module and embeds
+        them with text embeddings layer
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+                The tensors corresponding to the input images.
+        """
+        image_tokens = self.get_image_tokens(pixel_values)
+        vision_embeddings = self.get_input_embeddings()(image_tokens)
+        return vision_embeddings
 
     @auto_docstring
     def forward(
@@ -1051,7 +1065,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
             attentions=all_self_attns,
         )
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
+    # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: Union[torch.Tensor, "BlockMask"],
@@ -1121,7 +1135,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
         return causal_mask
 
     @staticmethod
-    # Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel._prepare_4d_causal_attention_mask_with_cache_position
+    # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._prepare_4d_causal_attention_mask_with_cache_position
     def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor,
         sequence_length: int,

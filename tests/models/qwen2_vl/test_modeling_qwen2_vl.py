@@ -28,6 +28,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -300,10 +301,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         pass
 
     @unittest.skip(reason="Compile not yet supported because in Qwen2VL models")
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported because in Qwen2VL models")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
@@ -367,7 +364,7 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     @slow
     def test_small_model_integration_test(self):

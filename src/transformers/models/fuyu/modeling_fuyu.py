@@ -125,8 +125,24 @@ class FuyuModel(FuyuPreTrainedModel):
                     f"Number of continuous embeddings {continuous_embeddings[batch_idx].shape=} does not match "
                     f"number of continuous token ids {src_indices.shape=} in batch element {batch_idx}."
                 )
-            output_embeddings[batch_idx, dst_indices] = continuous_embeddings[batch_idx][src_indices]
+            output_embeddings[batch_idx, dst_indices] = continuous_embeddings[batch_idx][src_indices].to(
+                output_embeddings.device
+            )
         return output_embeddings
+
+    def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs):
+        """
+        Encodes images into continuous embeddings that can be forwarded to the language model.
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+                The tensors corresponding to the input images.
+        """
+        patch_embeddings = [
+            self.vision_embed_tokens(patch.to(self.vision_embed_tokens.weight.dtype)).squeeze(0)
+            for patch in pixel_values
+        ]
+        return patch_embeddings
 
     @auto_docstring
     def forward(
@@ -185,17 +201,13 @@ class FuyuModel(FuyuPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
             if image_patches is not None and past_key_values is None:
-                patch_embeddings = [
-                    self.vision_embed_tokens(patch.to(self.vision_embed_tokens.weight.dtype))
-                    .squeeze(0)
-                    .to(inputs_embeds.device)
-                    for patch in image_patches
-                ]
-                inputs_embeds = self.gather_continuous_embeddings(
-                    word_embeddings=inputs_embeds,
-                    continuous_embeddings=patch_embeddings,
-                    image_patch_input_indices=image_patches_indices,
-                )
+                patch_embeddings = self.get_image_features(image_patches)
+                patch_embeddings = torch.cat(patch_embeddings, dim=0)
+
+                special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
+                special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+                patch_embeddings = patch_embeddings.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, patch_embeddings)
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,

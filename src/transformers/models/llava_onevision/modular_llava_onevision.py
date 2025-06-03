@@ -28,16 +28,57 @@ from transformers.models.llava_next_video.modeling_llava_next_video import (
     LlavaNextVideoModelOutputWithPast,
     LlavaNextVideoPreTrainedModel,
     get_anyres_image_grid_shape,
+    image_size_to_num_patches,
     unpad_image,
 )
 
-from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
+from ...image_processing_utils import BatchFeature
+from ...image_processing_utils_fast import DefaultFastImageProcessorKwargs, group_images_by_shape, reorder_images
+from ...image_utils import (
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    SizeDict,
+    get_image_size,
+)
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import (
+    TensorType,
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+    is_torchvision_available,
+    is_torchvision_v2_available,
+    logging,
+)
+
+
+if is_torchvision_available():
+    if is_torchvision_v2_available():
+        from torchvision.transforms.v2 import functional as F
+    else:
+        from torchvision.transforms import functional as F
 
 
 logger = logging.get_logger(__name__)
+
+
+class LlavaOnevisionFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
+    """
+    image_grid_pinpoints (`List[List[int]]`, *optional*):
+        A list of possible resolutions to use for processing high resolution images. The best resolution is selected
+        based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
+        method.
+    do_pad (`bool`, *optional*):
+        Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
+        number of patches in the batch. Padding will be applied to the bottom and right with zeros.
+    """
+
+    image_grid_pinpoints: Optional[List[List[int]]]
+    do_pad: Optional[bool]
 
 
 class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
@@ -55,6 +96,147 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
     do_pad = True
     image_grid_pinpoints = [[384, 384], [384, 768], [384, 1152], [384, 1536], [384, 1920], [384, 2304], [768, 384], [768, 768], [768, 1152], [768, 1536], [768, 1920], [768, 2304], [1152, 384], [1152, 768], [1152, 1152], [1152, 1536], [1152, 1920], [1152, 2304], [1536, 384], [1536, 768], [1536, 1152], [1536, 1536], [1536, 1920], [1536, 2304], [1920, 384], [1920, 768], [1920, 1152], [1920, 1536], [1920, 1920], [1920, 2304], [2304, 384], [2304, 768], [2304, 1152], [2304, 1536], [2304, 1920], [2304, 2304]]  # fmt: skip
     model_input_names = ["pixel_values_videos"]
+
+    # Copied from transformers.models.llava.image_processing_llava_fast.LlavaImageProcessorFast.pad_to_square
+    def pad_to_square(
+        self,
+        images: "torch.Tensor",
+        background_color: Union[int, Tuple[int, int, int]] = 0,
+    ) -> "torch.Tensor":
+        """
+        Pads an image to a square based on the longest edge.
+
+        Args:
+            images (`np.ndarray`):
+                The images to pad.
+            background_color (`int` or `Tuple[int, int, int]`, *optional*, defaults to 0):
+                The color to use for the padding. Can be an integer for single channel or a
+                tuple of integers representing for multi-channel images. If passed as integer
+                in mutli-channel mode, it will default to `0` in subsequent channels.
+        Returns:
+            `torch.Tensor`: The padded images.
+        """
+        height, width = get_image_size(images, ChannelDimension.FIRST)
+
+        if height == width:
+            return images
+
+        num_channels = images.shape[1] if len(images.shape) == 4 else images.shape[0]
+        if isinstance(background_color, int):
+            background_color = [background_color] + [0] * (num_channels - 1)
+        elif len(background_color) != num_channels:
+            raise ValueError(
+                f"background_color must have no more than {num_channels} elements to match the number of channels"
+            )
+
+        max_dim = max(height, width)
+        paste_x_left = (max_dim - width) // 2
+        paste_y_left = (max_dim - height) // 2
+        paste_x_right = max_dim - width - paste_x_left
+        paste_y_right = max_dim - height - paste_y_left
+        padded_images = F.pad(
+            images, padding=[paste_x_left, paste_y_left, paste_x_right, paste_y_right], fill=background_color
+        )
+
+        return padded_images
+
+    @auto_docstring
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionFastImageProcessorKwargs]) -> BatchFeature:
+        if isinstance(images, (tuple, list)) and isinstance(images[0], (tuple, list)):
+            # if the first element is a list, we assume that all elements are lists
+            batch_num_images = [len(x) for x in images]
+        elif isinstance(images, (tuple, list)):
+            # treat this as a single-image case for backward compatibility
+            batch_num_images = [1] * len(images)
+        else:
+            batch_num_images = [1]
+        kwargs["batch_num_images"] = batch_num_images
+        return super().preprocess(images, **kwargs)
+
+    def _preprocess(
+        self,
+        images: List["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        image_grid_pinpoints: List[List[int]],
+        interpolation: Optional["F.InterpolationMode"],
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: Optional[Union[float, List[float]]],
+        image_std: Optional[Union[float, List[float]]],
+        do_pad: bool,
+        batch_num_images: List[int],
+        return_tensors: Optional[Union[str, TensorType]],
+    ) -> BatchFeature:
+        processed_images = []
+        image_sizes = []
+
+        # only single image patching is supported
+        need_patching = [n == 1 for n in batch_num_images for _ in range(n)]
+
+        # Determine the size tuple
+        if size and size.height and size.width:
+            size_tuple = (size.height, size.width)
+        else:
+            size_tuple = (size.shortest_edge, size.shortest_edge)
+
+        # Determine the patch size
+        if crop_size and crop_size.height:
+            patch_size = crop_size.height
+        elif size and size.height:
+            patch_size = size.height
+        else:
+            patch_size = size.shortest_edge
+
+        for i, image in enumerate(images):
+            if need_patching[i]:
+                image_patches = self._get_image_patches(
+                    image,
+                    image_grid_pinpoints,
+                    size=size_tuple,
+                    patch_size=patch_size,
+                    interpolation=interpolation,
+                )
+            else:
+                padded_image = self.pad_to_square(
+                    images=image, background_color=tuple(int(x * 255) for x in self.image_mean)
+                )
+                image_patches = [padded_image]
+
+            # Group images by size for batched processing
+            processed_image_patches_grouped = {}
+            grouped_image_patches, grouped_image_patches_index = group_images_by_shape(image_patches)
+            for shape, stacked_image_patches in grouped_image_patches.items():
+                if do_resize:
+                    stacked_image_patches = self.resize(
+                        image=stacked_image_patches,
+                        size=size,
+                        interpolation=interpolation,
+                    )
+                if do_center_crop:
+                    stacked_image_patches = self.center_crop(stacked_image_patches, crop_size)
+                # Fused rescale and normalize
+                stacked_image_patches = self.rescale_and_normalize(
+                    stacked_image_patches, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+                )
+                processed_image_patches_grouped[shape] = stacked_image_patches
+            processed_image_patches = reorder_images(processed_image_patches_grouped, grouped_image_patches_index)
+            processed_image_patches = (
+                torch.stack(processed_image_patches, dim=0) if return_tensors else processed_image_patches
+            )
+            processed_images.append(processed_image_patches)
+            image_sizes.append(get_image_size(image, ChannelDimension.FIRST))
+
+        if do_pad:
+            processed_images = self._pad_for_batching(processed_images)
+        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
+        return BatchFeature(
+            data={"pixel_values": processed_images, "image_sizes": image_sizes, "batch_num_images": batch_num_images},
+            tensor_type=return_tensors,
+        )
 
 
 class LlavaOnevisionModelOutputWithPast(LlavaNextVideoModelOutputWithPast):
@@ -134,11 +316,11 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
                 image_feature = image_feature[0]
                 if image_newline is not None:
                     image_feature = torch.cat((image_feature, image_newline[None].to(image_feature)), dim=0)
+                image_feature = image_feature.flatten(0, 1)
             new_image_features.append(image_feature)
             feature_lens.append(image_feature.size(0))
-        image_features = torch.cat(new_image_features, dim=0)
-        feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features.device)
-        return image_features, feature_lens
+        feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features[0].device)
+        return new_image_features, feature_lens
 
     def apply_pooling(self, image_features):
         height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
@@ -152,6 +334,96 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
         image_features = image_features.permute(0, 2, 3, 1)
         image_features = image_features.view(batch_frames, -1, dim)
+        return image_features
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_sizes: torch.Tensor,
+        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_select_strategy: Optional[str] = None,
+        vision_aspect_ratio: Optional[str] = None,
+        batch_num_images: Optional[torch.LongTensor] = None,
+    ):
+        """
+        Obtains image last hidden states from the vision tower and apply multimodal projection.
+
+        Args:
+            pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
+               The tensors corresponding to the input images.
+            image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
+                Actual image size of each images (H, W).
+            vision_feature_layer (`Union[int, List[int]]`):
+                The index of the layer to select the vision feature. If multiple indices are provided,
+                the vision feature of the corresponding indices will be concatenated to form the
+                vision features.
+            vision_feature_select_strategy (`str`):
+                The feature selection strategy used to select the vision feature from the vision backbone.
+                Can be one of `"default"` or `"full"`
+            batch_num_images (`torch.LongTensor`, *optional*):
+                Number of images in each sample.
+        Returns:
+            image_features (List[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
+            and are of shape `(num_patches, image_length, embed_dim)`).
+        """
+        vision_feature_layer = (
+            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
+        )
+        vision_feature_select_strategy = (
+            vision_feature_select_strategy
+            if vision_feature_select_strategy is not None
+            else self.config.vision_feature_select_strategy
+        )
+        vision_aspect_ratio = (
+            vision_aspect_ratio if vision_aspect_ratio is not None else self.config.vision_aspect_ratio
+        )
+
+        # ! infer image_num_patches from image_sizes
+        if batch_num_images is None:
+            # treat this as a single-image case for backward compatibility
+            need_patching = [True] * len(image_sizes)
+        else:
+            need_patching = [n == 1 for n in batch_num_images for _ in range(n)]
+        image_num_patches = [
+            image_size_to_num_patches(
+                image_size=imsize,
+                grid_pinpoints=self.config.image_grid_pinpoints,
+                patch_size=self.config.vision_config.image_size,
+            )
+            if should_patch
+            else 1
+            for imsize, should_patch in zip(image_sizes, need_patching)
+        ]
+        if pixel_values.dim() == 5:
+            # stacked if input is (batch_size, num_patches, num_channels, height, width)
+            _pixel_values_list = [pix_val[:num_patch] for pix_val, num_patch in zip(pixel_values, image_num_patches)]
+            pixel_values = torch.cat(_pixel_values_list, dim=0)
+        elif pixel_values.dim() != 4:
+            # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
+            raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
+
+        image_features = self.vision_tower(pixel_values, output_hidden_states=True)
+        # If we have one vision feature layer, return the corresponding hidden states,
+        # otherwise, select the hidden states of each feature layer and concatenate them
+        if isinstance(vision_feature_layer, int):
+            selected_image_feature = image_features.hidden_states[vision_feature_layer]
+        else:
+            hs_pool = [image_features.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
+            selected_image_feature = torch.cat(hs_pool, dim=-1)
+
+        if vision_feature_select_strategy == "default":
+            selected_image_feature = selected_image_feature[:, 1:]
+        elif vision_feature_select_strategy == "full":
+            selected_image_feature = selected_image_feature
+        image_features = self.multi_modal_projector(selected_image_feature)
+        image_features = torch.split(image_features, image_num_patches, dim=0)
+
+        image_features, feature_lens = self.pack_image_features(
+            image_features,
+            image_sizes,
+            image_newline=self.image_newline,
+            vision_aspect_ratio=vision_aspect_ratio,
+        )
         return image_features
 
     def get_video_features(
@@ -214,6 +486,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         vision_feature_layer: Optional[Union[int, List[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         vision_aspect_ratio: Optional[str] = None,
+        batch_num_images: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -234,6 +507,8 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
             If `"full"`, the full vision features are used.
         vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
             Aspect ratio used when processong image features. The default value is "anyres_max_9".
+        batch_num_images (`torch.LongTensor`, *optional*):
+            Number of images in each sample.
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -272,13 +547,9 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
                 image_sizes,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
+                batch_num_images=batch_num_images,
             )
-            image_features, feature_lens = self.pack_image_features(
-                image_features,
-                image_sizes,
-                image_newline=self.image_newline,
-                vision_aspect_ratio=vision_aspect_ratio,
-            )
+            image_features = torch.cat(image_features, dim=0)
 
             special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
             special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
@@ -355,6 +626,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         vision_feature_layer: Optional[Union[int, List[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         vision_aspect_ratio: Optional[str] = None,
+        batch_num_images: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -377,6 +649,8 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
             If `"full"`, the full vision features are used.
         vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
             Aspect ratio used when processong image features. The default value is "anyres_max_9".
+        batch_num_images (`torch.LongTensor`, *optional*):
+            Number of images in each sample.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -438,6 +712,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
             vision_aspect_ratio=vision_aspect_ratio,
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
+            batch_num_images=batch_num_images,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,

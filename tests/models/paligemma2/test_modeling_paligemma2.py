@@ -26,6 +26,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    is_flaky,
     require_torch,
     torch_device,
 )
@@ -381,3 +382,8 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     @unittest.skip("Gemma2 has HybridCache and doesn't support StaticCache")
     def test_generate_with_static_cache(self):
         pass
+
+    @pytest.mark.generate
+    @is_flaky
+    def test_generate_compile_model_forward(self):
+        super().test_generate_compile_model_forward()

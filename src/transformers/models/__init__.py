@@ -62,6 +62,7 @@ if TYPE_CHECKING:
     from .cohere import *
     from .cohere2 import *
     from .colpali import *
+    from .colqwen2 import *
     from .conditional_detr import *
     from .convbert import *
     from .convnext import *
@@ -103,6 +104,7 @@ if TYPE_CHECKING:
     from .ernie import *
     from .esm import *
     from .falcon import *
+    from .falcon_h1 import *
     from .falcon_mamba import *
     from .fastspeech2_conformer import *
     from .flaubert import *

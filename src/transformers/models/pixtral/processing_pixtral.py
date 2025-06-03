@@ -18,11 +18,23 @@ Processor class for Pixtral.
 
 from typing import List, Union
 
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
+from ...processing_utils import (
+    MultiModalData,
+    ProcessingKwargs,
+    ProcessorMixin,
+    Unpack,
+    _validate_images_text_input_order,
+)
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import is_vision_available, logging
+
+
+if is_vision_available():
+    from .image_processing_pixtral import get_resize_output_image_size
 
 
 logger = logging.get_logger(__name__)
@@ -32,6 +44,7 @@ class PixtralProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_mm_token_type_ids": False,
         },
         "images_kwargs": {},
         "common_kwargs": {
@@ -77,14 +90,6 @@ class PixtralProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = [
-        "chat_template",
-        "patch_size",
-        "spatial_merge_size",
-        "image_token",
-        "image_break_token",
-        "image_end_token",
-    ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -106,6 +111,10 @@ class PixtralProcessor(ProcessorMixin):
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.image_break_token = image_break_token
         self.image_end_token = image_end_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.image_break_token_id = tokenizer.convert_tokens_to_ids(self.image_break_token)
+        self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
+        self.image_ids = [self.image_token_id, self.image_break_token_id, self.image_end_token_id]
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -213,9 +222,53 @@ class PixtralProcessor(ProcessorMixin):
                 prompt_strings.append(sample)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None)
         self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
+
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (`List[List[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = PixtralProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+
+            size = images_kwargs.get("size", None) or self.image_processor.size
+            patch_size = self.patch_size * self.spatial_merge_size
+
+            num_image_tokens = []
+            for height, width in image_sizes:
+                resized_height, resized_width = get_resize_output_image_size(
+                    np.zeros((height, width, 3)),
+                    size=(size["longest_edge"], size["longest_edge"]),
+                    patch_size=(patch_size, patch_size),
+                )
+                num_height_tokens = resized_height // patch_size
+                num_width_tokens = resized_width // patch_size
+                num_image_tokens.append((num_width_tokens + 1) * num_height_tokens)
+
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

@@ -45,7 +45,7 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/pef
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
 
 # For video model testing
-RUN python3 -m pip install --no-cache-dir av==9.2.0
+RUN python3 -m pip install --no-cache-dir av
 
 # Some slow tests require bnb
 RUN python3 -m pip install --no-cache-dir bitsandbytes
@@ -70,6 +70,9 @@ RUN python3 -m pip install --no-cache-dir g2p-en
 
 # For Some bitsandbytes tests
 RUN python3 -m pip install --no-cache-dir einops
+
+# For Some tests with `@require_liger_kernel`
+RUN python3 -m pip install --no-cache-dir liger-kernel
 
 # `kernels` may give different outputs (within 1e-5 range) even with the same model (weights) and the same inputs
 RUN python3 -m pip uninstall -y kernels
