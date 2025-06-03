@@ -56,7 +56,7 @@ logger = logging.get_logger(__name__)
 class DiaPreTrainedModel(PreTrainedModel):
     config_class = DiaConfig
     base_model_prefix = "model"
-    main_input_name = "encoder_input_ids"  # TODO: change this?
+    main_input_name = "input_ids"
     supports_gradient_checkpointing = True
     _no_split_modules = ["DiaEncoderLayer", "DiaDecoderLayer"]
     _supports_flash_attn_2 = True
@@ -406,7 +406,7 @@ def eager_attention_forward(
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask[:, :, :, : key_states.shape[-2]]
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -720,7 +720,7 @@ class DiaDecoder(DiaPreTrainedModel):
 
     def forward(
         self,
-        audio_codes: torch.Tensor,
+        input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
@@ -731,21 +731,21 @@ class DiaDecoder(DiaPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[BaseModelOutputWithPastAndCrossAttentions, Tuple]:
-        batch_size, seq_length = audio_codes.size()[:-1]
+        batch_size, seq_length = input_ids.size()[:-1]
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         if cache_position is None:
             cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_length, device=audio_codes.device
+                past_key_values_length, past_key_values_length + seq_length, device=input_ids.device
             )[None, :]
 
         # RoPE
-        hidden_states = self.embeddings(audio_codes)
+        hidden_states = self.embeddings(input_ids)
         position_embeddings = self.rotary_embeddings(hidden_states, cache_position)
 
         if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past cache
             mask_seq_length = past_key_values_length + seq_length
-            attention_mask = torch.ones(batch_size, mask_seq_length, device=audio_codes.device)
+            attention_mask = torch.ones(batch_size, mask_seq_length, device=input_ids.device)
 
         self_attn_cache = (
             past_key_values.self_attention_cache
@@ -821,12 +821,6 @@ class DiaModel(DiaGenerationMixin, DiaPreTrainedModel):
         self.decoder = DiaDecoder(config.decoder_config)
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.decoder.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.decoder.embed_tokens = value
-
     def get_encoder(self):
         return self.encoder
 
@@ -835,21 +829,20 @@ class DiaModel(DiaGenerationMixin, DiaPreTrainedModel):
 
     def forward(
         self,
-        # TODO: rename back to input_ids and attention_mask
-        audio_codes: Optional[Tuple[torch.FloatTensor]] = None,
-        audio_attention_mask: Optional[torch.LongTensor] = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        encoder_input_ids: Optional[torch.LongTensor] = None,
-        encoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_cache_position: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Union[EncoderDecoderCache, Tuple[torch.FloatTensor]]] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        decoder_cache_position: Optional[torch.LongTensor] = None,
+        encoder_outputs: Optional[Union[BaseModelOutput, Tuple]] = None,
+        past_key_values: Optional[EncoderDecoderCache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,  # TODO: return dict
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Seq2SeqModelOutput]:
-        if encoder_input_ids is None and encoder_outputs is None:
+        if input_ids is None and encoder_outputs is None:
             raise ValueError("You should either provide text ids or the cached text encodings. Neither has been found.")
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -871,19 +864,19 @@ class DiaModel(DiaGenerationMixin, DiaPreTrainedModel):
 
         # TODO: CFG should be possible with logits processor --> move the CFG steps out to prepare inputs
         # batch size becomes 2 * batch_size using CFG (uncoditioned == 0 and conditioned input == text)
-        if encoder_input_ids is not None:
-            encoder_input_ids = encoder_input_ids[:, None, :]
-            unconditioned_encoder_input_ids = torch.zeros_like(encoder_input_ids)
-            encoder_input_ids = torch.stack([unconditioned_encoder_input_ids, encoder_input_ids], dim=1).view(-1, encoder_input_ids.shape[-1])
+        if input_ids is not None:
+            input_ids = input_ids[:, None, :]
+            unconditioned_input_ids = torch.zeros_like(input_ids)
+            input_ids = torch.stack([unconditioned_input_ids, input_ids], dim=1).view(-1, input_ids.shape[-1])
 
-        if encoder_attention_mask is not None:
-            encoder_attention_mask = encoder_attention_mask.repeat_interleave(2, dim=0)
+        if attention_mask is not None:
+            attention_mask = attention_mask.repeat_interleave(2, dim=0)
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids=encoder_input_ids,
-                attention_mask=encoder_attention_mask,
-                cache_position=encoder_cache_position,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                cache_position=cache_position,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -897,21 +890,21 @@ class DiaModel(DiaGenerationMixin, DiaPreTrainedModel):
             )
 
         # Base TTS starts here
-        if audio_codes is None:
+        if decoder_input_ids is None:
             # (2*bsz, 1, channel)
-            audio_codes = torch.full((encoder_outputs[0].shape[0], 1, 9), 1026, device=self.device)
+            decoder_input_ids = torch.full((encoder_outputs[0].shape[0], 1, 9), 1026, device=self.device)
 
         # TODO: why does this exist?
-        if audio_codes.shape[-1] != 9:
-            audio_codes = audio_codes.repeat_interleave(2, dim=0)
-            audio_codes = torch.nn.functional.pad(audio_codes, (0, 9 - audio_codes.shape[1]), value=1026)[:, None, :]
+        if decoder_input_ids.shape[-1] != 9:
+            decoder_input_ids = decoder_input_ids.repeat_interleave(2, dim=0)
+            decoder_input_ids = torch.nn.functional.pad(decoder_input_ids, (0, 9 - decoder_input_ids.shape[1]), value=1026)[:, None, :]
 
         decoder_outputs = self.decoder(
-            audio_codes=audio_codes,
+            input_ids=decoder_input_ids,
             attention_mask=None,  # TODO: if we prefix audio we will need a mask when left padding - `audio_attention_mask`
-            cache_position=cache_position,
+            cache_position=decoder_cache_position,
             encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=encoder_attention_mask,
+            encoder_attention_mask=attention_mask,
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -956,29 +949,29 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, GenerationMixin):
 
     def forward(
         self,
-        # TODO: rename back to input_ids and attention_mask
-        audio_codes: Optional[Tuple[torch.FloatTensor]] = None,
-        audio_attention_mask: Optional[torch.LongTensor] = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        encoder_input_ids: Optional[torch.LongTensor] = None,
-        encoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_cache_position: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Union[EncoderDecoderCache, Tuple[torch.FloatTensor]]] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        decoder_cache_position: Optional[torch.LongTensor] = None,
+        encoder_outputs: Optional[Union[BaseModelOutput, Tuple]] = None,
+        past_key_values: Optional[EncoderDecoderCache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,  # TODO: return dict
-    ) -> Union[Tuple, Seq2SeqModelOutput]:
+        return_dict: Optional[bool] = None,
+        **kwargs,
+    ) -> Union[Tuple, Seq2SeqLMOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.model(
-            audio_codes,
-            audio_attention_mask=audio_attention_mask,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
             cache_position=cache_position,
-            encoder_input_ids=encoder_input_ids,
-            encoder_attention_mask=encoder_attention_mask,
-            encoder_cache_position=encoder_cache_position,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            decoder_cache_position=decoder_cache_position,
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             use_cache=use_cache,
