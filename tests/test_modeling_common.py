@@ -739,7 +739,6 @@ class ModelTesterMixin:
             model = model_class(config)
             model.to(torch_device)
             model.eval()
-            print(model_class)
             with torch.no_grad():
                 first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
                 second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
