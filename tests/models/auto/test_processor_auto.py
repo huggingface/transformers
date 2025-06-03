@@ -21,18 +21,19 @@ from pathlib import Path
 from shutil import copyfile
 
 from huggingface_hub import HfFolder, Repository
+
 import transformers
 from transformers import (
+    CONFIG_MAPPING,
+    FEATURE_EXTRACTOR_MAPPING,
+    PROCESSOR_MAPPING,
+    TOKENIZER_MAPPING,
     AutoConfig,
     AutoFeatureExtractor,
     AutoProcessor,
     AutoTokenizer,
     BertTokenizer,
-    CONFIG_MAPPING,
-    FEATURE_EXTRACTOR_MAPPING,
-    PROCESSOR_MAPPING,
     ProcessorMixin,
-    TOKENIZER_MAPPING,
     Wav2Vec2Config,
     Wav2Vec2FeatureExtractor,
     Wav2Vec2Processor,
@@ -51,6 +52,7 @@ from transformers.utils import (
     PROCESSOR_NAME,
     is_tokenizers_available,
 )
+
 
 sys.path.append(str(Path(__file__).parent.parent.parent.parent / "utils"))
 
