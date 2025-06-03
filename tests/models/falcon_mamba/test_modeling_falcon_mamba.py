@@ -505,8 +505,8 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         texts = ["Hello today", "Hello my name is Younes and today"]
 
         EXPECTED_OUTPUT = [
-            "Hello today I'm going to show you how to make a simple 3D model of a car.",
-            'Hello my name is Younes and today I will be talking about the “Theory of the firm” and the “Theory',
+            'Hello today I will be talking about the “Theory of Relativity” by Albert Einstein.\nThe',
+            'Hello my name is Younes and today I will be talking about the importance of the internet in our lives.\nThe internet is a global',
         ]
 
         inputs = tok(texts, return_tensors="pt", padding=True, return_token_type_ids=False).to(torch_device)
