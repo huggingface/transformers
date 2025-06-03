@@ -53,7 +53,7 @@ pipeline("Hello, I'm a language model")
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-neo-1.3B", torch_dtype=torch.float16, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-neo-1.3B", torch_dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_2")
 tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neo-1.3B")
 
 input_ids = tokenizer("Hello, I'm a language model", return_tensors="pt").to("cuda")
