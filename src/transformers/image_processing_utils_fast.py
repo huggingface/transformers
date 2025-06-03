@@ -306,7 +306,6 @@ class BaseImageProcessorFast(BaseImageProcessor):
             image = F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
         return image
 
-
     def rescale(
         self,
         image: "torch.Tensor",
