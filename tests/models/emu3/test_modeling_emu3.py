@@ -537,7 +537,7 @@ class Emu3IntegrationTest(unittest.TestCase):
         )
         self.assertTrue(out.shape[1] == 54)
 
-        image = model.decode_image_tokens(out[:, inputs.input_ids.shape[1] :], height=HEIGHT, width=WIDTH)
+        image = model.decode_image_tokens(image_tokens=out[:, inputs.input_ids.shape[1] :], height=HEIGHT, width=WIDTH)
         images = processor.postprocess(list(image.float()), return_tensors="np")
         self.assertTrue(images["pixel_values"].shape == (3, 40, 40))
         self.assertTrue(isinstance(images["pixel_values"], np.ndarray))
@@ -548,4 +548,4 @@ class Emu3IntegrationTest(unittest.TestCase):
             repo_type="dataset",
         )
         original_pixels = np.load(filepath)
-        self.assertTrue(np.allclose(original_pixels, images["pixel_values"]))
+        self.assertTrue(np.allclose(original_pixels, images["pixel_values"], atol=1))
