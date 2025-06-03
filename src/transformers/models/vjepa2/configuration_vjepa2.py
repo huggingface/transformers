@@ -173,3 +173,5 @@ class VJEPA2Config(PretrainedConfig):
             num_mask_tokens=self.pred_num_mask_tokens,
             zero_init_mask_tokens=self.pred_zero_init_mask_tokens,
         )
+
+__all__ = ["VJEPA2Config"]

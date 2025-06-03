@@ -551,12 +551,13 @@ class VJEPA2Embeddings(nn.Module):
             else VJEPA2PatchEmbeddings(config)
         )
         self.num_patches = self.patch_embeddings.num_patches
-        # position embeddings
-        self.position_embeddings = nn.Parameter(
-            torch.zeros(1, self.num_patches(config), config.hidden_size),
-            requires_grad=False,
-        )
-        self._init_pos_embed(self.position_embeddings.data)  # sincos pos-embed
+        if not self.config.use_rope:
+            # position embeddings
+            self.position_embeddings = nn.Parameter(
+                torch.zeros(1, self.num_patches(config), config.hidden_size),
+                requires_grad=False,
+            )
+            self._init_pos_embed(self.position_embeddings.data)  # sincos pos-embed
 
         # self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.patch_size
@@ -1395,13 +1396,13 @@ class VJEPA2PredictorEmbeddings(nn.Module):
         self.predictor_embeddings = nn.Linear(
             config.enc_hidden_size, config.hidden_size
         )
-
-        # position embeddings
-        self.position_embeddings = nn.Parameter(
-            torch.zeros(1, self.num_patches(config), config.hidden_size),
-            requires_grad=False,
-        )
-        self._init_pos_embed(self.position_embeddings.data)  # sincos pos-embed
+        if not self.config.use_rope:
+            # position embeddings
+            self.position_embeddings = nn.Parameter(
+                torch.zeros(1, self.num_patches(config), config.hidden_size),
+                requires_grad=False,
+            )
+            self._init_pos_embed(self.position_embeddings.data)  # sincos pos-embed
         self.num_mask_tokens = 0
         self.zero_init_mask_tokens = config.zero_init_mask_tokens
         if config.use_mask_tokens:
@@ -1658,17 +1659,19 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, VJEPA2Embeddings):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.position_embeddings.dtype)
+            if not module.config.use_rope:
+                module.position_embeddings.data = nn.init.trunc_normal_(
+                    module.position_embeddings.data.to(torch.float32),
+                    mean=0.0,
+                    std=self.config.initializer_range,
+                ).to(module.position_embeddings.dtype)
         elif isinstance(module, VJEPA2PredictorEmbeddings):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.position_embeddings.dtype)
+            if not module.config.use_rope:
+                module.position_embeddings.data = nn.init.trunc_normal_(
+                    module.position_embeddings.data.to(torch.float32),
+                    mean=0.0,
+                    std=self.config.initializer_range,
+                ).to(module.position_embeddings.dtype)
             if not module.zero_init_mask_tokens:
                 module.mask_token = nn.init.trunc_normal_(
                     module.mask_token.to(torch.float32),
@@ -1836,3 +1839,5 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         pixel_values = pixel_values.permute(0, 2, 1, 3, 4)  # B x C x T x H x W
         encoder_outputs, _ = self.forward(pixel_values)
         return encoder_outputs.last_hidden_state
+
+__all__ = ["VJEPA2Model", "VJEPA2PreTrainedModel", "VJEPA2ImageProcessor"]

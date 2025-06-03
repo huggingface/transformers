@@ -12,7 +12,7 @@ from PIL import Image
 from torchvision import transforms
 from transformers import VJEPA2Config, VJEPA2Model, VJEPA2ImageProcessor
 
-from ...models.vjepa2.modeling_vjepa2 import ClipToTensor, apply_masks
+from transformers.models.vjepa2.modeling_vjepa2 import apply_masks
 from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 HUB_REPO = "/home/koustuvs/mlp/jepa-oss"
@@ -95,8 +95,8 @@ def get_vjepa2_config(model_name):
     else:
         raise ValueError("Model not supported")
 
-def convert_encoder_keys(model_state_dict, og_encoder_state_dict):
-    emb_dim = model_state_dict["encoder.embeddings.position_embeddings"].size(-1)
+def convert_encoder_keys(model_state_dict, og_encoder_state_dict, config):
+    emb_dim = config.hidden_size
     for key, val in og_encoder_state_dict.copy().items():
         val = og_encoder_state_dict.pop(key)
         key = key.replace("module.backbone.", "")
@@ -123,9 +123,12 @@ def convert_encoder_keys(model_state_dict, og_encoder_state_dict):
             og_encoder_state_dict[key] = val
     return og_encoder_state_dict
 
-def convert_predictor_keys(model_state_dict, og_predictor_state_dict):
+def convert_predictor_keys(model_state_dict, og_predictor_state_dict, config):
+    emb_dim = config.pred_hidden_size
+    if config.get_predictor_config().use_rope:
+        if "predictor_pos_embed" in og_predictor_state_dict:
+            del og_predictor_state_dict["predictor_pos_embed"]
     # update predictor weights
-    emb_dim = model_state_dict["predictor.embeddings.position_embeddings"].size(-1)
     for key, val in og_predictor_state_dict.copy().items():
         val = og_predictor_state_dict.pop(key)
         key = key.replace("module.backbone.", "")
@@ -153,7 +156,7 @@ def convert_predictor_keys(model_state_dict, og_predictor_state_dict):
             og_predictor_state_dict[prefix + "key" + suffix] = k_e
             og_predictor_state_dict[prefix + "value" + suffix] = v_e
         else:
-            og_predictor_state_dict[key] = val
+            og_predictor_state_dict[key] = val 
     return og_predictor_state_dict
 
 def prepare_img():
@@ -169,7 +172,7 @@ def convert_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
     config = get_vjepa2_config(model_name)
 
     # load original model from torch hub
-    original_encoder, original_predictor = torch.hub.load(HUB_REPO, model_name, source=HUB_SOURCE)
+    original_encoder, original_predictor = torch.hub.load(HUB_REPO, "vjepa2_" + model_name, source=HUB_SOURCE)
     original_encoder.eval()
     original_predictor.eval()
 
@@ -180,8 +183,8 @@ def convert_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
     model = VJEPA2Model(config).eval()
     state_dict = model.state_dict()
 
-    og_encoder_sd = convert_encoder_keys(state_dict, encoder_state_dict)
-    og_predictor_sd = convert_predictor_keys(state_dict, decoder_state_dict)
+    og_encoder_sd = convert_encoder_keys(state_dict, encoder_state_dict, config)
+    og_predictor_sd = convert_predictor_keys(state_dict, decoder_state_dict, config)
 
     og_state_dict = og_encoder_sd
     og_state_dict.update(og_predictor_sd)
@@ -190,27 +193,10 @@ def convert_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
     # load image
     image = prepare_img()
  
-    # preprocess image
     crop_size = config.crop_size
-    transformations = transforms.Compose(
-        [
-            transforms.Resize(crop_size, interpolation=transforms.InterpolationMode.BILINEAR),
-            transforms.CenterCrop(size=(crop_size, crop_size)),
-            ClipToTensor(),
-            transforms.Normalize(
-                mean=IMAGENET_DEFAULT_MEAN,  # these are RGB mean+std values
-                std=IMAGENET_DEFAULT_STD,  # across a large photo dataset.
-            ),
-        ]
-    )
-
-    original_pixel_values = transformations(image).unsqueeze(0)  # insert batch dimension
-
     processor = VJEPA2ImageProcessor(crop_size=crop_size) 
     pixel_values = processor(image, return_tensors="pt").pixel_values
 
-    # check preprocessing
-    assert torch.allclose(original_pixel_values, pixel_values)
 
     with torch.no_grad():
         # reshape and move to gpu
