@@ -88,6 +88,7 @@ class LightGlueModelTester:
             width_confidence=self.width_confidence,
             filter_threshold=self.filter_threshold,
             matching_threshold=self.matching_threshold,
+            attn_implementation="eager",
         )
 
     def create_and_check_model(self, config, pixel_values):
