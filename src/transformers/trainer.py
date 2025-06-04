@@ -1791,6 +1791,7 @@ class Trainer:
             params = trial
         elif self.hp_search_backend == "sigopt":
             import warnings
+
             warnings.warn(
                 "SigOpt backend is deprecated and will be removed in a future version. "
                 "Please use Optuna, Ray Tune, or Weights & Biases instead.",
@@ -2742,6 +2743,7 @@ class Trainer:
                 run_id = trial.id
             elif self.hp_search_backend == "sigopt":
                 import warnings
+
                 warnings.warn(
                     "SigOpt backend is deprecated and will be removed in a future version. "
                     "Please use Optuna, Ray Tune, or Weights & Biases instead.",
@@ -3622,6 +3624,7 @@ class Trainer:
         """
         if backend == "sigopt":
             import warnings
+
             warnings.warn(
                 "SigOpt backend is deprecated and will be removed in a future version. "
                 "Please use Optuna, Ray Tune, or Weights & Biases instead.",
