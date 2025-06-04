@@ -442,8 +442,9 @@ class _BaseAutoModelClass:
             else:
                 repo_id = config.name_or_path
             model_class = get_class_from_dynamic_module(class_ref, repo_id, **kwargs)
-            # Only register the model class if it hasn't been registered in auto_cls,
-            # otherwise it will overwrite local implementations, causing unexpected results.
+            # This block handles the case where the user is loading a model with `trust_remote_code=True`
+            # but a library model exists with the same name. We don't want to override the autoclass
+            # mappings in this case, or all future loads of that model will be the remote code model.
             if not has_local_code:
                 cls.register(config.__class__, model_class, exist_ok=True)
                 model_class.register_for_auto_class(auto_class=cls)
@@ -582,8 +583,9 @@ class _BaseAutoModelClass:
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs, **kwargs
             )
             _ = hub_kwargs.pop("code_revision", None)
-            # Only register the model class if it hasn't been registered in auto_cls,
-            # otherwise it will overwrite local implementations, causing unexpected results.
+            # This block handles the case where the user is loading a model with `trust_remote_code=True`
+            # but a library model exists with the same name. We don't want to override the autoclass
+            # mappings in this case, or all future loads of that model will be the remote code model.
             if not has_local_code:
                 cls.register(config.__class__, model_class, exist_ok=True)
                 model_class.register_for_auto_class(auto_class=cls)
