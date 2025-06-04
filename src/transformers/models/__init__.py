@@ -62,6 +62,7 @@ if TYPE_CHECKING:
     from .cohere import *
     from .cohere2 import *
     from .colpali import *
+    from .colqwen2 import *
     from .conditional_detr import *
     from .convbert import *
     from .convnext import *
@@ -184,6 +185,7 @@ if TYPE_CHECKING:
     from .megatron_gpt2 import *
     from .mgp_str import *
     from .mimi import *
+    from .minimax import *
     from .mistral import *
     from .mistral3 import *
     from .mixtral import *

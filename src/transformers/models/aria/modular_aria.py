@@ -1299,7 +1299,7 @@ class AriaPreTrainedModel(LlamaPreTrainedModel):
     config_class = AriaConfig
     base_model_prefix = ""
     _supports_static_cache = False  # MoE models don't work with torch.compile (dynamic slicing)
-    _supports_attention_backend = False
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range

@@ -77,7 +77,7 @@ class TestTensorParallel(TestCasePlus):
                     f"torchrun --nproc_per_node {self.nproc_per_node} --master_port {get_torch_dist_unique_port()} {tmp.name}"
                 ).split()
             else:
-                cmd = ["python", tmp.name]
+                cmd = ["python3", tmp.name]
 
             # Note that the subprocess will be waited for here, and raise an error if not successful
             try:
