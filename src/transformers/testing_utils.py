@@ -56,10 +56,13 @@ from .integrations import (
     is_clearml_available,
     is_optuna_available,
     is_ray_available,
-    is_sigopt_available,
     is_swanlab_available,
     is_tensorboard_available,
     is_wandb_available,
+    is_ray_tune_available,
+    run_hp_search_optuna,
+    run_hp_search_ray,
+    run_hp_search_wandb,
 )
 from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
@@ -1171,12 +1174,9 @@ def require_faiss(test_case):
 
 def require_optuna(test_case):
     """
-    Decorator marking a test that requires optuna.
-
-    These tests are skipped when optuna isn't installed.
-
+    Decorator marking a test that requires Optuna. These tests are skipped when Optuna is not installed.
     """
-    return unittest.skipUnless(is_optuna_available(), "test requires optuna")(test_case)
+    return unittest.skipUnless(is_optuna_available(), "test requires Optuna")(test_case)
 
 
 def require_ray(test_case):
@@ -1187,16 +1187,6 @@ def require_ray(test_case):
 
     """
     return unittest.skipUnless(is_ray_available(), "test requires Ray/tune")(test_case)
-
-
-def require_sigopt(test_case):
-    """
-    Decorator marking a test that requires SigOpt.
-
-    These tests are skipped when SigOpt isn't installed.
-
-    """
-    return unittest.skipUnless(is_sigopt_available(), "test requires SigOpt")(test_case)
 
 
 def require_swanlab(test_case):

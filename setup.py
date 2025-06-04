@@ -174,7 +174,6 @@ _deps = [
     "scikit-learn",
     "scipy<1.13.0",  # SciPy >= 1.13.0 is not supported with the current jax pin (`jax>=0.4.1,<=0.4.13`)
     "sentencepiece>=0.1.91,!=0.1.92",
-    "sigopt",
     "starlette",
     "sudachipy>=0.6.6",
     "sudachidict_core>=20220729",
@@ -308,10 +307,9 @@ extras["sagemaker"] = deps_list("sagemaker")
 extras["deepspeed"] = deps_list("deepspeed") + extras["accelerate"]
 extras["optuna"] = deps_list("optuna")
 extras["ray"] = deps_list("ray[tune]")
-extras["sigopt"] = deps_list("sigopt")
 extras["hub-kernels"] = deps_list("kernels")
 
-extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"] + extras["sigopt"]
+extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["audio"] = deps_list(
