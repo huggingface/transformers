@@ -663,6 +663,7 @@ class VJEPA2Embeddings(nn.Module):
 
         return embeddings
 
+
 # Copied from transformers.models.vit.modeling_vit.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
@@ -678,11 +679,15 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
 
     # Normalize the attention scores to probabilities.
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
+        query.dtype
+    )
 
     # This is actually dropping out entire tokens to attend to, which might
     # seem a bit unusual, but is taken from the original Transformer paper.
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_weights = nn.functional.dropout(
+        attn_weights, p=dropout, training=module.training
+    )
 
     # Mask heads if we want to
     if attention_mask is not None:
@@ -692,7 +697,6 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
-
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->Dinov2->VJEPA
@@ -845,6 +849,9 @@ class VJEPA2RopeSelfAttention(nn.Module):
         self.h_dim = int(2 * ((self.attention_head_size // 3) // 2))
         self.w_dim = int(2 * ((self.attention_head_size // 3) // 2))
 
+        self.scaling = self.attention_head_size**-0.5
+        self.is_causal = False
+
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (
             self.num_attention_heads,
@@ -908,6 +915,7 @@ class VJEPA2RopeSelfAttention(nn.Module):
         hidden_states,
         position_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        head_mask: Optional[torch.Tensor] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
@@ -919,22 +927,29 @@ class VJEPA2RopeSelfAttention(nn.Module):
         key_layer = self.apply_rotary_embeddings(key_layer, pos_ids)
         query_layer = self.apply_rotary_embeddings(query_layer, pos_ids)
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[
+                    self.config._attn_implementation
+                ]
 
-        # Note: this is the self.scale in our applications
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        context_layer, attention_probs = attention_interface(
+            self,
+            query_layer,
+            key_layer,
+            value_layer,
+            head_mask,
+            is_causal=self.is_causal,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.dropout_prob,
+        )
 
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = self.proj(context_layer.view(new_context_layer_shape))
 
@@ -945,109 +960,15 @@ class VJEPA2RopeSelfAttention(nn.Module):
         return outputs
 
 
-class VJEPA2SdpaSelfAttention(VJEPA2SelfAttention):
-    def __init__(self, config: VJEPA2Config) -> None:
-        super().__init__(config)
-        self.attention_probs_dropout_prob = config.attention_probs_dropout_prob
-
-    def forward(
-        self,
-        hidden_states,
-        position_mask: Optional[torch.Tensor],
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        if output_attentions:
-            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
-            logger.warning_once(
-                "VJEPAModel is using VJEPASdpaSelfAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
-                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(
-                hidden_states=hidden_states,
-                head_mask=head_mask,
-                output_attentions=output_attentions,
-            )
-
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        context_layer = torch.nn.functional.scaled_dot_product_attention(
-            query_layer,
-            key_layer,
-            value_layer,
-            head_mask,
-            self.attention_probs_dropout_prob if self.training else 0.0,
-            is_causal=self.config.is_causal,
-            scale=None,
-        )
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = self.proj(context_layer.view(new_context_layer_shape))
-
-        return context_layer, None
-
-
-class VJEPA2SdpaRopeSelfAttention(VJEPA2RopeSelfAttention):
-    def __init__(self, config: VJEPA2Config) -> None:
-        super().__init__(config)
-        self.attention_probs_dropout_prob = config.attention_probs_dropout_prob
-
-    def forward(
-        self,
-        hidden_states,
-        position_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        if output_attentions:
-            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
-            logger.warning_once(
-                "VJEPAModel is using VJEPASdpaSelfAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
-                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(
-                hidden_states=hidden_states,
-                position_mask=position_mask,
-                output_attentions=output_attentions,
-            )
-
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        pos_ids = self.get_position_ids(hidden_states, masks=position_mask)
-        key_layer = self.apply_rotary_embeddings(key_layer, pos_ids)
-        query_layer = self.apply_rotary_embeddings(query_layer, pos_ids)
-
-        context_layer = torch.nn.functional.scaled_dot_product_attention(
-            query_layer,
-            key_layer,
-            value_layer,
-            head_mask,
-            self.attention_probs_dropout_prob if self.training else 0.0,
-            is_causal=self.config.is_causal,
-            scale=None,
-        )
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = self.proj(context_layer.view(new_context_layer_shape))
-
-        return context_layer, None
-
-
 # Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Dinov2->VJEPA
 class VJEPA2Attention(nn.Module):
     def __init__(self, config: VJEPA2Config) -> None:
         super().__init__()
-        self.attention = VJEPA2SelfAttention(config)
+        self.attention = (
+            VJEPA2RopeSelfAttention(config)
+            if config.use_rope
+            else VJEPA2SelfAttention(config)
+        )
         self.pruned_heads = set()
 
     def prune_heads(self, heads: Set[int]) -> None:
@@ -1078,77 +999,19 @@ class VJEPA2Attention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        head_mask: Optional[torch.Tensor] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_outputs = self.attention(hidden_states, head_mask, output_attentions)
+        self_outputs = self.attention(
+            hidden_states, position_mask, output_attentions, head_mask
+        )
 
         attention_output = self_outputs[0]
 
         outputs = (attention_output,) + self_outputs[
             1:
         ]  # add attentions if we output them
-        return outputs
-
-
-class VJEPA2RopeAttention(nn.Module):
-    def __init__(self, config: VJEPA2Config) -> None:
-        super().__init__()
-        self.attention = VJEPA2RopeSelfAttention(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads: Set[int]) -> None:
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads,
-            self.attention.num_attention_heads,
-            self.attention.attention_head_size,
-            self.pruned_heads,
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(
-            heads
-        )
-        self.attention.all_head_size = (
-            self.attention.attention_head_size * self.attention.num_attention_heads
-        )
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_outputs = self.attention(hidden_states, position_mask, output_attentions)
-
-        attention_output = self_outputs[0]
-
-        outputs = (attention_output,) + self_outputs[
-            1:
-        ]  # add attentions if we output them
-        return outputs
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTSdpaAttention with ViT->Dinov2
-class VJEPA2SdpaAttention(VJEPA2Attention):
-    def __init__(self, config: VJEPA2Config) -> None:
-        super().__init__(config)
-        self.attention = VJEPA2SdpaSelfAttention(config)
-
-
-class VJEPA2SdpaRopeAttention(VJEPA2Attention):
-    def __init__(self, config: VJEPA2Config) -> None:
-        super().__init__(config)
-        self.attention = VJEPA2SdpaRopeSelfAttention(config)
+        return self_outputs
 
 
 # Copied from transformers.models.beit.modeling_dinov2.drop_path
@@ -1232,17 +1095,6 @@ class VJEPA2SwiGLUFFN(nn.Module):
         return self.weights_out(hidden)
 
 
-VJEPA_ATTENTION_CLASSES = {
-    "eager": VJEPA2Attention,
-    "sdpa": VJEPA2SdpaAttention,
-}
-
-VJEPA_ROPE_ATTENTION_CLASSES = {
-    "eager": VJEPA2RopeAttention,
-    "sdpa": VJEPA2SdpaRopeAttention,
-}
-
-
 class VJEPA2Layer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
 
@@ -1254,18 +1106,7 @@ class VJEPA2Layer(nn.Module):
         super().__init__()
 
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        if config.use_sdpa:
-            self.attention = (
-                VJEPA2SdpaRopeSelfAttention(config)
-                if config.use_rope
-                else VJEPA2SdpaSelfAttention(config)
-            )
-        else:
-            self.attention = (
-                VJEPA_ROPE_ATTENTION_CLASSES[config._attn_implementation](config)
-                if config.use_rope
-                else VJEPA_ATTENTION_CLASSES[config._attn_implementation](config)
-            )
+        self.attention = VJEPA2Attention(config)
 
         self.drop_path = (
             VJEPA2DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()

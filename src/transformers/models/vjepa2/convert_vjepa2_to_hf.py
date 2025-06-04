@@ -10,10 +10,10 @@ import torch.nn as nn
 from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
-from transformers import VJEPA2Config, VJEPA2Model, VJEPA2ImageProcessor
 
-from transformers.models.vjepa2.modeling_vjepa2 import apply_masks
+from transformers import VJEPA2Config, VJEPA2ImageProcessor, VJEPA2Model
 from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+from transformers.models.vjepa2.modeling_vjepa2 import apply_masks
 
 HUB_REPO = "/home/koustuvs/mlp/jepa-oss"
 HUB_SOURCE = "local"
@@ -58,7 +58,8 @@ def get_vjepa2_config(model_name):
             pred_num_mask_tokens=10,
         )
     elif model_name == "vit_giant":
-        return VJEPA2Config(model_name="vit_giant",
+        return VJEPA2Config(
+            model_name="vit_giant",
             crop_size=256,
             frames_per_clip=64,
             uniform_power=True,
@@ -73,7 +74,7 @@ def get_vjepa2_config(model_name):
             pred_num_hidden_layers=12,
             pred_use_mask_tokens=True,
             pred_num_mask_tokens=10,
-        ) 
+        )
     elif model_name == "vit_giant_384":
         return VJEPA2Config(
             model_name="vit_giant_384",
@@ -91,9 +92,10 @@ def get_vjepa2_config(model_name):
             pred_num_hidden_layers=12,
             pred_use_mask_tokens=True,
             pred_num_mask_tokens=10,
-        ) 
+        )
     else:
         raise ValueError("Model not supported")
+
 
 def convert_encoder_keys(model_state_dict, og_encoder_state_dict, config):
     emb_dim = config.hidden_size
@@ -103,7 +105,7 @@ def convert_encoder_keys(model_state_dict, og_encoder_state_dict, config):
         if key.startswith("blocks."):
             key = key.replace("blocks.", "encoder.layer.")
         if "attn." in key:
-            key = key.replace("attn.", "attention.")
+            key = key.replace("attn.", "attention.attention.")
         if key == "pos_embed":
             key = "encoder.embeddings.position_embeddings"
         if "patch_embed." in key:
@@ -113,15 +115,24 @@ def convert_encoder_keys(model_state_dict, og_encoder_state_dict, config):
         if "qkv." in key:
             prefix, suffix = key.split("qkv")
             if "bias" in suffix:
-                q_e, k_e, v_e = val[0:emb_dim], val[emb_dim : emb_dim * 2], val[emb_dim * 2 :]
+                q_e, k_e, v_e = (
+                    val[0:emb_dim],
+                    val[emb_dim : emb_dim * 2],
+                    val[emb_dim * 2 :],
+                )
             else:
-                q_e, k_e, v_e = val[0:emb_dim, :], val[emb_dim : emb_dim * 2, :], val[emb_dim * 2 :, :]
+                q_e, k_e, v_e = (
+                    val[0:emb_dim, :],
+                    val[emb_dim : emb_dim * 2, :],
+                    val[emb_dim * 2 :, :],
+                )
             og_encoder_state_dict[prefix + "query" + suffix] = q_e
             og_encoder_state_dict[prefix + "key" + suffix] = k_e
             og_encoder_state_dict[prefix + "value" + suffix] = v_e
         else:
             og_encoder_state_dict[key] = val
     return og_encoder_state_dict
+
 
 def convert_predictor_keys(model_state_dict, og_predictor_state_dict, config):
     emb_dim = config.pred_hidden_size
@@ -135,11 +146,13 @@ def convert_predictor_keys(model_state_dict, og_predictor_state_dict, config):
         if key.startswith("predictor_blocks."):
             key = key.replace("predictor_blocks.", "predictor.layer.")
         if "attn." in key:
-            key = key.replace("attn.", "attention.")
+            key = key.replace("attn.", "attention.attention.")
         if key == "predictor_pos_embed":
             key = "predictor.embeddings.position_embeddings"
         if "predictor_embed." in key:
-            key = key.replace("predictor_embed.", "predictor.embeddings.predictor_embeddings.")
+            key = key.replace(
+                "predictor_embed.", "predictor.embeddings.predictor_embeddings."
+            )
         if "mask_tokens." in key:
             key = key.replace("mask_tokens.", "predictor.embeddings.mask_tokens.")
         if key.startswith("predictor_norm."):
@@ -149,20 +162,30 @@ def convert_predictor_keys(model_state_dict, og_predictor_state_dict, config):
         if "qkv." in key:
             prefix, suffix = key.split("qkv")
             if "bias" in suffix:
-                q_e, k_e, v_e = val[0:emb_dim], val[emb_dim : emb_dim * 2], val[emb_dim * 2 :]
+                q_e, k_e, v_e = (
+                    val[0:emb_dim],
+                    val[emb_dim : emb_dim * 2],
+                    val[emb_dim * 2 :],
+                )
             else:
-                q_e, k_e, v_e = val[0:emb_dim, :], val[emb_dim : emb_dim * 2, :], val[emb_dim * 2 :, :]
+                q_e, k_e, v_e = (
+                    val[0:emb_dim, :],
+                    val[emb_dim : emb_dim * 2, :],
+                    val[emb_dim * 2 :, :],
+                )
             og_predictor_state_dict[prefix + "query" + suffix] = q_e
             og_predictor_state_dict[prefix + "key" + suffix] = k_e
             og_predictor_state_dict[prefix + "value" + suffix] = v_e
         else:
-            og_predictor_state_dict[key] = val 
+            og_predictor_state_dict[key] = val
     return og_predictor_state_dict
+
 
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
     return image
+
 
 @torch.no_grad()
 def convert_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=False):
@@ -172,7 +195,9 @@ def convert_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
     config = get_vjepa2_config(model_name)
 
     # load original model from torch hub
-    original_encoder, original_predictor = torch.hub.load(HUB_REPO, "vjepa2_" + model_name, source=HUB_SOURCE)
+    original_encoder, original_predictor = torch.hub.load(
+        HUB_REPO, "vjepa2_" + model_name, source=HUB_SOURCE
+    )
     original_encoder.eval()
     original_predictor.eval()
 
@@ -192,11 +217,10 @@ def convert_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
 
     # load image
     image = prepare_img()
- 
-    crop_size = config.crop_size
-    processor = VJEPA2ImageProcessor(crop_size=crop_size) 
-    pixel_values = processor(image, return_tensors="pt").pixel_values
 
+    crop_size = config.crop_size
+    processor = VJEPA2ImageProcessor(crop_size=crop_size)
+    pixel_values = processor(image, return_tensors="pt").pixel_values
 
     with torch.no_grad():
         # reshape and move to gpu
@@ -210,24 +234,42 @@ def convert_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
         original_encoder_outputs = original_encoder(pixel_values)
         B, N, _ = original_encoder_outputs.shape
         # test full mask
-        context_mask = [torch.arange(N, device=pixel_values.device).unsqueeze(0).repeat((B, 1))]
+        context_mask = [
+            torch.arange(N, device=pixel_values.device).unsqueeze(0).repeat((B, 1))
+        ]
         predictor_mask = context_mask
-        original_predictor_outputs = original_predictor(original_encoder_outputs, context_mask, predictor_mask)
-        encoder_outputs, predictor_outputs = model(pixel_values, context_mask=context_mask, target_mask=predictor_mask)
-        assert torch.allclose(encoder_outputs.last_hidden_state, original_encoder_outputs, atol=1e-3)
-        assert torch.allclose(predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3)
+        original_predictor_outputs = original_predictor(
+            original_encoder_outputs, context_mask, predictor_mask
+        )
+        encoder_outputs, predictor_outputs = model(
+            pixel_values, context_mask=context_mask, target_mask=predictor_mask
+        )
+        assert torch.allclose(
+            encoder_outputs.last_hidden_state, original_encoder_outputs, atol=1e-3
+        )
+        assert torch.allclose(
+            predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3
+        )
         # test partial mask
         window_size = 256
         mask = torch.arange(N, device=pixel_values.device).unsqueeze(0)
         context_mask = [mask[:, :window_size].repeat((B, 1))]
         predictor_mask = [mask[:, window_size : window_size * 2].repeat((B, 1))]
         original_predictor_outputs = original_predictor(
-            apply_masks(original_encoder_outputs, context_mask), context_mask, predictor_mask
+            apply_masks(original_encoder_outputs, context_mask),
+            context_mask,
+            predictor_mask,
         )
-        encoder_outputs, predictor_outputs = model(pixel_values, context_mask=context_mask, target_mask=predictor_mask)
-        assert torch.allclose(encoder_outputs.last_hidden_state, original_encoder_outputs, atol=1e-3)
-        assert torch.allclose(predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3) 
- 
+        encoder_outputs, predictor_outputs = model(
+            pixel_values, context_mask=context_mask, target_mask=predictor_mask
+        )
+        assert torch.allclose(
+            encoder_outputs.last_hidden_state, original_encoder_outputs, atol=1e-3
+        )
+        assert torch.allclose(
+            predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3
+        )
+
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
@@ -242,13 +284,11 @@ def convert_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
             "vit_large": "vjepa2-vitl-fpc64-256",
             "vit_huge": "vjepa2-vith-fpc64-256",
             "vit_giant": "vjepa2-vitg-fpc64-256",
-            "vit_giant_384": "vjepa2-vith-fpc64-384", 
+            "vit_giant_384": "vjepa2-vith-fpc64-384",
         }
         name = model_name_to_hf_name[model_name]
         model.push_to_hub(f"facebook/{name}")
         processor.push_to_hub(f"facebook/{name}")
-
-
 
 
 if __name__ == "__main__":

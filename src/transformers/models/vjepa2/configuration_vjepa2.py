@@ -7,8 +7,7 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import dataclass
 
 
-@dataclass
-class VJEPA2PredictorConfig:
+class VJEPA2PredictorConfig(PretrainedConfig):
 
     patch_size: int = 16
     crop_size: int = 224
@@ -173,5 +172,6 @@ class VJEPA2Config(PretrainedConfig):
             num_mask_tokens=self.pred_num_mask_tokens,
             zero_init_mask_tokens=self.pred_zero_init_mask_tokens,
         )
+
 
 __all__ = ["VJEPA2Config"]
