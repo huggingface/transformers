@@ -65,13 +65,14 @@ pip install --upgrade torchao transformers
 </hfoption>
 <hfoption id="PyTorch Index">
 Stable Release from the PyTorch index
+    
 ```bash
 pip install torchao --index-url https://download.pytorch.org/whl/cu126 # options are cpu/cu118/cu126/cu128
 ```
 </hfoption>
 </hfoptions>
 
-If your torcha version is below 0.10.0, you need to upgrade it, please refer to the [deprecation notice](#deprecation-notice) for more details.
+If your torchao version is below 0.10.0, you need to upgrade it, please refer to the [deprecation notice](#deprecation-notice) for more details.
 
 ## Quantization examples
 
@@ -88,6 +89,7 @@ We'll show examples for recommended quantization methods based on hardwares, e.g
 ### H100 GPU
 <hfoptions id="examples-H100-GPU">
 <hfoption id="float8-dynamic-and-weight-only">
+
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -148,6 +150,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ### A100 GPU
 <hfoptions id="examples-A100-GPU">
 <hfoption id="int8-dynamic-and-weight-only">
+    
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -215,6 +218,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ### CPU
 <hfoptions id="examples-CPU">
 <hfoption id="int8-dynamic-and-weight-only">
+    
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -385,6 +389,7 @@ To avoid arbitrary user code execution, torchao sets `weights_only=True` in [tor
 
 <hfoptions id="serialization-examples">
 <hfoption id="save-locally">
+    
 ```py
 # don't serialize model with Safetensors
 output_dir = "llama3-8b-int4wo-128"
@@ -392,6 +397,7 @@ quantized_model.save_pretrained("llama3-8b-int4wo-128", safe_serialization=False
 ```
 </hfoption>
 <hfoption id="push-to-huggingface-hub">
+    
 ```py
 # don't serialize model with Safetensors
 USER_ID = "your_huggingface_user_id"

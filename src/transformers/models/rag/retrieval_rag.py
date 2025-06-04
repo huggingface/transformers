@@ -17,7 +17,8 @@
 import os
 import pickle
 import time
-from typing import Iterable, List, Optional, Tuple
+from collections.abc import Iterable
+from typing import List, Optional, Tuple
 
 import numpy as np
 
