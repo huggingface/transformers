@@ -45,7 +45,7 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/pef
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
 
 # For video model testing
-RUN python3 -m pip install --no-cache-dir av==9.2.0
+RUN python3 -m pip install --no-cache-dir av
 
 # Some slow tests require bnb
 RUN python3 -m pip install --no-cache-dir bitsandbytes

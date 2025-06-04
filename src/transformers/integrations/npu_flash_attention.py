@@ -23,6 +23,7 @@ if is_torch_npu_available():
 
     import torch_npu
     from einops import rearrange, repeat
+    from torch_npu import npu_rotary_mul
 
 
 # FlashAttention2 is supported on Ascend NPU with down-right aligned causal mask by default.
@@ -247,3 +248,19 @@ def npu_flash_attn_varlen_func(
         )[0]
 
     return output
+
+
+def npu_apply_rotary_emb(x, cos, sin, **kwargs):
+    # cos tensor after chunk should be repeated through chunked dimension to original shape on Ascend NPU
+    if len(cos.shape) == 2 and cos.shape[-1] == x.shape[-1] // 2:
+        cos = cos.repeat(1, 2)
+        # cos tensor with [S,D] shape should be unsqueezed to 4-d tensor with shape [1,S,1,D]
+        cos = cos.unsqueeze(0).unsqueeze(2)
+
+    # sin tensor after chunk should be repeated through chunked dimension to original shape on Ascend NPU
+    if len(sin.shape) == 2 and sin.shape[-1] == x.shape[-1] // 2:
+        sin = sin.repeat(1, 2)
+        # sin tensor with [S,D] shape should be unsqueezed to 4-d tensor with shape [1,S,1,D]
+        sin = sin.unsqueeze(0).unsqueeze(2)
+
+    return npu_rotary_mul(x, cos, sin)
