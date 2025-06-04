@@ -31,7 +31,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...video_utils import VideoInput
-
+import torch
 
 class Glm4vVideosProcessorKwargs(VideosKwargs, total=False):
     fps: Union[List[float], float]
@@ -52,7 +52,6 @@ class Glm4vProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": False,
         },
-        "videos_kwargs": {"fps": 2.0},
     }
 
 
@@ -98,44 +97,11 @@ class Glm4vProcessor(ProcessorMixin):
         images: ImageInput = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         videos: VideoInput = None,
+        timestamps: List =None,
         **kwargs: Unpack[Glm4vProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text.
 
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, `List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
-                tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
-
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **pixel_values_videos** -- Pixel values of videos to be fed to a model. Returned when `videos` is not `None`.
-            - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
-            - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
-            - **second_per_grid_ts** -- List of video seconds per time grid. Returned when `videos` is not `None`.
-        """
+        self.frame_timestamps = timestamps
         output_kwargs = self._merge_kwargs(
             Glm4vProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
@@ -149,20 +115,8 @@ class Glm4vProcessor(ProcessorMixin):
             image_grid_thw = None
 
         if videos is not None:
-            videos_inputs = self.image_processor(images=None, videos=videos, **output_kwargs["images_kwargs"])
+            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
-
-            fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
-            if isinstance(fps, (int, float)):
-                second_per_grid_ts = [self.image_processor.temporal_patch_size / fps] * len(video_grid_thw)
-            elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
-                second_per_grid_ts = [self.image_processor.temporal_patch_size / tmp for tmp in fps]
-            else:
-                raise ValueError(
-                    f"The length of fps ({len(fps) if hasattr(fps, '__len__') else fps}) must be equal to the length of video_grid_thw ({len(video_grid_thw)}) or fps should be a single number."
-                )
-            videos_inputs.update({"second_per_grid_ts": second_per_grid_ts})
-
         else:
             videos_inputs = {}
             video_grid_thw = None
@@ -182,15 +136,35 @@ class Glm4vProcessor(ProcessorMixin):
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
         if video_grid_thw is not None:
-            merge_length = self.image_processor.merge_size**2
-            index = 0
+            merge_length = self.video_processor.merge_size ** 2
+            video_index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
-                    text[i] = text[i].replace(
-                        self.video_token, "<|placeholder|>" * (video_grid_thw[index].prod() // merge_length), 1
-                    )
-                    index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.video_token)
+                    num_frames = len(video_grid_thw)
+                    video_structure = ""
+
+                    selected_timestamps = []
+                    for idx in range(0, len(self.frame_timestamps), 2):
+                        if len(selected_timestamps) >= num_frames:
+                            break
+                        selected_timestamps.append(self.frame_timestamps[idx])
+
+                    while len(selected_timestamps) < num_frames:
+                        selected_timestamps.append(selected_timestamps[-1] if selected_timestamps else 0)
+
+                    for frame_idx in range(num_frames):
+                        timestamp_sec = int(selected_timestamps[frame_idx])
+                        frame_structure = f"<|begin_of_image|>{self.image_token}<|end_of_image|>{timestamp_sec}"
+                        video_structure += frame_structure
+
+                    video_structure += ""
+                    text[i] = text[i].replace(self.video_token, video_structure, 1)
+                    video_index += 1
+                for frame_idx in range(len(video_grid_thw)):
+                    if self.image_token in text[i]:
+                        num_image_tokens = video_grid_thw[frame_idx].prod().item() // merge_length
+                        text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
+                text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])

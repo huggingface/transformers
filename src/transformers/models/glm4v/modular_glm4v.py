@@ -938,7 +938,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
             if pixel_values_videos is not None:
                 video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
                 video_embeds = torch.cat(video_embeds, dim=0)
-                n_video_tokens = (input_ids == self.config.video_token_id).sum()
+                n_video_tokens = (input_ids == self.config.image_token_id).sum()
                 n_video_features = video_embeds.shape[0]
                 if not is_torchdynamo_compiling() and n_video_tokens != n_video_features:
                     raise ValueError(
@@ -1247,7 +1247,6 @@ class Glm4vProcessorKwargs(Qwen2_5_VLProcessorKwargs):
         "text_kwargs": {
             "padding": False,
         },
-        "videos_kwargs": {"fps": 2.0},
     }
 
 
@@ -1362,15 +1361,29 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
         if video_grid_thw is not None:
-            merge_length = self.image_processor.merge_size**2
-            index = 0
+            merge_length = self.video_processor.merge_size ** 2
+            video_index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
-                    text[i] = text[i].replace(
-                        self.video_token, "<|placeholder|>" * (video_grid_thw[index].prod() // merge_length), 1
-                    )
-                    index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.video_token)
+                    if video_index >= len(video_grid_thw):
+                        break
+
+                    num_frames = video_grid_thw[video_index][0].item()
+                    video_structure = ""
+                    for frame_idx in range(num_frames):
+                        video_structure += f"<|begin_of_image|><|image|><|end_of_image|>{frame_idx}"
+                    text[i] = text[i].replace(self.video_token, video_structure, 1)
+                    video_index += 1
+
+                total_frames = video_grid_thw[0][0].item()
+                for frame_idx in range(total_frames):
+                    if self.image_token not in text[i]:
+                        break
+                    frame_structure = torch.tensor([1, video_grid_thw[0][1], video_grid_thw[0][2]])
+                    num_image_tokens = frame_structure.prod() // merge_length
+
+                    text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
+                text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])

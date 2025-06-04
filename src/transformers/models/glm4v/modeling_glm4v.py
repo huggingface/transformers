@@ -668,8 +668,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
                 We also have some important parameters:
                 fps (Frames Per Second): The video's frame rate, set to 1. This means one frame is processed each second.
                 tokens_per_second: This is a crucial parameter. It dictates how many "time-steps" or "temporal tokens" are conceptually packed into a one-second interval of the video. In this case, we have 25 tokens per second. So each second of the video will be represented with 25 separate time points. It essentially defines the temporal granularity.
-                temporal_patch_size: The number of frames that compose one temporal patch. Here, it's 2 frames.
-                interval: The step size for the temporal position IDs, calculated as tokens_per_second * temporal_patch_size / fps. In this case, 25 * 2 / 1 = 50. This means that each temporal patch will be have a difference of 50 in the temporal position IDs.
                 input_ids: [V V V V V V V V V V V V T T T T T], here V is for vision.
                 vision temporal position_ids: [0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]
                 vision height position_ids: [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1]
@@ -772,34 +770,29 @@ class Glm4vModel(Glm4vPreTrainedModel):
                         image_index += 1
                         video_frame_num = 1
 
+
                     elif modality_type == "video":
                         t, h, w = (
-                            video_grid_thw[video_index][0],
+                            video_frame_num,
                             video_grid_thw[video_index][1],
                             video_grid_thw[video_index][2],
                         )
-                        second_per_grid_t = second_per_grid_ts[video_index] if second_per_grid_ts is not None else 1.0
+
                         llm_grid_t, llm_grid_h, llm_grid_w = (
-                            t.item(),
+                            t,
                             h.item() // spatial_merge_size,
                             w.item() // spatial_merge_size,
+
                         )
-
-                        range_tensor = torch.arange(llm_grid_t).view(-1, 1)
-                        expanded_range = range_tensor.expand(-1, llm_grid_h * llm_grid_w)
-
-                        second_per_grid_t = torch.as_tensor(
-                            second_per_grid_t, dtype=range_tensor.dtype, device=range_tensor.device
-                        )
-
-                        time_tensor = expanded_range * second_per_grid_t * self.config.vision_config.tokens_per_second
-                        time_tensor_long = time_tensor.long()
-                        t_index = time_tensor_long.flatten()
-
-                        h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(llm_grid_t, -1, llm_grid_w).flatten()
-                        w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(llm_grid_t, llm_grid_h, -1).flatten()
-                        llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + st_idx)
-
+                        for t_idx in range(llm_grid_t):
+                            t_index = torch.tensor(t_idx).view(-1, 1).expand(
+                                -1, llm_grid_h * llm_grid_w).flatten()
+                            h_index = torch.arange(llm_grid_h).view(
+                                1, -1, 1).expand(1, -1, llm_grid_w).flatten()
+                            w_index = torch.arange(llm_grid_w).view(
+                                1, 1, -1).expand(1, llm_grid_h, -1).flatten()
+                            llm_pos_ids_list.append(
+                                torch.stack([t_index, h_index, w_index]) + st_idx)
                         video_index += 1
                         video_frame_num += 1
 
@@ -933,7 +926,12 @@ class Glm4vModel(Glm4vPreTrainedModel):
             if pixel_values_videos is not None:
                 video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
                 video_embeds = torch.cat(video_embeds, dim=0)
-                n_video_tokens = (input_ids == self.config.video_token_id).sum()
+                # if video_embeds.shape[0] == 5832:
+                #     from safetensors.torch import load_file
+                #     loaded_data = load_file("/mnt/image_embed.safetensors")
+                #     video_embeds = loaded_data["image_embeds"].to(video_embeds.device)
+                #     print("Loaded and replaced video_embeds with:\n", video_embeds)
+                n_video_tokens = (input_ids == self.config.image_token_id).sum()
                 n_video_features = video_embeds.shape[0]
                 if not is_torchdynamo_compiling() and n_video_tokens != n_video_features:
                     raise ValueError(
@@ -992,7 +990,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
                     delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
-
         outputs = self.language_model(
             input_ids=None,
             position_ids=position_ids,
