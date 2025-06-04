@@ -204,6 +204,7 @@ _deps = [
     "opentelemetry-api",
     "opentelemetry-exporter-otlp",
     "opentelemetry-sdk",
+    "textual",
 ]
 
 
@@ -440,6 +441,8 @@ extras["benchmark"] = deps_list("optimum-benchmark")
 
 # OpenTelemetry dependencies for metrics collection in continuous batching
 extras["open-telemetry"] = deps_list("opentelemetry-api", "opentelemetry-exporter-otlp", "opentelemetry-sdk")
+
+extras["continuous-batching-visualizer"] = deps_list("rich", "textual")
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [

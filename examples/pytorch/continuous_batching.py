@@ -11,7 +11,7 @@ torch.set_float32_matmul_precision("high")
 
 model_id = "meta-llama/Llama-3.2-3b-Instruct"
 model = AutoModelForCausalLM.from_pretrained(
-    model_id, attn_implementation="sdpa_paged", torch_dtype=torch.bfloat16, device_map="auto"
+    model_id, attn_implementation="sdpa_paged", torch_dtype=torch.bfloat16, device_map=0
 ).eval()
 tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 

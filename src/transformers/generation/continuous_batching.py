@@ -25,6 +25,7 @@ from enum import Enum
 from functools import partial
 from typing import Deque, Dict, List, Optional, Set, Tuple, Union
 
+from tokenizers import Tokenizer
 import torch
 import torch.nn as nn
 from torch.profiler import profile, schedule, tensorboard_trace_handler
@@ -33,6 +34,7 @@ from tqdm import tqdm
 from ..cache_utils import Cache
 from ..configuration_utils import PretrainedConfig
 from ..generation.configuration_utils import GenerationConfig
+from ..utils.continuous_batching_visualizer import ContinuousBatchingVisualizer
 from ..utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 
 
@@ -1102,6 +1104,7 @@ class ContinuousBatchingManager:
         self.profile = getattr(generation_config, "profile", False)
         self.manual_eviction = manual_eviction
         self.batch_processor: Optional[ContinuousBatchProcessor] = None
+        self.visualizer = None
 
     @traced
     def start(self):
@@ -1150,6 +1153,12 @@ class ContinuousBatchingManager:
             else:
                 logger.info("Continuous Batching Manager stopped.")
                 self._generation_thread = None
+
+    def set_tokenizer(self, tokenizer: Tokenizer):
+        self.tokenizer = tokenizer
+
+    def set_visualizer(self, visualizer: ContinuousBatchingVisualizer):
+        self.visualizer = visualizer
 
     def add_request(
         self, input_ids: List[int], request_id: Optional[str] = None, max_new_tokens: Optional[int] = None
@@ -1312,13 +1321,13 @@ class ContinuousBatchingManager:
                     record_shapes=False,
                     with_stack=True,
                 ) as prof:
-                    while not self.stop_event.is_set() or batch_processor.has_pending_requests():
+                    while not self.stop_event.is_set():
                         self._inner_generation_loop(batch_processor, is_first)
                         if is_first:
                             is_first = False
                         prof.step()
             else:
-                while not self.stop_event.is_set() or batch_processor.has_pending_requests():
+                while not self.stop_event.is_set():
                     self._inner_generation_loop(batch_processor, is_first)
                     if is_first:
                         is_first = False
@@ -1334,6 +1343,10 @@ class ContinuousBatchingManager:
         if torch.cuda.is_available():
             torch.cuda.synchronize()
         batch_processor.prepare_next_batch()
+        if self.visualizer is not None:
+            viz_data = self._collect_visualization_data(batch_processor)
+            self.visualizer.draw(viz_data)
+            self.visualizer.wait_for_input()
         if torch.cuda.is_available() and self.use_cuda_graph:
             if is_first:
                 self.warmup(batch_processor)
@@ -1383,6 +1396,22 @@ class ContinuousBatchingManager:
         if self.batch_processor is not None:
             self.batch_processor.scheduler.finish_request(request_id)
 
+    def _collect_visualization_data(self, batch_processor: ContinuousBatchProcessor) -> Dict:
+        """Collect data for visualization."""
+        data = {
+            "batch_contents": [],
+        }
+        data["attention_mask"] = batch_processor.attention_mask.clone()
+        for req in batch_processor.requests_in_batch:
+            if self.tokenizer is not None:
+                decoded = self.tokenizer.decode(req.prompt_ids)
+                decoded_tokens_list = self.tokenizer.convert_ids_to_tokens(req.prompt_ids)
+                data["batch_contents"].append({"request_id": req.request_id, "decoded": decoded, "decoded_tokens": decoded_tokens_list})
+            else:
+                data["batch_contents"].append({"request_id": req.request_id, "tokens": req.prompt_ids})
+        # TODO: cache data
+        return data
+
 
 class ContinuousMixin:
     """Mixin class for models to add continuous batching capabilities."""
@@ -1431,6 +1460,8 @@ class ContinuousMixin:
         inputs: List[List[int]],
         generation_config: Optional[GenerationConfig] = None,
         progress_bar: bool = True,
+        enable_visualizer: bool = False,
+        tokenizer: Optional[Tokenizer] = None,
         **kwargs,
     ) -> List[List[int]]:
         """Generate sequences for a batch of prompts using continuous batching.
@@ -1438,6 +1469,8 @@ class ContinuousMixin:
         Args:
             inputs: List of input token sequences (prompts)
             generation_config: Optional generation configuration
+            progress_bar: Whether to show a progress bar during generation
+            visualizer: Whether to visualize the continuous batching process
             **kwargs: Additional generation parameters
 
         Returns:
@@ -1454,29 +1487,37 @@ class ContinuousMixin:
         results = {}
         num_requests = len(inputs)
         try:
-            from tqdm.contrib.logging import logging_redirect_tqdm
+            if enable_visualizer:
+                manager.add_requests(inputs, **kwargs)
+                visualizer = ContinuousBatchingVisualizer()
+                if tokenizer is not None:
+                    manager.set_tokenizer(tokenizer)
+                manager.set_visualizer(visualizer)
+                visualizer.run()
+            else:
+                from tqdm.contrib.logging import logging_redirect_tqdm
 
-            with logging_redirect_tqdm([logger]):
-                with tqdm(
-                    total=num_requests,
-                    disable=(not progress_bar),
-                    desc=f"Solving {num_requests} requests",
-                    unit="request",
-                ) as pbar:
-                    manager.add_requests(inputs, **kwargs)
-                    finished_count = 0
-                    while finished_count < num_requests:
-                        result = manager.get_result(timeout=1)
-                        if result:
-                            req_id = result.request_id
-                            if result.status == RequestStatus.FINISHED:
-                                results[req_id] = result
-                                finished_count += 1
-                                pbar.update(1)
-                        else:
-                            if not manager.is_running():
-                                logger.error("Generation thread terminated unexpectedly.")
-                                break
+                with logging_redirect_tqdm([logger]):
+                    with tqdm(
+                        total=num_requests,
+                        disable=(not progress_bar),
+                        desc=f"Solving {num_requests} requests",
+                        unit="request",
+                    ) as pbar:
+                        manager.add_requests(inputs, **kwargs)
+                        finished_count = 0
+                        while finished_count < num_requests:
+                            result = manager.get_result(timeout=1)
+                            if result:
+                                req_id = result.request_id
+                                if result.status == RequestStatus.FINISHED:
+                                    results[req_id] = result
+                                    finished_count += 1
+                                    pbar.update(1)
+                            else:
+                                if not manager.is_running():
+                                    logger.error("Generation thread terminated unexpectedly.")
+                                    break
 
         except Exception as e:
             logger.error(f"Error during batch generation: {e}", exc_info=True)
