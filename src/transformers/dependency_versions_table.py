@@ -75,7 +75,7 @@ deps = {
     "sagemaker": "sagemaker>=2.31.0",
     "schedulefree": "schedulefree>=1.2.6",
     "scikit-learn": "scikit-learn",
-    "scipy": "scipy<1.13.0",
+    "scipy": "scipy<1.13.0,>=1.12.0",
     "sentencepiece": "sentencepiece>=0.1.91,!=0.1.92",
     "sigopt": "sigopt",
     "starlette": "starlette",
