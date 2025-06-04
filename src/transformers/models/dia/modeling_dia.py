@@ -22,25 +22,10 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation.logits_process import (
-    EpsilonLogitsWarper,
-    EtaLogitsWarper,
-    HammingDiversityLogitsProcessor,
-    InfNanRemoveLogitsProcessor,
-    LogitNormalization,
     LogitsProcessor,
     LogitsProcessorList,
-    MinPLogitsWarper,
-    SuppressTokensAtBeginLogitsProcessor,
-    SuppressTokensLogitsProcessor,
-    TemperatureLogitsWarper,
-    TopKLogitsWarper,
-    TopPLogitsWarper,
-    TypicalLogitsWarper,
 )
 from ...generation.stopping_criteria import (
-    ConfidenceCriteria,
-    MaxLengthCriteria,
-    MaxTimeCriteria,
     StoppingCriteria,
     StoppingCriteriaList,
 )
