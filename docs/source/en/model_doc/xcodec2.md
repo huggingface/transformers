@@ -42,14 +42,41 @@ Its architecture is based on [X-Codec](model_doc/xcodec) with several major diff
 
 * Transformer-Friendly Design: The 1D token structure of X-Codec2 naturally aligns with the autoregressive modeling in LLMs like LLaMA, improving training efficiency and downstream compatibility.
 
+## Usage example 
 
-## XCodecConfig
+Here is a quick example of how to encode and decode an audio using this model:
 
-[[autodoc]] XCodecConfig
+```python 
+>>> from datasets import load_dataset, Audio
+>>> from transformers import XCodec2Model, AutoFeatureExtractor
+>>> librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
-## XCodecModel
+>>> # load model and feature extractor
+>>> model = XCodec2Model.from_pretrained("Steveeeeeeen/XCodec2_test")
+>>> feature_extractor = AutoFeatureExtractor.from_pretrained("Steveeeeeeen/XCodec2_test")
 
-[[autodoc]] XCodecModel
+>>> # load audio sample
+>>> librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
+>>> audio_sample = librispeech_dummy[-1]["audio"]["array"]
+>>> inputs = feature_extractor(raw_audio=audio_sample, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
+
+>>> encoder_outputs = model.encode(inputs["input_values"])
+>>> audio_values = model.decode(encoder_outputs.audio_codes)[0]
+>>> # or the equivalent with a forward pass
+>>> audio_values = model(inputs["input_values"]).audio_values
+```
+
+This model was contributed by [Steven Zheng (Steveeeeeeen)](https://huggingface.co/Steveeeeeeen).
+The original code can be found [here](https://github.com/zhenye234/X-Codec-2.0).
+
+
+## XCodec2Config
+
+[[autodoc]] XCodec2Config
+
+## XCodec2Model
+
+[[autodoc]] XCodec2Model
     - decode
     - encode
     - forward
