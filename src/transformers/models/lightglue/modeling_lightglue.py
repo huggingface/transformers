@@ -276,7 +276,7 @@ class LightGlueAttentionBlock(nn.Module):
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]], Optional[torch.Tensor]]:
         all_hidden_states = () if output_hidden_states else None
-        message, attention_probs = self.attention(
+        attention_output, attention_probs = self.attention(
             hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
@@ -284,7 +284,7 @@ class LightGlueAttentionBlock(nn.Module):
             encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
         )
-        intermediate_states = torch.cat([hidden_states, message], dim=-1)
+        intermediate_states = torch.cat([hidden_states, attention_output], dim=-1)
         output_states = self.mlp(intermediate_states)
         hidden_states = hidden_states + output_states
 
