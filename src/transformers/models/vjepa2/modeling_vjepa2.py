@@ -1686,17 +1686,6 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
                 torch.arange(N, device=pixel_values.device).unsqueeze(0).repeat((B, 1))
             ]
 
-        encoder_output = VJEPA2OutputWithMaskedInput(
-            last_hidden_state=sequence_output,
-            masked_hidden_state=apply_masks(sequence_output, context_mask),
-            hidden_states=(
-                encoder_outputs[1] if not return_dict else encoder_outputs.hidden_states
-            ),
-            attentions=(
-                encoder_outputs[2] if not return_dict else encoder_outputs.attentions
-            ),
-        )
-
         if not skip_predictor:
             predictor_outputs = self.predictor(
                 encoder_hidden_states=sequence_output,
@@ -1707,27 +1696,9 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-
-            predictor_output = VJEPA2PredictorOutputWithMaskedInput(
-                last_hidden_state=predictor_outputs[0],
-                target_hidden_state=apply_masks(sequence_output, target_mask),
-                hidden_states=(
-                    predictor_outputs[1]
-                    if not return_dict
-                    else predictor_outputs.hidden_states
-                ),
-                attentions=(
-                    predictor_outputs[2]
-                    if not return_dict
-                    else predictor_outputs.attentions
-                ),
-            )
-
         else:
             predictor_outputs = [None, None]
             predictor_output = None
-
-        encoder_output.predictor_output = predictor_output
 
         pooled_output = None  # there is no CLS tokens in VJEPA
         # last hidden states will be from both the encoder and predictor
@@ -1737,6 +1708,20 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
             head_outputs = (predictor_outputs[0], pooled_output)
             pred_out = head_outputs + predictor_outputs[1:]
             return enc_out, pred_out
+
+        encoder_output = VJEPA2OutputWithMaskedInput(
+            last_hidden_state=sequence_output,
+            masked_hidden_state=apply_masks(sequence_output, context_mask),
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+        predictor_output = VJEPA2PredictorOutputWithMaskedInput(
+            last_hidden_state=predictor_outputs[0],
+            target_hidden_state=apply_masks(sequence_output, target_mask),
+            hidden_states=predictor_outputs.hidden_states,
+            attentions=predictor_outputs.attentions,
+        )
+        encoder_output.predictor_output = predictor_output
 
         return encoder_output
 
