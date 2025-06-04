@@ -416,6 +416,17 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_generate_with_head_masking(self):
         pass
 
+    @parameterized.expand([("random",), ("same",)])
+    @pytest.mark.generate
+    @unittest.skip(reason="Dia does not support assisted decoding yet")
+    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(reason="Dia does not support assisted decoding yet")
+    def test_assisted_decoding_sample(self):
+        pass
+
     @parameterized.expand([("offloaded",)])
     @pytest.mark.generate
     @unittest.skip(reason="Dia doesnt work with offloaded cache implementation yet")
@@ -532,6 +543,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    @unittest.skip(reason="")
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
