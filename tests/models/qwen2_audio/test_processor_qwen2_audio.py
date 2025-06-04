@@ -36,8 +36,7 @@ class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.checkpoint = "Qwen/Qwen2-Audio-7B-Instruct"
         cls.tmpdirname = tempfile.mkdtemp()
 
-        processor_kwargs = cls.prepare_processor_dict()
-        processor = Qwen2AudioProcessor.from_pretrained(cls.checkpoint, **processor_kwargs)
+        processor = Qwen2AudioProcessor.from_pretrained(cls.checkpoint)
         processor.save_pretrained(cls.tmpdirname)
         cls.audio_token = processor.audio_token
 
@@ -47,15 +46,12 @@ class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_audio_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).audio_processor
 
+    def get_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
+
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdirname, ignore_errors=True)
-
-    @staticmethod
-    def prepare_processor_dict():
-        return {
-            "chat_template": "{% set audio_count = namespace(value=0) %}{% for message in messages %}{% if loop.first and message['role'] != 'system' %}<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n{% endif %}<|im_start|>{{ message['role'] }}\n{% if message['content'] is string %}{{ message['content'] }}<|im_end|>\n{% else %}{% for content in message['content'] %}{% if 'audio' in content or 'audio_url' in content or content['type'] == 'audio' %}{% set audio_count.value = audio_count.value + 1 %}Audio {{ audio_count.value }}: <|audio_bos|><|AUDIO|><|audio_eos|>\n{% elif 'text' in content %}{{ content['text'] }}{% endif %}{% endfor %}<|im_end|>\n{% endif %}{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}",
-        }
 
     def test_can_load_various_tokenizers(self):
         processor = Qwen2AudioProcessor.from_pretrained(self.checkpoint)

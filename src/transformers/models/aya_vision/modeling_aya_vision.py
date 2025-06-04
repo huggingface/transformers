@@ -97,6 +97,7 @@ class AyaVisionPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_quantized_cache = False
     _supports_static_cache = False
+    _supports_flex_attn = True
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -282,7 +283,6 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        image_sizes: torch.Tensor = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, AyaVisionModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -310,7 +310,6 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
-                image_sizes=image_sizes,
             )
 
             if input_ids is None:

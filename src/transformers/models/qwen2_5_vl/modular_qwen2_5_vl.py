@@ -30,6 +30,7 @@ import torch.utils.checkpoint
 
 from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig
 from transformers.models.qwen2_vl.modeling_qwen2_vl import (
+    KwargsForCausalLM,
     PatchEmbed,
     PatchMerger,
     Qwen2RMSNorm,
@@ -622,6 +623,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
         rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         second_per_grid_ts: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, Qwen2_5_VLModelOutputWithPast]:
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(seq_length, num_channels * temporal_size * image_size * image_size)):
@@ -648,6 +650,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
             if pixel_values is not None:
                 image_embeds = self.get_image_features(pixel_values, image_grid_thw)
+                image_embeds = torch.cat(image_embeds, dim=0)
                 n_image_tokens = (input_ids == self.config.image_token_id).sum()
                 n_image_features = image_embeds.shape[0]
                 if not is_torchdynamo_compiling() and n_image_tokens != n_image_features:
@@ -665,6 +668,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
 
             if pixel_values_videos is not None:
                 video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
+                video_embeds = torch.cat(video_embeds, dim=0)
                 n_video_tokens = (input_ids == self.config.video_token_id).sum()
                 n_video_features = video_embeds.shape[0]
                 if not is_torchdynamo_compiling() and n_video_tokens != n_video_features:
@@ -680,15 +684,14 @@ class Qwen2_5_VLModel(Qwen2VLModel):
                 video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
-            if attention_mask is not None:
-                attention_mask = attention_mask.to(inputs_embeds.device)
-
         if position_ids is None:
-            attention_mask_2d = attention_mask
-            if attention_mask is not None and attention_mask.ndim == 4:
-                attention_mask_2d = torch.diagonal(attention_mask_2d[:, 0], dim1=1, dim2=2)
-                attention_mask_2d = attention_mask_2d / torch.finfo(attention_mask_2d.dtype).min
-                attention_mask_2d = (1.0 - attention_mask_2d).int()
+            attention_mask_tensor = (
+                attention_mask if not isinstance(attention_mask, dict) else attention_mask["full_attention"]
+            )
+            if attention_mask_tensor is not None and attention_mask_tensor.ndim == 4:
+                attention_mask_tensor = torch.diagonal(attention_mask_tensor[:, 0], dim1=1, dim2=2)
+                attention_mask_tensor = attention_mask_tensor / torch.finfo(attention_mask_tensor.dtype).min
+                attention_mask_tensor = (1.0 - attention_mask_tensor).int()
 
             # Calculate RoPE index once per generation in the pre-fill stage only.
             # When compiling, we can't check tensor values thus we check only input length
@@ -708,7 +711,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
                     image_grid_thw,
                     video_grid_thw,
                     second_per_grid_ts=second_per_grid_ts,
-                    attention_mask=attention_mask_2d,
+                    attention_mask=attention_mask_tensor,
                 )
                 self.rope_deltas = rope_deltas
             # then use the prev pre-calculated rope-deltas to get the correct position ids
@@ -737,6 +740,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
+            **kwargs,
         )
 
         output = Qwen2_5_VLModelOutputWithPast(
@@ -774,6 +778,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         second_per_grid_ts: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, Qwen2_5_VLCausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -846,6 +851,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
         hidden_states = outputs[0]

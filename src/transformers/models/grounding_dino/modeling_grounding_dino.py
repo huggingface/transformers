@@ -2454,16 +2454,25 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         _class_embed = GroundingDinoContrastiveEmbedding(config)
 
         if config.decoder_bbox_embed_share:
-            _bbox_embed = GroundingDinoMLPPredictionHead(
+            # a single shared instance
+            shared_head = GroundingDinoMLPPredictionHead(
                 input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
             )
-            self.bbox_embed = nn.ModuleList([_bbox_embed for _ in range(config.decoder_layers)])
+            self.bbox_embed = nn.ModuleList([shared_head] * config.decoder_layers)
         else:
-            for _ in range(config.decoder_layers):
-                _bbox_embed = GroundingDinoMLPPredictionHead(
-                    input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
-                )
-                self.bbox_embed = nn.ModuleList([_bbox_embed for _ in range(config.decoder_layers)])
+            # each layer has its own head (implicit deep copy through a new instance)
+            self.bbox_embed = nn.ModuleList(
+                [
+                    GroundingDinoMLPPredictionHead(
+                        input_dim=config.d_model,
+                        hidden_dim=config.d_model,
+                        output_dim=4,
+                        num_layers=3,
+                    )
+                    for _ in range(config.decoder_layers)
+                ]
+            )
+
         self.class_embed = nn.ModuleList([_class_embed for _ in range(config.decoder_layers)])
         # hack for box-refinement
         self.model.decoder.bbox_embed = self.bbox_embed

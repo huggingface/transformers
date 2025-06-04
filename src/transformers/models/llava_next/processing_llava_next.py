@@ -76,13 +76,6 @@ class LlavaNextProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = [
-        "chat_template",
-        "patch_size",
-        "vision_feature_select_strategy",
-        "image_token",
-        "num_additional_image_tokens",
-    ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 

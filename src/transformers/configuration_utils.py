@@ -1218,6 +1218,7 @@ ALLOWED_LAYER_TYPES = (
     "full_attention",
     "sliding_attention",
     "chunked_attention",
+    "linear_attention",  # used in minimax
 )
 
 
