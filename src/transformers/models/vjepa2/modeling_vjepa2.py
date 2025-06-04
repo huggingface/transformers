@@ -727,7 +727,8 @@ class VJEPA2SelfAttention(nn.Module):
         )
 
         self.proj = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.dropout_prob = config.attention_probs_dropout_prob
+        self.dropout = nn.Dropout(self.dropout_prob)
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (
@@ -840,7 +841,8 @@ class VJEPA2RopeSelfAttention(nn.Module):
         )
 
         self.proj = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.dropout_prob = config.attention_probs_dropout_prob
+        self.dropout = nn.Dropout(self.dropout_prob)
 
         self.grid_size = self.config.crop_size // self.config.patch_size
         self.grid_depth = self.config.frames_per_clip // self.config.tubelet_size
@@ -1563,9 +1565,23 @@ class VJEPA2PredictorOutputWithMaskedInput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor = None
     masked_hidden_state: Optional[torch.FloatTensor] = None
-    target_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    target_hidden_state: Optional[torch.FloatTensor] = None
+
+
+@dataclass
+class VJEPA2OutputWithMaskedInput(ModelOutput):
+    """
+    VJEPA outputs that also contains the masked encoder outputs
+    Optionally contains the predictor outputs
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    masked_hidden_state: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    predictor_output: Optional[VJEPA2PredictorOutputWithMaskedInput] = None
 
 
 def _convert_head_mask_to_5d(head_mask, num_hidden_layers):
@@ -1624,7 +1640,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Tuple[VJEPA2PredictorOutputWithMaskedInput]]:
+    ) -> Union[Tuple, VJEPA2OutputWithMaskedInput]:
         output_attentions = (
             output_attentions
             if output_attentions is not None
@@ -1670,11 +1686,15 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
                 torch.arange(N, device=pixel_values.device).unsqueeze(0).repeat((B, 1))
             ]
 
-        encoder_output = VJEPA2PredictorOutputWithMaskedInput(
+        encoder_output = VJEPA2OutputWithMaskedInput(
             last_hidden_state=sequence_output,
             masked_hidden_state=apply_masks(sequence_output, context_mask),
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+            hidden_states=(
+                encoder_outputs[1] if not return_dict else encoder_outputs.hidden_states
+            ),
+            attentions=(
+                encoder_outputs[2] if not return_dict else encoder_outputs.attentions
+            ),
         )
 
         if not skip_predictor:
@@ -1691,13 +1711,23 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
             predictor_output = VJEPA2PredictorOutputWithMaskedInput(
                 last_hidden_state=predictor_outputs[0],
                 target_hidden_state=apply_masks(sequence_output, target_mask),
-                hidden_states=predictor_outputs.hidden_states,
-                attentions=predictor_outputs.attentions,
+                hidden_states=(
+                    predictor_outputs[1]
+                    if not return_dict
+                    else predictor_outputs.hidden_states
+                ),
+                attentions=(
+                    predictor_outputs[2]
+                    if not return_dict
+                    else predictor_outputs.attentions
+                ),
             )
 
         else:
             predictor_outputs = [None, None]
             predictor_output = None
+
+        encoder_output.predictor_output = predictor_output
 
         pooled_output = None  # there is no CLS tokens in VJEPA
         # last hidden states will be from both the encoder and predictor
@@ -1708,7 +1738,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
             pred_out = head_outputs + predictor_outputs[1:]
             return enc_out, pred_out
 
-        return encoder_output, predictor_output
+        return encoder_output
 
     def get_vision_features(self, pixel_values) -> torch.Tensor:
         pixel_values = pixel_values.permute(0, 2, 1, 3, 4)  # B x C x T x H x W

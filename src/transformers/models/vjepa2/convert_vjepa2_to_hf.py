@@ -241,12 +241,13 @@ def convert_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
         original_predictor_outputs = original_predictor(
             original_encoder_outputs, context_mask, predictor_mask
         )
-        encoder_outputs, predictor_outputs = model(
+        outputs = model(
             pixel_values, context_mask=context_mask, target_mask=predictor_mask
         )
         assert torch.allclose(
-            encoder_outputs.last_hidden_state, original_encoder_outputs, atol=1e-3
+            outputs.last_hidden_state, original_encoder_outputs, atol=1e-3
         )
+        predictor_outputs = outputs.predictor_output
         assert torch.allclose(
             predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3
         )
@@ -260,12 +261,13 @@ def convert_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
             context_mask,
             predictor_mask,
         )
-        encoder_outputs, predictor_outputs = model(
+        outputs = model(
             pixel_values, context_mask=context_mask, target_mask=predictor_mask
         )
         assert torch.allclose(
-            encoder_outputs.last_hidden_state, original_encoder_outputs, atol=1e-3
+            outputs.last_hidden_state, original_encoder_outputs, atol=1e-3
         )
+        predictor_outputs = outputs.predictor_output
         assert torch.allclose(
             predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3
         )
