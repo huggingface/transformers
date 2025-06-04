@@ -35,7 +35,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import auto_docstring, is_ninja_available, is_torch_cuda_available, is_cuda_platform, logging
+from ...utils import auto_docstring, is_cuda_platform, is_ninja_available, is_torch_cuda_available, logging
 from .configuration_mra import MraConfig
 
 

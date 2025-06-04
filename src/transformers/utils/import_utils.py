@@ -482,8 +482,8 @@ def is_cuda_platform():
         torch.version.cuda is not None
     else:
         return False
-    
-    
+
+
 def is_rocm_platform():
     if is_torch_available():
         import torch
