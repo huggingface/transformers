@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers import Dinov2Config, Dinov2Model
+from transformers import Dinov2Config
 from transformers.testing_utils import (
     is_flaky,
     require_torch,
