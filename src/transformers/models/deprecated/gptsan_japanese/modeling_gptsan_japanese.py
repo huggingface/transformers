@@ -258,12 +258,12 @@ class GPTSanJapaneseSparseMLP(nn.Module):
         expert the corresponding hidden states.
 
         """
-        # Step 1: Get the router_mask from the router as wel as the probabilities
+        # Step 1: Get the router_mask from the router as well as the probabilities
         router_mask, router_probs, router_logits = self.router(hidden_states)
         expert_index = torch.argmax(router_mask, dim=-1)
 
         # The routers introduced might not always map all the tokens, to a router, which means that some hidden states
-        # can be unchanged from one layer to another. That is why the hidden states are cloned before updating only the seleced ones.
+        # can be unchanged from one layer to another. That is why the hidden states are cloned before updating only the selected ones.
 
         next_states = hidden_states.clone()
         for idx, expert in enumerate(self.experts.values()):
@@ -905,7 +905,7 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
 
         Returns:
             `MoEModelOutputWithPastAndCrossAttentions` or `tuple` if `return_dict` returns
-            MoEModelOutputWithPastAndCrossAttentions insted of tuple
+            MoEModelOutputWithPastAndCrossAttentions instead of tuple
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         device = self.position_embeddings.weight.device
@@ -1006,7 +1006,7 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
         if token_type_ids is not None:
             token_type_ids = token_type_ids.unsqueeze(1).unsqueeze(2)
             prefix_lm_mask = ((prefix_lm_mask + token_type_ids) > 0).float()
-        # Marge prefix_lm_mask and attention_mask
+        # Merge prefix_lm_mask and attention_mask
         extended_attention_mask = prefix_lm_mask * attention_mask.unsqueeze(1).unsqueeze(2)
 
         # Prepare head mask if needed
@@ -1130,7 +1130,7 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
             labels in `[0, ..., config.vocab_size]`
 
         Returns:
-            `MoECausalLMOutputWithPast` or `tuple` if `return_dict` returns MoECausalLMOutputWithPast insted of tuple
+            `MoECausalLMOutputWithPast` or `tuple` if `return_dict` returns MoECausalLMOutputWithPast instead of tuple
 
         Example:
 
@@ -1332,3 +1332,6 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
                 total_router_logits.append(router_logits)
                 total_expert_indexes.append(expert_indexes)
         return torch.cat(total_router_logits, dim=1), torch.cat(total_expert_indexes, dim=1)
+
+
+__all__ = ["GPTSanJapaneseForConditionalGeneration", "GPTSanJapaneseModel", "GPTSanJapanesePreTrainedModel"]

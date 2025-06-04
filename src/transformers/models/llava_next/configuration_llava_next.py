@@ -80,6 +80,9 @@ class LlavaNextConfig(PretrainedConfig):
     ```"""
 
     model_type = "llava_next"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+    }
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(

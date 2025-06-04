@@ -247,7 +247,7 @@ class SegGptImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
@@ -394,7 +394,7 @@ class SegGptImageProcessor(BaseImageProcessor):
         prompt_images: Optional[ImageInput] = None,
         prompt_masks: Optional[ImageInput] = None,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
@@ -586,7 +586,7 @@ class SegGptImageProcessor(BaseImageProcessor):
         palette_tensor = None
         palette = self.get_palette(num_labels) if num_labels is not None else None
         if palette is not None:
-            palette_tensor = torch.tensor(palette).float().to(masks.device)
+            palette_tensor = torch.tensor(palette).to(device=masks.device, dtype=torch.float)
             _, num_channels, _, _ = masks.shape
             palette_tensor = palette_tensor.view(1, 1, num_labels + 1, num_channels)
 

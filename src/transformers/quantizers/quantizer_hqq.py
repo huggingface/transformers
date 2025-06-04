@@ -135,7 +135,11 @@ class HqqHfQuantizer(HfQuantizer):
 
             # Append new expected layers based on _ref_keys
             _ref_keys = HQQLinear(
-                linear_layer=None, quant_config=None, compute_dtype=torch.float16, device="cpu"
+                linear_layer=None,
+                quant_config=None,
+                compute_dtype=torch.float16,
+                device="cpu",
+                del_orig=False,
             ).state_dict_keys() - {"bias"}
 
             # Clean-up
@@ -170,16 +174,13 @@ class HqqHfQuantizer(HfQuantizer):
         module, tensor_name = get_module_from_name(model, param_name)
 
         if self.pre_quantized:
-            return (
-                (isinstance(module, torch.nn.Linear) or isinstance(module, HQQLinear))
-                and tensor_name != "weight"
-                and tensor_name != "bias"
-            )
+            return (isinstance(module, torch.nn.Linear) or isinstance(module, HQQLinear)) and tensor_name != "weight"
         else:
-            # we need a special path for bias since hqq overwrote load_state_dict for this layer
             return (
                 isinstance(module, torch.nn.Linear)
                 and tensor_name == "weight"
+                # bias doesn't need to be quantized, we use this as a workaround to avoid loading bias into HQQLinear assuming it was loaded
+                # in the state_dict directly with the weight because hqq overwrote load_state_dict for this layer
                 or (isinstance(module, HQQLinear) and tensor_name == "bias")
             )
 
@@ -227,6 +228,7 @@ class HqqHfQuantizer(HfQuantizer):
                     quant_config=None,
                     compute_dtype=self.torch_dtype,
                     device=target_device,
+                    del_orig=False,
                 )
 
             hqq_layer.load_state_dict(module_state_dict)

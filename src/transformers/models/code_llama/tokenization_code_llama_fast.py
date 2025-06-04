@@ -20,10 +20,7 @@ from tokenizers import normalizers, processors
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
-from ...utils.versions import require_version
 
-
-require_version("tokenizers>=0.13.3")
 
 if is_sentencepiece_available():
     from .tokenization_code_llama import CodeLlamaTokenizer
@@ -170,10 +167,6 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         self._suffix_token = suffix_token
         self._eot_token = eot_token
         self.fill_token = fill_token
-
-    @property
-    def can_save_slow_tokenizer(self) -> bool:
-        return os.path.isfile(self.vocab_file) if self.vocab_file else False
 
     # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.update_post_processor
     def update_post_processor(self):

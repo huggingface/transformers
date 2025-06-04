@@ -29,6 +29,7 @@ import numpy as np
 from ....tokenization_utils import PreTrainedTokenizer
 from ....utils import (
     cached_file,
+    check_torch_load_is_safe,
     is_sacremoses_available,
     is_torch_available,
     logging,
@@ -222,6 +223,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
                             "from a PyTorch pretrained vocabulary, "
                             "or activate it with environment variables USE_TORCH=1 and USE_TF=0."
                         )
+                    check_torch_load_is_safe()
                     vocab_dict = torch.load(pretrained_vocab_file, weights_only=True)
 
             if vocab_dict is not None:
@@ -705,6 +707,7 @@ class TransfoXLCorpus:
 
         # Instantiate tokenizer.
         corpus = cls(*inputs, **kwargs)
+        check_torch_load_is_safe()
         corpus_dict = torch.load(resolved_corpus_file, weights_only=True)
         for key, value in corpus_dict.items():
             corpus.__dict__[key] = value
@@ -784,6 +787,7 @@ def get_lm_corpus(datadir, dataset):
     fn_pickle = os.path.join(datadir, "cache.pkl")
     if os.path.exists(fn):
         logger.info("Loading cached dataset...")
+        check_torch_load_is_safe()
         corpus = torch.load(fn_pickle, weights_only=True)
     elif os.path.exists(fn):
         logger.info("Loading cached dataset from pickle...")
@@ -816,3 +820,6 @@ def get_lm_corpus(datadir, dataset):
         torch.save(corpus, fn)
 
     return corpus
+
+
+__all__ = ["TransfoXLCorpus", "TransfoXLTokenizer"]

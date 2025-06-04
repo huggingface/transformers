@@ -38,6 +38,7 @@ from ...tokenization_utils_base import (
     to_py_obj,
 )
 from ...utils import add_end_docstrings, is_tf_tensor, is_torch_tensor, logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -128,6 +129,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 """
 
 
+@requires(backends=("sentencepiece",))
 class MLukeTokenizer(PreTrainedTokenizer):
     """
     Adapted from [`XLMRobertaTokenizer`] and [`LukeTokenizer`]. Based on

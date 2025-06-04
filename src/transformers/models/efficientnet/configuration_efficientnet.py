@@ -67,7 +67,7 @@ class EfficientNetConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in each block. If string, `"gelu"`, `"relu"`,
             `"selu", `"gelu_new"`, `"silu"` and `"mish"` are supported.
-        hiddem_dim (`int`, *optional*, defaults to 1280):
+        hidden_dim (`int`, *optional*, defaults to 1280):
             The hidden dimension of the layer before the classification head.
         pooling_type (`str` or `function`, *optional*, defaults to `"mean"`):
             Type of final pooling to be applied before the dense classification head. Available options are [`"mean"`,

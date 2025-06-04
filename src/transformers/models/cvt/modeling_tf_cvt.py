@@ -65,8 +65,8 @@ class TFBaseModelOutputWithCLSToken(ModelOutput):
             the initial embedding outputs.
     """
 
-    last_hidden_state: tf.Tensor = None
-    cls_token_value: tf.Tensor = None
+    last_hidden_state: Optional[tf.Tensor] = None
+    cls_token_value: Optional[tf.Tensor] = None
     hidden_states: Tuple[tf.Tensor, ...] | None = None
 
 

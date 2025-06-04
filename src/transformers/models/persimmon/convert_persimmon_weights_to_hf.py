@@ -82,7 +82,7 @@ def convert_persimmon_checkpoint(pytorch_dump_folder_path, ada_lib_path, pt_mode
     import sys
 
     sys.path.insert(0, ada_lib_path)
-    model_state_dict_base = torch.load(pt_model_path, map_location="cpu")
+    model_state_dict_base = torch.load(pt_model_path, map_location="cpu", weights_only=True)
     state_dict = flatdict.FlatDict(model_state_dict_base["model"], ".")
     state_dict = rename_state_dict(state_dict)
 

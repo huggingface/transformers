@@ -106,10 +106,10 @@ class TFRemBertEmbeddings(keras.layers.Layer):
 
     def call(
         self,
-        input_ids: tf.Tensor = None,
-        position_ids: tf.Tensor = None,
-        token_type_ids: tf.Tensor = None,
-        inputs_embeds: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         past_key_values_length=0,
         training: bool = False,
     ) -> tf.Tensor:
@@ -1037,7 +1037,7 @@ REMBERT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare RemBERT Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare RemBERT Model transformer outputting raw hidden-states without any specific head on top.",
     REMBERT_START_DOCSTRING,
 )
 class TFRemBertModel(TFRemBertPreTrainedModel):

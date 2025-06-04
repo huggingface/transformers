@@ -25,24 +25,11 @@ from torch import nn
 
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_mgp_str import MgpstrConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "MgpstrConfig"
-_TOKENIZER_FOR_DOC = "MgpstrTokenizer"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "alibaba-damo/mgp-str-base"
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -246,7 +233,7 @@ class MgpstrEncoder(nn.Module):
     def __init__(self, config: MgpstrConfig):
         super().__init__()
         # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers, device="cpu")]
 
         self.blocks = nn.Sequential(
             *[MgpstrLayer(config=config, drop_path=dpr[i]) for i in range(config.num_hidden_layers)]
@@ -306,12 +293,8 @@ class MgpstrA3Module(nn.Module):
         return (a3_out, attentions)
 
 
+@auto_docstring
 class MgpstrPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = MgpstrConfig
     base_model_prefix = "mgp_str"
     _no_split_modules = []
@@ -330,37 +313,7 @@ class MgpstrPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-MGP_STR_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`MgpstrConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-MGP_STR_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
-            for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare MGP-STR Model transformer outputting raw hidden-states without any specific head on top.",
-    MGP_STR_START_DOCSTRING,
-)
+@auto_docstring
 class MgpstrModel(MgpstrPreTrainedModel):
     def __init__(self, config: MgpstrConfig):
         super().__init__(config)
@@ -371,7 +324,7 @@ class MgpstrModel(MgpstrPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.embeddings.proj
 
-    @add_start_docstrings_to_model_forward(MGP_STR_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -406,12 +359,11 @@ class MgpstrModel(MgpstrPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     MGP-STR Model transformer with three classification heads on top (three A^3 modules and three linear layer on top
     of the transformer encoder output) for scene text recognition (STR) .
-    """,
-    MGP_STR_START_DOCSTRING,
+    """
 )
 class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
     config_class = MgpstrConfig
@@ -431,8 +383,7 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
         self.bpe_head = nn.Linear(config.hidden_size, config.num_bpe_labels)
         self.wp_head = nn.Linear(config.hidden_size, config.num_wordpiece_labels)
 
-    @add_start_docstrings_to_model_forward(MGP_STR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MgpstrModelOutput, config_class=MgpstrConfig)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -445,8 +396,6 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
         output_a3_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of a3 modules. See `a3_attentions` under returned tensors
             for more detail.
-
-        Returns:
 
         Example:
 

@@ -228,12 +228,17 @@ def write_model(
         if num_shards == 1:
             # Not sharded
             # (The sharded implementation would also work, but this is simpler.)
-            loaded = torch.load(os.path.join(input_base_path, "consolidated.00.pth"), map_location="cpu")
+            loaded = torch.load(
+                os.path.join(input_base_path, "consolidated.00.pth"), map_location="cpu", weights_only=True
+            )
         else:
             # Sharded
             checkpoint_list = sorted([file for file in os.listdir(input_base_path) if file.endswith(".pth")])
             print("Loading in order:", checkpoint_list)
-            loaded = [torch.load(os.path.join(input_base_path, file), map_location="cpu") for file in checkpoint_list]
+            loaded = [
+                torch.load(os.path.join(input_base_path, file), map_location="cpu", weights_only=True)
+                for file in checkpoint_list
+            ]
         param_count = 0
         index_dict = {"weight_map": {}}
         for layer_i in range(n_layers):

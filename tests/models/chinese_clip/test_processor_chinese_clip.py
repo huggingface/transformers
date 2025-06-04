@@ -36,8 +36,9 @@ if is_vision_available():
 class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ChineseCLIPProcessor
 
-    def setUp(self):
-        self.tmpdirname = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tmpdirname = tempfile.mkdtemp()
 
         vocab_tokens = [
             "[UNK]",
@@ -59,8 +60,8 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "t",
             "shirt",
         ]
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
+        cls.vocab_file = os.path.join(cls.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
+        with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
         image_processor_map = {
@@ -73,39 +74,44 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "image_std": [0.26862954, 0.26130258, 0.27577711],
             "do_convert_rgb": True,
         }
-        self.image_processor_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.image_processor_file, "w", encoding="utf-8") as fp:
+        cls.image_processor_file = os.path.join(cls.tmpdirname, FEATURE_EXTRACTOR_NAME)
+        with open(cls.image_processor_file, "w", encoding="utf-8") as fp:
             json.dump(image_processor_map, fp)
 
-        tokenizer = self.get_tokenizer()
-        image_processor = self.get_image_processor()
+        tokenizer = cls.get_tokenizer()
+        image_processor = cls.get_image_processor()
         processor = ChineseCLIPProcessor(tokenizer=tokenizer, image_processor=image_processor)
-        processor.save_pretrained(self.tmpdirname)
+        processor.save_pretrained(cls.tmpdirname)
 
-    def get_tokenizer(self, **kwargs):
-        return BertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_tokenizer(cls, **kwargs):
+        return BertTokenizer.from_pretrained(cls.tmpdirname, **kwargs)
 
-    def get_rust_tokenizer(self, **kwargs):
-        return BertTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_rust_tokenizer(cls, **kwargs):
+        return BertTokenizerFast.from_pretrained(cls.tmpdirname, **kwargs)
 
-    def get_image_processor(self, **kwargs):
-        return ChineseCLIPImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
+    @classmethod
+    def get_image_processor(cls, **kwargs):
+        return ChineseCLIPImageProcessor.from_pretrained(cls.tmpdirname, **kwargs)
 
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_save_load_pretrained_default(self):
         tokenizer_slow = self.get_tokenizer()
         tokenizer_fast = self.get_rust_tokenizer()
         image_processor = self.get_image_processor()
 
-        processor_slow = ChineseCLIPProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
-        processor_slow.save_pretrained(self.tmpdirname)
-        processor_slow = ChineseCLIPProcessor.from_pretrained(self.tmpdirname, use_fast=False)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor_slow = ChineseCLIPProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
+            processor_slow.save_pretrained(tmpdir)
+            processor_slow = ChineseCLIPProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
-        processor_fast = ChineseCLIPProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
-        processor_fast.save_pretrained(self.tmpdirname)
-        processor_fast = ChineseCLIPProcessor.from_pretrained(self.tmpdirname)
+            processor_fast = ChineseCLIPProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
+            processor_fast.save_pretrained(tmpdir)
+            processor_fast = ChineseCLIPProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor_slow.tokenizer.get_vocab(), tokenizer_slow.get_vocab())
         self.assertEqual(processor_fast.tokenizer.get_vocab(), tokenizer_fast.get_vocab())
@@ -119,15 +125,18 @@ class ChineseCLIPProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor_fast.image_processor, ChineseCLIPImageProcessor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = ChineseCLIPProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
-        processor.save_pretrained(self.tmpdirname)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor = ChineseCLIPProcessor(
+                tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor()
+            )
+            processor.save_pretrained(tmpdir)
 
-        tokenizer_add_kwargs = self.get_tokenizer(cls_token="(CLS)", sep_token="(SEP)")
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False)
+            tokenizer_add_kwargs = self.get_tokenizer(cls_token="(CLS)", sep_token="(SEP)")
+            image_processor_add_kwargs = self.get_image_processor(do_normalize=False)
 
-        processor = ChineseCLIPProcessor.from_pretrained(
-            self.tmpdirname, cls_token="(CLS)", sep_token="(SEP)", do_normalize=False
-        )
+            processor = ChineseCLIPProcessor.from_pretrained(
+                tmpdir, cls_token="(CLS)", sep_token="(SEP)", do_normalize=False
+            )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, BertTokenizerFast)

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,7 +32,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import cached_property, check_torch_load_is_safe, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -191,7 +190,8 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else {}
     )
-
+    # Addition keys that are required for forward, used in tests where we manipulate and create new input dict from scratch
+    additional_model_inputs = ["bool_masked_pos"]
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
@@ -456,6 +456,7 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
 
         # add boolean mask, indicating which patches to mask
         local_path = hf_hub_download(repo_id="hf-internal-testing/bool-masked-pos", filename="bool_masked_pos.pt")
+        check_torch_load_is_safe()
         inputs["bool_masked_pos"] = torch.load(local_path, weights_only=True)
 
         # forward pass

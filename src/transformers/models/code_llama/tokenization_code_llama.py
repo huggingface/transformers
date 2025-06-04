@@ -25,6 +25,7 @@ import sentencepiece as spm
 from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging, requires_backends
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -46,6 +47,7 @@ correct. If you don't know the answer to a question, please don't share false in
 # fmt: on
 
 
+@requires(backends=("sentencepiece",))
 class CodeLlamaTokenizer(PreTrainedTokenizer):
     """
     Construct a CodeLlama tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as

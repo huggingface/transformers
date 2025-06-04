@@ -148,7 +148,7 @@ def get_alignment(music_tokens, labels, prior, config):
             del w_hop
         weights = torch.cat(w_hops, dim=0)
         del w_hops
-        alignment_hop = weights.float().cpu().numpy()
+        alignment_hop = weights.to(device="cpu", dtype=torch.float).numpy()
         del weights
 
         # alignment_hop has shape (bs, n_ctx, nb_relevant_lyric_tokens)
@@ -429,7 +429,7 @@ class JukeboxBottleneckBlock(nn.Module):
             entropy = -torch.sum(_codebook_prob * torch.log(_codebook_prob + 1e-8))  # entropy ie how diverse
             used_curr = (_codebook_elem >= self.threshold).sum()
             usage = torch.sum(usage)
-            dk = torch.norm(self.codebook - old_codebook) / np.sqrt(np.prod(old_codebook.shape))
+            dk = torch.linalg.norm(self.codebook - old_codebook) / np.sqrt(np.prod(old_codebook.shape))
         return {"entropy": entropy, "used_curr": used_curr, "usage": usage, "dk": dk}
 
     def preprocess(self, hidden_states):
@@ -437,11 +437,13 @@ class JukeboxBottleneckBlock(nn.Module):
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
 
         if hidden_states.shape[-1] == self.codebook_width:
-            prenorm = torch.norm(hidden_states - torch.mean(hidden_states)) / np.sqrt(np.prod(hidden_states.shape))
+            prenorm = torch.linalg.norm(hidden_states - torch.mean(hidden_states)) / np.sqrt(
+                np.prod(hidden_states.shape)
+            )
         elif hidden_states.shape[-1] == 2 * self.codebook_width:
             x1, x2 = hidden_states[..., : self.codebook_width], hidden_states[..., self.codebook_width :]
-            prenorm = (torch.norm(x1 - torch.mean(x1)) / np.sqrt(np.prod(x1.shape))) + (
-                torch.norm(x2 - torch.mean(x2)) / np.sqrt(np.prod(x2.shape))
+            prenorm = (torch.linalg.norm(x1 - torch.mean(x1)) / np.sqrt(np.prod(x1.shape))) + (
+                torch.linalg.norm(x2 - torch.mean(x2)) / np.sqrt(np.prod(x2.shape))
             )
 
             # Normalise
@@ -517,7 +519,9 @@ class JukeboxBottleneckBlock(nn.Module):
             update_metrics = {}
 
         # Loss
-        commit_loss = torch.norm(dequantised_states.detach() - hidden_states) ** 2 / np.prod(hidden_states.shape)
+        commit_loss = torch.linalg.norm(dequantised_states.detach() - hidden_states) ** 2 / np.prod(
+            hidden_states.shape
+        )
 
         # Passthrough
         dequantised_states = hidden_states + (dequantised_states - hidden_states).detach()
@@ -1293,7 +1297,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
     ):
         """
         Autoregressive model on either lyric tokens or music tokens, or both. The attention pattern should be properly
-        set fro each configuration.
+        set for each configuration.
 
         Args:
             config (`JukeboxPriorConfig`):
@@ -1304,11 +1308,11 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 Number of tokens or lyrics tokens provided in a single pass.
             embed_dim (`int`, *optional*):
                 Either equals to the dimension of the codebook, or the sum of n_vocab (lyrics) and codebook dimension,
-                if the model combines lyrics and music tokens, or simply n_vocab if the model is a seperate encoder
+                if the model combines lyrics and music tokens, or simply n_vocab if the model is a separate encoder
             audio_conditioning (`bool`, *optional*, defaults to `False`):
-                Whether or not the prior supports conditionning on audio.
+                Whether or not the prior supports conditioning on audio.
             metadata_conditioning (`bool`, *optional*, defaults to `False`):
-                Whether or not the prior supports conditionning on artitst, genres, lyrics and timing.
+                Whether or not the prior supports conditioning on artitst, genres, lyrics and timing.
             is_encoder (`bool`, *optional*, defaults to `False`):
                 Whether the model is an encoder only model.
         """
@@ -1388,7 +1392,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         hidden_states = self.transformer(
             hidden_states, last_encoder_hidden_states=last_encoder_hidden_states
         )  # Transformer
-        if self.add_cond_after_transformer:  # Piped doesnt add x_cond
+        if self.add_cond_after_transformer:  # Piped doesn't add x_cond
             hidden_states = hidden_states + audio_conditioning
 
         activations = hidden_states
@@ -1531,7 +1535,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
             if get_preds:
                 preds = []
 
-            # Fill up key/value cache for past context by runing forward pass.
+            # Fill up key/value cache for past context by running forward pass.
             # We do so in chunks instead of doing the whole past in one forward pass to reduce max memory usage.
             if chunk_size is None:
                 chunk_size = len(sampled_audio)
@@ -1613,7 +1617,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
 
 class JukeboxMusicTokenConditioner(nn.Module):
     """
-    The `JukeboxMusicTokenConditioner` takes music tokens as an input (coresponding to the codes of the VQVAE's
+    The `JukeboxMusicTokenConditioner` takes music tokens as an input (corresponding to the codes of the VQVAE's
     codebook) and upsamples it using a single layer of decoder convolution block (the same is used in the VQVAE).
     """
 
@@ -1633,20 +1637,20 @@ class JukeboxMusicTokenConditioner(nn.Module):
         )
         self.layer_norm = JukeboxLayerNorm(config.hidden_size)
 
-    def forward(self, music_tokens, raw_audio_conditionning=None):
+    def forward(self, music_tokens, raw_audio_conditioning=None):
         """
         Args:
             music_tokens (`torch.LongTensor`):
-                Music tokens form the uper level in range(nb_discrete_codes)
-            raw_audio_conditionning (`torch.LongTensor`, *optional*):
+                Music tokens form the upper level in range(nb_discrete_codes)
+            raw_audio_conditioning (`torch.LongTensor`, *optional*):
                 Audio used when primed sampling, raw audio information that conditions the generation
         """
-        if raw_audio_conditionning is None:
-            raw_audio_conditionning = 0.0
+        if raw_audio_conditioning is None:
+            raw_audio_conditioning = 0.0
         # Embed music_tokens
         music_tokens = music_tokens.long()
         hidden_states = self.embed_tokens(music_tokens)
-        hidden_states = hidden_states + raw_audio_conditionning
+        hidden_states = hidden_states + raw_audio_conditioning
 
         # Run conditioner
         hidden_states = hidden_states.permute(0, 2, 1)
@@ -1764,7 +1768,7 @@ class JukeboxPrior(PreTrainedModel):
     """
     The JukeboxPrior class, which is a wrapper around the various conditioning and the transformer. JukeboxPrior can be
     seen as language models trained on music. They model the next `music token` prediction task. If a (lyric) `encoderù
-    is defined, it also models the `next character` prediction on the lyrics. Can be conditionned on timing, artist,
+    is defined, it also models the `next character` prediction on the lyrics. Can be conditioned on timing, artist,
     genre, lyrics and codes from lower-levels Priors.
 
     Args:
@@ -1805,7 +1809,7 @@ class JukeboxPrior(PreTrainedModel):
         elif isinstance(module, JukeboxConditionalAutoregressive) and hasattr(module, "start_token"):
             module.start_token.data.normal_(mean=0.0, std=0.01 * init_scale)
         elif isinstance(module, JukeboxResConv1DBlock) and self.config.zero_out:
-            module.conv1d_2.weigth.data.zero_()
+            module.conv1d_2.weight.data.zero_()
             module.conv1d_2.bias.data.zero_()
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
@@ -1927,7 +1931,7 @@ class JukeboxPrior(PreTrainedModel):
             tokens_list = torch.zeros(
                 (labels.shape[0], self.nb_relevant_lyric_tokens), dtype=torch.long, device=labels.device
             )
-            indices_list = []  # whats the index of each current character in original array
+            indices_list = []  # what's the index of each current character in original array
             for idx in range(labels.shape[0]):
                 full_tokens = labels.clone()[:, 4 + self.metadata_embedding.max_nb_genres :]
                 total_length, offset, duration = labels[idx, 0], labels[idx, 1], labels[idx, 2]
@@ -2069,12 +2073,12 @@ class JukeboxPrior(PreTrainedModel):
             n_samples (`int`):
                 Number of samples to generate.
             music_tokens (`List[torch.LongTensor]`, *optional*):
-                Previously gemerated tokens at the current level. Used as context for the generation.
+                Previously generated tokens at the current level. Used as context for the generation.
             music_tokens_conds (`List[torch.FloatTensor]`, *optional*):
                 Upper-level music tokens generated by the previous prior model. Is `None` if the generation is not
-                conditionned on the upper-level tokens.
+                conditioned on the upper-level tokens.
             metadata (`List[torch.LongTensor]`, *optional*):
-                List containing the metatdata tensor with the artist, genre and the lyric tokens.
+                List containing the metadata tensor with the artist, genre and the lyric tokens.
             temp (`float`, *optional*, defaults to 1.0):
                 Sampling temperature.
             top_k (`int`, *optional*, defaults to 0):
@@ -2233,11 +2237,11 @@ class JukeboxPrior(PreTrainedModel):
             hidden_states (`torch.Tensor`):
                 Hidden states which should be raw audio
             metadata (`List[torch.LongTensor]`, *optional*):
-                List containing the metadata conditioning tensorwith the lyric and the metadata tokens.
+                List containing the metadata conditioning tensor with the lyric and the metadata tokens.
             decode (`bool`, *optional*, defaults to `False`):
                 Whether or not to decode the encoded to tokens.
             get_preds (`bool`, *optional*, defaults to `False`):
-                Whether or not to return the actual predicitons of the model.
+                Whether or not to return the actual predictions of the model.
         """
         batch_size = hidden_states.shape[0]
         music_tokens, *music_tokens_conds = self.encode(hidden_states, bs_chunks=batch_size)
@@ -2462,10 +2466,10 @@ class JukeboxModel(JukeboxPreTrainedModel):
             metas (`List[Any]`, *optional*):
                 Metadatas used to generate the `labels`
             chunk_size (`int`, *optional*, defaults to 32):
-                Size of a chunk of audio, used to fill up the memory in chuncks to prevent OOM erros. Bigger chunks
+                Size of a chunk of audio, used to fill up the memory in chunks to prevent OOM errors. Bigger chunks
                 means faster memory filling but more consumption.
             sampling_temperature (`float`, *optional*, defaults to 0.98):
-                Temperature used to ajust the randomness of the sampling.
+                Temperature used to adjust the randomness of the sampling.
             lower_batch_size (`int`, *optional*, defaults to 16):
                 Maximum batch size for the lower level priors
             max_batch_size (`int`, *optional*, defaults to 16):
@@ -2661,3 +2665,6 @@ class JukeboxModel(JukeboxPreTrainedModel):
             )
         music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
         return music_tokens
+
+
+__all__ = ["JukeboxModel", "JukeboxPreTrainedModel", "JukeboxVQVAE", "JukeboxPrior"]

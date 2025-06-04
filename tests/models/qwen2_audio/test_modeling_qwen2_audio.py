@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -131,19 +130,6 @@ class Qwen2AudioModelTester:
         }
         return config, inputs_dict
 
-    def create_and_check_qwen2audio_model_fp16_forward(self, config, input_ids, pixel_values, attention_mask):
-        model = Qwen2AudioForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                pixel_values=pixel_values.to(torch.bfloat16),
-                return_dict=True,
-            )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
 
 @require_torch
 class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
@@ -168,6 +154,10 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, unittest.Tes
 
     @unittest.skip(reason="Compile not yet supported because in Qwen2Audio models")
     def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip(reason="Qwen2 Audio does not support right padding.")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
     @require_torch_sdpa

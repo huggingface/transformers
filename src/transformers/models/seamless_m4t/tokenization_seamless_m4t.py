@@ -29,6 +29,7 @@ from ...tokenization_utils import (
 )
 from ...tokenization_utils_base import AddedToken
 from ...utils import PaddingStrategy, logging
+from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
@@ -40,6 +41,7 @@ SPIECE_UNDERLINE = "▁"
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
 
+@requires(backends=("sentencepiece",))
 class SeamlessM4TTokenizer(PreTrainedTokenizer):
     """
     Construct a SeamlessM4T tokenizer.

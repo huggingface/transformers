@@ -92,6 +92,11 @@ Use [`YolosImageProcessor`] for preparing images (and optional targets) for the 
 
 [[autodoc]] YolosImageProcessor
     - preprocess
+
+## YolosImageProcessorFast
+
+[[autodoc]] YolosImageProcessorFast
+    - preprocess
     - pad
     - post_process_object_detection
 

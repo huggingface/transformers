@@ -61,11 +61,11 @@ class WatermarkDetectorOutput:
             Array containing confidence scores of a text being machine-generated for each element in the batch.
     """
 
-    num_tokens_scored: np.array = None
-    num_green_tokens: np.array = None
-    green_fraction: np.array = None
-    z_score: np.array = None
-    p_value: np.array = None
+    num_tokens_scored: Optional[np.array] = None
+    num_green_tokens: Optional[np.array] = None
+    green_fraction: Optional[np.array] = None
+    z_score: Optional[np.array] = None
+    p_value: Optional[np.array] = None
     prediction: Optional[np.array] = None
     confidence: Optional[np.array] = None
 
@@ -538,7 +538,7 @@ class SynthIDTextWatermarkDetector:
         context_repetition_mask = self.logits_processor.compute_context_repetition_mask(
             input_ids=tokenized_outputs,
         )
-        # context repitition mask shape [batch_size, output_len - (ngram_len - 1)]
+        # context repetition mask shape [batch_size, output_len - (ngram_len - 1)]
 
         combined_mask = context_repetition_mask * eos_token_mask
 

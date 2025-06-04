@@ -111,7 +111,7 @@ class TFTableQuestionAnsweringOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor = None
+    logits: Optional[tf.Tensor] = None
     logits_aggregation: tf.Tensor | None = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
@@ -170,10 +170,10 @@ class TFTapasEmbeddings(keras.layers.Layer):
 
     def call(
         self,
-        input_ids: tf.Tensor = None,
-        position_ids: tf.Tensor = None,
-        token_type_ids: tf.Tensor = None,
-        inputs_embeds: tf.Tensor = None,
+        input_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         training: bool = False,
     ) -> tf.Tensor:
         """
@@ -2344,11 +2344,11 @@ def _calculate_expected_result(
     if avg_approximation == AverageApproximationFunction.RATIO:
         average_result = sum_result / (count_result + EPSILON_ZERO_DIVISION)
     elif avg_approximation == AverageApproximationFunction.FIRST_ORDER:
-        # The sum of all probabilities exept that correspond to other cells
+        # The sum of all probabilities except that correspond to other cells
         ex = tf.reduce_sum(scaled_probability_per_cell, axis=1, keepdims=True) - scaled_probability_per_cell + 1
         average_result = tf.reduce_sum(numeric_values_masked * scaled_probability_per_cell / ex, axis=1)
     elif avg_approximation == AverageApproximationFunction.SECOND_ORDER:
-        # The sum of all probabilities exept that correspond to other cells
+        # The sum of all probabilities except that correspond to other cells
         ex = tf.reduce_sum(scaled_probability_per_cell, axis=1, keepdims=True) - scaled_probability_per_cell + 1
         pointwise_var = scaled_probability_per_cell * (1 - scaled_probability_per_cell)
         var = tf.reduce_sum(pointwise_var, axis=1, keepdims=True) - pointwise_var
