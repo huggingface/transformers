@@ -148,8 +148,8 @@ class Glm4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("xpu", 3): [
-                    'Hello I am doing a project on the history of the internet and I need to know what the first website was and who',
-                    'Hi today I am going to tell you about the most common disease in the world. This disease is called diabetes'
+                    "Hello I am doing a project on the history of the internet and I need to know what the first website was and who",
+                    "Hi today I am going to tell you about the most common disease in the world. This disease is called diabetes",
                 ],
                 ("cuda", 7): [],
                 ("cuda", 8): [

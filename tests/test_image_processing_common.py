@@ -31,7 +31,6 @@ from transformers.testing_utils import (
     is_flaky,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     require_vision,
     slow,
     torch_device,

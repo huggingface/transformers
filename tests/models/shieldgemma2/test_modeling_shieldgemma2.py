@@ -23,7 +23,6 @@ from transformers import is_torch_available
 from transformers.testing_utils import (
     cleanup,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
