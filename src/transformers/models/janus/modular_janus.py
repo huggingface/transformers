@@ -14,8 +14,9 @@
 # limitations under the License.
 
 import copy
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
