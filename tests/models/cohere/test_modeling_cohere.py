@@ -19,6 +19,7 @@ from transformers import CohereConfig, is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
+    require_torch_multi_accelerator,
     require_torch_multi_gpu,
     require_torch_sdpa,
     slow,
@@ -203,7 +204,7 @@ class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 @require_torch
 @slow
 class CohereIntegrationTest(unittest.TestCase):
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     @require_bitsandbytes
     def test_batched_4bit(self):
         model_id = "CohereForAI/c4ai-command-r-v01-4bit"

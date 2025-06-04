@@ -19,10 +19,12 @@ import requests
 from transformers.testing_utils import (
     is_flaky,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     require_torchvision,
     require_vision,
     slow,
+    torch_device,
 )
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
@@ -379,7 +381,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, atol=1, rtol=1)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_torchvision
     # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_fast_processor_equivalence_cpu_gpu_coco_detection_annotations
     def test_fast_processor_equivalence_cpu_gpu_coco_detection_annotations(self):
@@ -393,8 +395,8 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         processor = self.image_processor_list[1]()
         # 1. run processor on CPU
         encoding_cpu = processor(images=image, annotations=target, return_tensors="pt", device="cpu")
-        # 2. run processor on GPU
-        encoding_gpu = processor(images=image, annotations=target, return_tensors="pt", device="cuda")
+        # 2. run processor on accelerator
+        encoding_gpu = processor(images=image, annotations=target, return_tensors="pt", device=torch_device)
 
         # verify pixel values
         self.assertEqual(encoding_cpu["pixel_values"].shape, encoding_gpu["pixel_values"].shape)

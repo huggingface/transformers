@@ -18,6 +18,7 @@ import unittest
 from transformers import is_torch_available
 from transformers.testing_utils import (
     require_read_token,
+    require_torch_large_accelerator,
     require_torch_large_gpu,
     slow,
     torch_device,
@@ -34,8 +35,8 @@ if is_torch_available():
 
 
 @slow
-@require_torch_large_gpu
-@require_read_token
+@require_torch_large_accelerator
+# @require_read_token
 class Llama4IntegrationTest(unittest.TestCase):
     model_id = "meta-llama/Llama-4-Scout-17B-16E"
 

@@ -20,6 +20,7 @@ from transformers import AddedToken, AutoModelForCausalLM, AutoModelForSeq2SeqLM
 from transformers.testing_utils import (
     require_gguf,
     require_read_token,
+    require_torch_accelerator,
     require_torch_gpu,
     slow,
     torch_device,
@@ -35,7 +36,7 @@ if is_gguf_available():
 
 
 @require_gguf
-@require_torch_gpu
+@require_torch_accelerator
 @slow
 class GgufQuantizationTests(unittest.TestCase):
     """
@@ -107,7 +108,7 @@ class GgufQuantizationTests(unittest.TestCase):
 
 
 @require_gguf
-@require_torch_gpu
+@require_torch_accelerator
 @slow
 class GgufIntegrationTests(unittest.TestCase):
     """
@@ -263,7 +264,7 @@ class GgufIntegrationTests(unittest.TestCase):
 
 
 @require_gguf
-@require_torch_gpu
+@require_torch_accelerator
 @slow
 class GgufModelTests(unittest.TestCase):
     mistral_model_id = "TheBloke/Mistral-7B-Instruct-v0.2-GGUF"

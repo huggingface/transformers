@@ -16,12 +16,14 @@ import unittest
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GenerationConfig, QuarkConfig
 from transformers.testing_utils import (
+    backend_empty_cache,
     is_torch_available,
     require_accelerate,
     require_quark,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
+    torch_device,
 )
 from transformers.utils.import_utils import is_quark_available
 
@@ -83,7 +85,7 @@ class QuarkTest(unittest.TestCase):
         avoid unexpected behaviors. Please see: https://discuss.pytorch.org/t/how-can-we-release-gpu-memory-cache/14530/27
         """
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     def test_memory_footprint(self):
         mem_quantized = self.quantized_model.get_memory_footprint()

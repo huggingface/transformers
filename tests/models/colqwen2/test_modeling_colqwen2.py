@@ -27,7 +27,7 @@ from transformers import is_torch_available
 from transformers.models.colqwen2.configuration_colqwen2 import ColQwen2Config
 from transformers.models.colqwen2.modeling_colqwen2 import ColQwen2ForRetrieval, ColQwen2ForRetrievalOutput
 from transformers.models.colqwen2.processing_colqwen2 import ColQwen2Processor
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import backend_empty_cache, require_torch, require_vision, slow, torch_device
 
 
 if is_torch_available():
@@ -283,7 +283,7 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     @slow
     def test_model_integration_test(self):
