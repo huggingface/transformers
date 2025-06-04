@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """video processor class for Qwen2-VL."""
+
 import math
 from typing import List, Optional, Union
 
@@ -59,8 +60,13 @@ if is_torchvision_available():
 
 
 def smart_resize(
-        t: int,  height: int, width: int, t_factor: int = 2, factor: int = 28,
-        min_pixels: int = 112 * 112, max_pixels: int = 14 * 14 * 4 * 15000,
+    t: int,
+    height: int,
+    width: int,
+    t_factor: int = 2,
+    factor: int = 28,
+    min_pixels: int = 112 * 112,
+    max_pixels: int = 14 * 14 * 4 * 15000,
 ):
     """
     copy from qwen2vl
@@ -96,6 +102,7 @@ def smart_resize(
         w_bar = math.ceil(width * beta / factor) * factor
 
     return h_bar, w_bar
+
 
 if is_torch_available():
     import torch
@@ -179,7 +186,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
                     t_factor=temporal_patch_size,
                     factor=patch_size * merge_size,
                     min_pixels=min_pixels,
-                    max_pixels=max_pixels
+                    max_pixels=max_pixels,
                 )
                 stacked_videos = F.resize(
                     stacked_videos, size=(resized_height, resized_width), interpolation=interpolation
@@ -191,7 +198,6 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         grouped_videos, grouped_videos_index = group_videos_by_shape(resized_videos)
         processed_videos_grouped = {}
         processed_grids = {}
-
 
         for shape, stacked_videos in grouped_videos.items():
             resized_height, resized_width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)

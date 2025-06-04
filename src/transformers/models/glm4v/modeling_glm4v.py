@@ -643,7 +643,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
         video_grid_thw: Optional[torch.LongTensor] = None,
-        second_per_grid_ts: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -668,6 +667,8 @@ class Glm4vModel(Glm4vPreTrainedModel):
                 We also have some important parameters:
                 fps (Frames Per Second): The video's frame rate, set to 1. This means one frame is processed each second.
                 tokens_per_second: This is a crucial parameter. It dictates how many "time-steps" or "temporal tokens" are conceptually packed into a one-second interval of the video. In this case, we have 25 tokens per second. So each second of the video will be represented with 25 separate time points. It essentially defines the temporal granularity.
+                temporal_patch_size: The number of frames that compose one temporal patch. Here, it's 2 frames.
+                interval: The step size for the temporal position IDs, calculated as tokens_per_second * temporal_patch_size / fps. In this case, 25 * 2 / 1 = 50. This means that each temporal patch will be have a difference of 50 in the temporal position IDs.
                 input_ids: [V V V V V V V V V V V V T T T T T], here V is for vision.
                 vision temporal position_ids: [0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]
                 vision height position_ids: [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1]
@@ -685,8 +686,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
                 The temporal, height and width of feature shape of each image in LLM.
             video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
                 The temporal, height and width of feature shape of each video in LLM.
-            second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
-                The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -770,7 +769,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
                         image_index += 1
                         video_frame_num = 1
 
-
                     elif modality_type == "video":
                         t, h, w = (
                             video_frame_num,
@@ -782,18 +780,19 @@ class Glm4vModel(Glm4vPreTrainedModel):
                             t,
                             h.item() // spatial_merge_size,
                             w.item() // spatial_merge_size,
-
                         )
+
                         for t_idx in range(llm_grid_t):
-                            t_index = torch.tensor(t_idx).view(-1, 1).expand(
-                                -1, llm_grid_h * llm_grid_w).flatten()
-                            h_index = torch.arange(llm_grid_h).view(
-                                1, -1, 1).expand(1, -1, llm_grid_w).flatten()
-                            w_index = torch.arange(llm_grid_w).view(
-                                1, 1, -1).expand(1, llm_grid_h, -1).flatten()
-                            llm_pos_ids_list.append(
-                                torch.stack([t_index, h_index, w_index]) + st_idx)
+                            t_index = torch.tensor(t_idx).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w).flatten()
+
+                            h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(1, -1, llm_grid_w).flatten()
+
+                            w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(1, llm_grid_h, -1).flatten()
+
+                            llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + st_idx)
+
                         video_index += 1
+
                         video_frame_num += 1
 
                     else:
@@ -879,7 +878,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
         video_grid_thw: Optional[torch.LongTensor] = None,
         rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        second_per_grid_ts: Optional[torch.Tensor] = None,
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, Glm4vModelOutputWithPast]:
         r"""
@@ -893,8 +891,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
             The temporal, height and width of feature shape of each video in LLM.
         rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
             The rope index difference between sequence length and multimodal rope.
-        second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
-            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -933,7 +929,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
                         f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
                     )
 
-                mask = input_ids == self.config.image_token_id # CogVLM use image_token_id for video
+                mask = input_ids == self.config.image_token_id  # CogVLM use image_token_id for video
                 mask_unsqueezed = mask.unsqueeze(-1)
                 mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
                 video_mask = mask_expanded.to(inputs_embeds.device)
@@ -967,7 +963,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
                     input_ids,
                     image_grid_thw,
                     video_grid_thw,
-                    second_per_grid_ts=second_per_grid_ts,
                     attention_mask=attention_mask_tensor,
                 )
                 self.rope_deltas = rope_deltas
@@ -985,6 +980,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
                     delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+
         outputs = self.language_model(
             input_ids=None,
             position_ids=position_ids,
@@ -1589,7 +1585,6 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
         video_grid_thw: Optional[torch.LongTensor] = None,
         rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        second_per_grid_ts: Optional[torch.Tensor] = None,
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, Glm4vCausalLMOutputWithPast]:
         r"""
@@ -1607,8 +1602,6 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
             The temporal, height and width of feature shape of each video in LLM.
         rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
             The rope index difference between sequence length and multimodal rope.
-        second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
-            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
 
         Example:
 
@@ -1653,7 +1646,6 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
             pixel_values_videos=pixel_values_videos,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
-            second_per_grid_ts=second_per_grid_ts,
             position_ids=position_ids,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
@@ -1699,7 +1691,6 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
         pixel_values_videos=None,
         image_grid_thw=None,
         video_grid_thw=None,
-        second_per_grid_ts=None,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -1715,12 +1706,11 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
             pixel_values_videos=pixel_values_videos,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
-            second_per_grid_ts=second_per_grid_ts,
             use_cache=use_cache,
             **kwargs,
         )
 
-        # Qwen2-5-VL position_ids are prepareed with rope_deltas in forward
+        # GLM-4V position_ids are prepareed with rope_deltas in forward
         model_inputs["position_ids"] = None
 
         if cache_position[0] != 0:

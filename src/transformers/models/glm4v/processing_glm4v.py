@@ -5,7 +5,7 @@
 #                          modular_glm4v.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2025 The GLM4 & ZhipuAI team and HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The ZhipuAI Inc. team and HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
 # and OPT implementations in this library. It has been modified from its
@@ -31,7 +31,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...video_utils import VideoInput
-import torch
+
 
 class Glm4vVideosProcessorKwargs(VideosKwargs, total=False):
     fps: Union[List[float], float]
@@ -97,11 +97,46 @@ class Glm4vProcessor(ProcessorMixin):
         images: ImageInput = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         videos: VideoInput = None,
-        timestamps: List =None,
+        timestamps: Optional[List[int]] = None,
         **kwargs: Unpack[Glm4vProcessorKwargs],
     ) -> BatchFeature:
+        """
+        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
+        and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] if `text` is not `None` to encode
+        the text.
 
-        self.frame_timestamps = timestamps
+        Args:
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+            text (`str`, `List[str]`, `List[List[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
+                tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
+            timestamps (`List[int]`):
+                The timestamps of each frame in the video. This is used to generate the video grid in LLM.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **pixel_values_videos** -- Pixel values of videos to be fed to a model. Returned when `videos` is not `None`.
+            - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
+            - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
+        """
         output_kwargs = self._merge_kwargs(
             Glm4vProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
@@ -136,7 +171,7 @@ class Glm4vProcessor(ProcessorMixin):
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
         if video_grid_thw is not None:
-            merge_length = self.video_processor.merge_size ** 2
+            merge_length = self.video_processor.merge_size**2
             video_index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
@@ -144,10 +179,10 @@ class Glm4vProcessor(ProcessorMixin):
                     video_structure = ""
 
                     selected_timestamps = []
-                    for idx in range(0, len(self.frame_timestamps), 2):
+                    for idx in range(0, len(timestamps), 2):
                         if len(selected_timestamps) >= num_frames:
                             break
-                        selected_timestamps.append(self.frame_timestamps[idx])
+                        selected_timestamps.append(timestamps[idx])
 
                     while len(selected_timestamps) < num_frames:
                         selected_timestamps.append(selected_timestamps[-1] if selected_timestamps else 0)
@@ -160,7 +195,6 @@ class Glm4vProcessor(ProcessorMixin):
                     video_structure += ""
                     text[i] = text[i].replace(self.video_token, video_structure, 1)
                     video_index += 1
-
                 for frame_idx in range(len(video_grid_thw)):
                     if self.image_token in text[i]:
                         num_image_tokens = video_grid_thw[frame_idx].prod().item() // merge_length

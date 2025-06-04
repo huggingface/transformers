@@ -774,45 +774,27 @@ class Glm4vModel(Glm4vPreTrainedModel):
                         image_index += 1
                         video_frame_num = 1
 
-
                     elif modality_type == "video":
-
                         t, h, w = (
-
                             video_frame_num,
-
                             video_grid_thw[video_index][1],
-
                             video_grid_thw[video_index][2],
-
                         )
 
                         llm_grid_t, llm_grid_h, llm_grid_w = (
-
                             t,
-
                             h.item() // spatial_merge_size,
-
                             w.item() // spatial_merge_size,
-
                         )
 
                         for t_idx in range(llm_grid_t):
-                            t_index = torch.tensor(t_idx).view(-1, 1).expand(
+                            t_index = torch.tensor(t_idx).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w).flatten()
 
-                                -1, llm_grid_h * llm_grid_w).flatten()
+                            h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(1, -1, llm_grid_w).flatten()
 
-                            h_index = torch.arange(llm_grid_h).view(
+                            w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(1, llm_grid_h, -1).flatten()
 
-                                1, -1, 1).expand(1, -1, llm_grid_w).flatten()
-
-                            w_index = torch.arange(llm_grid_w).view(
-
-                                1, 1, -1).expand(1, llm_grid_h, -1).flatten()
-
-                            llm_pos_ids_list.append(
-
-                                torch.stack([t_index, h_index, w_index]) + st_idx)
+                            llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + st_idx)
 
                         video_index += 1
 
@@ -952,7 +934,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
                         f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
                     )
 
-                mask = input_ids == self.config.image_token_id # CogVLM use image_token_id for video
+                mask = input_ids == self.config.image_token_id  # CogVLM use image_token_id for video
                 mask_unsqueezed = mask.unsqueeze(-1)
                 mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
                 video_mask = mask_expanded.to(inputs_embeds.device)
@@ -1201,7 +1183,6 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             pixel_values_videos=pixel_values_videos,
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
-            second_per_grid_ts=second_per_grid_ts,
             position_ids=position_ids,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
@@ -1233,6 +1214,47 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             attentions=outputs.attentions,
             rope_deltas=outputs.rope_deltas,
         )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        cache_position=None,
+        position_ids=None,
+        use_cache=True,
+        pixel_values=None,
+        pixel_values_videos=None,
+        image_grid_thw=None,
+        video_grid_thw=None,
+        **kwargs,
+    ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            cache_position=cache_position,
+            position_ids=position_ids,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        # GLM-4V position_ids are prepareed with rope_deltas in forward
+        model_inputs["position_ids"] = None
+
+        if cache_position[0] != 0:
+            model_inputs["pixel_values"] = None
+            model_inputs["pixel_values_videos"] = None
+
+        return model_inputs
 
 
 class Glm4vVideosProcessorKwargs(Qwen2_5_VLVideosProcessorKwargs):
@@ -1276,12 +1298,12 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
         self.video_token = "<|video|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
 
     def __call__(
-            self,
-            images: ImageInput = None,
-            text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-            videos: VideoInput = None,
-            timestamps: List = None,
-            **kwargs: Unpack[Glm4vProcessorKwargs],
+        self,
+        images: ImageInput = None,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        videos: VideoInput = None,
+        timestamps: Optional[List[int]] = None,
+        **kwargs: Unpack[Glm4vProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -1319,7 +1341,6 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
             - **pixel_values_videos** -- Pixel values of videos to be fed to a model. Returned when `videos` is not `None`.
             - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
             - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
-            - **second_per_grid_ts** -- List of video seconds per time grid. Returned when `videos` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
             Glm4vProcessorKwargs,
@@ -1345,7 +1366,7 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
 
         text = text.copy()  # below lines change text in-place
         if image_grid_thw is not None:
-            merge_length = self.image_processor.merge_size ** 2
+            merge_length = self.image_processor.merge_size**2
             index = 0
             for i in range(len(text)):
                 while self.image_token in text[i]:
@@ -1355,7 +1376,7 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
         if video_grid_thw is not None:
-            merge_length = self.video_processor.merge_size ** 2
+            merge_length = self.video_processor.merge_size**2
             video_index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
@@ -1363,10 +1384,10 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
                     video_structure = ""
 
                     selected_timestamps = []
-                    for idx in range(0, len(self.frame_timestamps), 2):
+                    for idx in range(0, len(timestamps), 2):
                         if len(selected_timestamps) >= num_frames:
                             break
-                        selected_timestamps.append(self.frame_timestamps[idx])
+                        selected_timestamps.append(timestamps[idx])
 
                     while len(selected_timestamps) < num_frames:
                         selected_timestamps.append(selected_timestamps[-1] if selected_timestamps else 0)

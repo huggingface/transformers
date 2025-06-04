@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The ZhipuAI Inc. team and HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
 # and OPT implementations in this library. It has been modified from its
@@ -51,6 +51,7 @@ from ...video_utils import VideoInput, make_batched_videos
 
 logger = logging.get_logger(__name__)
 
+
 def smart_resize(
     height: int, width: int, factor: int = 28, min_pixels: int = 56 * 56, max_pixels: int = 14 * 14 * 4 * 1280
 ):
@@ -84,7 +85,7 @@ def smart_resize(
 
 class Glm4vImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a Qwen2-VL image processor that dynamically resizes images based on the original images.
+    Constructs a GLM-4V image processor that dynamically resizes images based on the original images.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
