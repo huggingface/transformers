@@ -53,8 +53,8 @@ image2 = Image.open(requests.get(url_image2, stream=True).raw)
 
 images = [image1, image2]
 
-processor = AutoImageProcessor.from_pretrained("stevenbucaille/lightglue_superpoint")
-model = AutoModel.from_pretrained("stevenbucaille/lightglue_superpoint")
+processor = AutoImageProcessor.from_pretrained("ETH-CVG/lightglue_superpoint")
+model = AutoModel.from_pretrained("ETH-CVG/lightglue_superpoint")
 
 inputs = processor(images, return_tensors="pt")
 with torch.no_grad():
