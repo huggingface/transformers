@@ -476,9 +476,11 @@ def is_torch_cuda_available():
     else:
         return False
 
+
 def is_cuda_platform():
     if is_torch_available():
         import torch
+
         torch.version.cuda is not None
     else:
         return False
@@ -487,6 +489,7 @@ def is_cuda_platform():
 def is_rocm_platform():
     if is_torch_available():
         import torch
+
         torch.version.rocm is not None
     else:
         return False
