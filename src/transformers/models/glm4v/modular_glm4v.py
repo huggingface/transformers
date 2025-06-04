@@ -320,16 +320,16 @@ class Glm4vVisionEmbeddings(nn.Module):
         self, lengths: torch.Tensor, image_shapes: torch.Tensor, h_coords: torch.Tensor, w_coords: torch.Tensor
     ):
         """
-        Using 2D interpolation to adapt position encoding
+        Adapt position encoding using 2D interpolation.
 
         Args:
-            lengths: List or Tensor of sequence lengths for each image [batch_size]
-            image_shapes: Image shape Tensor [batch_size, 3] (t h w) where index 1 is H, index 2 is W
-            h_coords: h coordinate for each patch Tensor [total_seq]
-            w_coords: w coordinate for each patch Tensor [total_seq]
+            lengths (torch.Tensor): Sequence lengths for each image in the batch.
+            image_shapes (torch.Tensor): Tensor of shape [batch_size, 3] representing the image shapes (t, h, w).
+            h_coords (torch.Tensor): Tensor of shape [total_seq] representing the h coordinate for each patch.
+            w_coords (torch.Tensor): Tensor of shape [total_seq] representing the w coordinate for each patch.
 
         Returns:
-            adapted_pos_embed: Adapted position encoding Tensor [total_seq, hidden_size]
+            torch.Tensor: Adapted position encoding tensor of shape [total_seq, hidden_size].
         """
         pos_embed_weight = self.position_embedding.weight
         hidden_size = pos_embed_weight.shape[1]
@@ -346,24 +346,18 @@ class Glm4vVisionEmbeddings(nn.Module):
 
         orig_size_sq = pos_embed_weight.shape[0]
         orig_size = int(orig_size_sq**0.5)
-        pos_embed_2d = pos_embed_weight.view(orig_size, orig_size, hidden_size)
-        pos_embed_2d = pos_embed_2d.permute(2, 0, 1).unsqueeze(0)
-        target_h_list = [image_shapes[i, 1].repeat(lengths[i]) for i in range(len(lengths))]
-        target_w_list = [image_shapes[i, 2].repeat(lengths[i]) for i in range(len(lengths))]
-        target_h = torch.cat(target_h_list)
-        target_w = torch.cat(target_w_list)
-        h_coords_float = h_coords.float()
-        w_coords_float = w_coords.float()
-        target_h_float = target_h.float()
-        target_w_float = target_w.float()
-        norm_w = ((w_coords_float + 0.5) / target_w_float) * 2 - 1
-        norm_h = ((h_coords_float + 0.5) / target_h_float) * 2 - 1
-        grid = torch.stack((norm_w, norm_h), dim=-1)
-        grid = grid.unsqueeze(0).unsqueeze(2)
-        pos_embed_2d_fp32 = pos_embed_2d.float()
-        grid_fp32 = grid.float()
+
+        pos_embed_2d = pos_embed_weight.view(orig_size, orig_size, hidden_size).permute(2, 0, 1).unsqueeze(0).float()
+        target_h = torch.cat([image_shapes[i, 1].repeat(lengths[i]) for i in range(len(lengths))]).float()
+        target_w = torch.cat([image_shapes[i, 2].repeat(lengths[i]) for i in range(len(lengths))]).float()
+
+        h_coords = h_coords.to(dtype=torch.float32)
+        w_coords = w_coords.to(dtype=torch.float32)
+        norm_w = ((w_coords + 0.5) / target_w) * 2 - 1
+        norm_h = ((h_coords + 0.5) / target_h) * 2 - 1
+        grid = torch.stack((norm_w, norm_h), dim=-1).unsqueeze(0).unsqueeze(2)
         interpolated_embed_fp32 = F.grid_sample(
-            pos_embed_2d_fp32, grid_fp32, mode="bicubic", align_corners=False, padding_mode="border"
+            pos_embed_2d, grid, mode="bicubic", align_corners=False, padding_mode="border"
         )
         adapted_pos_embed_fp32 = interpolated_embed_fp32.squeeze(0).squeeze(-1).permute(1, 0)
         adapted_pos_embed = adapted_pos_embed_fp32.to(pos_embed_weight.dtype)
