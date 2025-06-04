@@ -92,7 +92,7 @@ class Glm4vFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
 class Glm4vImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
     resample = PILImageResampling.BICUBIC
-    size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
+    size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 15000}
     do_rescale = True
     do_normalize = True
     image_mean = OPENAI_CLIP_MEAN
@@ -101,26 +101,18 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
-    min_pixels = None
-    max_pixels = None
     valid_kwargs = Glm4vFastImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
 
     def __init__(self, **kwargs: Unpack[Glm4vFastImageProcessorKwargs]):
         size = kwargs.pop("size", None)
-        min_pixels = kwargs.pop("min_pixels", None)
-        max_pixels = kwargs.pop("max_pixels", None)
         if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
         else:
             size = self.size
         # backward compatibility: override size with min_pixels and max_pixels if they are provided
-        if min_pixels is not None:
-            size["shortest_edge"] = min_pixels
-        if max_pixels is not None:
-            size["longest_edge"] = max_pixels
 
-        super().__init__(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
+        super().__init__(size=size, **kwargs)
 
     def _preprocess(
         self,

@@ -41,6 +41,10 @@ from ...utils import (
     is_torchvision_v2_available,
     is_vision_available,
 )
+
+if is_torch_available():
+    import torch
+
 from ...utils.import_utils import requires
 from ...video_processing_utils import (
     BASE_VIDEO_PROCESSOR_DOCSTRING,
@@ -68,12 +72,9 @@ def smart_resize(
     min_pixels: int = 112 * 112,
     max_pixels: int = 14 * 14 * 4 * 15000,
 ):
-    """
-    copy from qwen2vl
-    https://github.com/huggingface/transformers/src/transformers/models/qwen2_vl/image_processing_qwen2_vl.py
-    Rescales the image so that the following conditions are met:
+    """Rescales the image so that the following conditions are met:
 
-    1. Both dimensions (h and w) are divisible by 'factor'.
+    1. Both dimensions (height and width) are divisible by 'factor'.
 
     2. The total number of pixels is within the range ['min_pixels', 'max_pixels'].
 
@@ -103,27 +104,17 @@ def smart_resize(
 
     return h_bar, w_bar
 
-
-if is_torch_available():
-    import torch
-
-
 class Glm4vVideoProcessorInitKwargs(VideosKwargs):
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
+    size: SizeDict
     patch_size: Optional[int]
     temporal_patch_size: Optional[int]
     merge_size: Optional[int]
 
 
 @add_start_docstrings(
-    "Constructs a fast Qwen2-VL image processor that dynamically resizes videos based on the original videos.",
+    "Constructs a fast GLM-4V image processor that dynamically resizes videos based on the original videos.",
     BASE_VIDEO_PROCESSOR_DOCSTRING,
     """
-        min_pixels (`int`, *optional*, defaults to `56 * 56`):
-            The min pixels of the image to resize the image.
-        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
-            The max pixels of the image to resize the image.
         patch_size (`int`, *optional*, defaults to 14):
             The spacial patch size of the vision encoder.
         temporal_patch_size (`int`, *optional*, defaults to 2):
@@ -135,15 +126,13 @@ class Glm4vVideoProcessorInitKwargs(VideosKwargs):
 @requires(backends=("torchvision",))
 class Glm4vVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
-    size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
+    size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 15000}
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
     do_resize = True
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    min_pixels = 56 * 56
-    max_pixels = 28 * 28 * 1280
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
@@ -152,7 +141,6 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
 
     def __init__(self, **kwargs: Unpack[Glm4vVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
-        self.size = {"shortest_edge": self.min_pixels, "longest_edge": self.max_pixels}
 
     def _preprocess(
         self,
@@ -166,8 +154,6 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         do_normalize: bool,
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
-        min_pixels: Optional[int] = None,
-        max_pixels: Optional[int] = None,
         patch_size: Optional[int] = None,
         temporal_patch_size: Optional[int] = None,
         merge_size: Optional[int] = None,
@@ -184,9 +170,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
                     height=height,
                     width=width,
                     t_factor=temporal_patch_size,
-                    factor=patch_size * merge_size,
-                    min_pixels=min_pixels,
-                    max_pixels=max_pixels,
+                    factor=patch_size * merge_size
                 )
                 stacked_videos = F.resize(
                     stacked_videos, size=(resized_height, resized_width), interpolation=interpolation

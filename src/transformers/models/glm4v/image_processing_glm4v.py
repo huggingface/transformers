@@ -46,7 +46,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, logging
-from ...video_utils import VideoInput, make_batched_videos
+from ...video_utils import VideoInput
 
 
 logger = logging.get_logger(__name__)
@@ -90,8 +90,17 @@ class Glm4vImageProcessor(BaseImageProcessor):
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions.
-        size (`Dict[str, int]`, *optional*, defaults to `{"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}`):
-            Size of the image after resizing. `shortest_edge` and `longest_edge` keys must be present.
+        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 15000}`):
+            Size of the image's `(height, width)` dimensions after resizing. Can be overridden by the `size` parameter
+            in the `preprocess` method. Available options are:
+                - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
+                    Do NOT keep the aspect ratio.
+                - `{"shortest_edge": int, "longest_edge": int}`: The image will be resized to a maximum size respecting
+                    the aspect ratio and keeping the shortest edge less or equal to `shortest_edge` and the longest edge
+                    less or equal to `longest_edge`.
+                - `{"max_height": int, "max_width": int}`: The image will be resized to the maximum size respecting the
+                    aspect ratio and keeping the height less or equal to `max_height` and the width less or equal to
+                    `max_width`.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use when resizing the image.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -106,10 +115,6 @@ class Glm4vImageProcessor(BaseImageProcessor):
             Standard deviation to use if normalizing the image. This is a float or list of floats for each channel in the image.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
-        min_pixels (`int`, *optional*, defaults to `56 * 56`):
-            The min pixels of the image to resize the image.
-        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
-            The max pixels of the image to resize the image.
         patch_size (`int`, *optional*, defaults to 14):
             The spatial patch size of the vision encoder.
         temporal_patch_size (`int`, *optional*, defaults to 2):
@@ -140,7 +145,7 @@ class Glm4vImageProcessor(BaseImageProcessor):
         if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
         else:
-            size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
+            size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 15000}
         self.min_pixels = size["shortest_edge"]
         self.max_pixels = size["longest_edge"]
         self.size = size
@@ -298,8 +303,6 @@ class Glm4vImageProcessor(BaseImageProcessor):
         videos: VideoInput = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
-        min_pixels: Optional[int] = None,
-        max_pixels: Optional[int] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
@@ -341,9 +344,6 @@ class Glm4vImageProcessor(BaseImageProcessor):
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
                 `True`.
-            min_pixels (`int`, *optional*, defaults to `self.min_pixels`):
-                The min pixels of the image to resize the image.
-            max_pixels (`int`, *optional*, defaults to `self.max_pixels`):
                 The max pixels of the image to resize the image.
             patch_size (`int`, *optional*, defaults to `self.patch_size`):
                 The spatial patch size of the vision encoder.
@@ -373,18 +373,13 @@ class Glm4vImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
 
         """
-        min_pixels = min_pixels if min_pixels is not None else self.min_pixels
-        max_pixels = max_pixels if max_pixels is not None else self.max_pixels
 
-        if size is not None:
-            if "shortest_edge" not in size or "longest_edge" not in size:
-                raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-            min_pixels = size["shortest_edge"]
-        elif min_pixels is not None and max_pixels is not None:
-            # backward compatibility: override size with min_pixels and max_pixels if they are provided
-            size = {"shortest_edge": min_pixels, "longest_edge": max_pixels}
+        if size is not None and ("shortest_edge" not in size or "longest_edge" not in size):
+            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
         else:
-            size = {**self.size}
+            size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 15000}
+            self.min_pixels = size["shortest_edge"]
+            self.max_pixels = size["longest_edge"]
 
         do_resize = do_resize if do_resize is not None else self.do_resize
 
@@ -461,8 +456,8 @@ class Glm4vImageProcessor(BaseImageProcessor):
         Returns:
             `int`: Number of image patches per image.
         """
-        min_pixels = images_kwargs.get("min_pixels", None) or self.size["shortest_edge"]
-        max_pixels = images_kwargs.get("max_pixels", None) or self.size["longest_edge"]
+        min_pixels = images_kwargs.get("shortest_edge", None) or self.size["shortest_edge"]
+        max_pixels = images_kwargs.get("longest_edge", None) or self.size["longest_edge"]
         patch_size = images_kwargs.get("patch_size", None) or self.patch_size
         merge_size = images_kwargs.get("merge_size", None) or self.merge_size
 
