@@ -5304,17 +5304,3 @@ class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
         with ray_start_client_server():
             assert ray.util.client.ray.is_connected()
             self.ray_hyperparameter_search()
-
-
-@slow
-@require_torch
-@require_ray
-class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
-    // ... existing code ...
-
-
-@slow
-@require_torch
-@require_ray
-class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
-    // ... existing code ...
