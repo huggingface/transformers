@@ -72,6 +72,7 @@ class GraniteMoeHybridModelTester(BambaModelTester):
         return super().get_config(
             shared_intermediate_size=self.shared_intermediate_size,
             layer_types=self.layer_types,
+            mlp_bias=False,
         )
 
 
