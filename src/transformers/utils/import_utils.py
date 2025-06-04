@@ -2090,7 +2090,10 @@ class _LazyModule(ModuleType):
         try:
             return importlib.import_module("." + module_name, self.__name__)
         except Exception as e:
-            raise e
+            raise RuntimeError(
+                f"Failed to import {self.__name__}.{module_name} because of the following error (look up to see its"
+                f" traceback):\n{e}"
+            ) from e
 
     def __reduce__(self):
         return (self.__class__, (self._name, self.__file__, self._import_structure))
