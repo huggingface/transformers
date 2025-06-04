@@ -16,26 +16,90 @@ rendered properly in your Markdown viewer.
 
 # XLM-RoBERTa-XL
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-## Overview
+[XLM-RoBERTa-XL](https://arxiv.org/abs/2105.00572) is a large-scale multilingual language model with 3.5B parameters, trained on 100 languages. What makes XLM-RoBERTa-XL unique is its ability to achieve strong performance on both high-resource languages while greatly improving low-resource languages, outperforming both XLM-R and RoBERTa-Large on various benchmarks.
 
-The XLM-RoBERTa-XL model was proposed in [Larger-Scale Transformers for Multilingual Masked Language Modeling](https://arxiv.org/abs/2105.00572) by Naman Goyal, Jingfei Du, Myle Ott, Giri Anantharaman, Alexis Conneau. 
+You can find all the original XLM-RoBERTa-XL checkpoints under the [XLM-RoBERTa-XL](https://huggingface.co/models?search=xlm-roberta-xl) collection.
 
-The abstract from the paper is the following:
+> [!TIP]
+> Click on the XLM-RoBERTa-XL models in the right sidebar for more examples of how to apply XLM-RoBERTa-XL to different cross-lingual tasks like classification, translation, and question answering.
 
-*Recent work has demonstrated the effectiveness of cross-lingual language model pretraining for cross-lingual understanding. In this study, we present the results of two larger multilingual masked language models, with 3.5B and 10.7B parameters. Our two new models dubbed XLM-R XL and XLM-R XXL outperform XLM-R by 1.8% and 2.4% average accuracy on XNLI. Our model also outperforms the RoBERTa-Large model on several English tasks of the GLUE benchmark by 0.3% on average while handling 99 more languages. This suggests pretrained models with larger capacity may obtain both strong performance on high-resource languages while greatly improving low-resource languages. We make our code and models publicly available.*
+The example below demonstrates how to use XLM-RoBERTa-XL for masked language modeling with [`Pipeline`] or the [`AutoModel`] class.
 
-This model was contributed by [Soonhwan-Kwon](https://github.com/Soonhwan-Kwon) and [stefan-it](https://huggingface.co/stefan-it). The original code can be found [here](https://github.com/pytorch/fairseq/tree/master/examples/xlmr).
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-## Usage tips
+```python
+from transformers import pipeline
 
-XLM-RoBERTa-XL is a multilingual model trained on 100 different languages. Unlike some XLM multilingual models, it does 
-not require `lang` tensors to understand which language is used, and should be able to determine the correct 
-language from the input ids.
+# Initialize the pipeline with XLM-RoBERTa-XL
+unmasker = pipeline("fill-mask", model="facebook/xlm-roberta-xl")
+
+# Example in English
+result = unmasker("Hello, I'm a [MASK] model.")
+print(result)
+
+# Example in French
+result = unmasker("Bonjour, je suis un modèle [MASK].")
+print(result)
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+from transformers import AutoModelForMaskedLM, AutoTokenizer
+import torch
+
+# Load model and tokenizer
+model = AutoModelForMaskedLM.from_pretrained("facebook/xlm-roberta-xl")
+tokenizer = AutoTokenizer.from_pretrained("facebook/xlm-roberta-xl")
+
+# Prepare input
+text = "Hello, I'm a [MASK] model."
+inputs = tokenizer(text, return_tensors="pt")
+
+# Get prediction
+with torch.no_grad():
+    outputs = model(**inputs)
+    predictions = outputs.logits.argmax(dim=-1)
+
+# Decode prediction
+predicted_token = tokenizer.decode(predictions[0][inputs["input_ids"][0] == tokenizer.mask_token_id])
+print(f"Predicted token: {predicted_token}")
+```
+
+</hfoption>
+</hfoptions>
+
+## Model Details
+
+XLM-RoBERTa-XL was proposed in [Larger-Scale Transformers for Multilingual Masked Language Modeling](https://arxiv.org/abs/2105.00572) by Naman Goyal, Jingfei Du, Myle Ott, Giri Anantharaman, and Alexis Conneau. The model achieves state-of-the-art results on several benchmarks:
+
+- 1.8% average accuracy improvement over XLM-R on XNLI
+- Outperforms RoBERTa-Large on English GLUE tasks by 0.3% on average
+- Handles 99 more languages than RoBERTa-Large while maintaining strong performance
+
+### Key Features
+
+- 3.5B parameter model (also available in 10.7B parameter version as XLM-R XXL)
+- Trained on 100 different languages
+- No language token required - automatically detects language from input
+- Based on the XLM-RoBERTa architecture with increased model capacity
+- Particularly effective for low-resource languages
+
+## Usage Tips
+
+- Unlike some XLM models, XLM-RoBERTa-XL doesn't require `lang` tensors - it automatically determines the language from input
+- Due to its large size, consider using model parallelism or gradient checkpointing for training
+- For inference, you may want to use quantization or model sharding to reduce memory requirements
+- Supports all standard RoBERTa tasks (classification, token classification, QA, etc.)
 
 ## Resources
 
@@ -45,6 +109,10 @@ language from the input ids.
 - [Causal language modeling task guide](../tasks/language_modeling)
 - [Masked language modeling task guide](../tasks/masked_language_modeling)
 - [Multiple choice task guide](../tasks/multiple_choice)
+
+<Tip>
+This implementation is based on XLM-RoBERTa. Refer to the [documentation of XLM-RoBERTa](xlm-roberta) for usage examples as well as the information relative to the inputs and outputs.
+</Tip>
 
 ## XLMRobertaXLConfig
 
