@@ -417,6 +417,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXT)
 
     @require_torch_large_accelerator
+    @require_deterministic_for_xpu
     def test_model_4b_batch(self):
         model_id = "google/gemma-3-4b-it"
 
@@ -455,7 +456,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3):
                     [
-                        'user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\n',
+                        'user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown and white cow standing on a sandy beach next to a turquoise ocean. It looks like a very sunny and',
                         'user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, these images are not identical. They depict very different scenes:\n\n*   **Image 1** shows a cow standing on a beach.',
                     ],
                 ("cuda", 7): [],
@@ -511,6 +512,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXT)
 
     @require_torch_large_accelerator
+    @require_deterministic_for_xpu
     def test_model_4b_batch_crops(self):
         model_id = "google/gemma-3-4b-it"
 
