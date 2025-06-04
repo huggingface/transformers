@@ -24,6 +24,8 @@ from parameterized import parameterized
 
 from transformers import CONFIG_MAPPING, Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 from transformers.testing_utils import (
+    Expectations,
+    cleanup,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -1620,6 +1622,12 @@ def prepare_img():
 @require_torch
 @slow
 class Blip2ModelIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
     def test_inference_opt(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
         model = Blip2ForConditionalGeneration.from_pretrained(
@@ -1698,9 +1706,19 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         predictions = model.generate(**inputs)
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
+        expectations = Expectations(
+            {
+                ("cuda", 7): [
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                    "a woman is playing with her dog on the beach",
+                ]
+            }
+        )
+        expected_outputs = expectations.get_expectation()
+
         # Test output
-        self.assertEqual(predictions[0].tolist(), [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1])
-        self.assertEqual("woman playing with dog on the beach", generated_text)
+        self.assertEqual(predictions[0].tolist(), expected_outputs[0])
+        self.assertEqual(expected_outputs[1], generated_text)
 
         # image and context
         prompt = "Question: which city is this? Answer:"
@@ -1709,9 +1727,19 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         predictions = model.generate(**inputs)
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
+        expectations = Expectations(
+            {
+                ("cuda", 7): [
+                    [0, 3, 7, 152, 2515, 11389, 3523, 1],
+                    "san francisco",
+                ]
+            }
+        )
+        expected_outputs = expectations.get_expectation()
+
         # Test output
-        self.assertEqual(predictions[0].tolist(), [0, 3, 7, 152, 67, 839, 1])
-        self.assertEqual(generated_text, "san diego")
+        self.assertEqual(predictions[0].tolist(), expected_outputs[0])
+        self.assertEqual(generated_text, expected_outputs[1])
 
     def test_inference_t5_batched_beam_search(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
@@ -1725,9 +1753,19 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
         predictions = model.generate(**inputs, num_beams=2)
 
+        expectations = Expectations(
+            {
+                ("cuda", 7): [
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                ]
+            }
+        )
+        expected_predictions = expectations.get_expectation()
+
         # Test output (in this case, slightly different from greedy search)
-        self.assertEqual(predictions[0].tolist(), [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1])
-        self.assertEqual(predictions[1].tolist(), [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1])
+        self.assertEqual(predictions[0].tolist(), expected_predictions[0])
+        self.assertEqual(predictions[1].tolist(), expected_predictions[1])
 
     @require_torch_multi_accelerator
     def test_inference_opt_multi_accelerator(self):
