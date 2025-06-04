@@ -122,10 +122,10 @@ class LightGlueConfig(PretrainedConfig):
                 keypoint_detector_config["model_type"] if "model_type" in keypoint_detector_config else "superpoint"
             )
             keypoint_detector_config = CONFIG_MAPPING[keypoint_detector_config["model_type"]](
-                **keypoint_detector_config
+                **keypoint_detector_config, attn_implementation="eager"
             )
         if keypoint_detector_config is None:
-            keypoint_detector_config = CONFIG_MAPPING["superpoint"]()
+            keypoint_detector_config = CONFIG_MAPPING["superpoint"](attn_implementation="eager")
 
         self.keypoint_detector_config = keypoint_detector_config
 

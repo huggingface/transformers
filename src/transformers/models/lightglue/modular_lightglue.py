@@ -138,10 +138,10 @@ class LightGlueConfig(PretrainedConfig):
                 keypoint_detector_config["model_type"] if "model_type" in keypoint_detector_config else "superpoint"
             )
             keypoint_detector_config = CONFIG_MAPPING[keypoint_detector_config["model_type"]](
-                **keypoint_detector_config
+                **keypoint_detector_config, attn_implementation="eager"
             )
         if keypoint_detector_config is None:
-            keypoint_detector_config = CONFIG_MAPPING["superpoint"]()
+            keypoint_detector_config = CONFIG_MAPPING["superpoint"](attn_implementation="eager")
 
         self.keypoint_detector_config = keypoint_detector_config
 
@@ -295,13 +295,8 @@ class LightGlueAttention(LlamaAttention):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
