@@ -77,6 +77,10 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 
+# TODO: temporarily for debugging
+debug = True
+
+
 class DiaPreTrainedModel(PreTrainedModel):
     config_class = DiaConfig
     base_model_prefix = "model"
@@ -392,6 +396,7 @@ class DiaRotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        # TODO: this should not be needed when using proper position ids
         if position_ids.ndim == 1:
             # Ensure position_ids is at least 2D, e.g., (1, seq_len)
             position_ids = position_ids.unsqueeze(0)
@@ -467,8 +472,8 @@ class DiaSelfAttention(nn.Module):  # Modular : LlamaAttentions
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor],
         position_embeddings: Tuple[torch.Tensor, torch.Tensor],
-        cache_position: Optional[torch.LongTensor] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
@@ -591,7 +596,6 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         residual = hidden_states
@@ -602,7 +606,6 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
             normed_states,
             attention_mask,
             position_embeddings,
-            cache_position,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -631,22 +634,23 @@ class DiaEncoder(DiaPreTrainedModel):
         self,
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         with_unconditioned_input: bool = False,
         return_dict: Optional[bool] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[BaseModelOutput, Tuple]:
-        if cache_position is None:
-            cache_position = torch.arange(input_ids.shape[-1], device=input_ids.device)[None, :]
-
         if with_unconditioned_input:
             unconditioned_input_ids = torch.zeros_like(input_ids)
             input_ids = torch.stack([unconditioned_input_ids, input_ids], dim=1).view(-1, input_ids.shape[-1])
 
         hidden_states = self.embedding(input_ids)
-        position_embeddings = self.rotary_embeddings(hidden_states, cache_position)
+
+        # RoPE
+        # Note: We expect right padding and hence always generate
+        # the position ids on the fly to reduce preparation overhead
+        position_ids = torch.arange(input_ids.shape[-1], device=input_ids.device)[None, :]
+        position_embeddings = self.rotary_embeddings(hidden_states, position_ids)
 
         attention_mask = self._update_full_mask(
             attention_mask,
@@ -665,7 +669,6 @@ class DiaEncoder(DiaPreTrainedModel):
                 hidden_states,
                 attention_mask,
                 position_embeddings,
-                cache_position,
                 **kwargs,
             )
             hidden_states = layer_outputs[0]
@@ -699,12 +702,12 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        position_embeddings: torch.Tensor,
-        cache_position: torch.LongTensor,
-        encoder_hidden_states: torch.Tensor,
-        encoder_attention_mask: torch.Tensor,
-        past_key_values: Optional[Cache] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[EncoderDecoderCache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         residual = hidden_states
@@ -715,8 +718,8 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
             normed_states,
             attention_mask,
             position_embeddings,
-            cache_position,
             past_key_values,
+            cache_position,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -759,7 +762,7 @@ class DiaDecoder(DiaPreTrainedModel):
         self,
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
@@ -767,6 +770,7 @@ class DiaDecoder(DiaPreTrainedModel):
         output_hidden_states: Optional[bool] = False,
         with_unconditioned_input: bool = False,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Union[BaseModelOutputWithPastAndCrossAttentions, Tuple]:
         batch_size, seq_length = input_ids.size()[:-1]
@@ -774,14 +778,16 @@ class DiaDecoder(DiaPreTrainedModel):
         if cache_position is None:
             cache_position = torch.arange(
                 past_key_values_length, past_key_values_length + seq_length, device=self.device
-            )[None, :]
+            )
+        if position_ids is None:
+            position_ids = cache_position[None, :]
 
         if with_unconditioned_input:
             input_ids = input_ids.repeat_interleave(2, dim=0)
 
         # RoPE
         hidden_states = self.embeddings(input_ids)
-        position_embeddings = self.rotary_embeddings(hidden_states, cache_position)
+        position_embeddings = self.rotary_embeddings(hidden_states, position_ids)
 
         if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past cache
@@ -820,10 +826,10 @@ class DiaDecoder(DiaPreTrainedModel):
                 hidden_states,
                 attention_mask,
                 position_embeddings,
-                cache_position,
                 encoder_hidden_states,
                 encoder_attention_mask,
                 past_key_values,
+                cache_position,
                 **kwargs,
             )
             hidden_states = layer_outputs[0]
@@ -872,10 +878,9 @@ class DiaModel(DiaPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
-        decoder_cache_position: Optional[torch.LongTensor] = None,
+        decoder_position_ids: Optional[torch.LongTensor] = None,
         encoder_outputs: Optional[Union[BaseModelOutput, Tuple]] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
         use_cache: Optional[bool] = None,
@@ -883,6 +888,7 @@ class DiaModel(DiaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         with_unconditioned_input: bool = False,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, Seq2SeqModelOutput]:
         if input_ids is None and encoder_outputs is None:
             raise ValueError(
@@ -906,11 +912,20 @@ class DiaModel(DiaPreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
 
+        global debug
+        if debug:
+            if input_ids is not None:
+                input_ids = input_ids[:, None, :]
+                unconditioned_input_ids = torch.zeros_like(input_ids)
+                input_ids = torch.stack([unconditioned_input_ids, input_ids], dim=1).view(-1, input_ids.shape[-1])
+
+            if attention_mask is not None:
+                attention_mask = attention_mask.repeat_interleave(2, dim=0)
+
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                cache_position=cache_position,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -924,10 +939,15 @@ class DiaModel(DiaPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
+        if debug:
+            if decoder_input_ids is None:
+                # (2*bsz, 1, channel)
+                decoder_input_ids = torch.full((encoder_outputs[0].shape[0], 1, 9), 1026, device=self.device)
+
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=None,  # TODO: if we prefix audio we will need a mask when left padding - `audio_attention_mask`
-            cache_position=decoder_cache_position,
+            position_ids=decoder_position_ids,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
             past_key_values=past_key_values,
@@ -936,6 +956,7 @@ class DiaModel(DiaPreTrainedModel):
             with_unconditioned_input=with_unconditioned_input,
             use_cache=use_cache,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         if not return_dict:
@@ -1795,10 +1816,9 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, GenerationMixin):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
-        decoder_cache_position: Optional[torch.LongTensor] = None,
+        decoder_position_ids: Optional[torch.LongTensor] = None,
         encoder_outputs: Optional[Union[BaseModelOutput, Tuple]] = None,
         past_key_values: Optional[EncoderDecoderCache] = None,
         use_cache: Optional[bool] = None,
@@ -1807,6 +1827,7 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, GenerationMixin):
         with_unconditioned_input: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Union[Tuple, Seq2SeqLMOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1814,10 +1835,9 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, GenerationMixin):
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
-            decoder_cache_position=decoder_cache_position,
+            decoder_position_ids=decoder_position_ids,
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             use_cache=use_cache,
@@ -1825,13 +1845,10 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             with_unconditioned_input=with_unconditioned_input,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
-        if not return_dict:
-            last_hidden_state = outputs[0]
-        else:
-            last_hidden_state = outputs.last_hidden_state
-
+        last_hidden_state = outputs[0]
         batch_size = last_hidden_state.shape[0]
         audio_logits = self.logits_dense(last_hidden_state).view(batch_size, -1, self.num_channels, self.vocab_size)
 
