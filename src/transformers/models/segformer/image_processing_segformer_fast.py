@@ -171,10 +171,14 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
             processed_segmentation_maps.append(torch.tensor(segmentation_map))
             added_dimension_list.append(added_dimension)
 
-        # Add an axis to the segmentation maps for transformations.
         kwargs["do_normalize"] = False
         kwargs["do_rescale"] = False
         kwargs["input_data_format"] = ChannelDimension.FIRST
+        kwargs["interpolation"] = (
+            pil_torch_interpolation_mapping[PILImageResampling.NEAREST] 
+            if PILImageResampling.NEAREST in pil_torch_interpolation_mapping 
+            else kwargs.get("interpolation")
+        )
 
         processed_segmentation_maps = self._preprocess(
             images=processed_segmentation_maps,
