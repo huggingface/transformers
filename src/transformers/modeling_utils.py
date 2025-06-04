@@ -753,6 +753,7 @@ def _load_state_dict_into_meta_model(
     unexpected_keys: Optional[List[str]] = None,  # passing `unexpected` for cleanup from quantization items
     device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
 ) -> Tuple[Optional[Dict], Optional[Dict]]:
+
     """Load parameters from `meta_state_dict` into the model. The parameters of the `meta_state_dict` are on the meta
     device in order to easily infer the shapes and dtypes that they will have. Then proper parameters are then loaded
     from `shard_file`, which is the actual state dict file on disk.
@@ -821,6 +822,29 @@ def _load_state_dict_into_meta_model(
                     raise ValueError(f"{param_name} doesn't have any device set.")
                 else:
                     param_device = device_map[module_layer.group()]
+
+                    if isinstance(param_device, int): # Check if the fetched device is an integer
+                        device_id = param_device # Use device_id for clarity in this block
+                    
+                        if hasattr(torch, 'npu') and torch.npu.is_available() and device_id < torch.npu.device_count():
+                            device_type_str = "npu"
+                        elif torch.cuda.is_available() and device_id < torch.cuda.device_count():
+                            device_type_str = "cuda"
+                        elif device_id == -1 or device_id == 0:
+                            device_type_str = "cpu"
+                        else:
+                            raise ValueError(
+                                f"Invalid integer device_map '{device_id}' for parameter '{param_name}'. "
+                                f"Cannot find a matching device type (NPU, CUDA, CPU) for this ID."
+                            )
+
+                        if device_type_str == "cpu":
+                            final_param_device = "cpu"
+                        else:
+                            final_param_device = f'{device_type_str}:{device_id}'
+                        
+                        # Update param_device with the correct string
+                        param_device = final_param_device
 
             if param_device == "disk":
                 if not is_safetensors:
