@@ -277,6 +277,10 @@ class ArceeConfig(LlamaConfig):
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the AFM-4.5B-Base.
 
+    Pre-trained weights are available at
+    [arcee-ai/AFM-4.5B](https://huggingface.co/arcee-ai/AFM-4.5B)
+    and were used to build the examples below.
+
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
