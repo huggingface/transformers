@@ -976,7 +976,7 @@ class DiaClassifierFreeGuidanceFilterLogitsProcessor(LogitsProcessor):
         _, top_k_indices = torch.topk(scores, k=self.cfg_filter_top_k, dim=-1)
         mask = torch.ones_like(scores, dtype=torch.bool)
         mask = mask.scatter(dim=-1, index=top_k_indices, value=False)
-        scores = scores.masked_fill(mask, -torch.inf)
+        scores = cond_scores.masked_fill(mask, -torch.inf)
 
         return scores
 
