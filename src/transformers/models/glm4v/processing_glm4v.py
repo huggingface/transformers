@@ -160,6 +160,7 @@ class Glm4vProcessor(ProcessorMixin):
                     video_structure += ""
                     text[i] = text[i].replace(self.video_token, video_structure, 1)
                     video_index += 1
+
                 for frame_idx in range(len(video_grid_thw)):
                     if self.image_token in text[i]:
                         num_image_tokens = video_grid_thw[frame_idx].prod().item() // merge_length

@@ -648,7 +648,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
         video_grid_thw: Optional[torch.LongTensor] = None,
-        second_per_grid_ts: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -692,8 +691,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
                 The temporal, height and width of feature shape of each image in LLM.
             video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
                 The temporal, height and width of feature shape of each video in LLM.
-            second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
-                The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -777,35 +774,48 @@ class Glm4vModel(Glm4vPreTrainedModel):
                         image_index += 1
                         video_frame_num = 1
 
+
                     elif modality_type == "video":
+
                         t, h, w = (
-                            video_grid_thw[video_index][0],
+
+                            video_frame_num,
+
                             video_grid_thw[video_index][1],
+
                             video_grid_thw[video_index][2],
+
                         )
-                        second_per_grid_t = second_per_grid_ts[video_index] if second_per_grid_ts is not None else 1.0
+
                         llm_grid_t, llm_grid_h, llm_grid_w = (
-                            t.item(),
+
+                            t,
+
                             h.item() // spatial_merge_size,
+
                             w.item() // spatial_merge_size,
+
                         )
 
-                        range_tensor = torch.arange(llm_grid_t).view(-1, 1)
-                        expanded_range = range_tensor.expand(-1, llm_grid_h * llm_grid_w)
+                        for t_idx in range(llm_grid_t):
+                            t_index = torch.tensor(t_idx).view(-1, 1).expand(
 
-                        second_per_grid_t = torch.as_tensor(
-                            second_per_grid_t, dtype=range_tensor.dtype, device=range_tensor.device
-                        )
+                                -1, llm_grid_h * llm_grid_w).flatten()
 
-                        time_tensor = expanded_range * second_per_grid_t * self.config.vision_config.tokens_per_second
-                        time_tensor_long = time_tensor.long()
-                        t_index = time_tensor_long.flatten()
+                            h_index = torch.arange(llm_grid_h).view(
 
-                        h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(llm_grid_t, -1, llm_grid_w).flatten()
-                        w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(llm_grid_t, llm_grid_h, -1).flatten()
-                        llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + st_idx)
+                                1, -1, 1).expand(1, -1, llm_grid_w).flatten()
+
+                            w_index = torch.arange(llm_grid_w).view(
+
+                                1, 1, -1).expand(1, llm_grid_h, -1).flatten()
+
+                            llm_pos_ids_list.append(
+
+                                torch.stack([t_index, h_index, w_index]) + st_idx)
 
                         video_index += 1
+
                         video_frame_num += 1
 
                     else:
@@ -891,7 +901,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
         video_grid_thw: Optional[torch.LongTensor] = None,
         rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        second_per_grid_ts: Optional[torch.Tensor] = None,
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, Glm4vModelOutputWithPast]:
         r"""
@@ -905,8 +914,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
             The temporal, height and width of feature shape of each video in LLM.
         rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
             The rope index difference between sequence length and multimodal rope.
-        second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
-            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -945,7 +952,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
                         f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
                     )
 
-                mask = input_ids == self.config.video_token_id
+                mask = input_ids == self.config.image_token_id # CogVLM use image_token_id for video
                 mask_unsqueezed = mask.unsqueeze(-1)
                 mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
                 video_mask = mask_expanded.to(inputs_embeds.device)
@@ -979,7 +986,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
                     input_ids,
                     image_grid_thw,
                     video_grid_thw,
-                    second_per_grid_ts=second_per_grid_ts,
                     attention_mask=attention_mask_tensor,
                 )
                 self.rope_deltas = rope_deltas
@@ -1134,7 +1140,6 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         video_grid_thw: Optional[torch.LongTensor] = None,
         rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        second_per_grid_ts: Optional[torch.Tensor] = None,
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, Glm4vCausalLMOutputWithPast]:
         r"""
@@ -1152,8 +1157,6 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             The temporal, height and width of feature shape of each video in LLM.
         rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
             The rope index difference between sequence length and multimodal rope.
-        second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
-            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
 
         Example:
 
@@ -1273,11 +1276,12 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
         self.video_token = "<|video|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
 
     def __call__(
-        self,
-        images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        videos: VideoInput = None,
-        **kwargs: Unpack[Glm4vProcessorKwargs],
+            self,
+            images: ImageInput = None,
+            text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+            videos: VideoInput = None,
+            timestamps: List = None,
+            **kwargs: Unpack[Glm4vProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -1295,6 +1299,8 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
             videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
                 tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
+            timestamps (`List[int]`):
+                The timestamps of each frame in the video. This is used to generate the video grid in LLM.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
@@ -1328,20 +1334,8 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
             image_grid_thw = None
 
         if videos is not None:
-            videos_inputs = self.image_processor(images=None, videos=videos, **output_kwargs["images_kwargs"])
+            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
-
-            fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
-            if isinstance(fps, (int, float)):
-                second_per_grid_ts = [self.image_processor.temporal_patch_size / fps] * len(video_grid_thw)
-            elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
-                second_per_grid_ts = [self.image_processor.temporal_patch_size / tmp for tmp in fps]
-            else:
-                raise ValueError(
-                    f"The length of fps ({len(fps) if hasattr(fps, '__len__') else fps}) must be equal to the length of video_grid_thw ({len(video_grid_thw)}) or fps should be a single number."
-                )
-            videos_inputs.update({"second_per_grid_ts": second_per_grid_ts})
-
         else:
             videos_inputs = {}
             video_grid_thw = None
@@ -1351,7 +1345,7 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
 
         text = text.copy()  # below lines change text in-place
         if image_grid_thw is not None:
-            merge_length = self.image_processor.merge_size**2
+            merge_length = self.image_processor.merge_size ** 2
             index = 0
             for i in range(len(text)):
                 while self.image_token in text[i]:
@@ -1365,24 +1359,30 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
             video_index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
-                    if video_index >= len(video_grid_thw):
-                        break
-
-                    num_frames = video_grid_thw[video_index][0].item()
+                    num_frames = len(video_grid_thw)
                     video_structure = ""
+
+                    selected_timestamps = []
+                    for idx in range(0, len(self.frame_timestamps), 2):
+                        if len(selected_timestamps) >= num_frames:
+                            break
+                        selected_timestamps.append(self.frame_timestamps[idx])
+
+                    while len(selected_timestamps) < num_frames:
+                        selected_timestamps.append(selected_timestamps[-1] if selected_timestamps else 0)
+
                     for frame_idx in range(num_frames):
-                        video_structure += f"<|begin_of_image|><|image|><|end_of_image|>{frame_idx}"
+                        timestamp_sec = int(selected_timestamps[frame_idx])
+                        frame_structure = f"<|begin_of_image|>{self.image_token}<|end_of_image|>{timestamp_sec}"
+                        video_structure += frame_structure
+
+                    video_structure += ""
                     text[i] = text[i].replace(self.video_token, video_structure, 1)
                     video_index += 1
-
-                total_frames = video_grid_thw[0][0].item()
-                for frame_idx in range(total_frames):
-                    if self.image_token not in text[i]:
-                        break
-                    frame_structure = torch.tensor([1, video_grid_thw[0][1], video_grid_thw[0][2]])
-                    num_image_tokens = frame_structure.prod() // merge_length
-
-                    text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
+                for frame_idx in range(len(video_grid_thw)):
+                    if self.image_token in text[i]:
+                        num_image_tokens = video_grid_thw[frame_idx].prod().item() // merge_length
+                        text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)

@@ -926,11 +926,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
             if pixel_values_videos is not None:
                 video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
                 video_embeds = torch.cat(video_embeds, dim=0)
-                # if video_embeds.shape[0] == 5832:
-                #     from safetensors.torch import load_file
-                #     loaded_data = load_file("/mnt/image_embed.safetensors")
-                #     video_embeds = loaded_data["image_embeds"].to(video_embeds.device)
-                #     print("Loaded and replaced video_embeds with:\n", video_embeds)
                 n_video_tokens = (input_ids == self.config.image_token_id).sum()
                 n_video_features = video_embeds.shape[0]
                 if not is_torchdynamo_compiling() and n_video_tokens != n_video_features:
@@ -938,7 +933,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
                         f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
                     )
 
-                mask = input_ids == self.config.video_token_id
+                mask = input_ids == self.config.image_token_id # CogVLM use image_token_id for video
                 mask_unsqueezed = mask.unsqueeze(-1)
                 mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
                 video_mask = mask_expanded.to(inputs_embeds.device)

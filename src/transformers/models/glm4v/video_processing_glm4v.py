@@ -237,6 +237,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         pixel_values_videos = torch.cat(processed_videos, dim=0)
         video_grid_thw = torch.tensor(processed_grids)
 
+        # turn video_grid_thw into a list of lists for model process
         total_frames = video_grid_thw[0][0].item()
         h = video_grid_thw[0][1].item()
         w = video_grid_thw[0][2].item()
