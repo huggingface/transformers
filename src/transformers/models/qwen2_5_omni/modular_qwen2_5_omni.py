@@ -1963,6 +1963,11 @@ def apply_rotary_pos_emb_vision(tensor: torch.Tensor, freqs: torch.Tensor) -> to
     tensor = tensor.float()
     cos = freqs.cos()
     sin = freqs.sin()
+
+    rotary_dim = cos.shape[-1]
+    if rotary_dim == 0:
+        return tensor
+
     cos = cos.unsqueeze(1).repeat(1, 1, 2).unsqueeze(0).float()
     sin = sin.unsqueeze(1).repeat(1, 1, 2).unsqueeze(0).float()
     output = (tensor * cos) + (rotate_half(tensor) * sin)
@@ -2924,6 +2929,9 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
+    rotary_dim = cos.shape[-1]
+    if rotary_dim == 0:
+        return q, k
 
     def rotate_half_codec(x):
         # x = rearrange(x, "... (d r) -> ... d r", r=2)

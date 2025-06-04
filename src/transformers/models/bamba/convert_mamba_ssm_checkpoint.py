@@ -111,8 +111,7 @@ def convert_ssm_config_to_hf_config(
         assert not attn_cfg["qkv_proj_bias"], "Only support no qkv bias."
         assert not attn_cfg["out_proj_bias"], "Only support no out bias."
         hf_config.partial_rotary_factor = attn_cfg["rotary_emb_dim"] 
-        if hf_config.partial_rotary_factor != 0:
-            hf_config.partial_rotary_factor / hf_config.hidden_size
+        hf_config.partial_rotary_factor /= hf_config.hidden_size
         hf_config.num_attention_heads = attn_cfg["num_heads"]
         hf_config.num_key_value_heads = attn_cfg["num_heads_kv"]
 
