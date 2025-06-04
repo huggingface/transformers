@@ -24,12 +24,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from typing import Callable, Optional, Tuple, Union
 
 import torch
 from torch import nn
 
 from transformers.activations import ACT2FN
+from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
 
 from ...cache_utils import Cache, DynamicCache
@@ -45,7 +47,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import LossKwargs, auto_docstring, can_return_tuple
@@ -78,11 +80,164 @@ class ArceeRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class ArceeRotaryEmbedding(nn.Module):
-    """ArceeRotaryEmbedding supports YARN scaling in addition to the default RoPE"""
+def _compute_default_rope_parameters(
+    config: Optional[PretrainedConfig] = None,
+    device: Optional["torch.device"] = None,
+    seq_len: Optional[int] = None,
+    **rope_kwargs,
+) -> Tuple["torch.Tensor", float]:
+    """
+    Computes the inverse frequencies according to the original RoPE implementation
+    Args:
+        config ([`~transformers.PretrainedConfig`]):
+            The model configuration.
+        device (`torch.device`):
+            The device to use for initialization of the inverse frequencies.
+        seq_len (`int`, *optional*):
+            The current sequence length. Unused for this type of RoPE.
+        rope_kwargs (`Dict`, *optional*):
+            BC compatibility with the previous RoPE class instantiation, will be removed in v4.45.
+    Returns:
+        Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+        post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+    """
+    if config is not None and len(rope_kwargs) > 0:
+        raise ValueError(
+            "Unexpected arguments: `**rope_kwargs` and `config` are mutually exclusive in "
+            f"`_compute_default_rope_parameters`, got `rope_kwargs`={rope_kwargs} and `config`={config}"
+        )
+    if len(rope_kwargs) > 0:
+        base = rope_kwargs["base"]
+        dim = rope_kwargs["dim"]
+    elif config is not None:
+        base = config.rope_theta
+        partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
+        head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        dim = int(head_dim * partial_rotary_factor)
 
-    def __init__(self, config: ArceeConfig, device=None):
+    attention_factor = 1.0  # Unused in this type of RoPE
+
+    # Compute the inverse frequencies
+    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float().to(device) / dim))
+    return inv_freq, attention_factor
+
+
+def _compute_yarn_parameters(
+    config: PretrainedConfig, device: "torch.device", seq_len: Optional[int] = None, **rope_kwargs
+) -> Tuple["torch.Tensor", float]:
+    """
+    Computes the inverse frequencies with NTK scaling. Please refer to the
+    [original paper](https://arxiv.org/abs/2309.00071)
+    Args:
+        config ([`~transformers.PretrainedConfig`]):
+            The model configuration.
+        device (`torch.device`):
+            The device to use for initialization of the inverse frequencies.
+        seq_len (`int`, *optional*):
+            The current sequence length. Unused for this type of RoPE.
+        rope_kwargs (`Dict`, *optional*):
+            BC compatibility with the previous RoPE class instantiation, will be removed in v4.45.
+    Returns:
+        Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+        post-processing scaling factor applied to the computed cos/sin.
+    """
+    # No need to keep BC with yarn, unreleased when this new pattern was created.
+    if len(rope_kwargs) > 0:
+        raise ValueError(
+            f"Unexpected arguments: `**rope_kwargs` should be unset in `_compute_yarn_parameters`, got {rope_kwargs}"
+        )
+
+    base = config.rope_theta
+    partial_rotary_factor = config.partial_rotary_factor if hasattr(config, "partial_rotary_factor") else 1.0
+    head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+    dim = int(head_dim * partial_rotary_factor)
+
+    # Arcee: Use original max_position_embeddings instead of max_position_embeddings
+    max_position_embeddings = config.rope_scaling.get(
+        "original_max_position_embeddings", config.max_position_embeddings
+    )
+    factor = config.rope_scaling["factor"]
+
+    # Sets the attention factor as suggested in the paper
+    attention_factor = config.rope_scaling.get("attention_factor")
+    if attention_factor is None:
+        attention_factor = 0.1 * math.log(factor) + 1.0
+
+    # Optional config options
+    # beta_fast/beta_slow: as suggested in the paper, default to 32/1 (correspondingly)
+    beta_fast = config.rope_scaling.get("beta_fast") or 32
+    beta_slow = config.rope_scaling.get("beta_slow") or 1
+
+    # Compute the inverse frequencies
+    def find_correction_dim(num_rotations, dim, base, max_position_embeddings):
+        """Inverse dimension formula to find the dimension based on the number of rotations"""
+        return (dim * math.log(max_position_embeddings / (num_rotations * 2 * math.pi))) / (2 * math.log(base))
+
+    def find_correction_range(low_rot, high_rot, dim, base, max_position_embeddings):
+        """Find dimension range bounds based on rotations"""
+        low = math.floor(find_correction_dim(low_rot, dim, base, max_position_embeddings))
+        high = math.ceil(find_correction_dim(high_rot, dim, base, max_position_embeddings))
+        return max(low, 0), min(high, dim - 1)
+
+    def linear_ramp_factor(min, max, dim):
+        if min == max:
+            max += 0.001  # Prevent singularity
+
+        linear_func = (torch.arange(dim, dtype=torch.float32) - min) / (max - min)
+        ramp_func = torch.clamp(linear_func, 0, 1)
+        return ramp_func
+
+    # Note on variable naming: "interpolation" comes from the original technique, where we interpolate the position IDs
+    # to expand the possible context length. In other words, interpolation = apply scaling factor.
+    pos_freqs = base ** (torch.arange(0, dim, 2).float().to(device) / dim)
+    inv_freq_extrapolation = 1.0 / pos_freqs
+    inv_freq_interpolation = 1.0 / (factor * pos_freqs)
+
+    low, high = find_correction_range(beta_fast, beta_slow, dim, base, max_position_embeddings)
+
+    # Get n-dimensional rotational scaling corrected for extrapolation
+    inv_freq_extrapolation_factor = 1 - linear_ramp_factor(low, high, dim // 2).float().to(device)
+    inv_freq = (
+        inv_freq_interpolation * (1 - inv_freq_extrapolation_factor)
+        + inv_freq_extrapolation * inv_freq_extrapolation_factor
+    )
+
+    return inv_freq, attention_factor
+
+
+# This maps the "rope_type" string field in rope config to the corresponding function to compute the RoPE parameters
+# from the model config. You can append new {'rope_type': callable} pairs to this dictionary to enable custom RoPE
+# parameterizations, as long as the callable has the same signature.
+ROPE_INIT_FUNCTIONS = {
+    "default": _compute_default_rope_parameters,
+    "yarn": _compute_yarn_parameters,
+}
+
+
+class ArceeRotaryEmbedding(nn.Module):
+    """ArceeRotaryEmbedding supports custom RoPE scaling including YARN scaling"""
+
+    def __init__(
+        self,
+        dim=None,
+        max_position_embeddings=2048,
+        base=10000,
+        device=None,
+        scaling_factor=1.0,
+        rope_type="default",
+        config: Optional[ArceeConfig] = None,
+    ):
         super().__init__()
+        # Use the custom rope functions if available
+        if config is not None and hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type", "default"))
+            rope_init_fn = ROPE_INIT_FUNCTIONS.get(rope_type, _compute_default_rope_parameters)
+            self.rope_init_fn = rope_init_fn
+            self.rope_type = rope_type
+        else:
+            # Fallback to default
+            self.rope_init_fn = _compute_default_rope_parameters
+            self.rope_type = "default"
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))

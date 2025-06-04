@@ -23,9 +23,107 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import Optional
 
-from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from transformers.configuration_utils import PretrainedConfig
+from transformers.utils import logging
+
+
+logger = logging.get_logger(__name__)
+
+
+def _check_received_keys(
+    rope_type: str,
+    received_keys: set,
+    required_keys: set,
+    optional_keys: Optional[set] = None,
+    ignore_keys: Optional[set] = None,
+):
+    """Compare the received keys in `config.rope_scaling` against the expected and optional keys"""
+    # BC: "rope_type" was originally "type" -- let's check for "rope_type" when "type" is present
+    if "type" in received_keys:
+        received_keys -= {"type"}
+        required_keys.add("rope_type")
+
+    # Some models need to store model-specific keys, and we don't want to throw warning at them
+    if ignore_keys is not None:
+        received_keys -= ignore_keys
+
+    missing_keys = required_keys - received_keys
+    if missing_keys:
+        raise KeyError(f"Missing required keys in `rope_scaling` for 'rope_type'='{rope_type}': {missing_keys}")
+
+    if optional_keys is not None:
+        unused_keys = received_keys - required_keys - optional_keys
+    else:
+        unused_keys = received_keys - required_keys
+    if unused_keys:
+        logger.warning(f"Unrecognized keys in `rope_scaling` for 'rope_type'='{rope_type}': {unused_keys}")
+
+
+def _validate_default_rope_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
+    rope_scaling = config.rope_scaling
+    rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
+    required_keys = {"rope_type"}
+    received_keys = set(rope_scaling.keys())
+    _check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+
+
+def _validate_yarn_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
+    rope_scaling = config.rope_scaling
+    rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
+    required_keys = {"rope_type", "factor", "original_max_position_embeddings"}
+    optional_keys = {"attention_factor", "beta_fast", "beta_slow"}
+    received_keys = set(rope_scaling.keys())
+    _check_received_keys(rope_type, received_keys, required_keys, optional_keys, ignore_keys=ignore_keys)
+
+    factor = rope_scaling["factor"]
+    if factor is None or not isinstance(factor, float) or factor < 1.0:
+        logger.warning(f"`rope_scaling`'s factor field must be a float >= 1, got {factor}")
+
+    attention_factor = rope_scaling.get("attention_factor")
+    if attention_factor is not None and (not isinstance(attention_factor, float) or attention_factor < 0):
+        logger.warning(
+            f"`rope_scaling`'s attention_factor field must be a float greater than 0, got {attention_factor}"
+        )
+    beta_fast = rope_scaling.get("beta_fast")
+    if beta_fast is not None and not isinstance(beta_fast, float):
+        logger.warning(f"`rope_scaling`'s beta_fast field must be a float, got {beta_fast}")
+    beta_slow = rope_scaling.get("beta_slow")
+    if beta_slow is not None and not isinstance(beta_slow, float):
+        logger.warning(f"`rope_scaling`'s beta_slow field must be a float, got {beta_slow}")
+
+    if (beta_fast or 32) < (beta_slow or 1):
+        logger.warning(
+            f"`rope_scaling`'s beta_fast field must be greater than beta_slow, got beta_fast={beta_fast} "
+            f"(defaults to 32 if None) and beta_slow={beta_slow} (defaults to 1 if None)"
+        )
+
+
+# Like `ROPE_INIT_FUNCTIONS`, this validation function mapping can be dynamically updated for custom RoPE types.
+ROPE_VALIDATION_FUNCTIONS = {
+    "default": _validate_default_rope_parameters,
+    "yarn": _validate_yarn_parameters,
+}
+
+
+def rope_config_validation(config: PretrainedConfig, ignore_keys: Optional[set] = None):
+    """
+    Validate the RoPE config arguments, given a `PretrainedConfig` object
+    """
+    rope_scaling = getattr(config, "rope_scaling", None)  # not a default parameter in `PretrainedConfig`
+    if rope_scaling is None:
+        return
+
+    # BC: "rope_type" was originally "type"
+    rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", "default"))
+    validation_fn = ROPE_VALIDATION_FUNCTIONS.get(rope_type)
+    if validation_fn is not None:
+        validation_fn(config, ignore_keys=ignore_keys)
+    else:
+        logger.warning(
+            f"Missing validation function mapping in `ROPE_VALIDATION_FUNCTIONS` for 'rope_type'='{rope_type}'"
+        )
 
 
 class ArceeConfig(PretrainedConfig):
