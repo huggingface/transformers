@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_accelerator,
+    require_torch_large_accelerator,
     require_torch_sdpa,
     slow,
     torch_device,
@@ -443,6 +444,7 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         ]
         super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
 
+    @require_torch_large_accelerator
     @require_torch_sdpa
     @slow
     def test_eager_matches_sdpa_generate(self):
@@ -509,14 +511,12 @@ class DeepseekV3IntegrationTest(unittest.TestCase):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         NUM_TOKENS_TO_GENERATE = 40
-        # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
-        # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
+        # https://github.com/huggingface/transformers/pull/38562#issuecomment-2939209171
+        # The reason why the output is gibberish is because the testing model bzantium/tiny-deepseek-v3 is not trained
+        # one. Since original DeepSeek-V3 model is too big to debug and test, there was no testing with the original one.
         EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
-            "reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe "
-            "theory of relativ",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, "
-            "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+            "Simply put, the theory of relativity states that  Frojekecdytesాలు sicʰtinaccianntuala breej的效率和质量的控制lavestock-PraccuraciesOTTensorialoghismos的思路astiomotivityosexualriad TherapeuticsoldtYPEface Kishsatellite-TV",
+            "My favorite all time favorite condiment is ketchup.ieden沟渠係室温 Fryrok般地Segmentation Cycle/physicalwarenkrautempsాలు蹈梗 Mesomac一等asan lethality suspended Causewaydreamswith Fossilsdorfాలు蹈 ChristiansenHOMEbrew",
         ]
 
         prompts = [
