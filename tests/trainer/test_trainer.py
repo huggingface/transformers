@@ -14,7 +14,6 @@
 
 import dataclasses
 import gc
-import importlib
 import json
 import math
 import os
@@ -28,12 +27,10 @@ from functools import partial
 from itertools import product
 from pathlib import Path
 from typing import Any
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import numpy as np
 from huggingface_hub import HfFolder, ModelCard, create_branch, list_repo_commits, list_repo_files
-from packaging import version
-from parameterized import parameterized
 
 from transformers import (
     AutoFeatureExtractor,
@@ -52,7 +49,6 @@ from transformers import (
     logging,
     set_seed,
 )
-from transformers.hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
     TOKEN,
@@ -103,14 +99,12 @@ from transformers.testing_utils import (
     require_torch_tf32,
     require_torch_up_to_2_accelerators,
     require_vision,
-    require_wandb,
     run_first,
     run_test_using_subprocess,
     slow,
     torch_device,
 )
-from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend, check_target_module_exists
-from transformers.training_args import OptimizerNames
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, check_target_module_exists
 from transformers.utils import (
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
@@ -118,11 +112,7 @@ from transformers.utils import (
     WEIGHTS_NAME,
     check_torch_load_is_safe,
     is_accelerate_available,
-    is_apex_available,
-    is_bitsandbytes_available,
     is_safetensors_available,
-    is_torchao_available,
-    is_torchdistx_available,
 )
 from transformers.utils.hp_naming import TrialShortNamer
 
@@ -139,7 +129,6 @@ if is_torch_available():
     from torch import nn
     from torch.utils.data import IterableDataset
 
-    import transformers.optimization
     from transformers import (
         AutoModelForCausalLM,
         AutoModelForSequenceClassification,
