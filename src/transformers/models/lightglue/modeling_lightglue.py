@@ -29,7 +29,7 @@ from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...utils import ModelOutput, auto_docstring
 from ...utils.generic import can_return_tuple
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from .configuration_lightglue import LightGlueConfig
@@ -433,6 +433,7 @@ class LightGlueTokenConfidenceLayer(nn.Module):
         return token
 
 
+@auto_docstring
 class LightGluePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -511,35 +512,10 @@ def get_matches_from_scores(scores: torch.Tensor, threshold: float) -> Tuple[tor
     return matches, matching_scores
 
 
-LIGHTGLUE_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`LightGlueConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+@auto_docstring(
+    custom_intro="""
+    LightGlue model taking images as inputs and outputting the matching of them.
     """
-
-LIGHTGLUE_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`LightPointImageProcessor`]. See
-            [`LightPointImageProcessor.__call__`] for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors. See `attentions` under returned tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "LightGlue model taking images as inputs and outputting the matching of them.",
-    LIGHTGLUE_START_DOCSTRING,
 )
 class LightGlueForKeypointMatching(LightGluePreTrainedModel):
     """
@@ -915,7 +891,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
         )
 
     @can_return_tuple
-    @add_start_docstrings_to_model_forward(LIGHTGLUE_INPUTS_DOCSTRING)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
