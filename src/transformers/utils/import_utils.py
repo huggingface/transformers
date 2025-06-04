@@ -490,7 +490,7 @@ def is_rocm_platform():
     if is_torch_available():
         import torch
 
-        torch.version.rocm is not None
+        torch.version.hip is not None
     else:
         return False
 
