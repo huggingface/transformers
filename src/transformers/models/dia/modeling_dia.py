@@ -636,14 +636,9 @@ class DiaEncoder(DiaPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
-        with_unconditioned_input: bool = False,
         return_dict: Optional[bool] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[BaseModelOutput, Tuple]:
-        if with_unconditioned_input:
-            unconditioned_input_ids = torch.zeros_like(input_ids)
-            input_ids = torch.stack([unconditioned_input_ids, input_ids], dim=1).view(-1, input_ids.shape[-1])
-
         hidden_states = self.embedding(input_ids)
 
         # RoPE
@@ -768,7 +763,6 @@ class DiaDecoder(DiaPreTrainedModel):
         past_key_values: Optional[EncoderDecoderCache] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
-        with_unconditioned_input: bool = False,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
@@ -781,9 +775,6 @@ class DiaDecoder(DiaPreTrainedModel):
             )
         if position_ids is None:
             position_ids = cache_position[None, :]
-
-        if with_unconditioned_input:
-            input_ids = input_ids.repeat_interleave(2, dim=0)
 
         # RoPE
         hidden_states = self.embeddings(input_ids)
@@ -886,7 +877,6 @@ class DiaModel(DiaPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        with_unconditioned_input: bool = False,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, Seq2SeqModelOutput]:
@@ -929,7 +919,6 @@ class DiaModel(DiaPreTrainedModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
-                with_unconditioned_input=with_unconditioned_input,
             )
         # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
@@ -953,7 +942,6 @@ class DiaModel(DiaPreTrainedModel):
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            with_unconditioned_input=with_unconditioned_input,
             use_cache=use_cache,
             return_dict=return_dict,
             cache_position=cache_position,
@@ -986,6 +974,7 @@ class DiaClassifierFreeGuidanceFilterLogitsProcessor(LogitsProcessor):
                 f"the conditional inputs, and the second half of batches corresponding to the unconditional inputs. Got "
                 f"batch size {scores.shape[0]} for the logits and {input_ids.shape[0]} for the input ids."
             )
+        # TODO: reshape from (B * C, V) to (B, C, V)
 
         # cfg
         scores_last = scores.view(scores.shape[0] // 2, 2, *scores.shape[1:])
@@ -1002,68 +991,6 @@ class DiaClassifierFreeGuidanceFilterLogitsProcessor(LogitsProcessor):
         return scores
 
 
-class DiaHangoverLogitsProcessor(LogitsProcessor):
-    def __init__(self, pad_value: int, hangover: torch.Tensor, device: str = "cpu"):
-        self.pad_value = torch.tensor(pad_value, device=device)
-        self.hangover = hangover
-        self.step = 0
-        self.device = self.hangover.device
-
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        """
-        This logits processor is used to apply the hangover to the generated tokens.
-
-        If delay pattern is [0, 2, 3, 4] then:
-
-            s   s+1 s+2 s+3 s+4 s+5 ...
-            |   |   |   |   |   |
-        C0: x   x   x   x   x   x ...
-        C1: H   H   x   x   x   x ...
-        C2: H   H   H   x   x   x ...
-        C3: H   H   H   H   x   x ...
-
-        (H is the hangover token.)
-        The H is forced until the hangover is over.
-        """
-        if self.step < self.hangover.shape[1]:  # Check if step is within hangover sequence length
-            hangover_mask = self.hangover[:, self.step, :] != self.pad_value
-
-            active_rows_N, active_cols_N = torch.where(hangover_mask)
-            active_tokens_values_N = self.hangover[active_rows_N, self.step, active_cols_N]
-
-            scores[active_rows_N, active_cols_N, :] = -torch.inf
-            scores[active_rows_N, active_cols_N, active_tokens_values_N] = 0.0
-
-            self.step += 1
-        return scores
-
-
-class DiaExponentialDecayLengthPenalty(LogitsProcessor):
-    def __init__(
-        self,
-        exponential_decay_length_penalty: Tuple[int, float],
-        eos_value: int,
-        input_ids_seq_length: int,
-        device: str = "cpu",
-    ):
-        self.regulation_start = exponential_decay_length_penalty[0] + input_ids_seq_length
-        self.regulation_factor = exponential_decay_length_penalty[1]
-
-        self.eos_value = torch.tensor(eos_value, device=device)
-
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        cur_len = input_ids.shape[-1]
-        penalties = torch.zeros_like(scores)
-        scores_processed = scores
-        if cur_len > self.regulation_start:
-            penalty_idx = cur_len - self.regulation_start
-            # To support negative logits we compute the penalty of the absolute value and add to the original logit
-            penalty = torch.abs(scores[:, 0, self.eos_value]) * (pow(self.regulation_factor, penalty_idx) - 1)
-            penalties[:, 0, self.eos_value] = penalty
-            scores_processed = scores + penalties
-        return scores_processed
-
-
 class DiaEOSFilterAndScaleLogitsProcessor(LogitsProcessor):
     def __init__(self, eos_value: int, eos_scale: float, device: str = "cpu"):
         self.eos_value = eos_value
@@ -1076,6 +1003,8 @@ class DiaEOSFilterAndScaleLogitsProcessor(LogitsProcessor):
         # 2. if channel 0 has EOS with highest logit, it will be the only candidate
         # 3. if channel 0 has EOS not with highest logit, it will be suppressed
         """
+        # TODO: reshape from (B * C, V) to (B, C, V)
+
         scores[:, 1:, self.eos_value :] = torch.full_like(
             scores[:, 1:, self.eos_value :],
             fill_value=-torch.inf,
@@ -1133,6 +1062,9 @@ class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
 
         The PAD & EOS are forced from step s+1.
         """
+        # TODO: reshape from (B * C, V) to (B, C, V)
+        # and reshape from (B * C, S) to (B, S, C)
+
         # EOS Countup
         # Due to delay pattern, we do not stop generation at the first EOS token.
         # Instead, we force EOS, PAD at delay pattern steps.
@@ -1193,108 +1125,6 @@ class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
         return scores
 
 
-class DiaRepetitionPenaltyLogitsProcessor(LogitsProcessor):
-    r"""
-    [`LogitsProcessor`] that prevents the repetition of previous tokens through a penalty. This penalty is applied at
-    most once per token. Note that, for decoder-only models like most LLMs, the considered tokens include the prompt
-    by default.
-
-    In the original [paper](https://arxiv.org/pdf/1909.05858.pdf), the authors suggest the use of a penalty of around
-    1.2 to achieve a good balance between truthful generation and lack of repetition. To penalize and reduce
-    repetition, use `penalty` values above 1.0, where a higher value penalizes more strongly. To reward and encourage
-    repetition, use `penalty` values between 0.0 and 1.0, where a lower value rewards more strongly.
-
-    Args:
-        penalty (`float`):
-            The parameter for repetition penalty. 1.0 means no penalty. Above 1.0 penalizes previously generated
-            tokens. Between 0.0 and 1.0 rewards previously generated tokens.
-        prompt_ignore_length (`int`, *optional*):
-            The original input ids sequence length, which if provided, will not be used in the penalty calculation.
-
-    Examples:
-
-    ```py
-    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, RepetitionPenaltyLogitsProcessor
-
-    >>> # Initializing the model and tokenizer for it
-    >>> model = AutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
-    >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
-    >>> inputs = tokenizer(["I'm not going to"], return_tensors="pt")
-
-    >>> # This shows a normal generate without any specific parameters
-    >>> summary_ids = model.generate(**inputs)
-    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True)[0])
-    I'm not going to be able to do that. I'm going to be able to do that
-
-    >>> # This generates a penalty for repeated tokens
-    >>> penalized_ids = model.generate(**inputs, repetition_penalty=1.1)
-    >>> print(tokenizer.batch_decode(penalized_ids, skip_special_tokens=True)[0])
-    I'm not going to be able to do that. I'll just have to go out and play
-
-    >>> # We can also exclude the input prompt by creating an instance of this class
-    >>> # with a `prompt_ignore_length` and passing it as a custom logit processor
-    >>> rep_pen_processor = RepetitionPenaltyLogitsProcessor(
-    ...     penalty=1.1,
-    ...     prompt_ignore_length=inputs["input_ids"].shape[-1]
-    ... )
-    >>> penalized_ids = model.generate(**inputs, logits_processor=[rep_pen_processor])
-    >>> print(tokenizer.batch_decode(penalized_ids, skip_special_tokens=True)[0])
-    I'm not going to be able to do that. I'm going to have to go through a lot of things, and
-    ```
-    """
-
-    def __init__(self, penalty: float, prompt_ignore_length: Optional[int] = None):
-        if not isinstance(penalty, float) or not (penalty > 0):
-            raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
-
-        if prompt_ignore_length is not None and (
-            not isinstance(prompt_ignore_length, int) or prompt_ignore_length < 0
-        ):
-            raise ValueError(f"`prompt_ignore_length` has to be a positive integer, but is {prompt_ignore_length}")
-
-        self.penalty = penalty
-        self.prompt_ignore_length = prompt_ignore_length
-
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        # input_ids: (batch_size, current_sequence_length, num_channels)
-        # scores: (batch_size, num_channels, vocab_size)
-
-        if self.penalty == 1.0:  # No penalty, no change to scores
-            return scores
-
-        # Determine which part of input_ids to use for penalty calculation
-        if self.prompt_ignore_length is not None and self.prompt_ignore_length > 0:
-            input_ids_to_penalize = input_ids[:, self.prompt_ignore_length :, :]
-        else:
-            input_ids_to_penalize = input_ids
-
-        if input_ids_to_penalize.shape[1] == 0:
-            return scores
-
-        input_ids_permuted = input_ids_to_penalize.permute(0, 2, 1)  # Shape: (B, C, S')
-
-        gathered_token_scores = torch.gather(scores, 2, input_ids_permuted)
-
-        penalized_token_scores = torch.where(
-            gathered_token_scores < 0, gathered_token_scores * self.penalty, gathered_token_scores / self.penalty
-        )
-
-        scores_processed = scores.scatter(2, input_ids_permuted, penalized_token_scores)
-
-        return scores_processed
-
-
-class DiaFlattenLogitsProcessor(LogitsProcessor):
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        return scores.view(-1, scores.shape[-1])
-
-
-class DiaUnflattenLogitsProcessor(LogitsProcessor):
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        batch_size = input_ids.shape[0]
-        return scores.view(batch_size, -1, *scores.shape[1:])
-
-
 class DiaEosTokenCriteria(StoppingCriteria):
     """
     This class can be used to stop generation whenever the "end-of-sequence" token is generated.
@@ -1325,6 +1155,9 @@ class DiaEosTokenCriteria(StoppingCriteria):
         We need to stop generation in step s+3, where all of the information is generated.
         We check by if the first channel has EOS in the `step - max_delay_pattern + 1` step.
         """
+        # TODO: reshape from (B * C, V) to (B, C, V)
+        # and reshape from (B * C, S) to (B, S, C)
+
         if input_ids.shape[1] < self.max_delay_pattern:
             return torch.zeros(input_ids.shape[0], dtype=torch.bool, device=input_ids.device)
 
@@ -1488,22 +1321,65 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model.get_decoder()
 
-    def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Dict
-    ) -> Tuple[GenerationConfig, Dict]:
-        generation_config, model_kwargs = super()._prepare_generation_config(
-            generation_config, use_model_defaults, **kwargs
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        decoder_position_ids: Optional[torch.LongTensor] = None,
+        encoder_outputs: Optional[Union[BaseModelOutput, Tuple]] = None,
+        past_key_values: Optional[EncoderDecoderCache] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
+    ) -> Union[Tuple, Seq2SeqLMOutput]:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            decoder_position_ids=decoder_position_ids,
+            encoder_outputs=encoder_outputs,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
         )
 
-        # Enabling unconditioned input for generation
-        model_kwargs["with_unconditioned_input"] = True
+        last_hidden_state = outputs[0]
+        batch_size = last_hidden_state.shape[0]
+        audio_logits = self.logits_dense(last_hidden_state).view(batch_size, -1, self.num_channels, self.vocab_size)
 
-        self.config.eos_token_id = self.config.eos_token_id or generation_config.eos_token_id
-        self.config.pad_token_id = self.config.pad_token_id or generation_config.pad_token_id
-        self.config.bos_token_id = self.config.bos_token_id or generation_config.bos_token_id
+        # TODO: loss calculations here
+        loss = None
 
-        return generation_config, model_kwargs
+        if not return_dict:
+            output = (audio_logits,) + outputs[1:]
+            # loss
+            return output
 
+        return Seq2SeqLMOutput(
+            loss=loss,
+            logits=audio_logits,
+            past_key_values=outputs.past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+        )
+
+    # TODO: seems to expect static cache --> we shouldn't have to do anything in this method as the user needs to provide correct values with processor
     def _prepare_model_inputs(
         self,
         inputs: Optional[torch.Tensor] = None,
@@ -1539,6 +1415,7 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, GenerationMixin):
 
         return input_ids, "input_ids", model_kwargs
 
+    # TODO: accept 3D and reshape to 2D after processing everything
     def _prepare_decoder_input_ids_for_generation(
         self,
         batch_size: int,
@@ -1591,6 +1468,7 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, GenerationMixin):
 
         return decoder_input_ids, model_kwargs
 
+    # TODO: shouldn't be necessary (esp after using prepare_inputs_for_gen...)
     def _prepare_attention_mask_for_generation(
         self,
         inputs_tensor: torch.Tensor,
@@ -1625,51 +1503,34 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, GenerationMixin):
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
     ) -> LogitsProcessorList:
-        # instantiate processors list
-        processors = LogitsProcessorList()
-        if logits_processor is None:
-            logits_processor = []
+        # TODO: hangover processor is removed --> use mask to overwrite the first xxx tokens with mask
+        # TODO: make input_ids of audio (bsz * num_channels, seq_len)
+        # --> reshape in forward/generate prep
+        # --> logits can be processed by any of the other methods
 
-        if generation_config.guidance_scale != 1.0:
-            processors.append(
+        custom_processors = LogitsProcessorList()
+
+        if generation_config.guidance_scale is not None and generation_config.guidance_scale != 1:
+            custom_processors.append(
                 DiaClassifierFreeGuidanceFilterLogitsProcessor(
                     cfg_scale=generation_config.guidance_scale
-                    if generation_config.guidance_scale is not None
-                    else 3.0,
+                    if generation_config.guidance_scale is not None else 3.0,
                     cfg_filter_top_k=model_kwargs.get("guidance_top_k", 50),
                     device=device,
                 )
             )
-        processors.append(
-            SuppressTokensLogitsProcessor(
-                [self.config.pad_token_id, self.config.bos_token_id],
-                device=device,
-            )
-        )
-        processors.append(
-            DiaHangoverLogitsProcessor(
-                pad_value=self.config.pad_token_id,
-                hangover=model_kwargs["decoder_hangover"],
-                device=device,
-            )
-        )
-        if generation_config.exponential_decay_length_penalty is not None:
-            processors.append(
-                DiaExponentialDecayLengthPenalty(
-                    exponential_decay_length_penalty=generation_config.exponential_decay_length_penalty,
-                    eos_value=self.config.eos_token_id,
-                    input_ids_seq_length=input_ids_seq_length,
-                    device=device,
-                )
-            )
-        processors.append(
+            # Avoid adding cfg again
+            generation_config.guidance_scale = None
+
+        custom_processors.append(
             DiaEOSFilterAndScaleLogitsProcessor(
                 eos_value=self.config.eos_token_id,
                 eos_scale=model_kwargs.get("eos_scale", 0.8),
                 device=device,
             )
         )
-        processors.append(
+
+        custom_processors.append(
             DiaEOSDelayPatternLogitsProcessor(
                 delay_pattern=torch.tensor(self.config.delay_pattern, device=device, dtype=torch.long),
                 eos_value=self.config.eos_token_id,
@@ -1679,106 +1540,17 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, GenerationMixin):
             )
         )
 
-        if generation_config.diversity_penalty is not None and generation_config.diversity_penalty > 0.0:
-            processors.append(
-                HammingDiversityLogitsProcessor(
-                    diversity_penalty=generation_config.diversity_penalty,
-                    num_beams=generation_config.num_beams,
-                    num_beam_groups=generation_config.num_beam_groups,
-                )
-            )
-
-        if generation_config.repetition_penalty is not None and generation_config.repetition_penalty != 1.0:
-            processors.append(DiaRepetitionPenaltyLogitsProcessor(penalty=generation_config.repetition_penalty))
-        if generation_config.remove_invalid_values is True:
-            processors.append(InfNanRemoveLogitsProcessor())
-        if generation_config.suppress_tokens is not None:
-            processors.append(
-                SuppressTokensLogitsProcessor(
-                    generation_config.suppress_tokens,
-                    device=device,
-                )
-            )
-        if generation_config.begin_suppress_tokens is not None:
-            begin_index = input_ids_seq_length
-            begin_index = (
-                begin_index
-                if (input_ids_seq_length > 1 or generation_config.forced_bos_token_id is None)
-                else begin_index + 1
-            )
-            processors.append(
-                SuppressTokensAtBeginLogitsProcessor(
-                    generation_config.begin_suppress_tokens,
-                    begin_index,
-                    device=device,
-                )
-            )
-
-        # TODO (joao): find a strategy to specify the order of the processors
-        processors = self._merge_criteria_processor_list(processors, logits_processor)
-
-        # Processors previously known as `LogitsWarpers`, only applied with sampling strategies
-        if generation_config.do_sample:
-            # In beam methods, we need to keep at least one non-eos token to explore continuations that might have a
-            # better score (i.e. keep len(list(generation_config._eos_token_tensor)) + 1)
-            if generation_config.num_beams > 1:
-                if isinstance(generation_config._eos_token_tensor, list):
-                    min_tokens_to_keep = len(generation_config._eos_token_tensor) + 1
-                elif isinstance(generation_config._eos_token_tensor, torch.Tensor):
-                    min_tokens_to_keep = generation_config._eos_token_tensor.shape[0] + 1
-                else:
-                    min_tokens_to_keep = 2
-            else:
-                min_tokens_to_keep = 1
-
-            # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
-            # all samplers can be found in `generation_utils_samplers.py`
-            processors.append(DiaFlattenLogitsProcessor())
-            if generation_config.temperature is not None and generation_config.temperature != 1.0:
-                processors.append(TemperatureLogitsWarper(generation_config.temperature))
-            if generation_config.top_k is not None and generation_config.top_k != 0:
-                processors.append(
-                    TopKLogitsWarper(top_k=generation_config.top_k, min_tokens_to_keep=min_tokens_to_keep)
-                )
-            if generation_config.top_p is not None and generation_config.top_p < 1.0:
-                processors.append(
-                    TopPLogitsWarper(top_p=generation_config.top_p, min_tokens_to_keep=min_tokens_to_keep)
-                )
-            if generation_config.min_p is not None:
-                # Applied after temperature scaling (see https://github.com/ggerganov/llama.cpp/pull/3841#issuecomment-2073826084)
-                processors.append(
-                    MinPLogitsWarper(min_p=generation_config.min_p, min_tokens_to_keep=min_tokens_to_keep)
-                )
-            if generation_config.typical_p is not None and generation_config.typical_p < 1.0:
-                processors.append(
-                    TypicalLogitsWarper(mass=generation_config.typical_p, min_tokens_to_keep=min_tokens_to_keep)
-                )
-            if generation_config.epsilon_cutoff is not None and 0.0 < generation_config.epsilon_cutoff < 1.0:
-                processors.append(
-                    EpsilonLogitsWarper(
-                        epsilon=generation_config.epsilon_cutoff, min_tokens_to_keep=min_tokens_to_keep
-                    )
-                )
-            if generation_config.eta_cutoff is not None and 0.0 < generation_config.eta_cutoff < 1.0:
-                processors.append(
-                    EtaLogitsWarper(
-                        epsilon=generation_config.eta_cutoff, min_tokens_to_keep=min_tokens_to_keep, device=device
-                    )
-                )
-            processors.append(DiaUnflattenLogitsProcessor())
-
-        # Watermarking should be after all logits processing is finished (see #34630)
-        if generation_config.watermarking_config is not None:
-            processors.append(
-                generation_config.watermarking_config.construct_processor(
-                    self.config.get_text_config().vocab_size, device
-                )
-            )
-
-        # `LogitNormalization` should always be the last logit processor, when present
-        if generation_config.renormalize_logits is True:
-            processors.append(LogitNormalization())
-        return processors
+        return super()._get_logits_processor(
+            generation_config=generation_config,
+            input_ids_seq_length=input_ids_seq_length,
+            encoder_input_ids=encoder_input_ids,
+            prefix_allowed_tokens_fn=None,
+            logits_processor=custom_processors,
+            device=device,
+            model_kwargs=model_kwargs,
+            negative_prompt_ids=negative_prompt_ids,
+            negative_prompt_attention_mask=negative_prompt_attention_mask,
+        )
 
     def _get_stopping_criteria(
         self,
@@ -1787,90 +1559,49 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, GenerationMixin):
         tokenizer: Optional["PreTrainedTokenizerBase"] = None,
         **kwargs,
     ) -> StoppingCriteriaList:
-        criteria = StoppingCriteriaList()
-        if generation_config.max_time is not None:
-            criteria.append(MaxTimeCriteria(max_time=generation_config.max_time))
-        if generation_config.max_length is not None:
-            criteria.append(
-                MaxLengthCriteria(max_length=generation_config.max_length + max(self.config.delay_pattern))
-            )
-        criteria.append(
+        custom_stopping_criteria = StoppingCriteriaList()
+
+        # We end generation after `max delays` if every sample generated eos on their first channel
+        custom_stopping_criteria.append(
             DiaEosTokenCriteria(
                 eos_value=self.config.eos_token_id,
                 delay_pattern=torch.tensor(self.config.delay_pattern, device=self.device, dtype=torch.long),
                 device=self.device,
             )
         )
-        if (
-            generation_config.is_assistant
-            and generation_config.assistant_confidence_threshold is not None
-            and generation_config.assistant_confidence_threshold > 0
-        ):
-            criteria.append(
-                ConfidenceCriteria(assistant_confidence_threshold=generation_config.assistant_confidence_threshold)
-            )
-        criteria = self._merge_criteria_processor_list(criteria, stopping_criteria)
-        return criteria
 
-    def forward(
+        return super()._get_stopping_criteria(
+            generation_config=generation_config,
+            stopping_criteria=custom_stopping_criteria,
+            tokenizer=tokenizer,
+            **kwargs,
+        )
+
+    def _prepare_generation_config(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        decoder_position_ids: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[Union[BaseModelOutput, Tuple]] = None,
-        past_key_values: Optional[EncoderDecoderCache] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        with_unconditioned_input: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
-    ) -> Union[Tuple, Seq2SeqLMOutput]:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            decoder_position_ids=decoder_position_ids,
-            encoder_outputs=encoder_outputs,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            with_unconditioned_input=with_unconditioned_input,
-            return_dict=return_dict,
-            cache_position=cache_position,
+        generation_config: Optional[GenerationConfig],
+        use_model_defaults: Optional[bool] = None,
+        **kwargs: Dict
+    ) -> Tuple[GenerationConfig, Dict]:
+        generation_config, model_kwargs = super()._prepare_generation_config(
+            generation_config, use_model_defaults, **kwargs
         )
 
-        last_hidden_state = outputs[0]
-        batch_size = last_hidden_state.shape[0]
-        audio_logits = self.logits_dense(last_hidden_state).view(batch_size, -1, self.num_channels, self.vocab_size)
+        # We allow generation up to max length + max delay pattern
+        # (will revert back to max length after generation)
+        # TODO: check where max delay wasn't considered but added afterwards
+        generation_config.max_length += max(self.config.delay_pattern)
 
-        # TODO: loss calculations here
-        loss = None
+        # TODO: move this to prepare_inputs_for_generation
+        # Enabling unconditioned input for generation
+        model_kwargs["with_unconditioned_input"] = True
 
-        if not return_dict:
-            output = (audio_logits,) + outputs[1:]
-            # loss
-            return output
+        # We need this for our custom logit processors and stopping criteria
+        self.config.eos_token_id = self.config.eos_token_id or generation_config.eos_token_id
+        self.config.pad_token_id = self.config.pad_token_id or generation_config.pad_token_id
+        self.config.bos_token_id = self.config.bos_token_id or generation_config.bos_token_id
 
-        return Seq2SeqLMOutput(
-            loss=loss,
-            logits=audio_logits,
-            past_key_values=outputs.past_key_values,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
-        )
+        return generation_config, model_kwargs
 
     def generate(
         self,
