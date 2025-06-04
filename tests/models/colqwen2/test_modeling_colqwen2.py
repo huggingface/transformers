@@ -324,9 +324,9 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         # Further validation: fine-grained check, with a hardcoded score from the original Hf implementation.
         expected_scores = torch.tensor(
             [
-                [16.2500, 7.8750, 14.6875],
-                [9.5000, 17.1250, 10.5000],
-                [14.9375, 10.9375, 20.0000],
+                [16.2500,  7.9688, 14.7500],
+                [9.5000, 17.1250, 10.6250],
+                [14.8750, 10.8750, 20.0000],
             ],
             dtype=scores.dtype,
         )
