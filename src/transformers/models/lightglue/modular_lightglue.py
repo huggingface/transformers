@@ -460,7 +460,7 @@ class LightGlueMatchAssignmentLayer(nn.Module):
         batch_size, num_keypoints, descriptor_dim = descriptors.shape
         # Final projection and similarity computation
         m_descriptors = self.final_projection(descriptors)
-        m_descriptors = m_descriptors / torch.tensor(self.descriptor_dim) ** 0.25
+        m_descriptors = m_descriptors / torch.tensor(self.descriptor_dim, device=m_descriptors.device) ** 0.25
         m_descriptors = m_descriptors.reshape(batch_size // 2, 2, num_keypoints, descriptor_dim)
         m_descriptors0 = m_descriptors[:, 0]
         m_descriptors1 = m_descriptors[:, 1]
