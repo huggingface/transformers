@@ -1396,7 +1396,7 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
                     video_index += 1
                 for frame_idx in range(len(video_grid_thw)):
                     if self.image_token in text[i]:
-                        num_image_tokens = video_grid_thw[frame_idx].prod().item() // merge_length
+                        num_image_tokens = video_grid_thw[frame_idx].prod() // merge_length
                         text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 

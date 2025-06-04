@@ -131,8 +131,6 @@ class Glm4vImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = True,
-        min_pixels: Optional[int] = None,
-        max_pixels: Optional[int] = None,
         patch_size: int = 14,
         temporal_patch_size: int = 2,
         merge_size: int = 2,
@@ -143,11 +141,6 @@ class Glm4vImageProcessor(BaseImageProcessor):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
         else:
             size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
-        # backward compatibility: override size with min_pixels and max_pixels if they are provided
-        if min_pixels is not None:
-            size["shortest_edge"] = min_pixels
-        if max_pixels is not None:
-            size["longest_edge"] = max_pixels
         self.min_pixels = size["shortest_edge"]
         self.max_pixels = size["longest_edge"]
         self.size = size
@@ -451,42 +444,6 @@ class Glm4vImageProcessor(BaseImageProcessor):
             pixel_values = np.array(pixel_values)
             vision_grid_thws = np.array(vision_grid_thws)
             data.update({"pixel_values": pixel_values, "image_grid_thw": vision_grid_thws})
-
-        # kept for BC only and should be removed after v5.0
-        if videos is not None:
-            logger.warning(
-                "`Glm4vImageProcessor` works only with image inputs and doesn't process videos anymore. "
-                "This is a deprecated behavior and will be removed in v5.0. "
-                "Your videos should be forwarded to `Glm4vVideoProcessor`. "
-            )
-            videos = make_batched_videos(videos)
-            pixel_values_videos, vision_grid_thws_videos = [], []
-            for images in videos:
-                patches, video_grid_thw = self._preprocess(
-                    images,
-                    do_resize=do_resize,
-                    size=size,
-                    resample=resample,
-                    do_rescale=do_rescale,
-                    rescale_factor=rescale_factor,
-                    do_normalize=do_normalize,
-                    image_mean=image_mean,
-                    image_std=image_std,
-                    patch_size=patch_size,
-                    temporal_patch_size=temporal_patch_size,
-                    merge_size=merge_size,
-                    data_format=data_format,
-                    do_convert_rgb=do_convert_rgb,
-                    input_data_format=input_data_format,
-                )
-                pixel_values_videos.extend(patches)
-                vision_grid_thws_videos.append(video_grid_thw)
-            data.update(
-                {
-                    "pixel_values_videos": np.array(pixel_values_videos),
-                    "video_grid_thw": np.array(vision_grid_thws_videos),
-                }
-            )
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
