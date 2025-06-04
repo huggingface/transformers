@@ -111,6 +111,8 @@ class MimiConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `False`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
+        use_streaming (`bool`, *optional*, defaults to `False`):
+            Whether to use streaming mode. If `True`, the model encode method will return the padding cache that can be used in a subsequent call to the encode method.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         sliding_window (`int`, *optional*, defaults to 250):
@@ -172,6 +174,7 @@ class MimiConfig(PretrainedConfig):
         initializer_range=0.02,
         norm_eps=1e-5,
         use_cache=False,
+        use_streaming=False,
         rope_theta=10000.0,
         sliding_window=250,
         attention_dropout=0.0,
@@ -209,6 +212,7 @@ class MimiConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.norm_eps = norm_eps
         self.use_cache = use_cache
+        self.use_streaming = use_streaming
         self.rope_theta = rope_theta
         self.sliding_window = sliding_window
         self.attention_dropout = attention_dropout

@@ -24,6 +24,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
+from ...masking_utils import create_causal_mask
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_outputs import BaseModelOutputWithPast
@@ -77,6 +78,45 @@ class MimiOutput(ModelOutput):
     decoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
 
 
+class MimiConv1dPaddingCache:
+    """
+    Padding cache for MimiConv1d causal convolutions in order to support streaming via cache padding.
+    See: https://arxiv.org/pdf/2005.06720 & https://arxiv.org/pdf/2204.07064
+
+    A padding cache is a list of cached partial hidden states for each convolution layer.
+    Hidden states are cached from the previous call to the MimiConv1d forward pass, given the padding size.
+    """
+    def __init__(self):
+        self.padding_cache: List[torch.Tensor] = []
+
+    def update(
+        self,
+        padding_states: torch.Tensor,
+        layer_idx: int,
+    ):
+        """
+        Updates the padding cache with the new padding states for the layer `layer_idx` and returns the current cache.
+        If cache was not yet initialized, it is initialized with the padding states and None is returned.
+
+        Parameters:
+            padding_states (`torch.Tensor`):
+                The new padding states to cache.
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+        Returns:
+            `torch.Tensor` or `None`, the current padding cache.
+        """
+        if len(self.padding_cache) <= layer_idx:
+            current_cache = None
+            self.padding_cache.append(padding_states)
+        else:
+            current_cache = self.padding_cache[layer_idx]
+    
+        self.padding_cache[layer_idx] = padding_states
+
+        return current_cache
+
+
 @dataclass
 class MimiEncoderOutput(ModelOutput):
     """
@@ -116,45 +156,6 @@ class MimiDecoderOutput(ModelOutput):
 
     audio_values: Optional[torch.FloatTensor] = None
     decoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
-
-
-class MimiConv1dPaddingCache:
-    """
-    Padding cache for MimiConv1d causal convolutions in order to support streaming via cache padding.
-    See: https://arxiv.org/pdf/2005.06720 & https://arxiv.org/pdf/2204.07064
-
-    A padding cache is a list of cached partial hidden states for each convolution layer.
-    Hidden states are cached from the previous call to the MimiConv1d forward pass, given the padding size.
-    """
-    def __init__(self):
-        self.padding_cache: List[torch.Tensor] = []
-
-    def update(
-        self,
-        padding_states: torch.Tensor,
-        layer_idx: int,
-    ):
-        """
-        Updates the padding cache with the new padding states for the layer `layer_idx` and returns the current cache.
-        If cache was not yet initialized, it is initialized with the padding states and None is returned.
-
-        Parameters:
-            padding_states (`torch.Tensor`):
-                The new padding states to cache.
-            layer_idx (`int`):
-                The index of the layer to cache the states for.
-        Returns:
-            `torch.Tensor` or `None`, the current padding cache.
-        """
-        if len(self.padding_cache) <= layer_idx:
-            current_cache = None
-            self.padding_cache.append(padding_states)
-        else:
-            current_cache = self.padding_cache[layer_idx]
-    
-        self.padding_cache[layer_idx] = padding_states
-
-        return current_cache
 
 
 class MimiConv1d(nn.Module):
@@ -1101,11 +1102,13 @@ class MimiTransformerModel(nn.Module):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = None
-        if attention_mask is not None:
-            causal_mask = self._update_causal_mask(
-                attention_mask, hidden_states, cache_position, past_key_values, output_attentions
-            )
+        causal_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=hidden_states,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+        )
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1627,7 +1630,11 @@ class MimiModel(MimiPreTrainedModel):
         """
         Encodes the given input using the underlying VQVAE. The padding mask is required to compute the correct scale.
         """
+
+        # TODO: @eustlb, let's make the encoder support padding_mask so that batched inputs are supported. 
         embeddings = self.encoder(input_values, padding_cache=padding_cache)
+
+        # TODO: @eustlb, convert the padding mask to attention mask.
         encoder_outputs = self.encoder_transformer(
             embeddings.transpose(1, 2), past_key_values=past_key_values, return_dict=return_dict
         )
@@ -1681,6 +1688,7 @@ class MimiModel(MimiPreTrainedModel):
         num_quantizers: Optional[float] = None,
         encoder_past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         padding_cache: Optional[MimiConv1dPaddingCache] = None,
+        use_streaming: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor, Optional[torch.Tensor]], MimiEncoderOutput]:
         """
@@ -1709,6 +1717,7 @@ class MimiModel(MimiPreTrainedModel):
             `codebook` of shape `[batch_size, num_codebooks, frames]`, the discrete encoded codes for the input audio waveform.
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
+        use_streaming = use_streaming if use_streaming is not None else self.config.use_streaming
 
         num_quantizers = self.config.num_quantizers if num_quantizers is None else num_quantizers
 
@@ -1724,6 +1733,9 @@ class MimiModel(MimiPreTrainedModel):
 
         if padding_mask is None:
             padding_mask = torch.ones_like(input_values).bool()
+
+        if use_streaming and padding_cache is None:
+            padding_cache = MimiConv1dPaddingCache() 
 
         encoded_frames, encoder_past_key_values, padding_cache = self._encode_frame(
             input_values,
