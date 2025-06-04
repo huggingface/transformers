@@ -17,14 +17,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING
 
 from ...configuration_utils import PretrainedConfig
-from ..auto import CONFIG_MAPPING
-
-
-if TYPE_CHECKING:
-    from ..superpoint import SuperPointConfig
+from ..auto import CONFIG_MAPPING, AutoConfig
+from ..superpoint import SuperPointConfig
 
 
 class LightGlueConfig(PretrainedConfig):
@@ -85,10 +81,11 @@ class LightGlueConfig(PretrainedConfig):
     """
 
     model_type = "lightglue"
+    sub_configs = {"keypoint_detector_config": AutoConfig}
 
     def __init__(
         self,
-        keypoint_detector_config: "SuperPointConfig" = None,
+        keypoint_detector_config: SuperPointConfig = None,
         descriptor_dim: int = 256,
         num_hidden_layers: int = 9,
         num_attention_heads: int = 4,

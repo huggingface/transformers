@@ -29,12 +29,7 @@ from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-)
+from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from ...utils.generic import can_return_tuple
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from .configuration_lightglue import LightGlueConfig
@@ -208,7 +203,7 @@ class LightGlueAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
@@ -281,7 +276,7 @@ class LightGlueAttentionBlock(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,

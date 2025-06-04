@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -25,15 +25,13 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from ...utils.generic import can_return_tuple
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from ..clip.modeling_clip import CLIPMLP
 from ..cohere.modeling_cohere import apply_rotary_pos_emb
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
+from ..superpoint import SuperPointConfig
 
-
-if TYPE_CHECKING:
-    from ..superpoint import SuperPointConfig
 
 logger = logging.get_logger(__name__)
 
@@ -99,10 +97,11 @@ class LightGlueConfig(PretrainedConfig):
     """
 
     model_type = "lightglue"
+    sub_configs = {"keypoint_detector_config": AutoConfig}
 
     def __init__(
         self,
-        keypoint_detector_config: "SuperPointConfig" = None,
+        keypoint_detector_config: SuperPointConfig = None,
         descriptor_dim: int = 256,
         num_hidden_layers: int = 9,
         num_attention_heads: int = 4,
@@ -272,7 +271,7 @@ class LightGlueAttention(LlamaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
@@ -342,7 +341,7 @@ class LightGlueAttentionBlock(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
