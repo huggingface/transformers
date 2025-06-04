@@ -696,7 +696,13 @@ if TYPE_CHECKING:
         TrainerControl,
         TrainerState,
     )
-    from .trainer_utils import EvalPrediction, IntervalStrategy, SchedulerType, enable_full_determinism, set_seed
+    from .trainer_utils import (
+        EvalPrediction,
+        IntervalStrategy,
+        SchedulerType,
+        enable_full_determinism,
+        set_seed,
+    )
     from .training_args import TrainingArguments
     from .training_args_seq2seq import Seq2SeqTrainingArguments
     from .training_args_tf import TFTrainingArguments
@@ -784,7 +790,10 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummies_sentencepiece_and_tokenizers_objects import *
     else:
-        from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
+        from .convert_slow_tokenizer import (
+            SLOW_TO_FAST_CONVERTERS,
+            convert_slow_tokenizer,
+        )
 
     try:
         if not is_vision_available():
@@ -902,9 +911,14 @@ if TYPE_CHECKING:
             WatermarkLogitsProcessor,
             WhisperTimeStampLogitsProcessor,
         )
-        from .integrations.executorch import TorchExportableModuleWithStaticCache, convert_and_export_with_cache
+        from .integrations.executorch import (
+            TorchExportableModuleWithStaticCache,
+            convert_and_export_with_cache,
+        )
         from .masking_utils import AttentionMaskInterface
-        from .model_debugging_utils import model_addition_debugger_context
+        from .model_debugging_utils import (
+            model_addition_debugger_context,
+        )
         from .modeling_layers import GradientCheckpointingLayer
         from .modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
         from .modeling_utils import AttentionInterface, PreTrainedModel
@@ -957,10 +971,20 @@ if TYPE_CHECKING:
             TFTopPLogitsWarper,
         )
         from .keras_callbacks import KerasMetricCallback, PushToHubCallback
-        from .modeling_tf_utils import TFPreTrainedModel, TFSequenceSummary, TFSharedEmbeddings, shape_list
+        from .modeling_tf_utils import (
+            TFPreTrainedModel,
+            TFSequenceSummary,
+            TFSharedEmbeddings,
+            shape_list,
+        )
 
         # Optimization
-        from .optimization_tf import AdamWeightDecay, GradientAccumulator, WarmUp, create_optimizer
+        from .optimization_tf import (
+            AdamWeightDecay,
+            GradientAccumulator,
+            WarmUp,
+            create_optimizer,
+        )
 
     try:
         if not is_flax_available():
