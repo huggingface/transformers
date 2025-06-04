@@ -528,7 +528,8 @@ class MraSelfAttention(nn.Module):
             )
 
         kernel_loaded = mra_cuda_kernel is not None
-        if is_torch_cuda_available() and is_ninja_available() and not kernel_loaded:
+        cuda_platform = torch.version.cuda is not None
+        if is_torch_cuda_available() and is_ninja_available() and cuda_platform and not kernel_loaded:
             try:
                 load_cuda_kernels()
             except Exception as e:
