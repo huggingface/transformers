@@ -14,23 +14,13 @@
 # limitations under the License.
 """PyTorch Dia model."""
 
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 import torch
 from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
-from ...generation.logits_process import (
-    LogitsProcessor,
-    LogitsProcessorList,
-)
-from ...generation.stopping_criteria import (
-    StoppingCriteria,
-    StoppingCriteriaList,
-)
-from ...generation.streamers import BaseStreamer
-from ...generation.utils import GenerateOutput, GenerationConfig, GenerationMixin
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
     _prepare_4d_attention_mask,
@@ -46,13 +36,13 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...tokenization_utils_base import PreTrainedTokenizerBase
 from ...utils import (
     is_torch_flex_attn_available,
     is_torchdynamo_compiling,
     logging,
 )
 from .configuration_dia import DiaConfig, DiaDecoderConfig, DiaEncoderConfig
+from .generation_dia import DiaGenerationMixin
 
 
 if is_torch_flex_attn_available():
@@ -869,6 +859,7 @@ class DiaModel(DiaPreTrainedModel):
             raise ValueError(
                 "You should either provide text ids or the cached text encodings. Neither has been found."
             )
+        # TODO: raise value error on decoder inputs == None
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -918,6 +909,10 @@ class DiaModel(DiaPreTrainedModel):
                 # (2*bsz, 1, channel)
                 decoder_input_ids = torch.full((encoder_outputs[0].shape[0], 1, 9), 1026, device=self.device)
 
+        # We forward with a 2D tensor (bsz * channels, seq_len) but internally we use a 3D tensor (bsz, seq_len, channels)
+        if decoder_input_ids.ndim == 2:
+            decoder_input_ids = decoder_input_ids.reshape(encoder_outputs[0].shape[0], -1, self.config.num_channels)
+
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=None,  # TODO: if we prefix audio we will need a mask when left padding - `audio_attention_mask`
@@ -947,343 +942,7 @@ class DiaModel(DiaPreTrainedModel):
         )
 
 
-class DiaClassifierFreeGuidanceFilterLogitsProcessor(LogitsProcessor):
-    def __init__(self, cfg_scale: float = 3.0, cfg_filter_top_k: int = 50, device: str = "cpu"):
-        self.cfg_scale = torch.tensor(cfg_scale, device=device)
-        self.cfg_filter_top_k = cfg_filter_top_k
-
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        if scores.shape[0] != 2 * input_ids.shape[0]:
-            raise ValueError(
-                f"Logits should have twice the batch size of the input ids, the first half of batches corresponding to "
-                f"the conditional inputs, and the second half of batches corresponding to the unconditional inputs. Got "
-                f"batch size {scores.shape[0]} for the logits and {input_ids.shape[0]} for the input ids."
-            )
-        # TODO: reshape from (B * C, V) to (B, C, V)
-
-        # cfg
-        scores_last = scores.view(scores.shape[0] // 2, 2, *scores.shape[1:])
-        uncond_scores = scores_last[:, 0, :]
-        cond_scores = scores_last[:, 1, :]
-        scores = cond_scores + self.cfg_scale * (cond_scores - uncond_scores)  # Shape [B_orig, C, V]
-
-        # cfg filter top k
-        _, top_k_indices = torch.topk(scores, k=self.cfg_filter_top_k, dim=-1)
-        mask = torch.ones_like(scores, dtype=torch.bool)
-        mask = mask.scatter(dim=-1, index=top_k_indices, value=False)
-        scores = cond_scores.masked_fill(mask, -torch.inf)
-
-        return scores
-
-
-class DiaEOSFilterAndScaleLogitsProcessor(LogitsProcessor):
-    def __init__(self, eos_value: int, eos_scale: float, device: str = "cpu"):
-        self.eos_value = eos_value
-        self.eos_scale = torch.tensor(eos_scale, device=device) if eos_scale != 1.0 else None
-
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        """
-        EOS filter, this ensures:
-        # 1. only channel 0 can generate EOS
-        # 2. if channel 0 has EOS with highest logit, it will be the only candidate
-        # 3. if channel 0 has EOS not with highest logit, it will be suppressed
-        """
-        # TODO: reshape from (B * C, V) to (B, C, V)
-
-        scores[:, 1:, self.eos_value :] = torch.full_like(
-            scores[:, 1:, self.eos_value :],
-            fill_value=-torch.inf,
-        )
-        if self.eos_scale is not None:
-            scores[:, 0, self.eos_value] *= self.eos_scale
-
-        scores_flat = scores.view(-1, scores.shape[-1])
-
-        top_logit_indices = torch.argmax(scores_flat, dim=-1)
-        eos_not_highest_mask = top_logit_indices != self.eos_value
-        mask_eos_unless_highest = torch.zeros_like(scores_flat, dtype=torch.bool)
-        mask_eos_unless_highest[eos_not_highest_mask, self.eos_value] = True
-        scores_flat = scores_flat.masked_fill(mask_eos_unless_highest, -torch.inf)
-        eos_highest_mask = top_logit_indices == self.eos_value
-        mask_eos_highest = torch.zeros_like(scores_flat, dtype=torch.bool)
-        mask_eos_highest[eos_highest_mask, : self.eos_value] = True
-        scores_flat = scores_flat.masked_fill(mask_eos_highest, -torch.inf)
-
-        scores = scores_flat.view(scores.shape)
-
-        return scores
-
-
-class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
-    def __init__(
-        self,
-        delay_pattern: torch.Tensor,
-        eos_value: int,
-        pad_value: int,
-        max_step: int,
-        device: str = "cpu",
-    ):
-        self.delay_pattern = delay_pattern
-        self.max_delay_pattern = delay_pattern.max().item()
-        self.num_channels = delay_pattern.shape[0]
-        self.eos_value = eos_value
-        self.pad_value = pad_value
-        self.max_step = torch.tensor(max_step, device=device)
-        self.eos_countup: Optional[torch.Tensor] = None
-        self.device = device
-
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        """
-        This logits processor is used to apply the delay pattern to the generated tokens when EOS is generated.
-
-        If delay pattern is [0, 2, 3, 4] then:
-
-            s   s+1 s+2 s+3 s+4 s+5 ...
-            |   |   |   |   |   |
-        C0: EOS PAD PAD PAD PAD PAD ...
-        C1: x   x   EOS PAD PAD PAD ...
-        C2: x   x   x   EOS PAD PAD ...
-        C3: x   x   x   x   EOS PAD ...
-
-        The PAD & EOS are forced from step s+1.
-        """
-        # TODO: reshape from (B * C, V) to (B, C, V)
-        # and reshape from (B * C, S) to (B, S, C)
-
-        # EOS Countup
-        # Due to delay pattern, we do not stop generation at the first EOS token.
-        # Instead, we force EOS, PAD at delay pattern steps.
-        batch_size = scores.shape[0]
-        if self.eos_countup is None:
-            self.eos_countup = torch.full((batch_size,), -1, dtype=torch.long, device=self.device)
-
-        step = input_ids.shape[1]
-
-        # EOS countdown and delay pattern application
-        active_mask = self.eos_countup > 0
-
-        if active_mask.any():
-            # Logits for active items: [num_active, C, V]
-            scores_active = scores[active_mask]
-            # Countdown values for active items: [num_active]
-            eos_countup_active = self.eos_countup[active_mask]
-
-            # Expand for comparison with delay_pattern: [num_active, C]
-            eos_countup_active = eos_countup_active.unsqueeze(1).expand(-1, self.num_channels)
-            delay_pattern = self.delay_pattern.unsqueeze(0).expand(scores_active.shape[0], -1)  # [num_active, C]
-
-            # Mask for forcing EOS: [num_active, C]
-            force_eos_mask_BxC = eos_countup_active == delay_pattern
-            # Mask for forcing PAD: [num_active, C]
-            force_pad_mask_BxC = eos_countup_active > delay_pattern
-
-            # Efficiently apply forced EOS and PAD logits
-            vocab_size = scores_active.shape[-1]
-
-            # Create template rows for forced EOS and PAD
-            eos_row = torch.full((vocab_size,), -torch.inf, device=self.device, dtype=scores_active.dtype)
-            eos_row[self.eos_value] = 0.0
-            pad_row = torch.full((vocab_size,), -torch.inf, device=self.device, dtype=scores_active.dtype)
-            pad_row[self.pad_value] = 0.0
-
-            # Clone the active slice to modify it
-            final_modified_slice = scores_active.clone()
-            final_modified_slice[force_eos_mask_BxC] = eos_row
-            final_modified_slice[force_pad_mask_BxC] = pad_row
-
-            # Update the original logits tensor with the modified slice
-            scores[active_mask] = final_modified_slice
-
-        # This is possible because we applied `DiaEOSFilterAndScaleLogitsProcessor`
-        last_generated_tokens = torch.argmax(scores, dim=-1)[:, 0]  # Shape [B_orig]
-        eos_start_mask = last_generated_tokens == self.eos_value
-        eos_start_mask |= step + self.max_delay_pattern >= self.max_step
-        eos_start_mask &= self.eos_countup < 0
-
-        # Make sure that the EOS token is the only candidate for the first token
-        scores[eos_start_mask, 0, :] = -torch.inf
-        scores[eos_start_mask, 0, self.eos_value] = 0.0
-
-        self.eos_countup[eos_start_mask] = 0
-        self.eos_countup[self.eos_countup >= 0] += 1
-
-        return scores
-
-
-class DiaEosTokenCriteria(StoppingCriteria):
-    """
-    This class can be used to stop generation whenever the "end-of-sequence" token is generated.
-    By default, it uses the `model.generation_config.eos_token_id`.
-
-    Args:
-        eos_token_id (`Union[int, List[int], torch.Tensor]`):
-            The id(s) of the *end-of-sequence* token.
-    """
-
-    def __init__(self, eos_value: int, delay_pattern: torch.Tensor, device: str = "cpu"):
-        self.eos_token_id = torch.tensor(eos_value, device=device)
-        self.max_delay_pattern = delay_pattern.max().item()
-
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
-        """
-        This stopping criteria is used to stop generation when EOS is generated.
-
-        If delay pattern is [0, 2, 3, 4] then:
-
-            s   s+1 s+2 s+3 s+4 s+5 ...
-            |   |   |   |   |   |
-        C0: EOS PAD PAD PAD PAD PAD ...
-        C1: x   x   EOS PAD PAD PAD ...
-        C2: x   x   x   EOS PAD PAD ...
-        C3: x   x   x   x   EOS PAD ...
-
-        We need to stop generation in step s+3, where all of the information is generated.
-        We check by if the first channel has EOS in the `step - max_delay_pattern + 1` step.
-        """
-        # TODO: reshape from (B * C, V) to (B, C, V)
-        # and reshape from (B * C, S) to (B, S, C)
-
-        if input_ids.shape[1] < self.max_delay_pattern:
-            return torch.zeros(input_ids.shape[0], dtype=torch.bool, device=input_ids.device)
-
-        is_done = input_ids[:, -self.max_delay_pattern + 1, 0] == self.eos_token_id
-        return is_done
-
-
-def build_delay_indices(B: int, T: int, C: int, delay_pattern: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Precompute (t_idx_BxTxC, indices_BTCx3) so that out[t, c] = in[t - delay[c], c].
-    Negative t_idx => BOS; t_idx >= T => PAD.
-    """
-    device = delay_pattern.device
-
-    t_idx_BxT = torch.broadcast_to(torch.arange(T, dtype=torch.long, device=device)[None, :], [B, T])
-    t_idx_BxTx1 = t_idx_BxT[..., None]
-    t_idx_BxTxC = t_idx_BxTx1 - delay_pattern.view(1, 1, C)
-
-    b_idx_BxTxC = torch.broadcast_to(torch.arange(B, dtype=torch.long, device=device).view(B, 1, 1), [B, T, C])
-    c_idx_BxTxC = torch.broadcast_to(torch.arange(C, dtype=torch.long, device=device).view(1, 1, C), [B, T, C])
-
-    # We must clamp time indices to [0..T-1] so gather_nd equivalent won't fail
-    t_clamped_BxTxC = torch.clamp(t_idx_BxTxC, 0, T - 1)
-
-    indices_BTCx3 = torch.stack([b_idx_BxTxC.reshape(-1), t_clamped_BxTxC.reshape(-1), c_idx_BxTxC.reshape(-1)], dim=1)
-
-    return t_idx_BxTxC, indices_BTCx3
-
-
-def apply_audio_delay(
-    audio: torch.Tensor,
-    pad_value: int,
-    bos_value: int,
-    precomp: Tuple[torch.Tensor, torch.Tensor],
-) -> torch.Tensor:
-    """
-    Applies the delay pattern to batched audio tokens using precomputed indices,
-    inserting BOS where t_idx < 0 and PAD where t_idx >= T.
-
-    Args:
-        audio: [B, T, C] int16 audio tokens (or int32/float)
-        pad_value: the padding token
-        bos_value: the BOS token
-        precomp:  (t_idx_BxTxC, indices_BTCx3) from build_delay_indices
-
-    Returns:
-        result: [B, T, C] delayed audio tokens
-    """
-    device = audio.device  # Get device from input tensor
-    t_idx_BxTxC, indices_BTCx3 = precomp
-    t_idx_BxTxC = t_idx_BxTxC.to(device)  # Move precomputed indices to device
-    indices_BTCx3 = indices_BTCx3.to(device)
-
-    # Equivalent of tf.gather_nd using advanced indexing
-    # Ensure indices are long type if not already (build_delay_indices should handle this)
-    gathered_flat = audio[indices_BTCx3[:, 0], indices_BTCx3[:, 1], indices_BTCx3[:, 2]]
-    gathered_BxTxC = gathered_flat.view(audio.shape)
-
-    # Create masks on the correct device
-    mask_bos = t_idx_BxTxC < 0  # => place bos_value
-    mask_pad = t_idx_BxTxC >= audio.shape[1]  # => place pad_value
-
-    # Create scalar tensors on the correct device
-    bos_tensor = torch.tensor(bos_value, dtype=audio.dtype, device=device)
-    pad_tensor = torch.tensor(pad_value, dtype=audio.dtype, device=device)
-
-    # If mask_bos, BOS; else if mask_pad, PAD; else original gather
-    # All tensors should now be on the same device
-    result = torch.where(mask_bos, bos_tensor, torch.where(mask_pad, pad_tensor, gathered_BxTxC))
-
-    return result
-
-
-def build_revert_indices(B: int, T: int, C: int, delay_pattern: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Precompute indices for the revert operation using PyTorch.
-
-    Returns:
-        A tuple (t_idx_BxTxC, indices_BTCx3) where:
-            - t_idx_BxTxC is a tensor of shape [B, T, C] computed as time indices plus the delay.
-            - indices_BTCx3 is a tensor of shape [B*T*C, 3] used for gathering, computed from:
-                batch indices, clamped time indices, and channel indices.
-    """
-    # Use default device unless specified otherwise; assumes inputs might define device later
-    device = delay_pattern.device
-
-    t_idx_BT1 = torch.broadcast_to(torch.arange(T, dtype=torch.long, device=device).unsqueeze(0), [B, T])
-    t_idx_BT1 = t_idx_BT1.unsqueeze(-1)
-
-    t_idx_BxTxC = torch.minimum(
-        t_idx_BT1 + delay_pattern.view(1, 1, C), torch.tensor(T - 1, dtype=torch.long, device=device)
-    )
-    b_idx_BxTxC = torch.broadcast_to(torch.arange(B, dtype=torch.long, device=device).view(B, 1, 1), [B, T, C])
-    c_idx_BxTxC = torch.broadcast_to(torch.arange(C, dtype=torch.long, device=device).view(1, 1, C), [B, T, C])
-
-    indices_BTCx3 = torch.stack([b_idx_BxTxC.reshape(-1), t_idx_BxTxC.reshape(-1), c_idx_BxTxC.reshape(-1)], dim=1)
-
-    return t_idx_BxTxC, indices_BTCx3
-
-
-def revert_audio_delay(
-    audio_BxTxC: torch.Tensor,
-    pad_value: int,
-    precomp: Tuple[torch.Tensor, torch.Tensor],
-    T: int,
-) -> torch.Tensor:
-    """
-    Reverts a delay pattern from batched audio tokens using precomputed indices (PyTorch version).
-
-    Args:
-        audio_BxTxC: Input delayed audio tensor
-        pad_value: Padding value for out-of-bounds indices
-        precomp: Precomputed revert indices tuple containing:
-            - t_idx_BxTxC: Time offset indices tensor
-            - indices_BTCx3: Gather indices tensor for original audio
-        T: Original sequence length before padding
-
-    Returns:
-        Reverted audio tensor with same shape as input
-    """
-    t_idx_BxTxC, indices_BTCx3 = precomp
-    device = audio_BxTxC.device  # Get device from input tensor
-
-    # Move precomputed indices to the same device as audio_BxTxC if they aren't already
-    t_idx_BxTxC = t_idx_BxTxC.to(device)
-    indices_BTCx3 = indices_BTCx3.to(device)
-
-    # Using PyTorch advanced indexing (equivalent to tf.gather_nd or np equivalent)
-    gathered_flat = audio_BxTxC[indices_BTCx3[:, 0], indices_BTCx3[:, 1], indices_BTCx3[:, 2]]
-    gathered_BxTxC = gathered_flat.view(audio_BxTxC.size())  # Use .size() for robust reshaping
-
-    # Create pad_tensor on the correct device
-    pad_tensor = torch.tensor(pad_value, dtype=audio_BxTxC.dtype, device=device)
-    # Create T tensor on the correct device for comparison
-    T_tensor = torch.tensor(T, device=device)
-    result_BxTxC = torch.where(t_idx_BxTxC >= T_tensor, pad_tensor, gathered_BxTxC)  # Changed np.where to torch.where
-
-    return result_BxTxC
-
-
-class DiaForConditionalGeneration(DiaPreTrainedModel, GenerationMixin):
+class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
     base_model_prefix = "model"
 
     def __init__(self, config: DiaConfig):
@@ -1310,6 +969,7 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, GenerationMixin):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
+        # TODO: we expect (bsz * channels, seq_len)
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         decoder_position_ids: Optional[torch.LongTensor] = None,
@@ -1342,7 +1002,7 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, GenerationMixin):
 
         last_hidden_state = outputs[0]
         batch_size = last_hidden_state.shape[0]
-        audio_logits = self.logits_dense(last_hidden_state).view(batch_size, -1, self.num_channels, self.vocab_size)
+        audio_logits = self.logits_dense(last_hidden_state).view((batch_size * self.num_channels, -1, self.vocab_size))
 
         # TODO: loss calculations here
         loss = None
@@ -1363,300 +1023,6 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, GenerationMixin):
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
-
-    # TODO: seems to expect static cache --> we shouldn't have to do anything in this method as the user needs to provide correct values with processor
-    def _prepare_model_inputs(
-        self,
-        inputs: Optional[torch.Tensor] = None,
-        bos_token_id: Optional[torch.Tensor] = None,
-        model_kwargs: Optional[Dict[str, torch.Tensor]] = None,
-    ) -> Tuple[torch.Tensor, Optional[str], Dict[str, torch.Tensor]]:
-        _encoder_length = self.config.encoder_config.max_length
-        _encoder_pad = 0
-
-        # We need to pop input_ids from model_kwargs to avoid passing it to the encoder
-        input_ids: Optional[torch.Tensor] = model_kwargs.pop("input_ids", None)
-
-        if inputs is not None and input_ids is not None:
-            raise ValueError("inputs and input_ids cannot be provided at the same time")
-        if input_ids is None and inputs is None:
-            raise ValueError("inputs must be provided")
-        if input_ids is None:
-            input_ids = inputs
-
-        if input_ids.ndim == 1:
-            input_ids = input_ids.unsqueeze(0)
-        if input_ids.ndim != 2:
-            raise ValueError("input_ids must be a 1D or 2D tensor")
-        if input_ids.shape[-1] == _encoder_length:
-            raise ValueError(f"input_ids length must be {_encoder_length} for generation")
-
-        batch_size = input_ids.shape[0]
-
-        # attention mask
-        # Batch size is doubled for unconditioned input
-        model_kwargs["attention_mask"] = (input_ids != _encoder_pad).to(self.device).repeat_interleave(2, dim=0)
-        model_kwargs["decoder_attention_mask"] = torch.ones((2 * batch_size, 1), dtype=torch.bool, device=self.device)
-
-        return input_ids, "input_ids", model_kwargs
-
-    # TODO: accept 3D and reshape to 2D after processing everything
-    def _prepare_decoder_input_ids_for_generation(
-        self,
-        batch_size: int,
-        model_input_name: str,
-        model_kwargs: Dict[str, torch.Tensor],
-        decoder_start_token_id: torch.Tensor,
-        device: Optional[torch.device] = None,
-    ) -> Tuple[torch.LongTensor, Dict[str, torch.Tensor]]:
-        if device is None:
-            device = self.device
-
-        decoder_input_ids = model_kwargs.pop("decoder_input_ids", None)
-        decoder_attention_mask = model_kwargs["decoder_attention_mask"]
-        decoder_input_ids_length = decoder_input_ids.shape[1] if decoder_input_ids is not None else 0
-
-        delay_pattern = torch.tensor(self.config.delay_pattern, device=device, dtype=torch.long)
-        max_delay_pattern = delay_pattern.max().item()
-
-        input_ids = torch.full(
-            (batch_size, 1 + decoder_input_ids_length + max_delay_pattern, self.config.decoder_config.num_channels),
-            self.config.pad_token_id,
-            dtype=torch.long,
-            device=device,
-        )
-
-        input_ids[:, 0, :] = self.config.bos_token_id
-        if decoder_input_ids is not None:
-            input_ids[:, 1 : decoder_input_ids_length + 1, :] = decoder_input_ids
-
-        delay_precomp = build_delay_indices(
-            B=batch_size,
-            T=1 + decoder_input_ids_length + max_delay_pattern,
-            C=self.config.decoder_config.num_channels,
-            delay_pattern=delay_pattern,
-        )
-
-        input_ids = apply_audio_delay(
-            audio=input_ids,
-            pad_value=self.config.pad_token_id,
-            bos_value=self.config.bos_token_id,
-            precomp=delay_precomp,
-        )
-
-        decoder_input_ids = input_ids[:, : 1 + decoder_input_ids_length, :]
-        decoder_hangover = input_ids[:, 1 + decoder_input_ids_length :, :]
-        decoder_attention_mask = decoder_attention_mask.expand(-1, decoder_input_ids.shape[1])
-
-        model_kwargs["decoder_hangover"] = decoder_hangover
-        model_kwargs["decoder_attention_mask"] = decoder_attention_mask
-
-        return decoder_input_ids, model_kwargs
-
-    # TODO: shouldn't be necessary (esp after using prepare_inputs_for_gen...)
-    def _prepare_attention_mask_for_generation(
-        self,
-        inputs_tensor: torch.Tensor,
-        generation_config: GenerationConfig,
-        model_kwargs: Dict[str, Any],
-    ) -> torch.LongTensor:
-        return model_kwargs["attention_mask"]
-
-    def _prepare_cache_for_generation(
-        self,
-        generation_config: GenerationConfig,
-        model_kwargs: Dict,
-        assistant_model: "PreTrainedModel",
-        batch_size: int,
-        max_cache_length: int,
-        device: torch.device,
-    ) -> bool:
-        # Batch size is doubled for unconditioned input
-        return super()._prepare_cache_for_generation(
-            generation_config, model_kwargs, assistant_model, batch_size * 2, max_cache_length, device
-        )
-
-    def _get_logits_processor(
-        self,
-        generation_config: GenerationConfig,
-        input_ids_seq_length: Optional[int] = None,
-        encoder_input_ids: torch.LongTensor = None,
-        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
-        logits_processor: Optional[LogitsProcessorList] = None,
-        device: Optional[str] = None,
-        model_kwargs: Optional[Dict[str, Any]] = None,
-        negative_prompt_ids: Optional[torch.Tensor] = None,
-        negative_prompt_attention_mask: Optional[torch.Tensor] = None,
-    ) -> LogitsProcessorList:
-        # TODO: hangover processor is removed --> use mask to overwrite the first xxx tokens with mask
-        # TODO: make input_ids of audio (bsz * num_channels, seq_len)
-        # --> reshape in forward/generate prep
-        # --> logits can be processed by any of the other methods
-
-        custom_processors = LogitsProcessorList()
-
-        if generation_config.guidance_scale is not None and generation_config.guidance_scale != 1:
-            custom_processors.append(
-                DiaClassifierFreeGuidanceFilterLogitsProcessor(
-                    cfg_scale=generation_config.guidance_scale
-                    if generation_config.guidance_scale is not None else 3.0,
-                    cfg_filter_top_k=model_kwargs.get("guidance_top_k", 50),
-                    device=device,
-                )
-            )
-            # Avoid adding cfg again
-            generation_config.guidance_scale = None
-
-        custom_processors.append(
-            DiaEOSFilterAndScaleLogitsProcessor(
-                eos_value=self.config.eos_token_id,
-                eos_scale=model_kwargs.get("eos_scale", 0.8),
-                device=device,
-            )
-        )
-
-        custom_processors.append(
-            DiaEOSDelayPatternLogitsProcessor(
-                delay_pattern=torch.tensor(self.config.delay_pattern, device=device, dtype=torch.long),
-                eos_value=self.config.eos_token_id,
-                pad_value=self.config.pad_token_id,
-                max_step=generation_config.max_length,
-                device=device,
-            )
-        )
-
-        return super()._get_logits_processor(
-            generation_config=generation_config,
-            input_ids_seq_length=input_ids_seq_length,
-            encoder_input_ids=encoder_input_ids,
-            prefix_allowed_tokens_fn=None,
-            logits_processor=custom_processors,
-            device=device,
-            model_kwargs=model_kwargs,
-            negative_prompt_ids=negative_prompt_ids,
-            negative_prompt_attention_mask=negative_prompt_attention_mask,
-        )
-
-    def _get_stopping_criteria(
-        self,
-        generation_config: GenerationConfig,
-        stopping_criteria: Optional[StoppingCriteriaList],
-        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
-        **kwargs,
-    ) -> StoppingCriteriaList:
-        custom_stopping_criteria = StoppingCriteriaList()
-
-        # We end generation after `max delays` if every sample generated eos on their first channel
-        custom_stopping_criteria.append(
-            DiaEosTokenCriteria(
-                eos_value=self.config.eos_token_id,
-                delay_pattern=torch.tensor(self.config.delay_pattern, device=self.device, dtype=torch.long),
-                device=self.device,
-            )
-        )
-
-        return super()._get_stopping_criteria(
-            generation_config=generation_config,
-            stopping_criteria=custom_stopping_criteria,
-            tokenizer=tokenizer,
-            **kwargs,
-        )
-
-    def _prepare_generation_config(
-        self,
-        generation_config: Optional[GenerationConfig],
-        use_model_defaults: Optional[bool] = None,
-        **kwargs: Dict
-    ) -> Tuple[GenerationConfig, Dict]:
-        generation_config, model_kwargs = super()._prepare_generation_config(
-            generation_config, use_model_defaults, **kwargs
-        )
-
-        # We allow generation up to max length + max delay pattern
-        # (will revert back to max length after generation)
-        # TODO: check where max delay wasn't considered but added afterwards
-        generation_config.max_length += max(self.config.delay_pattern)
-
-        # TODO: move this to prepare_inputs_for_generation
-        # Enabling unconditioned input for generation
-        model_kwargs["with_unconditioned_input"] = True
-
-        # We need this for our custom logit processors and stopping criteria
-        self.config.eos_token_id = self.config.eos_token_id or generation_config.eos_token_id
-        self.config.pad_token_id = self.config.pad_token_id or generation_config.pad_token_id
-        self.config.bos_token_id = self.config.bos_token_id or generation_config.bos_token_id
-
-        return generation_config, model_kwargs
-
-    def generate(
-        self,
-        inputs: Optional[torch.Tensor] = None,
-        generation_config: Optional[GenerationConfig] = None,
-        logits_processor: Optional[LogitsProcessorList] = None,
-        stopping_criteria: Optional[StoppingCriteriaList] = None,
-        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
-        synced_gpus: Optional[bool] = None,
-        assistant_model: Optional["PreTrainedModel"] = None,
-        streamer: Optional["BaseStreamer"] = None,
-        negative_prompt_ids: Optional[torch.Tensor] = None,
-        negative_prompt_attention_mask: Optional[torch.Tensor] = None,
-        use_model_defaults: Optional[bool] = None,
-        custom_generate: Optional[str] = None,
-        **kwargs,
-    ) -> Union[GenerateOutput, torch.LongTensor]:
-        decoder_input_ids = kwargs.get("decoder_input_ids", None)
-        decoder_input_length = decoder_input_ids.shape[1] if decoder_input_ids is not None else 0
-
-        output = super().generate(
-            inputs=inputs,
-            generation_config=generation_config,
-            logits_processor=logits_processor,
-            stopping_criteria=stopping_criteria,
-            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
-            synced_gpus=synced_gpus,
-            assistant_model=assistant_model,
-            streamer=streamer,
-            negative_prompt_ids=negative_prompt_ids,
-            negative_prompt_attention_mask=negative_prompt_attention_mask,
-            use_model_defaults=use_model_defaults,
-            custom_generate=custom_generate,
-            **kwargs,
-        )
-
-        return_dict_in_generate = not isinstance(output, torch.Tensor)
-
-        if return_dict_in_generate:
-            output_sequences = output.sequences
-        else:
-            output_sequences = output
-
-        # 1 for bos token
-        output_sequences = output_sequences[:, 1 + decoder_input_length :]
-        delay_pattern = torch.tensor(self.config.delay_pattern, dtype=torch.long, device=output_sequences.device)
-        max_delay_pattern = delay_pattern.max().item()
-
-        delay_precomp = build_revert_indices(
-            B=output_sequences.shape[0],
-            T=output_sequences.shape[1],
-            C=self.config.decoder_config.num_channels,
-            delay_pattern=delay_pattern,
-        )
-        output_sequences = revert_audio_delay(
-            output_sequences,
-            pad_value=self.config.pad_token_id,
-            precomp=delay_precomp,
-            T=output_sequences.shape[1],
-        )
-
-        # see `DiaEosTokenCriteria` why we need to +1
-        output_sequences = output_sequences[:, -max_delay_pattern + 1 :]
-
-        if return_dict_in_generate:
-            output.sequences = output_sequences
-        else:
-            output = output_sequences
-
-        return output
 
 
 __all__ = [
