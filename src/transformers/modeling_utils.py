@@ -2587,7 +2587,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         """
         base_model = getattr(self, self.base_model_prefix, self)
         if base_model is not self:
-            return base_model.get_input_embeddings()
+            return getattr(base_model, self._inputs_embeddings, None)
         else:
             raise NotImplementedError
 
@@ -2600,7 +2600,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         """
         base_model = getattr(self, self.base_model_prefix, self)
         if base_model is not self:
-            base_model.set_input_embeddings(value)
+            base_model.setattr(self._input_embeddings, value)
+        elif hasattr(self, "_input_embeddings"):
+            setattr(self, self._input_embeddings, value)
         else:
             raise NotImplementedError
 
@@ -2611,16 +2613,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         Returns:
             `nn.Module`: A torch module mapping hidden states to vocabulary.
         """
-        return None  # Overwrite for models with output embeddings
+        return getattr(self, self._output_embeddings, None)  # Overwrite for models with output embeddings
 
     def _init_weights(self, module):
-        """
-        Initialize the weights. This method should be overridden by derived class and is
-        the only initialization method that will be called when loading a checkpoint
-        using `from_pretrained`. Any attempt to initialize outside of this function
-        will be useless as the torch.nn.init function are all replaced with skip.
-        """
-        pass
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.Module):
+            if hasattr(module, "weight") and module.weight is not None:
+                module.weight.data.fill_(1.0)
 
     def _initialize_weights(self, module):
         """
