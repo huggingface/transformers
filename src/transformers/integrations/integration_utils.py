@@ -22,11 +22,10 @@ import importlib.util
 import json
 import numbers
 import os
-import pickle
 import shutil
 import sys
 import tempfile
-from dataclasses import asdict, fields
+from dataclasses import fields
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Union
