@@ -675,7 +675,7 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
     @slow
     @require_torch_accelerator
     @require_torchvision
-    def test_fast_processor_equivalence_cpu_gpu_coco_detection_annotations(self):
+    def test_fast_processor_equivalence_cpu_accelerator_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
@@ -731,7 +731,7 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
     @slow
     @require_torch_accelerator
     @require_torchvision
-    def test_fast_processor_equivalence_cpu_gpu_coco_panoptic_annotations(self):
+    def test_fast_processor_equivalence_cpu_accelerator_coco_panoptic_annotations(self):
         # prepare image, target and masks_path
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt") as f:

@@ -614,8 +614,8 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
 
     @slow
     @require_torch_accelerator
-    # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_fast_processor_equivalence_cpu_gpu_coco_detection_annotations
-    def test_fast_processor_equivalence_cpu_gpu_coco_detection_annotations(self):
+    # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_fast_processor_equivalence_cpu_accelerator_coco_detection_annotations
+    def test_fast_processor_equivalence_cpu_accelerator_coco_detection_annotations(self):
         # prepare image and target
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         with open("./tests/fixtures/tests_samples/COCO/coco_annotations.txt") as f:
@@ -672,8 +672,8 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
 
     @slow
     @require_torch_accelerator
-    # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_fast_processor_equivalence_cpu_gpu_coco_panoptic_annotations
-    def test_fast_processor_equivalence_cpu_gpu_coco_panoptic_annotations(self):
+    # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_fast_processor_equivalence_cpu_accelerator_coco_panoptic_annotations
+    def test_fast_processor_equivalence_cpu_accelerator_coco_panoptic_annotations(self):
         # prepare image, target and masks_path
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         with open("./tests/fixtures/tests_samples/COCO/coco_panoptic_annotations.txt") as f:
