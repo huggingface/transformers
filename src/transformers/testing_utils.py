@@ -3237,7 +3237,7 @@ def cleanup(device: str, gc_collect=False):
 
 
 # Type definition of key used in `Expectations` class.
-DeviceProperties = tuple[Union[str, None], Union[int, None]]
+DeviceProperties = tuple[Union[str, None], Union[None, int, tuple[int, int]]]
 
 
 @cache
@@ -3248,11 +3248,11 @@ def get_device_properties() -> DeviceProperties:
     if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
         import torch
 
-        major, _ = torch.cuda.get_device_capability()
+        major, minor = torch.cuda.get_device_capability()
         if IS_ROCM_SYSTEM:
-            return ("rocm", major)
+            return ("rocm", (major, minor))
         else:
-            return ("cuda", major)
+            return ("cuda", (major, minor))
     elif IS_XPU_SYSTEM:
         import torch
 
@@ -3273,6 +3273,20 @@ class Expectations(UserDict[DeviceProperties, Any]):
         return self.find_expectation(get_device_properties())
 
     @staticmethod
+    def unpack(key: DeviceProperties) -> tuple[Optional[str], Optional[int], Optional[int]]:
+        """
+        Unpack a `DeviceProperties` tuple into a `device_type`, `major`, and `minor`.
+        """
+        device_type, major_minor = key
+        if major_minor is None:
+            major, minor = None, None
+        elif isinstance(major_minor, int):
+            major, minor = major_minor, None
+        else:
+            major, minor = major_minor
+        return device_type, major, minor
+
+    @staticmethod
     def is_default(key: DeviceProperties) -> bool:
         return all(p is None for p in key)
 
@@ -3280,29 +3294,29 @@ class Expectations(UserDict[DeviceProperties, Any]):
     def score(key: DeviceProperties, other: DeviceProperties) -> int:
         """
         Returns score indicating how similar two instances of the `Properties` tuple are.
-        Points are calculated using bits, but documented as int.
         Rules are as follows:
-            * Matching `type` gives 8 points.
-            * Semi-matching `type`, for example cuda and rocm, gives 4 points.
-            * Matching `major` (compute capability major version) gives 2 points.
-            * Default expectation (if present) gives 1 points.
+            * Matching `type` adds one point, semi-matching `type` adds half a point (e.g. cuda and rocm).
+            * If types match, matching `major` adds another point, and then matching `minor` adds another.
+            * Default expectation (if present) is worth 0.1 point to distinguish it from a straight-up zero.
         """
-        (device_type, major) = key
-        (other_device_type, other_major) = other
+        device_type, major, minor = Expectations.unpack(key)
+        other_device_type, other_major, other_minor = Expectations.unpack(other)
 
-        score = 0b0
-        if device_type == other_device_type:
-            score |= 0b1000
+        score = 0
+        # Matching device type, maybe major and minor
+        if device_type is not None and device_type == other_device_type:
+            score += 1
+            if major is not None and major == other_major:
+                score += 1
+                if minor is not None and minor == other_minor:
+                    score += 1
+        # Semi-matching device type
         elif device_type in ["cuda", "rocm"] and other_device_type in ["cuda", "rocm"]:
-            score |= 0b100
-
-        if major == other_major and other_major is not None:
-            score |= 0b10
-
+            score = 0.5
+        # Default expectation
         if Expectations.is_default(other):
-            score |= 0b1
-
-        return int(score)
+            score = 0.1
+        return score
 
     def find_expectation(self, key: DeviceProperties = (None, None)) -> Any:
         """
