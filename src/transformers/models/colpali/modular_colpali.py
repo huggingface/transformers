@@ -14,28 +14,15 @@
 # limitations under the License.
 
 
-from typing import ClassVar, List, Optional, Union
+from typing import List, Optional, Union
 
-from transformers.models.paligemma.processing_paligemma import (
-    IMAGE_TOKEN,
-    PaliGemmaProcessor,
-    build_string_from_input,
-)
+from transformers.models.paligemma.processing_paligemma import IMAGE_TOKEN, PaliGemmaProcessor, build_string_from_input
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, make_flat_list_of_images
-from ...processing_utils import (
-    ProcessingKwargs,
-    Unpack,
-)
-from ...tokenization_utils_base import (
-    PreTokenizedInput,
-    TextInput,
-)
-from ...utils import (
-    is_torch_available,
-    logging,
-)
+from ...processing_utils import ProcessingKwargs, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import is_torch_available, logging
 
 
 if is_torch_available():
@@ -73,10 +60,23 @@ class ColPaliProcessor(PaliGemmaProcessor):
             The tokenizer is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
+        visual_prompt_prefix (`str`, *optional*, defaults to `"Describe the image."`):
+            A string that gets tokenized and prepended to the image tokens.
+        query_prefix (`str`, *optional*, defaults to `"Question: "`):
+            A prefix to be used for the query.
     """
 
-    visual_prompt_prefix: ClassVar[str] = "Describe the image."
-    query_prefix: ClassVar[str] = "Question: "
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        chat_template=None,
+        visual_prompt_prefix: str = "Describe the image.",
+        query_prefix: str = "Question: ",
+    ):
+        super().__init__(image_processor=image_processor, tokenizer=tokenizer, chat_template=chat_template)
+        self.visual_prompt_prefix = visual_prompt_prefix
+        self.query_prefix = query_prefix
 
     @property
     def query_augmentation_token(self) -> str:
@@ -96,7 +96,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """
-        Main method to prepare for the model either (1) one or several texts, either (2) one or several image(s). This method is custom
+        Main method to prepare for the model either (1) one or several texts, either (2) one or several image(s). This method is a custom
         wrapper around the PaliGemmaProcessor's [`~PaliGemmaProcessor.__call__`] method adapted for the ColPali model. It cannot process
         both text and images at the same time.
 
@@ -196,12 +196,10 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
             if suffix is None:
                 suffix = self.query_augmentation_token * 10
-            texts_query: List[str] = []
 
+            texts_query: List[str] = []
             for query in text:
-                query = self.tokenizer.bos_token + self.query_prefix + query
-                query += suffix  # add suffix (pad tokens)
-                query += "\n"  # make input ISO to PaliGemma's processor
+                query = self.tokenizer.bos_token + self.query_prefix + query + suffix + "\n"
                 texts_query.append(query)
 
             output_kwargs["text_kwargs"]["max_length"] = output_kwargs["text_kwargs"].get("max_length", 50)
@@ -223,7 +221,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
         Prepare for the model one or several image(s). This method is a wrapper around the `__call__` method of the ColPaliProcessor's
         [`ColPaliProcessor.__call__`].
 
-        This method forwards the `images` and `kwargs` arguments to SiglipImageProcessor's [`~SiglipImageProcessor.__call__`].
+        This method forwards the `images` and `kwargs` arguments to the image processor.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -258,7 +256,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
         Prepare for the model one or several texts. This method is a wrapper around the `__call__` method of the ColPaliProcessor's
         [`ColPaliProcessor.__call__`].
 
-        This method forwards the `text` and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`].
+        This method forwards the `text` and `kwargs` arguments to the tokenizer.
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
