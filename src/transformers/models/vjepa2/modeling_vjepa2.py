@@ -1700,14 +1700,12 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
             predictor_outputs = [None, None]
             predictor_output = None
 
-        pooled_output = None  # there is no CLS tokens in VJEPA
-        # last hidden states will be from both the encoder and predictor
         if not return_dict:
-            head_outputs = (sequence_output, pooled_output)
-            enc_out = head_outputs + encoder_outputs[1:]
-            head_outputs = (predictor_outputs[0], pooled_output)
-            pred_out = head_outputs + predictor_outputs[1:]
-            return enc_out, pred_out
+            enc_head_outputs = (sequence_output, apply_masks(sequence_output, context_mask))
+            pred_head_outputs = (predictor_outputs[0], apply_masks(sequence_output, target_mask))
+            pred_out = pred_head_outputs + predictor_outputs[1:]
+            enc_out = enc_head_outputs + encoder_outputs[1:] + pred_out
+            return enc_out #pred_out
 
         encoder_output = VJEPA2OutputWithMaskedInput(
             last_hidden_state=sequence_output,
