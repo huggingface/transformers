@@ -32,7 +32,7 @@ from torch import nn
 
 from transformers.activations import ACT2FN
 from transformers.configuration_utils import PretrainedConfig
-from transformers.utils import logging
+from transformers.utils import auto_docstring, logging
 
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -50,7 +50,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import LossKwargs, auto_docstring, can_return_tuple
+from ...utils import LossKwargs, can_return_tuple
 from .configuration_arcee import ArceeConfig
 
 
@@ -767,20 +767,7 @@ class ArceeForCausalLM(ArceePreTrainedModel, GenerationMixin):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    The Arcee Model transformer with a sequence classification head on top (linear layer).
-
-    [`ArceeForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-2) do.
-
-    Since it does classification on the last token, it requires to know the position of the last token. If a
-    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
-    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
-    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
-    each row of the batch).
-    """
-)
+@auto_docstring(checkpoint="arcee-ai/AFM-4.5B")
 class ArceeForSequenceClassification(ArceePreTrainedModel):
     """
     The Arcee Model transformer with a sequence classification head on top (linear layer).
@@ -872,7 +859,7 @@ class ArceeForSequenceClassification(ArceePreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(checkpoint="arcee-ai/AFM-4.5B")
 class ArceeForQuestionAnswering(ArceePreTrainedModel):
     """
     The Arcee Model transformer with a span classification head on top for extractive question-answering tasks.
@@ -941,7 +928,7 @@ class ArceeForQuestionAnswering(ArceePreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(checkpoint="arcee-ai/AFM-4.5B")
 class ArceeForTokenClassification(ArceePreTrainedModel):
     """
     The Arcee Model transformer with a token classification head on top.

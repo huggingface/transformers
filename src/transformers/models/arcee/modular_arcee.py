@@ -27,7 +27,7 @@ from torch import nn
 
 from transformers.activations import ACT2FN
 from transformers.configuration_utils import PretrainedConfig
-from transformers.utils import is_torch_available, logging
+from transformers.utils import auto_docstring, is_torch_available, logging
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -525,6 +525,7 @@ class ArceeForCausalLM(LlamaForCausalLM):
         self.post_init()
 
 
+@auto_docstring(checkpoint="arcee-ai/AFM-4.5B")
 class ArceeForSequenceClassification(LlamaForSequenceClassification):
     """
     The Arcee Model transformer with a sequence classification head on top (linear layer).
@@ -538,6 +539,7 @@ class ArceeForSequenceClassification(LlamaForSequenceClassification):
         self.post_init()
 
 
+@auto_docstring(checkpoint="arcee-ai/AFM-4.5B")
 class ArceeForQuestionAnswering(LlamaForQuestionAnswering):
     """
     The Arcee Model transformer with a span classification head on top for extractive question-answering tasks.
@@ -552,6 +554,7 @@ class ArceeForQuestionAnswering(LlamaForQuestionAnswering):
         self.post_init()
 
 
+@auto_docstring(checkpoint="arcee-ai/AFM-4.5B")
 class ArceeForTokenClassification(LlamaForTokenClassification):
     """
     The Arcee Model transformer with a token classification head on top.
