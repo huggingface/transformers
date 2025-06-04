@@ -124,7 +124,7 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
         size: SizeDict,
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
-        interpolation: "F.InterpolationMode" = InterpolationMode.BILINEAR,
+        interpolation: Optional["F.InterpolationMode"] = None,
     ) -> "torch.Tensor":
         """
         Resize an image or batchd images to target size `(size["height"], size["width"])`. If `keep_aspect_ratio` is `True`, the image
@@ -140,7 +140,7 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
                 If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
             ensure_multiple_of (`int`, *optional*, defaults to 1):
                 The image is resized to a size that is a multiple of this value.
-            interpoation (`F.InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
+            interpolation (`F.InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
                 Defines the resampling filter to use if resizing the image. Otherwise, the image is resized to size
                 specified in `size`.
         """
