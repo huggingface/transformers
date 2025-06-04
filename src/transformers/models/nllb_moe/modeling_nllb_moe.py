@@ -22,6 +22,7 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
@@ -515,6 +516,7 @@ class NllbMoeAttention(nn.Module):
         bias: bool = True,
         is_causal: bool = False,
         config: Optional[NllbMoeConfig] = None,
+        layer_idx: Optional[int] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -531,6 +533,7 @@ class NllbMoeAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
         self.is_causal = is_causal
+        self.layer_idx = layer_idx
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -541,10 +544,11 @@ class NllbMoeAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         encoder_hidden_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        cache_position: Optional[torch.Tensor] = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -565,42 +569,37 @@ class NllbMoeAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
 
-        # get key, value proj
-        # `past_key_value[0].shape[2] == encoder_hidden_states.shape[1]`
-        # is checking that the `sequence_length` of the `past_key_value` is the same as
-        # the provided `encoder_hidden_states` to support prefix tuning
-        if (
-            is_cross_attention
-            and past_key_value is not None
-            and past_key_value[0].shape[2] == encoder_hidden_states.shape[1]
-        ):
-            # reuse k,v, cross_attentions
-            key_states = past_key_value[0]
-            value_states = past_key_value[1]
-        elif is_cross_attention:
-            # cross_attentions
-            key_states = self.k_proj(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
-            value_states = self.v_proj(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
-        elif past_key_value is not None:
-            # reuse k, v, self_attention
-            key_states = self.k_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
-            value_states = self.v_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
-        else:
-            # self_attention
-            key_states = self.k_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
-            value_states = self.v_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
+        if past_key_value is not None:
+            if isinstance(past_key_value, EncoderDecoderCache):
+                is_updated = past_key_value.is_updated.get(self.layer_idx)
+                if is_cross_attention:
+                    # after the first generated id, we can subsequently re-use all key/value_states from cache
+                    curr_past_key_value = past_key_value.cross_attention_cache
+                else:
+                    curr_past_key_value = past_key_value.self_attention_cache
+            else:
+                curr_past_key_value = past_key_value
 
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_states, value_states)
+        current_states = encoder_hidden_states if is_cross_attention else hidden_states
+        if is_cross_attention and past_key_value is not None and is_updated:
+            # reuse k,v, cross_attentions
+            key_states = curr_past_key_value.key_cache[self.layer_idx]
+            value_states = curr_past_key_value.value_cache[self.layer_idx]
+        else:
+            key_states = self.k_proj(current_states)
+            value_states = self.v_proj(current_states)
+            key_states = key_states.view(*kv_input_shape).transpose(1, 2)
+            value_states = value_states.view(*kv_input_shape).transpose(1, 2)
+
+            if past_key_value is not None:
+                # save all key/value_states to cache to be re-used for fast auto-regressive generation
+                cache_position = cache_position if not is_cross_attention else None
+                key_states, value_states = curr_past_key_value.update(
+                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                )
+                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
+                if is_cross_attention:
+                    past_key_value.is_updated[self.layer_idx] = True
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -708,7 +707,7 @@ class NllbMoeEncoderLayer(nn.Module):
 
 
 class NllbMoeDecoderLayer(nn.Module):
-    def __init__(self, config: NllbMoeConfig, is_sparse: bool = False):
+    def __init__(self, config: NllbMoeConfig, is_sparse: bool = False, layer_idx: Optional[int] = None):
         super().__init__()
         self.embed_dim = config.d_model
         self.is_sparse = is_sparse
@@ -730,6 +729,7 @@ class NllbMoeDecoderLayer(nn.Module):
             config.attention_dropout,
             is_decoder=True,
             config=config,
+            layer_idx=layer_idx,
         )
         self.cross_attention_layer_norm = nn.LayerNorm(self.embed_dim)
         if not self.is_sparse:
@@ -747,10 +747,11 @@ class NllbMoeDecoderLayer(nn.Module):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         cross_attn_layer_head_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = True,
+        cache_position: Optional[torch.Tensor] = True,
     ) -> torch.Tensor:
         """
         Args:
@@ -1120,7 +1121,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         self.layers = nn.ModuleList()
         for i in range(config.decoder_layers):
             is_sparse = (i + 1) % sparse_step == 0 if sparse_step > 0 else False
-            self.layers.append(NllbMoeDecoderLayer(config, is_sparse))
+            self.layers.append(NllbMoeDecoderLayer(config, is_sparse, layer_idx=i))
 
         self.layer_norm = nn.LayerNorm(config.d_model)
 
@@ -1143,6 +1144,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.Tensor] = True,
     ):
         r"""
         Args:
@@ -1230,12 +1232,28 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
-        # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
+        # initialize `past_key_values`
+        return_legacy_cache = False
+        if use_cache and not isinstance(past_key_values, Cache):
+            return_legacy_cache = True
+            logger.warning_once(
+                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
+                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
+                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
+            )
+            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
+
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         attention_mask = self._update_causal_mask(
             attention_mask,
             input_shape,
@@ -1257,19 +1275,12 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_router_probs = () if output_router_logits else None
         all_cross_attentions = () if output_attentions else None
-        present_key_value_states = () if use_cache else None
+        next_decoder_cache = None
 
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
@@ -1293,8 +1304,6 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                 layer_head_mask = head_mask[idx] if head_mask is not None else None
                 cross_attn_layer_head_mask = cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
 
-                past_key_value = past_key_values[idx] if past_key_values is not None else None
-
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
                     if use_cache:
@@ -1313,6 +1322,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                         None,  # past_key_value is always None with gradient checkpointing
                         use_cache,
                         output_attentions,
+                        cache_position,
                     )
                 else:
                     layer_outputs = decoder_layer(
@@ -1322,10 +1332,11 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                         encoder_attention_mask=encoder_attention_mask,
                         layer_head_mask=layer_head_mask,
                         cross_attn_layer_head_mask=cross_attn_layer_head_mask,
-                        past_key_value=past_key_value,
+                        past_key_value=past_key_values,
                         use_cache=use_cache,
                         output_attentions=output_attentions,
                         output_router_logits=output_router_logits,
+                        cache_position=cache_position,
                     )
 
                 hidden_states = layer_outputs[0]
@@ -1334,7 +1345,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                 continue
 
             if use_cache:
-                present_key_value_states += (layer_outputs[1],)
+                next_decoder_cache = layer_outputs[1]
 
             if output_attentions:
                 all_self_attns += (layer_outputs[2],)
@@ -1349,12 +1360,16 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
+        next_cache = next_decoder_cache if use_cache else None
+        if return_legacy_cache:
+            next_cache = past_key_values.to_legacy_cache()
+
         if not return_dict:
             return tuple(
                 v
                 for v in [
                     hidden_states,
-                    present_key_value_states,
+                    next_cache,
                     all_hidden_states,
                     all_self_attns,
                     all_cross_attentions,
@@ -1364,7 +1379,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
             )
         return MoEModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=present_key_value_states,
+            past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
@@ -1503,6 +1518,7 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.Tensor] = True,
     ) -> Union[Tuple[torch.Tensor], Seq2SeqMoEModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1582,6 +1598,7 @@ class NllbMoeModel(NllbMoePreTrainedModel):
             output_hidden_states=output_hidden_states,
             output_router_logits=output_router_logits,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         if not return_dict:
@@ -1652,6 +1669,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.Tensor] = None,
     ) -> Union[Tuple[torch.Tensor], Seq2SeqMoEOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1723,6 +1741,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             output_router_logits=output_router_logits,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
         lm_logits = self.lm_head(outputs[0])
 

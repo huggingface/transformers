@@ -22,6 +22,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import (
     _prepare_4d_attention_mask,
@@ -399,7 +400,7 @@ class Speech2TextEncoderLayer(nn.Module):
 # copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->Speech2Text, MBART->SPEECH_TO_TEXT
 # TODO: change copy when applying cache class
 class Speech2TextDecoderLayer(nn.Module):
-    def __init__(self, config: Speech2TextConfig):
+    def __init__(self, config: Speech2TextConfig, layer_idx=None):
         super().__init__()
         self.embed_dim = config.d_model
 
@@ -410,6 +411,7 @@ class Speech2TextDecoderLayer(nn.Module):
             is_decoder=True,
             is_causal=True,
             config=config,
+            layer_idx=layer_idx,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -773,7 +775,9 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
             self.padding_idx,
         )
 
-        self.layers = nn.ModuleList([Speech2TextDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList(
+            [Speech2TextDecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)]
+        )
 
         self.layer_norm = nn.LayerNorm(config.d_model)
 
@@ -801,6 +805,7 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        cache_position=None,
     ):
         r"""
         Args:
@@ -885,12 +890,27 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
-        # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache = True` is incompatible with gradient checkpointing. Setting `use_cache = False`..."
+                )
+                use_cache = False
+
+        return_legacy_cache = False
+        if use_cache and not isinstance(past_key_values, Cache):
+            return_legacy_cache = True
+            logger.warning_once(
+                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
+                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
+                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
+            )
+            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
+
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else past_key_values
         attention_mask = self._update_causal_mask(
             attention_mask,
             input_shape,
@@ -910,18 +930,11 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
         hidden_states = inputs_embeds + positions
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache = True` is incompatible with gradient checkpointing. Setting `use_cache = False`..."
-                )
-                use_cache = False
-
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
-        next_decoder_cache = () if use_cache else None
+        next_decoder_cache = None
 
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
@@ -939,8 +952,6 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
                 if dropout_probability < self.layerdrop:
                     continue
 
-            past_key_value = past_key_values[idx] if past_key_values is not None else None
-
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
@@ -953,6 +964,7 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
                     None,
                     output_attentions,
                     use_cache,
+                    cache_position,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -964,14 +976,15 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
                     cross_attn_layer_head_mask=(
                         cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
                     ),
-                    past_key_value=past_key_value,
+                    past_key_value=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
+                    cache_position=cache_position,
                 )
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
+                next_decoder_cache = layer_outputs[3 if output_attentions else 1]
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -985,6 +998,9 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = next_decoder_cache if use_cache else None
+        if return_legacy_cache:
+            next_cache = past_key_values.to_legacy_cache()
+
         if not return_dict:
             return tuple(
                 v
@@ -1116,6 +1132,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.Tensor] = None,
     ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`):
@@ -1214,6 +1231,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         if not return_dict:
@@ -1278,6 +1296,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel, Generation
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.Tensor] = None,
     ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`):
@@ -1361,6 +1380,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel, Generation
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
         lm_logits = self.lm_head(outputs[0])
 

@@ -22,6 +22,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ...cache_utils import DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
@@ -83,10 +84,11 @@ def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=N
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, d_model_size, num_heads):
+    def __init__(self, d_model_size, num_heads, layer_idx=None):
         super().__init__()
         self.num_heads = num_heads
         self.d_model_size = d_model_size
+        self.layer_idx = layer_idx
 
         self.depth = int(d_model_size / self.num_heads)
 
@@ -129,6 +131,7 @@ class MultiHeadAttention(nn.Module):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
+        cache_position=None,
     ):
         batch_size = q.shape[0]
 
@@ -139,15 +142,9 @@ class MultiHeadAttention(nn.Module):
         q = self.split_into_heads(q, batch_size)
         k = self.split_into_heads(k, batch_size)
         v = self.split_into_heads(v, batch_size)
-        if layer_past is not None:
-            past_key, past_value = layer_past[0], layer_past[1]
-            k = torch.cat((past_key, k), dim=-2)
-            v = torch.cat((past_value, v), dim=-2)
 
-        if use_cache is True:
-            present = torch.stack((k, v))
-        else:
-            present = (None,)
+        if layer_past is not None:
+            k, v = layer_past.update(k, v, self.layer_idx, {"cache_position": cache_position})
 
         output = scaled_dot_product_attention(q, k, v, mask, attention_mask, head_mask)
         scaled_attention = output[0].permute([0, 2, 1, 3])
@@ -155,7 +152,7 @@ class MultiHeadAttention(nn.Module):
         original_size_attention = scaled_attention.reshape(batch_size, -1, self.d_model_size)
         output = self.dense(original_size_attention)
 
-        outputs = (output, present)
+        outputs = (output, layer_past)
         if output_attentions:
             outputs = outputs + (attn,)
         return outputs
@@ -166,10 +163,10 @@ def point_wise_feed_forward_network(d_model_size, dff):
 
 
 class EncoderLayer(nn.Module):
-    def __init__(self, d_model_size, num_heads, dff, rate=0.1):
+    def __init__(self, d_model_size, num_heads, dff, rate=0.1, layer_idx=None):
         super().__init__()
 
-        self.multi_head_attention = MultiHeadAttention(d_model_size, num_heads)
+        self.multi_head_attention = MultiHeadAttention(d_model_size, num_heads, layer_idx=layer_idx)
         self.ffn = point_wise_feed_forward_network(d_model_size, dff)
 
         self.layernorm1 = nn.LayerNorm(d_model_size, eps=1e-6)
@@ -179,7 +176,15 @@ class EncoderLayer(nn.Module):
         self.dropout2 = nn.Dropout(rate)
 
     def forward(
-        self, x, mask, layer_past=None, attention_mask=None, head_mask=None, use_cache=False, output_attentions=False
+        self,
+        x,
+        mask,
+        layer_past=None,
+        attention_mask=None,
+        head_mask=None,
+        use_cache=False,
+        output_attentions=False,
+        cache_position=None,
     ):
         normed = self.layernorm1(x)
         attn_outputs = self.multi_head_attention(
@@ -192,6 +197,7 @@ class EncoderLayer(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            cache_position=cache_position,
         )
         attn_output = attn_outputs[0]
         attn_output = self.dropout1(attn_output)
@@ -242,7 +248,10 @@ class CTRLModel(CTRLPreTrainedModel):
 
         self.dropout = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList(
-            [EncoderLayer(config.n_embd, config.n_head, config.dff, config.resid_pdrop) for _ in range(config.n_layer)]
+            [
+                EncoderLayer(config.n_embd, config.n_head, config.dff, config.resid_pdrop, layer_idx=i)
+                for i in range(config.n_layer)
+            ]
         )
         self.layernorm = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
 
@@ -276,6 +285,7 @@ class CTRLModel(CTRLPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.Tensor] = None,
         **kwargs,  # NOOP kwargs, for now
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPast]:
         r"""
@@ -332,11 +342,17 @@ class CTRLModel(CTRLPreTrainedModel):
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        if past_key_values is None:
-            past_length = 0
-            past_key_values = tuple([None] * len(self.h))
-        else:
-            past_length = past_key_values[0][0].size(-2)
+        return_legacy_cache = False
+        if use_cache and isinstance(past_key_values, (list, tuple)):
+            logger.warning_once(
+                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
+                "You should pass an instance of `DynamicCache` instead, e.g. "
+                "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
+            )
+            return_legacy_cache = True
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+
+        past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         if position_ids is None:
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0)
@@ -387,24 +403,25 @@ class CTRLModel(CTRLPreTrainedModel):
 
         hidden_states = self.dropout(hidden_states)
 
-        presents = () if use_cache else None
+        next_decoder_cache = None
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
-        for i, (h, layer_past) in enumerate(zip(self.h, past_key_values)):
+        for i, h in enumerate(self.h):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
             outputs = h(
                 hidden_states,
                 mask,
-                layer_past=layer_past,
+                layer_past=past_key_values,
                 attention_mask=attention_mask,
                 head_mask=head_mask[i],
                 use_cache=use_cache,
                 output_attentions=output_attentions,
+                cache_position=cache_position,
             )
-            hidden_states, present = outputs[:2]
+            hidden_states = outputs[0]
             if use_cache is True:
-                presents = presents + (present,)
+                next_decoder_cache = outputs[1]
 
             if output_attentions:
                 all_attentions += (outputs[2],)
@@ -413,12 +430,16 @@ class CTRLModel(CTRLPreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
+        next_cache = next_decoder_cache if use_cache else None
+        if return_legacy_cache:
+            next_cache = past_key_values.to_legacy_cache()
+
         if not return_dict:
-            return tuple(v for v in [hidden_states, presents, all_hidden_states, all_attentions] if v is not None)
+            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_attentions] if v is not None)
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=presents,
+            past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
         )
@@ -462,6 +483,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithPast]:
         r"""
@@ -520,6 +542,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         hidden_states = transformer_outputs[0]

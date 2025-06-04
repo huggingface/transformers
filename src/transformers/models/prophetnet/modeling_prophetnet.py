@@ -26,6 +26,7 @@ from torch import Tensor, nn
 from torch.nn import LayerNorm
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -488,11 +489,7 @@ class ProphetNetPositionalEmbeddings(nn.Embedding):
 class ProphetNetAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(
-        self,
-        config: ProphetNetConfig,
-        num_attn_heads: int,
-    ):
+    def __init__(self, config: ProphetNetConfig, num_attn_heads: int, layer_idx: Optional[int] = None):
         super().__init__()
         hidden_size = config.hidden_size
 
@@ -500,6 +497,7 @@ class ProphetNetAttention(nn.Module):
         self.dropout = config.dropout
         self.num_attn_heads = num_attn_heads
         self.head_dim = hidden_size // num_attn_heads
+        self.layer_idx = layer_idx
 
         assert self.head_dim * num_attn_heads == hidden_size, (
             "`config.hidden_size` must be divisible by `config.num_encoder_attention_heads` and"
@@ -512,17 +510,15 @@ class ProphetNetAttention(nn.Module):
 
         self.out_proj = nn.Linear(hidden_size, hidden_size)
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_attn_heads, self.head_dim).transpose(1, 2).contiguous()
-
     def forward(
         self,
         hidden_states,
         key_value_states: Optional[Tensor] = None,
         attention_mask: Optional[Tensor] = None,
         layer_head_mask: Optional[Tensor] = None,
-        past_key_value: Optional[Tuple[Tensor]] = None,
-        output_attentions: bool = False,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: Optional[bool] = False,
+        cache_position: Optional[torch.Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor]]:
         batch_size, tgt_len, hidden_size = hidden_states.size()
 
@@ -537,32 +533,46 @@ class ProphetNetAttention(nn.Module):
 
         # previous time steps are cached - no need to recompute key and value if they are static
         query_states = self.query_proj(hidden_states) / (self.head_dim**0.5)
+        # get query proj
+        query_states = self.q_proj(hidden_states) * self.scaling
 
-        if is_cross_attention and past_key_value is not None:
+        if past_key_value is not None:
+            if isinstance(past_key_value, EncoderDecoderCache):
+                is_updated = past_key_value.is_updated.get(self.layer_idx)
+                if is_cross_attention:
+                    # after the first generated id, we can subsequently re-use all key/value_states from cache
+                    curr_past_key_value = past_key_value.cross_attention_cache
+                else:
+                    curr_past_key_value = past_key_value.self_attention_cache
+            else:
+                curr_past_key_value = past_key_value
+
+        current_states = key_value_states if is_cross_attention else hidden_states
+        if is_cross_attention and past_key_value is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = past_key_value[0]
-            value_states = past_key_value[1]
-        elif is_cross_attention:
-            # cross_attentions
-            key_states = self._shape(self.key_proj(key_value_states), -1, batch_size)
-            value_states = self._shape(self.value_proj(key_value_states), -1, batch_size)
+            key_states = curr_past_key_value.key_cache[self.layer_idx]
+            value_states = curr_past_key_value.value_cache[self.layer_idx]
         else:
-            # self_attention
-            key_states = self._shape(self.key_proj(hidden_states), -1, batch_size)
-            value_states = self._shape(self.value_proj(hidden_states), -1, batch_size)
+            key_states = self.k_proj(current_states)
+            value_states = self.v_proj(current_states)
+            key_states = key_states.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
+            value_states = value_states.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
-        if is_cross_attention:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_states, value_states)
+            if past_key_value is not None:
+                # save all key/value_states to cache to be re-used for fast auto-regressive generation
+                cache_position = cache_position if not is_cross_attention else None
+                key_states, value_states = curr_past_key_value.update(
+                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                )
+                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
+                if is_cross_attention:
+                    past_key_value.is_updated[self.layer_idx] = True
 
-        # project states into the correct shape
-        proj_shape = (batch_size, self.num_attn_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, batch_size).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
+        proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
+        query_states = query_states.view(batch_size, tgt_len, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(*proj_shape)
+        key_states = key_states.reshape(*proj_shape)
+        value_states = value_states.reshape(*proj_shape)
         src_len = key_states.size(2)
         attn_weights = torch.einsum("bsij,bsjk->bsik", query_states, key_states.transpose(2, 3))
         expected_shape = (batch_size, self.num_attn_heads, tgt_len, src_len)
@@ -638,7 +648,7 @@ class ProphetNetFeedForward(nn.Module):
 
 
 class ProphetNetNgramSelfAttention(nn.Module):
-    def __init__(self, config: ProphetNetConfig):
+    def __init__(self, config: ProphetNetConfig, layer_idx=None):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -649,6 +659,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.head_dim = config.hidden_size // self.num_attn_heads
         self.ngram = config.ngram
+        self.layer_idx = layer_idx
 
         assert self.head_dim * self.num_attn_heads == config.hidden_size, (
             "config.hidden_size must be divisible by num_attn_heads"
@@ -683,6 +694,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
         main_relative_position_buckets=None,
         predict_relative_position_buckets=None,
         position_ids=None,
+        cache_position=None,
     ):
         batch_size, ngram_sequence_length, hidden_size = hidden_states.size()
         assert list(hidden_states.size()) == [batch_size, ngram_sequence_length, hidden_size], (
@@ -721,13 +733,9 @@ class ProphetNetNgramSelfAttention(nn.Module):
 
         # saved states are stored with shape (batch_size, num_attn_heads, seq_len, head_dim)
         if past_key_value is not None:
-            prev_main_key_states = past_key_value[0]
-            main_key_states = torch.cat((prev_main_key_states, main_key_states), dim=2)
-            prev_main_value_states = past_key_value[1]
-            main_value_states = torch.cat((prev_main_value_states, main_value_states), dim=2)
-
-        # Update cache
-        past_key_value = (main_key_states, main_value_states)
+            prev_main_key_states, main_value_states = past_key_value.update(
+                main_key_states, main_value_states, self.layer_idx, {"cache_position": cache_position}
+            )
 
         # get seq_length of main stream only
         sequence_length = ngram_sequence_length // (1 + self.ngram)
@@ -1004,15 +1012,15 @@ class ProphetNetDecoderLayer(nn.Module):
     Decoder block for Prophetnet
     """
 
-    def __init__(self, config: ProphetNetConfig):
+    def __init__(self, config: ProphetNetConfig, layer_idx=None):
         super().__init__()
         # 1st residual block
-        self.self_attn = ProphetNetNgramSelfAttention(config)
+        self.self_attn = ProphetNetNgramSelfAttention(config, layer_idx=layer_idx)
         self.self_attn_layer_norm = LayerNorm(config.hidden_size)
 
         # 2nd residual block
         if config.add_cross_attention:
-            self.cross_attn = ProphetNetAttention(config, config.num_decoder_attention_heads)
+            self.cross_attn = ProphetNetAttention(config, config.num_decoder_attention_heads, layer_idx=layer_idx)
             self.cross_attn_layer_norm = LayerNorm(config.hidden_size)
 
         # 3rd residual block
@@ -1032,15 +1040,14 @@ class ProphetNetDecoderLayer(nn.Module):
         predict_relative_position_buckets=None,
         position_ids=None,
         past_key_value=None,
-        use_cache: bool = True,
-        output_attentions: bool = False,
+        use_cache: Optional[bool] = True,
+        output_attentions: Optional[bool] = False,
+        cache_position: Optional[torch.Tensor] = None,
     ):
         # 1st residual block
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
-        ngram_attention_output, self_attn_weights, self_attn_weights_ngram, present_key_value = self.self_attn(
+        ngram_attention_output, self_attn_weights, self_attn_weights_ngram, past_key_value = self.self_attn(
             hidden_states=hidden_states,
-            past_key_value=self_attn_past_key_value,
+            past_key_value=past_key_value,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             extended_predict_attention_mask=extended_predict_attention_mask,
@@ -1051,22 +1058,18 @@ class ProphetNetDecoderLayer(nn.Module):
         hidden_states = self.self_attn_layer_norm(hidden_states + ngram_attention_output)
 
         # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
-        cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             # 2nd residual block
-            attention_output, cross_attn_weights, cross_attn_present_key_value = self.cross_attn(
+            attention_output, cross_attn_weights, past_key_value = self.cross_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attn_mask,
                 layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=cross_attn_past_key_value,
+                past_key_value=past_key_value,
                 output_attentions=output_attentions,
             )
             hidden_states = self.cross_attn_layer_norm(attention_output + hidden_states)
-
-            # add cross-attn to positions 3,4 of present_key_value tuple
-            present_key_value = present_key_value + cross_attn_present_key_value
 
         # 3rd residual block
         feed_forward_output = self.feed_forward(hidden_states)
@@ -1078,7 +1081,7 @@ class ProphetNetDecoderLayer(nn.Module):
             outputs += (self_attn_weights, self_attn_weights_ngram, cross_attn_weights)
 
         if use_cache:
-            outputs += (present_key_value,)
+            outputs += (past_key_value,)
 
         return outputs
 
@@ -1242,7 +1245,9 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         self.position_embeddings = ProphetNetPositionalEmbeddings(config)
 
         self.ngram_embeddings = nn.Embedding(self.ngram, config.hidden_size, None)
-        self.layers = nn.ModuleList([ProphetNetDecoderLayer(config) for _ in range(config.num_decoder_layers)])
+        self.layers = nn.ModuleList(
+            [ProphetNetDecoderLayer(config, layer_idx=i) for i in range(config.num_decoder_layers)]
+        )
         self.embeddings_layer_norm = LayerNorm(config.hidden_size)
 
         self.gradient_checkpointing = False
@@ -1270,6 +1275,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, ProphetNetDecoderModelOutput]:
         r"""
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
@@ -1313,7 +1319,26 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             past_key_values=past_key_values,
         )
 
-        if past_key_values is not None:
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
+        return_legacy_cache = False
+        if use_cache and isinstance(past_key_values, (list, tuple)):
+            logger.warning_once(
+                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
+                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
+                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
+            )
+            return_legacy_cache = True
+            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
+
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else past_key_values
+
+        if past_key_values_length != 0:
             main_relative_position_buckets, predict_relative_position_buckets = None, None
         else:
             (
@@ -1328,7 +1353,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         ngram_embeddings = self.ngram_embeddings.weight
 
         # prepare attention mask
-        if past_key_values is not None:
+        if past_key_values_length != 0:
             assert hidden_states.size(1) == 1, (
                 "At the moment `use_cache` is only supported for `decoder_input_ids` of length 1"
             )
@@ -1369,15 +1394,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         all_main_stream_attns = () if output_attentions else None
         all_ngram_stream_attns = () if output_attentions else None
         all_cross_attns = () if output_attentions and self.config.add_cross_attention else None
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
-        present_key_values = () if use_cache else None
+        next_decoder_cache = None
 
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
@@ -1392,8 +1409,6 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                 all_main_stream_hidden_states += (hidden_states[:, :sequence_length],)
                 if self.config.ngram > 0:
                     all_ngram_stream_hidden_states += (hidden_states[:, sequence_length:],)
-
-            past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
@@ -1411,6 +1426,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                     None,
                     use_cache,
                     output_attentions,
+                    cache_position,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -1426,15 +1442,16 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                     main_relative_position_buckets=main_relative_position_buckets,
                     predict_relative_position_buckets=predict_relative_position_buckets,
                     position_ids=position_ids,
-                    past_key_value=past_key_value,
+                    past_key_value=past_key_values,
                     use_cache=use_cache,
                     output_attentions=output_attentions,
+                    cache_position=cache_position,
                 )
 
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                present_key_values += (layer_outputs[4 if output_attentions else 1],)
+                next_decoder_cache = layer_outputs[4 if output_attentions else 1]
 
             if output_attentions:
                 all_main_stream_attns += (layer_outputs[1],)
@@ -1448,6 +1465,10 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             if self.config.ngram > 0:
                 all_ngram_stream_hidden_states += (hidden_states[:, sequence_length:],)
 
+        next_cache = next_decoder_cache if use_cache else None
+        if return_legacy_cache:
+            next_cache = past_key_values.to_legacy_cache()
+
         # split last_hidden_state for return
         last_hidden_state = hidden_states[:, :sequence_length]
         last_hidden_state_ngram = hidden_states[:, sequence_length:] if self.config.ngram > 0 else None
@@ -1458,7 +1479,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                 for v in [
                     last_hidden_state,
                     last_hidden_state_ngram,
-                    present_key_values,
+                    next_cache,
                     all_main_stream_hidden_states,
                     all_ngram_stream_hidden_states,
                     all_main_stream_attns,
@@ -1470,7 +1491,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         return ProphetNetDecoderModelOutput(
             last_hidden_state=last_hidden_state,
             last_hidden_state_ngram=last_hidden_state_ngram,
-            past_key_values=present_key_values,
+            past_key_values=next_cache,
             hidden_states=all_main_stream_hidden_states,
             hidden_states_ngram=all_ngram_stream_hidden_states,
             attentions=all_main_stream_attns,
@@ -1618,6 +1639,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, ProphetNetSeq2SeqModelOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1689,6 +1711,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
 
         if not return_dict:
@@ -1759,6 +1782,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, ProphetNetSeq2SeqLMOutput]:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1824,6 +1848,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel, GenerationMi
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
         batch_size, sequence_length = (
             decoder_input_ids.shape if decoder_input_ids is not None else decoder_inputs_embeds.shape[:2]
