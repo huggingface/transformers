@@ -1648,6 +1648,10 @@ class MimiModel(MimiPreTrainedModel):
         codes = self.quantizer.encode(embeddings, num_quantizers)
         codes = codes.transpose(0, 1)
         return codes, past_key_values, padding_cache
+    
+    @property
+    def frame_size(self) -> int:
+        return int(self.config.sampling_rate / self.config.frame_rate)
 
     def get_encoded_length(self, input_length: torch.LongTensor) -> torch.LongTensor:
         """
@@ -1730,6 +1734,9 @@ class MimiModel(MimiPreTrainedModel):
 
         if channels < 1 or channels > 2:
             raise ValueError(f"Number of audio channels must be 1 or 2, but got {channels}")
+        
+        if input_length % self.frame_size != 0 or input_length == 0:
+            raise ValueError(f"Input length must be a multiple of {self.frame_size}, but got {input_length}")
 
         if padding_mask is None:
             padding_mask = torch.ones_like(input_values).bool()
