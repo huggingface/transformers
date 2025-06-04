@@ -130,6 +130,7 @@ from .utils import (
     is_seqio_available,
     is_soundfile_available,
     is_spacy_available,
+    is_speech_available,
     is_spqr_available,
     is_sudachi_available,
     is_sudachi_projection_available,
@@ -1474,6 +1475,13 @@ def require_tiktoken(test_case):
     Decorator marking a test that requires TikToken. These tests are skipped when TikToken isn't installed.
     """
     return unittest.skipUnless(is_tiktoken_available(), "test requires TikToken")(test_case)
+
+
+def require_speech(test_case):
+    """
+    Decorator marking a test that requires speech. These tests are skipped when speech isn't available.
+    """
+    return unittest.skipUnless(is_speech_available(), "test requires torchaudio")(test_case)
 
 
 def get_gpu_count():
