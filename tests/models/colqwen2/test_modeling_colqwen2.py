@@ -27,8 +27,14 @@ from transformers import is_torch_available
 from transformers.models.colqwen2.configuration_colqwen2 import ColQwen2Config
 from transformers.models.colqwen2.modeling_colqwen2 import ColQwen2ForRetrieval, ColQwen2ForRetrievalOutput
 from transformers.models.colqwen2.processing_colqwen2 import ColQwen2Processor
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device, \
-    require_torch_large_accelerator
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_large_accelerator,
+    require_vision,
+    slow,
+    torch_device,
+)
+
 
 if is_torch_available():
     import torch
@@ -324,7 +330,7 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         # Further validation: fine-grained check, with a hardcoded score from the original Hf implementation.
         expected_scores = torch.tensor(
             [
-                [16.2500,  7.9688, 14.7500],
+                [16.2500, 7.9688, 14.7500],
                 [9.5000, 17.1250, 10.6250],
                 [14.8750, 10.8750, 20.0000],
             ],
