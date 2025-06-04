@@ -351,12 +351,6 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_initialization(self):
         pass
 
-    @unittest.skip(
-        reason="Siglip has no FLEX attention, and we don't have a proper way to set/test attn in VLMs. TODO @raushan"
-    )
-    def test_flex_attention_with_grads(self):
-        pass
-
     def test_automodelforcausallm(self):
         """
         Regression test for #36741/#36917 -- make sure `AutoModelForCausalLM` works with a Gemma3 config, i.e. that
