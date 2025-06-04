@@ -19,105 +19,6 @@ if is_hqq_available():
 
 logger = logging.get_logger(__name__)
 
-
-# Utility functions for static/sliding cache update logic
-def _static_cache_update(
-    k_cache: torch.Tensor,
-    v_cache: torch.Tensor,
-    key_states: torch.Tensor,
-    value_states: torch.Tensor,
-    cache_position: Optional[torch.LongTensor],
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Updates the static cache tensors in place.
-
-    Args:
-        k_cache (`torch.Tensor`): The key cache tensor to update.
-        v_cache (`torch.Tensor`): The value cache tensor to update.
-        key_states (`torch.Tensor`): The new key states to add.
-        value_states (`torch.Tensor`): The new value states to add.
-        cache_position (`Optional[torch.LongTensor]`): The position indices where the new states should be inserted.
-                                                       If None, the entire cache is overwritten (prefill).
-
-    Returns:
-        Tuple[`torch.Tensor`, `torch.Tensor`]: The updated key and value cache tensors (modified in-place).
-    """
-    if cache_position is None:
-        # Prefill phase where seq_len potentially equals max_cache_len. Directly copy.
-        k_cache.copy_(key_states)
-        v_cache.copy_(value_states)
-    else:
-        # Generation phase. Update specific positions.
-        # Use index_copy_ for in-place update (compile-friendly).
-        try:
-            k_cache.index_copy_(2, cache_position, key_states)
-            v_cache.index_copy_(2, cache_position, value_states)
-        except NotImplementedError:
-            # Fallback for devices like MPS where index_copy_ might not be supported.
-            k_cache[:, :, cache_position] = key_states
-            v_cache[:, :, cache_position] = value_states
-    return k_cache, v_cache
-
-
-def _sliding_cache_update(
-    k_cache: torch.Tensor,
-    v_cache: torch.Tensor,
-    key_states: torch.Tensor,
-    value_states: torch.Tensor,
-    cache_position: torch.LongTensor,
-    max_cache_len: int,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Updates the sliding window cache tensors, returning the potentially modified tensors.
-
-    Args:
-        k_cache (`torch.Tensor`): The key cache tensor to update.
-        v_cache (`torch.Tensor`): The value cache tensor to update.
-        key_states (`torch.Tensor`): The new key states to add.
-        value_states (`torch.Tensor`): The new value states to add.
-        cache_position (`torch.LongTensor`): The position indices where the new states should be inserted.
-        max_cache_len (`int`): The maximum length of the sliding window cache.
-
-    Returns:
-        Tuple[`torch.Tensor`, `torch.Tensor`]: The key and value tensors representing the cache state after the update.
-                                               For prefill > window, these are the full input states.
-                                               Otherwise, they are the updated cache tensors.
-    """
-    # Handle prefill phase when prompt length > sliding_window_size
-    if cache_position.shape[0] > max_cache_len:
-        new_k = key_states[:, :, -max_cache_len:, :]
-        new_v = value_states[:, :, -max_cache_len:, :]
-        k_cache.copy_(new_k)
-        v_cache.copy_(new_v)
-        return key_states, value_states
-
-    # Sliding window logic for generation phase or prefill < window
-    slicing = torch.arange(max_cache_len, device=value_states.device)
-    current_seq_len = cache_position[-1] + 1  # Use last position to determine current length
-    to_shift = current_seq_len > max_cache_len
-    indices = (slicing + to_shift.sum()) % max_cache_len
-
-    k_out_shifted = k_cache[:, :, indices]
-    v_out_shifted = v_cache[:, :, indices]
-
-    # Clamp cache_position to determine the *target index* within the shifted cache view
-    update_position = cache_position.clamp(min=0, max=max_cache_len - 1)
-
-    try:
-        k_out_updated = k_out_shifted.index_copy(2, update_position, key_states)
-        v_out_updated = v_out_shifted.index_copy(2, update_position, value_states)
-    except NotImplementedError:
-        # Fallback for MPS: clone and modify the clone
-        k_out_updated = k_out_shifted.clone()
-        v_out_updated = v_out_shifted.clone()
-        k_out_updated[:, :, update_position] = key_states
-        v_out_updated[:, :, update_position] = value_states
-
-    k_cache.copy_(k_out_updated)
-    v_cache.copy_(v_out_updated)
-    return k_out_updated, v_out_updated
-
-
 class CacheProcessor:
     """
     Base class for cache processors that can be applied to modify cache behavior.
@@ -252,9 +153,25 @@ class CacheLayer:
     """Base, abstract class for a single layer's cache."""
     is_compileable = False
 
-    def __init__(self, key_cache: Optional[torch.Tensor] = None, value_cache: Optional[torch.Tensor] = None) -> None:
-        self.key_cache = key_cache if key_cache is not None else None
-        self.value_cache = value_cache if value_cache is not None else None
+    def __init__(
+        self,
+        config: Optional[PretrainedConfig] = None,
+        max_batch_size: Optional[int] = None,
+        max_cache_len: Optional[int] = None,
+        device: Union[torch.device, str, None] = None,
+        dtype: Optional[torch.dtype] = None,
+    ):
+        if config is not None or max_batch_size is not None or max_cache_len is not None or device is not None or dtype is not None:
+            raise NotImplementedError("Make sure to implement `__init__` in a subclass.")
+        self.key_cache = None
+        self.value_cache = None
+    
+    @classmethod
+    def from_kv(cls, key_cache: torch.Tensor, value_cache: torch.Tensor) -> None:
+        cache = cls()
+        cache.key_cache = key_cache
+        cache.value_cache = value_cache
+        return cache
 
     def update(
         self,
@@ -305,9 +222,35 @@ class Cache:
     This class handles basic propagation of operations across layers.
     """
 
-    layer_structure = ()  # Subclasses must define their layer type
+    pattern_block = ()  # Subclasses must define their layer pattern
 
     def __init__(self, config_or_ddp_cache_data = None, processors: Optional[CacheProcessorList] = None, *args, **kwargs):
+        """
+        Initialize a Cache instance with the specified configuration and processors.
+
+        Args:
+            config_or_ddp_cache_data (`PretrainedConfig` or `Iterable`, *optional*):
+                Model configuration for shape/device info, or DDP-distributed cache data for compatibility.
+                If `Iterable`, must contain (key_states, value_states) tuples for each layer.
+            processors (`CacheProcessorList`, *optional*):
+                List of cache processors to apply (e.g., quantization, offloading). Defaults to empty list.
+            *args, **kwargs:
+                Additional arguments for cache configuration:
+                - `max_batch_size`/`batch_size` (`int`): Maximum batch size for static caches
+                - `max_cache_len` (`int`): Maximum sequence length. For hybrid caches:
+                  * SlidingWindowLayers: clamped to `min(sliding_window, max_cache_len)`
+                  * StaticLayers: uses full `max_cache_len`
+                - `device` (`torch.device`): Device for cache tensors
+                - `dtype` (`torch.dtype`): Data type for cache tensors
+                - `layer_device_map` (`Dict[int, Union[str, torch.device]]`): Per-layer device mapping
+
+        Note:
+            For hybrid caches (mixing StaticLayer and SlidingWindowLayer):
+            - Requires `model_config.sliding_window` to be set
+            - Uses `sliding_window_pattern` (default: 2) to determine layer alternation
+            - SlidingWindow layers are limited to sliding window size, Static layers use full max_cache_len
+            - Pattern: (SlidingWindow, ..., SlidingWindow, Static) repeated across layers
+        """
         self.layers: List[CacheLayer] = []
         self.processors = processors if processors is not None else CacheProcessorList()
         
@@ -321,46 +264,55 @@ class Cache:
             # (shape=[global batch size, num_heads, seq_len, head_dim]).
             # WARNING: `_distributed_cache_data` must be the first argument in `__init__`, otherwise we'll break
             # compatibility. The name of the argument doesn't matter.
-            assert self.layer_structure == (DynamicLayer,), "torch DDP is only supported for DynamicCache"
+            assert self.pattern_block == (DynamicLayer,), "torch DDP is only supported for DynamicCache"
             for key_states, value_states in _distributed_cache_data:
-                layer = DynamicLayer(key_states, value_states)
+                layer = DynamicLayer.from_kv(key_states, value_states)
                 self.layers.append(layer)
             # Initialize processors after cache setup
             self.processors.init(self, **kwargs)
             return
         else:
             model_config = kwargs.pop("config", None)
-            
-        if self.layer_structure == (StaticLayer,):
-            #rename max_batch_size to batch_size
-            if "max_batch_size" in kwargs:
-                kwargs["batch_size"] = kwargs.pop("max_batch_size")
-            config = StaticCacheConfig(*args, **kwargs)
-            for idx in range(model_config.num_hidden_layers):
-                layer_device = config.layer_device_map[idx] if config.layer_device_map is not None else config.device
-                layer = StaticLayer(model_config, config.batch_size, config.max_cache_len, layer_device, config.dtype)
-                self.layers.append(layer)
-        elif self.layer_structure == (SlidingWindowLayer,):
-            #rename max_batch_size to batch_size
-            if "max_batch_size" in kwargs:
-                kwargs["batch_size"] = kwargs.pop("max_batch_size")
-            config = StaticCacheConfig(*args, **kwargs)
-            for idx in range(model_config.num_hidden_layers):
-                layer_device = config.layer_device_map[idx] if config.layer_device_map is not None else config.device
-                layer = SlidingWindowLayer(model_config, config.batch_size, config.max_cache_len, layer_device, config.dtype)
-                self.layers.append(layer)
-        else:
-            # Initialize first round of layers
-            for layer_type in self.layer_structure:
-                self.layers.append(layer_type())
+        
+        # Expand pattern_block into layer_types
+        model_num_layers = getattr(model_config, "num_hidden_layers", len(self.pattern_block))
+
+        #rename max_batch_size to batch_size
+        if "max_batch_size" in kwargs:
+            kwargs["batch_size"] = kwargs.pop("max_batch_size")
+        config = StaticCacheConfig(*args, **kwargs)
+        # Adjust max_cache_len for sliding window layers (they can't be larger than sliding window)
+        max_cache_len = config.max_cache_len or model_config.max_position_embeddings if model_config is not None else None
+        sliding_window_len = min(getattr(model_config, "sliding_window", max_cache_len), max_cache_len) if model_config is not None else None
+
+        if {StaticLayer, SlidingWindowLayer} == set(self.pattern_block): # Hybrid cache
+            if getattr(model_config, "sliding_window", None) is None:
+                raise ValueError(
+                    "Setting `cache_implementation` to 'hybrid' requires the model config supporting "
+                    "sliding window attention, please check if there is a `sliding_window` field in the model "
+                    "config and it's not set to None."
+                )
+            # Build the pattern block: (Sw, Sw, ..., Sw, St) or (St)
+            block_size = getattr(model_config, "sliding_window_pattern", 2)
+            self.pattern_block = (SlidingWindowLayer,) * (block_size - 1) + (StaticLayer,)
+
+        self.layer_types = [self.pattern_block[i % len(self.pattern_block)] for i in range(model_num_layers)]
+        
+        for idx, layer_type in enumerate(self.layer_types):
+            layer_device = config.layer_device_map[idx] if config.layer_device_map is not None else config.device
+            layer_len = sliding_window_len if layer_type == SlidingWindowLayer else max_cache_len
+            layer = layer_type(model_config, config.batch_size, layer_len, layer_device, config.dtype)
+            self.layers.append(layer)
         
         # Initialize processors after cache setup
         self.processors.init(self, **kwargs)
 
-    def new_layer(self) -> CacheLayer:
-        new_layer_idx = (len(self.layers) + 1) % len(self.layer_structure)
-        new_layer_type = self.layer_structure[new_layer_idx]
-        return new_layer_type()
+    def grow_layers_to(self, layer_idx):
+        while len(self.layers) <= layer_idx:
+            next_type_idx = len(self.layer_types) % len(self.pattern_block)
+            next_layer_type = self.pattern_block[next_type_idx]
+            self.layer_types.append(next_layer_type)
+            self.layers.append(next_layer_type())
 
     @property
     def key_cache(self) -> KVList:
@@ -399,11 +351,7 @@ class Cache:
         # Apply pre-update processors
         key_states, value_states = self.processors.pre_update(self, key_states, value_states, layer_idx, cache_kwargs)
         
-        if layer_idx >= len(self.layers):
-            # Extend the list with empty layers up to the required index
-            self.layers.extend([self.new_layer() for _ in range(layer_idx - len(self.layers))])
-            # Create new layer
-            self.layers.append(self.new_layer())
+        self.grow_layers_to(layer_idx)
         
         # Update the layer
         key_states, value_states = self.layers[layer_idx].update(key_states, value_states, cache_kwargs)
@@ -449,7 +397,7 @@ class Cache:
         """
         # Check if the attribute/method exists and gather values if it is an attribute
         attribute_values = []
-        for i, layer in enumerate(self.layers[: len(self.layer_structure)]):
+        for i, layer in enumerate(self.layers[: len(self.pattern_block)]):
             if not hasattr(layer, name):
                 raise AttributeError(
                     f"Layer {i} ({layer.__class__.__name__}) of {self.__class__.__name__} does not support `{name}`"
@@ -458,7 +406,7 @@ class Cache:
                 attribute_values.append(getattr(layer, name))
 
         if attribute_values:
-            assert len(attribute_values) == len(self.layer_structure), f"Cache {self.__class__.__name__} gathered {len(attribute_values)} values for {name}, but there are {len(self.layer_structure)} layers."
+            assert len(attribute_values) == len(self.pattern_block), f"Cache {self.__class__.__name__} gathered {len(attribute_values)} values for {name}, but there are {len(self.pattern_block)} layers."
             values = set(attribute_values)
             if len(values) == 1:
                 return values.pop()
@@ -467,7 +415,7 @@ class Cache:
                     return all(values)
                 else:
                     raise ValueError(
-                        f"Cache {self.__class__.__name__}:{self.layer_structure} has multiple values for {name}: {attribute_values}. This is not supported."
+                        f"Cache {self.__class__.__name__}:{self.pattern_block} has multiple values for {name}: {attribute_values}. This is not supported."
                     )
         # If the attribute is a method, we need to propagate it to all layers
         def propagate_to_layers(*args, **kwargs):
@@ -707,21 +655,27 @@ class QuantizedCacheConfig(CacheConfig):
 @dataclass
 class StaticCacheConfig(CacheConfig):
     """
-    Configuration class for static cache settings.
+    Configuration class for static and sliding window cache settings.
     """
 
     cache_implementation = "static"
 
-    def __init__(self, batch_size: int, max_cache_len: int, device="cpu", dtype=torch.float32, layer_device_map=None):
+    def __init__(self, batch_size: int = None, max_cache_len: int = None, device=None, dtype=None, layer_device_map=None):
         self.batch_size = batch_size
         self.max_cache_len = max_cache_len
+        if batch_size is not None and device is None:
+            device = "cpu"
+            logger.warning_once("`device` not set in cache initialization, using default `cpu`")
+        if batch_size is not None and dtype is None:
+            dtype = torch.float32
+            logger.warning_once("`dtype` not set in cache initialization, using default `float32`")
         self.device = device
-        self._dtype = str(dtype).split(".")[-1]
+        self._dtype = str(dtype).split(".")[-1] if dtype is not None else None
         self.layer_device_map = layer_device_map
 
     @property
     def dtype(self):
-        return getattr(torch, self._dtype)
+        return getattr(torch, self._dtype) if self._dtype is not None else None
 
     def validate(self):
         """Validates if the arguments passed are correct"""
@@ -830,7 +784,7 @@ class DynamicLayer(CacheLayer):
         """Split the current instance into a list of `DynamicLayer` by the batch size."""
         out = []
         for i in range(0, full_batch_size, split_size):
-            current_split = DynamicLayer(
+            current_split = DynamicLayer.from_kv(
                 key_cache=self.key_cache[i : i + split_size] if self.key_cache.numel() else None,
                 value_cache=self.value_cache[i : i + split_size] if self.value_cache.numel() else None,
             )
@@ -888,7 +842,7 @@ class DynamicCache(Cache):
         ```
     """
 
-    layer_structure = (DynamicLayer,)
+    pattern_block = (DynamicLayer,)
 
 
 # Utilities for `DynamicCache` <> torch.export support
@@ -1097,12 +1051,49 @@ class StaticLayer(CacheLayer):
 
     def get_max_cache_shape(self, state) -> Optional[int]:
         return self.max_cache_len, True
+    
+    def _static_update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        cache_position: Optional[torch.LongTensor],
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        # Utility functions for static/sliding cache update logic
+        """
+        Updates the static cache tensors in place.
+
+        Args:
+            k_cache (`torch.Tensor`): The key cache tensor to update.
+            v_cache (`torch.Tensor`): The value cache tensor to update.
+            key_states (`torch.Tensor`): The new key states to add.
+            value_states (`torch.Tensor`): The new value states to add.
+            cache_position (`Optional[torch.LongTensor]`): The position indices where the new states should be inserted.
+                                                        If None, the entire cache is overwritten (prefill).
+
+        Returns:
+            Tuple[`torch.Tensor`, `torch.Tensor`]: The updated key and value cache tensors (modified in-place).
+        """
+        if cache_position is None:
+            # Prefill phase where seq_len potentially equals max_cache_len. Directly copy.
+            self.key_cache.copy_(key_states)
+            self.value_cache.copy_(value_states)
+        else:
+            # Generation phase. Update specific positions.
+            # Use index_copy_ for in-place update (compile-friendly).
+            try:
+                self.key_cache.index_copy_(2, cache_position, key_states)
+                self.value_cache.index_copy_(2, cache_position, value_states)
+            except NotImplementedError:
+                # Fallback for devices like MPS where index_copy_ might not be supported.
+                self.key_cache[:, :, cache_position] = key_states
+                self.value_cache[:, :, cache_position] = value_states
+        return self.key_cache, self.value_cache
 
     def update(self, key_states, value_states, cache_kwargs=None) -> Tuple[torch.Tensor, torch.Tensor]:
         cache_position = cache_kwargs.get("cache_position") if cache_kwargs else None
         key_states = key_states.to(self.key_cache.dtype)
         value_states = value_states.to(self.value_cache.dtype)
-        return _static_cache_update(self.key_cache, self.value_cache, key_states, value_states, cache_position)
+        return self._static_update(key_states, value_states, cache_position)
 
     def get_seq_length(self, state, cache_position=None) -> int:
         if cache_position is not None:
@@ -1168,7 +1159,7 @@ class StaticCache(Cache):
         ```
     """
 
-    layer_structure = (StaticLayer,)
+    pattern_block = (StaticLayer,)
 
 
 
@@ -1177,24 +1168,69 @@ class SlidingWindowLayer(StaticLayer):
     A cache layer that implements sliding window attention caching.
     Inherits from StaticLayer but uses sliding window update logic.
     """
+    is_compileable = True
     
-    def update(self, key_states, value_states, cache_kwargs=None) -> Tuple[torch.Tensor, torch.Tensor]:
-        cache_position = cache_kwargs.get("cache_position") if cache_kwargs else None
-        
+    def _static_update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        cache_position: torch.LongTensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Updates the sliding window cache tensors, returning the potentially modified tensors.
+
+        Args:
+            k_cache (`torch.Tensor`): The key cache tensor to update.
+            v_cache (`torch.Tensor`): The value cache tensor to update.
+            key_states (`torch.Tensor`): The new key states to add.
+            value_states (`torch.Tensor`): The new value states to add.
+            cache_position (`torch.LongTensor`): The position indices where the new states should be inserted.
+            max_cache_len (`int`): The maximum length of the sliding window cache.
+
+        Returns:
+            Tuple[`torch.Tensor`, `torch.Tensor`]: The key and value tensors representing the cache state after the update.
+                                                For prefill > window, these are the full input states.
+                                                Otherwise, they are the updated cache tensors.
+        """
+
         if cache_position is None:
             raise ValueError("`cache_position` must be provided for SlidingWindowLayer.")
-            
-        key_states = key_states.to(self.key_cache.dtype)
-        value_states = value_states.to(self.value_cache.dtype)
         
-        return _sliding_cache_update(
-            self.key_cache, 
-            self.value_cache, 
-            key_states, 
-            value_states, 
-            cache_position,
-            self.max_cache_len
-        )
+        # Handle prefill phase when prompt length > sliding_window_size
+        if cache_position.shape[0] > self.max_cache_len:
+            new_k = key_states[:, :, -self.max_cache_len:, :]
+            new_v = value_states[:, :, -self.max_cache_len:, :]
+            self.key_cache.copy_(new_k)
+            self.value_cache.copy_(new_v)
+            return self.key_cache, self.value_cache
+
+        # Sliding window logic for generation phase or prefill < window
+        slicing = torch.arange(self.max_cache_len, device=value_states.device)
+        current_seq_len = cache_position[-1] + 1  # Use last position to determine current length
+        to_shift = current_seq_len > self.max_cache_len
+        indices = (slicing + to_shift.sum()) % self.max_cache_len
+
+        k_out_shifted = self.key_cache[:, :, indices]
+        v_out_shifted = self.value_cache[:, :, indices]
+
+        # Clamp cache_position to determine the *target index* within the shifted cache view
+        update_position = cache_position.clamp(min=0, max=self.max_cache_len - 1)
+
+        try:
+            k_out_updated = k_out_shifted.index_copy(2, update_position, key_states)
+            v_out_updated = v_out_shifted.index_copy(2, update_position, value_states)
+        except NotImplementedError:
+            # Fallback for MPS: clone and modify the clone
+            k_out_updated = k_out_shifted.clone()
+            v_out_updated = v_out_shifted.clone()
+            k_out_updated[:, :, update_position] = key_states
+            v_out_updated[:, :, update_position] = value_states
+
+        self.key_cache.copy_(k_out_updated)
+        self.value_cache.copy_(v_out_updated)
+        return self.key_cache, self.value_cache
+
+
 
 class SlidingWindowCache(Cache):
     """
@@ -1251,9 +1287,7 @@ class SlidingWindowCache(Cache):
         ```
     """
 
-    layer_structure = (SlidingWindowLayer,)
-    is_sliding = True
-    is_compileable = True
+    pattern_block = (SlidingWindowLayer,)
 
     def __init__(
         self,
@@ -1492,62 +1526,7 @@ class HybridCache(Cache):
         ```
     """
 
-    is_compileable = True
-
-    def __init__(
-        self,
-        config: PretrainedConfig,
-        max_batch_size: int,
-        max_cache_len: Optional[int] = None,
-        device: Union[torch.device, str, None] = None,
-        dtype: torch.dtype = torch.float32,
-        layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
-    ) -> None:
-        if not hasattr(config, "sliding_window") or config.sliding_window is None:
-            raise ValueError(
-                "Setting `cache_implementation` to 'hybrid' requires the model config supporting "
-                "sliding window attention, please check if there is a `sliding_window` field in the model "
-                "config and it's not set to None."
-            )
-        
-        # Build the layer structure based on the sliding window pattern
-        layer_switch = config.sliding_window_pattern if hasattr(config, "sliding_window_pattern") else 2
-        is_sliding_list = [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)]
-        
-        # Create dynamic layer structure: SlidingWindowLayer for sliding layers, StaticLayer for global layers
-        layer_structure = tuple(
-            SlidingWindowLayer if is_sliding else StaticLayer 
-            for is_sliding in is_sliding_list
-        )
-        
-        # Store the layer structure for the base class
-        self.layer_structure = layer_structure
-        
-        # Adjust max_cache_len for sliding window layers (they can't be larger than sliding window)
-        max_cache_len = max_cache_len if max_cache_len is not None else config.max_position_embeddings
-        sliding_window_len = min(config.sliding_window, max_cache_len)
-        
-        # For hybrid cache, we need to set max_cache_len to sliding_window_len for sliding layers
-        # But the base Cache.__init__ doesn't handle this mixed case, so we need custom initialization
-        super(Cache, self).__init__()
-        self.layers: List[CacheLayer] = []
-        self.processors = CacheProcessorList()
-        
-        # Create layers manually since we have a mixed structure
-        for idx, layer_type in enumerate(layer_structure):
-            layer_device = layer_device_map[idx] if layer_device_map is not None else device
-            if layer_type == SlidingWindowLayer:
-                # Sliding window layers use the smaller cache length
-                layer = layer_type(config, max_batch_size, sliding_window_len, layer_device, dtype)
-            else:
-                # Static layers use the full cache length  
-                layer = layer_type(config, max_batch_size, max_cache_len, layer_device, dtype)
-            self.layers.append(layer)
-            
-        # Initialize processors
-        self.processors.init(self)
-
-
+    pattern_block = (StaticLayer, SlidingWindowLayer)
 
 
 class HybridChunkedCache(Cache):
