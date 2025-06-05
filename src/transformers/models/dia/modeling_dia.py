@@ -59,7 +59,7 @@ debug = False
 class DiaPreTrainedModel(PreTrainedModel):
     config_class = DiaConfig
     base_model_prefix = "model"
-    main_input_name = "input_ids"  # TODO: change this?
+    main_input_name = "input_ids"
     supports_gradient_checkpointing = True
     _no_split_modules = ["DiaEncoderLayer", "DiaDecoderLayer"]
     _supports_flash_attn_2 = True
