@@ -14,8 +14,6 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# XLM-RoBERTa
-
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -25,31 +23,33 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-[XLM-RoBERTa](https://arxiv.org/abs/1911.02116) is a large multilingual language model trained on 2.5TB of filtered CommonCrawl data across 100 languages. What makes XLM-RoBERTa unique is its ability to achieve strong performance on both high and low-resource languages without sacrificing per-language performance, outperforming previous multilingual models like mBERT by significant margins.
+# XLM-RoBERTa
 
-You can find all the original XLM-RoBERTa checkpoints under the [XLM-RoBERTa](https://huggingface.co/models?search=xlm-roberta) collection.
+[XLM-RoBERTa](https://huggingface.co/papers/1911.02116) is a large multilingual masked language model trained on 2.5TB of filtered CommonCrawl data across 100 languages. It shows that scaling the model provides strong performance gains on high-resource and low-resource languages. The model uses the [RoBERTa](./roberta) pretraining objectives on the [XLM](./xlm) model.
+
+You can find all the original XLM-RoBERTa checkpoints under the [Facebook AI community](https://huggingface.co/FacebookAI) organization.
 
 > [!TIP]
 > Click on the XLM-RoBERTa models in the right sidebar for more examples of how to apply XLM-RoBERTa to different cross-lingual tasks like classification, translation, and question answering.
 
-The example below demonstrates how to use XLM-RoBERTa for masked language modeling with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
 ```python
+import torch
 from transformers import pipeline
 
 # Initialize the pipeline with XLM-RoBERTa
-unmasker = pipeline("fill-mask", model="xlm-roberta-base")
-
-# Example in English
-result = unmasker("Hello, I'm a [MASK] model.")
-print(result)
-
+pipeline = pipeline(
+    task="fill-mask",
+    model="facebook/xlm-roberta-base",
+    torch_dtype=torch.float16,
+    device=0
+)
 # Example in French
-result = unmasker("Bonjour, je suis un modèle [MASK].")
-print(result)
+pipeline("Bonjour, je suis un modèle [MASK].")
 ```
 
 </hfoption>
@@ -60,46 +60,75 @@ from transformers import AutoModelForMaskedLM, AutoTokenizer
 import torch
 
 # Load model and tokenizer
-model = AutoModelForMaskedLM.from_pretrained("xlm-roberta-base")
-tokenizer = AutoTokenizer.from_pretrained("xlm-roberta-base")
+tokenizer = AutoTokenizer.from_pretrained(
+    "facebook/xlm-roberta-base"
+)
+model = AutoModelForMaskedLM.from_pretrained(
+    "facebook/xlm-roberta-base",
+    torch_dtype=torch.float16,
+    device_map="auto",
+    attn_implementation="sdpa"
+)
 
 # Prepare input
-text = "Hello, I'm a [MASK] model."
-inputs = tokenizer(text, return_tensors="pt")
+inputs = tokenizer("Bonjour, je suis un modèle [MASK].", return_tensors="pt").to("cuda")
 
-# Get prediction
 with torch.no_grad():
     outputs = model(**inputs)
-    predictions = outputs.logits.argmax(dim=-1)
+    predictions = outputs.logits
 
-# Decode prediction
-predicted_token = tokenizer.decode(predictions[0][inputs["input_ids"][0] == tokenizer.mask_token_id])
-print(f"Predicted token: {predicted_token}")
+masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
+predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
+predicted_token = tokenizer.decode(predicted_token_id)
+
+print(f"The predicted token is: {predicted_token}")
 ```
 
 </hfoption>
+<hfoption id="CLI">
+
+```bash
+transformers-cli run fill-mask \
+    --model facebook/xlm-roberta-base \
+    --text "Bonjour, je suis un modèle [MASK]." \
+    --device 0
+# Output: The predicted token is: modèle
+```
+</hfoption>
 </hfoptions>
 
-## Model Details
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [quantization guide](../quantization) overview for more available quantization backends.
 
-XLM-RoBERTa was proposed in [Unsupervised Cross-lingual Representation Learning at Scale](https://arxiv.org/abs/1911.02116) by Alexis Conneau, Kartikay Khandelwal, Naman Goyal, Vishrav Chaudhary, Guillaume Wenzek, Francisco Guzmán, Edouard Grave, Myle Ott, Luke Zettlemoyer and Veselin Stoyanov. The model achieves state-of-the-art results on several cross-lingual benchmarks:
+The example below uses bitsandbytes the quantive the weights to 4 bits
 
-- +13.8% average accuracy on XNLI
-- +12.3% average F1 score on MLQA
-- +2.1% average F1 score on NER
-- Particularly strong on low-resource languages (e.g., +11.8% for Swahili, +9.2% for Urdu)
+```python
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer, BitsAndBytesConfig
+# Load model and tokenizer with bitsandbytes quantization
 
-### Key Features
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_compute_dtype=torch.bfloat16
+    bnb_4bit_quant_type="nf4",  # or "fp4" for float 4-bit quantization
+    bnb_4bit_use_double_quant=True,  # use double quantization for better performance
+)
+tokenizer = AutoTokenizer.from_pretrained("facebook/xlm-roberta-base")
+model = AutoModelForMaskedLM.from_pretrained(
+    "facebook/xlm-roberta-base",
+    torch_dtype=torch.float16,
+    device_map="auto",
+    attn_implementation="flash_attention_2",
+    quantization_config=quantization_config
+)
 
-- Trained on 100 languages using 2.5TB of filtered CommonCrawl data
-- Based on RoBERTa architecture with multilingual adaptations
-- No language token required - automatically detects language from input
-- Uses only masked language modeling (no translation objective)
-- Competitive with strong monolingual models on GLUE and XNLI
+inputs = tokenizer("Bonjour, je suis un modèle [MASK].", return_tensors="pt").to("cuda")
+outputs = model.generate(**inputs, max_new_tokens=100)
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+```
 
-## Usage Tips
+## Notes
 
-- Unlike some XLM models, XLM-RoBERTa doesn't require `lang` tensors - it automatically determines the language from input
+- Unlike some XLM models, XLM-RoBERTa doesn't require `lang` tensors to understand what language is being used. It automatically determines the language from the input IDs
 - Uses RoBERTa's training approach but adapted for multilingual data
 - Particularly effective for low-resource languages
 - Supports all standard RoBERTa tasks (classification, token classification, QA, etc.)
