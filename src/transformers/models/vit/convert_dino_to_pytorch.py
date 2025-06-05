@@ -25,7 +25,12 @@ from PIL import Image
 
 from transformers import ViTConfig, ViTForImageClassification, ViTImageProcessor, ViTModel
 from transformers.utils import logging
+from torchvision import transforms
 
+from transformers.image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+)
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -175,9 +180,24 @@ def convert_vit_checkpoint(model_name, pytorch_dump_folder_path, base_model=True
     model.load_state_dict(state_dict)
 
     # Check outputs on an image, prepared by ViTImageProcessor
+    image = prepare_img()
     image_processor = ViTImageProcessor()
-    encoding = image_processor(images=prepare_img(), return_tensors="pt")
+    encoding = image_processor(images=image, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
+
+    # Verify that preprocessing matches original Google ViT implementation
+    transformations = transforms.Compose([
+        transforms.Resize((224, 224), interpolation=transforms.InterpolationMode.BICUBIC),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=IMAGENET_STANDARD_MEAN, # Google ViT uses IMAGENET_STANDARD_MEAN - [0.5, 0.5, 0.5]
+            std=IMAGENET_STANDARD_STD # Google ViT uses IMAGENET_STANDARD_STD - [0.5, 0.5, 0.5]
+        ),
+    ])
+    
+    original_pixel_values = transformations(image).unsqueeze(0)
+    assert torch.allclose(pixel_values, original_pixel_values, atol=1e-3)
+
     outputs = model(pixel_values)
 
     if base_model:
