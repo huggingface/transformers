@@ -22,15 +22,15 @@ import requests
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
-
-from transformers import ViTConfig, ViTForImageClassification, ViTImageProcessor, ViTModel
-from transformers.utils import logging
 from torchvision import transforms
 
+from transformers import ViTConfig, ViTForImageClassification, ViTImageProcessor, ViTModel
 from transformers.image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
 )
+from transformers.utils import logging
+
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -194,7 +194,7 @@ def convert_vit_checkpoint(model_name, pytorch_dump_folder_path, base_model=True
             std=IMAGENET_STANDARD_STD # Google ViT uses IMAGENET_STANDARD_STD - [0.5, 0.5, 0.5]
         ),
     ])
-    
+
     original_pixel_values = transformations(image).unsqueeze(0)
     assert torch.allclose(pixel_values, original_pixel_values, atol=1e-3)
 
