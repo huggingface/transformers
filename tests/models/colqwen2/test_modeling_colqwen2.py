@@ -28,6 +28,7 @@ from transformers.models.colqwen2.configuration_colqwen2 import ColQwen2Config
 from transformers.models.colqwen2.modeling_colqwen2 import ColQwen2ForRetrieval, ColQwen2ForRetrievalOutput
 from transformers.models.colqwen2.processing_colqwen2 import ColQwen2Processor
 from transformers.testing_utils import (
+    Expectations,
     require_bitsandbytes,
     require_torch,
     require_vision,
@@ -328,13 +329,20 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         self.assertTrue((scores.argmax(axis=1) == torch.arange(len(ds), device=scores.device)).all())
 
         # Further validation: fine-grained check, with a hardcoded score from the original Hf implementation.
-        expected_scores = torch.tensor(
-            [
-                [15.1250,  8.6875, 15.0625],
-                [9.2500, 17.2500, 10.3750],
-                [15.9375, 12.3750, 20.2500],
-            ],
-            dtype=scores.dtype,
+        expectations = Expectations(
+            {
+                ("cuda", 7): [
+                    [15.5000, 8.1250, 14.9375],
+                    [9.0625, 17.1250, 10.6875],
+                    [15.9375, 12.1875, 20.2500],
+                ],
+                ("cuda", 8): [
+                    [15.1250, 8.6875, 15.0625],
+                    [9.2500, 17.2500, 10.3750],
+                    [15.9375, 12.3750, 20.2500],
+                ],
+            }
         )
+        expected_scores = torch.tensor(expectations.get_expectation(), dtype=scores.dtype)
 
         assert torch.allclose(scores, expected_scores, atol=1e-3), f"Expected scores {expected_scores}, got {scores}"
