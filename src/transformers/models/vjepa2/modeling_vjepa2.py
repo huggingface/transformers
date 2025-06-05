@@ -1522,7 +1522,7 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
         ],
     ) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv3d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
             module.weight.data = nn.init.trunc_normal_(
@@ -1705,7 +1705,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
             pred_head_outputs = (predictor_outputs[0], apply_masks(sequence_output, target_mask))
             pred_out = pred_head_outputs + predictor_outputs[1:]
             enc_out = enc_head_outputs + encoder_outputs[1:] + pred_out
-            return enc_out #pred_out
+            return enc_out
 
         encoder_output = VJEPA2OutputWithMaskedInput(
             last_hidden_state=sequence_output,
