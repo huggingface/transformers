@@ -14,8 +14,6 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# XLM
-
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
         <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -23,14 +21,16 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-[XLM](https://arxiv.org/abs/1901.07291) is a transformer model pretrained using one of three objectives: causal language modeling (CLM), masked language modeling (MLM), or translation language modeling (TLM). What makes XLM unique is its ability to handle multiple languages through cross-lingual pretraining, achieving state-of-the-art results on cross-lingual classification and machine translation tasks.
+# XLM
 
-You can find all the original XLM checkpoints under the [XLM](https://huggingface.co/models?search=xlm) collection.
+[XLM](https://huggingface.co/papers/1901.07291) demonstrates cross-lingual pretraining with two approaches, unsupervised training on a single language and supervised training on more than one language with a cross-lingual language model objective. The XLM model supports the causal language modeling objective, masked language modeling, and translation language modeling (an extension of the [BERT](./bert)) masked language modeling objective to multiple language inputs).
+
+You can find all the original XLM checkpoints under the [Facebook AI community](https://huggingface.co/FacebookAI?search_models=xlm-mlm) organization.
 
 > [!TIP]
 > Click on the XLM models in the right sidebar for more examples of how to apply XLM to different cross-lingual tasks like classification, translation, and question answering.
 
-The example below demonstrates how to use XLM for masked language modeling with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -78,38 +78,12 @@ print(f"Predicted token: {predicted_token}")
 </hfoption>
 </hfoptions>
 
-## Model Details
-
-XLM was proposed in [Cross-lingual Language Model Pretraining](https://arxiv.org/abs/1901.07291) by Guillaume Lample and Alexis Conneau. The model achieves state-of-the-art results on several cross-lingual tasks:
-
-- 4.9% absolute gain in accuracy on XNLI
-- 34.3 BLEU on WMT'16 German-English (unsupervised)
-- 38.5 BLEU on WMT'16 Romanian-English (supervised)
-
-### Key Features
-
-- Supports multiple languages through cross-lingual pretraining
-- Three training objectives:
-  - Causal language modeling (CLM) for autoregressive generation
-  - Masked language modeling (MLM) similar to BERT
-  - Translation language modeling (TLM) for parallel data
-- Multilingual checkpoints with language-specific parameters
-
-## Usage Tips
+## Notes
 
 - Choose the appropriate checkpoint based on your task (CLM for generation, MLM for understanding)
 - For multilingual tasks, use the `lang` parameter to specify the language
 - The model supports input sequences of up to 256 tokens
 - For TLM, the model can leverage context from both languages in parallel data
-
-## Resources
-
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
 
 ## XLMConfig
 
