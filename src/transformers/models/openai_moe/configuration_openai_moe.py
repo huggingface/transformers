@@ -75,6 +75,7 @@ class OpenaiConfig(PretrainedConfig):
         router_aux_loss_coef: float = 0.9,
         output_router_logits=False,
         use_cache=True,
+        layer_types=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -97,17 +98,18 @@ class OpenaiConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
+        self.layer_types = layer_types
         if self.layer_types is None:
             self.layer_types = [
                 "sliding_attention" if bool((i + 1) % 2) else "full_attention" for i in range(self.num_hidden_layers)
             ]
+        layer_type_validation(self.layer_types)
 
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, copy it it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
-        layer_type_validation(self.layer_types)
         
         self.attention_bias = True 
         self.mlp_bias = False
