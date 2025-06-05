@@ -37,6 +37,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "BambaConfig": [
         "attn_layer_indices",
     ],
+    "Dots1Config": ["use_sliding_window", "max_window_layers"],
     "JambaConfig": [
         "max_position_embeddings",
         "attn_layer_offset",
@@ -474,6 +475,7 @@ def check_config_attributes():
                 and inspect.getmodule(x) == inspect.getmodule(_config_class),
             )
         ]
+
         for config_class in config_classes_in_module:
             unused_attributes = check_config_attributes_being_used(config_class)
             if len(unused_attributes) > 0:

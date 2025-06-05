@@ -197,7 +197,7 @@ class Dots1Config(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.routed_scaling_factor = routed_scaling_factor
         self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window if use_sliding_window else None
+        self.sliding_window = sliding_window if self.use_sliding_window else None
         self.max_window_layers = max_window_layers
 
         self.layer_types = layer_types
