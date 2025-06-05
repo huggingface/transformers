@@ -330,6 +330,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): torch.tensor([11.7500, 14.7500, 14.1250, 10.5625, 6.7812], dtype=torch.bfloat16),
                 ("cuda", 7): torch.tensor([11.9375, 14.7500, 14.4375, 10.8125,  7.0938], dtype=torch.bfloat16),
+                ("cuda", 8): torch.tensor([11.8750, 14.8125, 14.3125, 10.8125,  6.9375], dtype=torch.bfloat16),
             }
         )  # fmt: skip
         expected_logits = expected_logits_all.get_expectation()
@@ -359,6 +360,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "Whispers of dawn,\nSilent whispers of the night,\nNew day's light.",
                 ("cuda", 7): "Whispers of dawn,\nSilent whispers of the night,\nNew day's light.",
+                ("cuda", 8): "Whispers of dawn,\nSilent whispers of the night,\nNew day's light begins.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -688,7 +690,16 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         actual_logits = output.logits[0, -1, :5].cpu()
-        expected_logits = torch.tensor([-9.8750, -0.5703, 1.4297, -10.3125, -10.3125], dtype=torch.bfloat16)
+
+        expected_logits_all = Expectations(
+            {
+                ("xpu", 3): torch.tensor([-9.8750, -0.5703, 1.4297, -10.3125, -10.3125], dtype=torch.bfloat16),
+                ("cuda", 7): torch.tensor([-9.8750, -0.5703, 1.4297, -10.3125, -10.3125], dtype=torch.bfloat16),
+                ("cuda", 8): torch.tensor([-9.8750,  -0.5117,   1.4297, -10.3750, -10.3750], dtype=torch.bfloat16),
+            }
+        )  # fmt: skip
+        expected_logits = torch.tensor(expected_logits_all.get_expectation(), dtype=torch.bfloat16)
+
         # The original implementation and the transformers implementation do not match exactly, hence the higher tolerance.
         # The difference is likely due to the different implementations of the attention mechanism (different order of operations)
         # between the transformers Llama model and the original InternLM model.
@@ -766,6 +777,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden path leads to calm lake,\nNature's peaceful grace.",
                 ("cuda", 7): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden path leads to calm lake,\nNature's peaceful grace.",
+                ("cuda", 8): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nA wooden path leads to the sea,\nPeaceful, still waters.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -941,6 +953,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After re-examining the images, I can see that they are actually",
                 ("cuda", 7): "user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After re-examining the images, I can see that they are actually",
+                ("cuda", 8): "user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After closely examining the images again, I can see that there are several differences",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -956,6 +969,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common shot in tennis where the player swings the racket across their",
                 ("cuda", 7): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common shot in tennis where the player swings the racket across their",
+                ("cuda", 8): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common shot in tennis where the player swings the racket across their",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -971,6 +985,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.",
                 ("cuda", 7): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.",
+                ("cuda", 8): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
