@@ -688,6 +688,9 @@ class ChatCommand(BaseTransformersCLICommand):
     # -----------------------------------------------------------------------------------------------------------------
     # Main logic
     def run(self):
+        asyncio.run(self._inner_run())
+
+    async def _inner_run(self):
         if self.spawn_backend:
             serve_args = ServeArguments(
                 model_revision=self.args.model_revision,
@@ -765,13 +768,15 @@ class ChatCommand(BaseTransformersCLICommand):
                     stream=True,
                     extra_body={"request_id": request_id, "generation_config": {**generation_config.to_dict()}},
                 )
-                model_output, request_id = asyncio.run(interface.stream_output(stream))
-                asyncio.run(client.close())
+
+                model_output, request_id = await interface.stream_output(stream)
 
                 chat.append({"role": "assistant", "content": model_output})
 
             except KeyboardInterrupt:
                 break
+            finally:
+                await client.close()
 
 
 if __name__ == "__main__":
