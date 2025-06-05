@@ -69,10 +69,6 @@ logger = logging.get_logger(__name__)
 
 class Glm4vFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
-    min_pixels (`int`, *optional*, defaults to `56 * 56`):
-        The min pixels of the image to resize the image.
-    max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
-        The max pixels of the image to resize the image.
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
     temporal_patch_size (`int`, *optional*, defaults to 2):
@@ -80,9 +76,6 @@ class Glm4vFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
     """
-
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
     patch_size: Optional[int]
     temporal_patch_size: Optional[int]
     merge_size: Optional[int]
@@ -252,8 +245,6 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
         do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        min_pixels: Optional[int] = None,
-        max_pixels: Optional[int] = None,
         patch_size: Optional[int] = None,
         temporal_patch_size: Optional[int] = None,
         merge_size: Optional[int] = None,
@@ -265,10 +256,6 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
         **kwargs,
     ):
         r"""
-        min_pixels (`int`, *optional*, defaults to `56 * 56`):
-            The min pixels of the image to resize the image.
-        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
-            The max pixels of the image to resize the image.
         patch_size (`int`, *optional*, defaults to 14):
             The spatial patch size of the vision encoder.
         temporal_patch_size (`int`, *optional*, defaults to 2):
@@ -276,18 +263,6 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
         merge_size (`int`, *optional*, defaults to 2):
             The merge size of the vision encoder to llm encoder.
         """
-        min_pixels = min_pixels if min_pixels is not None else self.min_pixels
-        max_pixels = max_pixels if max_pixels is not None else self.max_pixels
-
-        if size is not None:
-            if "shortest_edge" not in size or "longest_edge" not in size:
-                raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-            min_pixels = size["shortest_edge"]
-        elif min_pixels is not None and max_pixels is not None:
-            # backward compatibility: override size with min_pixels and max_pixels if they are provided
-            size = {"shortest_edge": min_pixels, "longest_edge": max_pixels}
-        else:
-            size = {**self.size}
 
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -358,41 +333,6 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
             pixel_values = torch.stack(pixel_values)
             vision_grid_thws = torch.tensor(vision_grid_thws)
             data.update({"pixel_values": pixel_values, "image_grid_thw": vision_grid_thws})
-
-        # kept for BC only and should be removed after v5.0
-        if videos is not None:
-            logger.warning(
-                "`Glm4vImageProcessorFast` works only with image inputs and doesn't process videos anymore. "
-                "This is a deprecated behavior and will be removed in v5.0. "
-                "Your videos should be forwarded to `Glm4vVideoProcessor`. "
-            )
-            videos = make_batched_videos(videos)
-            pixel_values_videos, vision_grid_thws_videos = [], []
-            for images in videos:
-                patches, video_grid_thw = self._preprocess(
-                    images,
-                    do_resize=do_resize,
-                    size=size,
-                    interpolation=interpolation,
-                    do_rescale=do_rescale,
-                    rescale_factor=rescale_factor,
-                    do_normalize=do_normalize,
-                    image_mean=image_mean,
-                    image_std=image_std,
-                    patch_size=patch_size,
-                    temporal_patch_size=temporal_patch_size,
-                    merge_size=merge_size,
-                    do_convert_rgb=do_convert_rgb,
-                    input_data_format=input_data_format,
-                    device=device,
-                )
-                pixel_values_videos.extend(patches)
-                vision_grid_thws_videos.append(video_grid_thw)
-            pixel_values_videos = torch.stack(pixel_values_videos)
-            vision_grid_thws_videos = torch.tensor(vision_grid_thws_videos)
-            data.update({"pixel_values_videos": pixel_values_videos, "video_grid_thw": vision_grid_thws_videos})
-
-        return BatchFeature(data=data, tensor_type=return_tensors)
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
         """

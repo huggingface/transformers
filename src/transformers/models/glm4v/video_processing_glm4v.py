@@ -129,6 +129,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
     do_sample_frames = True
     patch_size = 14
     temporal_patch_size = 2
+    max_frame_count = 300
     merge_size = 2
     valid_kwargs = Glm4vVideoProcessorInitKwargs
     num_frames = 16
@@ -141,6 +142,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
 
         self.patch_size = kwargs.get("patch_size", self.patch_size)
         self.temporal_patch_size = kwargs.get("temporal_patch_size", self.temporal_patch_size)
+        self.max_frame_count = kwargs.get("max_frame_count", self.max_frame_count)
         self.merge_size = kwargs.get("merge_size", self.merge_size)
         self.num_frames = kwargs.get("num_frames", self.num_frames)
         self.fps = kwargs.get("fps", self.fps)
@@ -149,73 +151,37 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         self,
         video: torch.Tensor,
         metadata: Union[VideoMetadata, dict],
-        num_frames: Optional[int] = None,
-        fps: Optional[int] = None,
-        frame_indexes: Optional[List[int]] = None,
-        skip_secs: Optional[int] = 1,
     ):
-        num_frames = num_frames if num_frames is not None else self.num_frames
-        fps = fps if fps is not None else self.fps
-
-        assert num_frames is None or frame_indexes is None, (
-            "num_frames and frame_indexes cannot be set at the same time."
-        )
-
-        if fps is None:
-            fps = 2
-        inv_fps = 1 / fps
-
         total_frames = video.shape[0]
-        if hasattr(metadata, "timestamps"):
-            timestamps = metadata["timestamps"]
+        video_fps = getattr(metadata, "fps", 2.0)
+        timestamps = [i / video_fps for i in range(total_frames)]
+        duration = math.floor(max(timestamps))
+
+        if duration <= self.max_frame_count:
+            target_seconds = np.arange(0, duration + 1, 1.0 / self.fps)
         else:
-            video_fps = getattr(metadata, "fps", 2.0)
-            timestamps = [i / video_fps for i in range(total_frames)]
+            target_seconds = np.linspace(0, duration, self.fps * self.max_frame_count, endpoint=True)
 
-        duration = round(max(timestamps)) + 1
-        second_idxs = None
+        frame_indices = []
+        for t in target_seconds:
+            closest_idx = min(range(total_frames), key=lambda i: abs(timestamps[i] - t))
+            frame_indices.append(closest_idx)
 
-        if frame_indexes is not None:
-            frame_indices = frame_indexes
-            if max(frame_indices) >= total_frames:
-                raise ValueError(f"frame_indexes {frame_indexes} exceed the total frames {total_frames}.")
+        seen = set()
+        unique_frame_indices = []
+        for idx in frame_indices:
+            if idx not in seen:
+                seen.add(idx)
+                unique_frame_indices.append(idx)
 
-            if len(frame_indexes) == 1 and frame_indexes[0] < 0:
-                avg_num_frames = -frame_indexes[0]
-                second_indices = np.linspace(0, duration, avg_num_frames, endpoint=True)
-                frame_indices = []
-                current_second_index = 0
-                for i in range(total_frames):
-                    if timestamps[i] >= second_indices[current_second_index]:
-                        frame_indices.append(i)
-                        current_second_index += 1
-                        if current_second_index == len(second_indices):
-                            break
-                if len(frame_indices) < avg_num_frames:
-                    last_frame_idx = frame_indices[-1]
-                    frame_indices += [last_frame_idx] * (avg_num_frames - len(frame_indices))
-                second_idxs = ["{:.1f}".format(second) for second in second_indices]
-        else:
-            if num_frames >= duration * fps:
-                frame_indices = []
-                current_second = 0
-                for frame_index in range(total_frames):
-                    if timestamps[frame_index] >= current_second:
-                        current_second += inv_fps
-                        frame_indices.append(frame_index)
-                        if current_second >= duration:
-                            break
-            else:
-                frame_indices = np.linspace(0, total_frames - 1, num_frames, dtype=int)
-
+        frame_indices = unique_frame_indices
         if len(frame_indices) % 2 != 0:
             frame_indices.append(frame_indices[-1])
+
         sampled_video = video[frame_indices].contiguous()
+        second_idxs = [int(math.floor(timestamps[i])) for i in frame_indices]
 
-        if second_idxs is None:
-            second_idxs = [int(timestamps[f]) for f in frame_indices]
-
-        return sampled_video, second_idxs, int(duration)
+        return sampled_video, second_idxs
 
     def _preprocess(
         self,
@@ -234,10 +200,6 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         patch_size: Optional[int] = None,
         temporal_patch_size: Optional[int] = None,
         merge_size: Optional[int] = None,
-        num_frames: Optional[int] = None,
-        fps: Optional[int] = None,
-        frame_indexes: Optional[List[int]] = None,
-        skip_secs: Optional[int] = 0,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ):
@@ -248,9 +210,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         image_std = image_std or self.image_std
         interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
 
-        timestamps_list, durations_list = [], []
-        processed_videos = videos
-
+        timestamps_list = []
         if do_sample_frames:
             if video_metadata is None or (isinstance(video_metadata, list) and video_metadata[0] is None):
                 raise ValueError(
@@ -259,15 +219,11 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
                 )
             processed_videos = []
             for video, metadata in zip(videos, video_metadata):
-                video, timestamps, duration = self.sample_frames(
-                    video, metadata, num_frames, fps, frame_indexes, skip_secs
-                )
+                video, timestamps = self.sample_frames(video, metadata)
                 timestamps_list.append(timestamps)
-                durations_list.append(duration)
                 processed_videos.append(video)
         else:
-            timestamps_list = [[int((idx / 24)) for idx in range(len(video))] for video in videos]
-            durations_list = [len(video) // 24 for video in videos]
+            raise AssertionError("Must set `do_sample_frames=True` to sample frames from CogVLM Model.")
 
         grouped_videos, grouped_videos_index = group_videos_by_shape(processed_videos)
         resized_videos_grouped = {}
@@ -342,7 +298,6 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
             "pixel_values_videos": pixel_values_videos,
             "video_grid_thw": video_grid_thw,
             "timestamps": timestamps_list,
-            "durations": durations_list,
         }
 
         return BatchFeature(data=data, tensor_type=return_tensors)
