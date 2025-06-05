@@ -105,7 +105,7 @@ class MoshiAsrConfig(PretrainedConfig):
         head_dim=None,
         initializer_range=0.02,
         use_cache=True,
-        sliding_window=3000,
+        sliding_window=750,
         attention_dropout=0.0,
         ffn_dim=5632,
         rms_norm_eps=1e-8,
