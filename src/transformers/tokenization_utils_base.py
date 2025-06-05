@@ -3254,7 +3254,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value.
 
-                This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
+                This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
                 `>= 7.5` (Volta).
             padding_side (`str`, *optional*):
                 The side on which the model should have padding applied. Should be selected between ['right', 'left'].
