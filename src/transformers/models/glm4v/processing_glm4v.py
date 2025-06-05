@@ -151,9 +151,13 @@ class Glm4vProcessor(ProcessorMixin):
 
         if videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
+            timestamps = videos_inputs["timestamps"]
             video_grid_thw = videos_inputs["video_grid_thw"]
+
+            videos_inputs = {k: v for k, v in videos_inputs.items() if k not in ["timestamps", "durations"]}
         else:
             videos_inputs = {}
+            timestamps = []
             video_grid_thw = None
 
         if not isinstance(text, list):
@@ -178,23 +182,23 @@ class Glm4vProcessor(ProcessorMixin):
                     num_frames = len(video_grid_thw)
                     video_structure = ""
 
-                    selected_timestamps = []
-                    for idx in range(0, len(timestamps), 2):
-                        if len(selected_timestamps) >= num_frames:
-                            break
-                        selected_timestamps.append(timestamps[idx])
-
+                    if hasattr(timestamps, "tolist"):
+                        timestamps_list = timestamps.tolist()[0]
+                    else:
+                        timestamps_list = timestamps[0] if isinstance(timestamps[0], list) else timestamps
+                    unique_timestamps = []
+                    for idx in range(0, len(timestamps_list), 2):
+                        unique_timestamps.append(timestamps_list[idx])
+                    selected_timestamps = unique_timestamps[:num_frames]
                     while len(selected_timestamps) < num_frames:
                         selected_timestamps.append(selected_timestamps[-1] if selected_timestamps else 0)
-
                     for frame_idx in range(num_frames):
-                        timestamp_sec = int(selected_timestamps[frame_idx])
+                        timestamp_sec = selected_timestamps[frame_idx]
                         frame_structure = f"<|begin_of_image|>{self.image_token}<|end_of_image|>{timestamp_sec}"
                         video_structure += frame_structure
-
-                    video_structure += ""
                     text[i] = text[i].replace(self.video_token, video_structure, 1)
                     video_index += 1
+
                 for frame_idx in range(len(video_grid_thw)):
                     if self.image_token in text[i]:
                         num_image_tokens = video_grid_thw[frame_idx].prod().item() // merge_length

@@ -22,6 +22,8 @@
 import math
 from typing import List, Optional, Union
 
+import numpy as np
+
 from ...image_processing_utils import (
     BatchFeature,
 )
@@ -42,6 +44,7 @@ from ...utils import (
     is_vision_available,
 )
 
+
 if is_torch_available():
     import torch
 
@@ -50,7 +53,7 @@ from ...video_processing_utils import (
     BASE_VIDEO_PROCESSOR_DOCSTRING,
     BaseVideoProcessor,
 )
-from ...video_utils import group_videos_by_shape, reorder_videos
+from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
 
 if is_vision_available():
@@ -72,17 +75,8 @@ def smart_resize(
     min_pixels: int = 112 * 112,
     max_pixels: int = 14 * 14 * 4 * 15000,
 ):
-    """Rescales the image so that the following conditions are met:
-
-    1. Both dimensions (height and width) are divisible by 'factor'.
-
-    2. The total number of pixels is within the range ['min_pixels', 'max_pixels'].
-
-    3. The aspect ratio of the image is maintained as closely as possible.
-
-    """
     if t < t_factor:
-        raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
+        raise ValueError(f"t:{t} must be larger than t_factor:{t_factor}")
     if height < factor or width < factor:
         raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
     elif max(height, width) / min(height, width) > 200:
@@ -104,11 +98,9 @@ def smart_resize(
 
     return h_bar, w_bar
 
+
 class Glm4vVideoProcessorInitKwargs(VideosKwargs):
-    size: SizeDict
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
+    max_image_size: dict[str, int] = None
 
 
 @add_start_docstrings(
@@ -127,41 +119,159 @@ class Glm4vVideoProcessorInitKwargs(VideosKwargs):
 class Glm4vVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 15000}
+    max_image_size = {"longest_edge": 28 * 28 * 15000}
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
     do_resize = True
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
+    do_sample_frames = True
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
     valid_kwargs = Glm4vVideoProcessorInitKwargs
+    num_frames = 16
+    fps = 2
+
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
     def __init__(self, **kwargs: Unpack[Glm4vVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
 
+        self.patch_size = kwargs.get("patch_size", self.patch_size)
+        self.temporal_patch_size = kwargs.get("temporal_patch_size", self.temporal_patch_size)
+        self.merge_size = kwargs.get("merge_size", self.merge_size)
+        self.num_frames = kwargs.get("num_frames", self.num_frames)
+        self.fps = kwargs.get("fps", self.fps)
+
+    def sample_frames(
+        self,
+        video: torch.Tensor,
+        metadata: Union[VideoMetadata, dict],
+        num_frames: Optional[int] = None,
+        fps: Optional[int] = None,
+        frame_indexes: Optional[List[int]] = None,
+        skip_secs: Optional[int] = 1,
+    ):
+        num_frames = num_frames if num_frames is not None else self.num_frames
+        fps = fps if fps is not None else self.fps
+
+        assert num_frames is None or frame_indexes is None, (
+            "num_frames and frame_indexes cannot be set at the same time."
+        )
+
+        if fps is None:
+            fps = 2
+        inv_fps = 1 / fps
+
+        total_frames = video.shape[0]
+        if hasattr(metadata, "timestamps"):
+            timestamps = metadata["timestamps"]
+        else:
+            video_fps = getattr(metadata, "fps", 2.0)
+            timestamps = [i / video_fps for i in range(total_frames)]
+
+        duration = round(max(timestamps)) + 1
+        second_idxs = None
+
+        if frame_indexes is not None:
+            frame_indices = frame_indexes
+            if max(frame_indices) >= total_frames:
+                raise ValueError(f"frame_indexes {frame_indexes} exceed the total frames {total_frames}.")
+
+            if len(frame_indexes) == 1 and frame_indexes[0] < 0:
+                avg_num_frames = -frame_indexes[0]
+                second_indices = np.linspace(0, duration, avg_num_frames, endpoint=True)
+                frame_indices = []
+                current_second_index = 0
+                for i in range(total_frames):
+                    if timestamps[i] >= second_indices[current_second_index]:
+                        frame_indices.append(i)
+                        current_second_index += 1
+                        if current_second_index == len(second_indices):
+                            break
+                if len(frame_indices) < avg_num_frames:
+                    last_frame_idx = frame_indices[-1]
+                    frame_indices += [last_frame_idx] * (avg_num_frames - len(frame_indices))
+                second_idxs = ["{:.1f}".format(second) for second in second_indices]
+        else:
+            if num_frames >= duration * fps:
+                frame_indices = []
+                current_second = 0
+                for frame_index in range(total_frames):
+                    if timestamps[frame_index] >= current_second:
+                        current_second += inv_fps
+                        frame_indices.append(frame_index)
+                        if current_second >= duration:
+                            break
+            else:
+                frame_indices = np.linspace(0, total_frames - 1, num_frames, dtype=int)
+
+        if len(frame_indices) % 2 != 0:
+            frame_indices.append(frame_indices[-1])
+        sampled_video = video[frame_indices].contiguous()
+
+        if second_idxs is None:
+            second_idxs = [int(timestamps[f]) for f in frame_indices]
+
+        return sampled_video, second_idxs, int(duration)
+
     def _preprocess(
         self,
-        videos: List["torch.Tensor"],
-        do_convert_rgb: bool,
-        do_resize: bool,
-        size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        videos: List[torch.Tensor],
+        video_metadata: Optional[Union[List[VideoMetadata], List[dict]]] = None,
+        do_convert_rgb: bool = True,
+        do_resize: bool = True,
+        size: SizeDict = None,
+        interpolation: Optional[str] = None,
+        do_rescale: bool = True,
+        rescale_factor: float = 1 / 255.0,
+        do_normalize: bool = True,
+        do_sample_frames: bool = True,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
         patch_size: Optional[int] = None,
         temporal_patch_size: Optional[int] = None,
         merge_size: Optional[int] = None,
+        num_frames: Optional[int] = None,
+        fps: Optional[int] = None,
+        frame_indexes: Optional[List[int]] = None,
+        skip_secs: Optional[int] = 0,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ):
-        grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
+        patch_size = patch_size or self.patch_size
+        temporal_patch_size = temporal_patch_size or self.temporal_patch_size
+        merge_size = merge_size or self.merge_size
+        image_mean = image_mean or self.image_mean
+        image_std = image_std or self.image_std
+        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+
+        timestamps_list, durations_list = [], []
+        processed_videos = videos
+
+        if do_sample_frames:
+            if video_metadata is None or (isinstance(video_metadata, list) and video_metadata[0] is None):
+                raise ValueError(
+                    "Frame sampling is enabled but no video metadata was found. "
+                    "Please pass in `VideoMetadata` object per each input video or set `do_sample_frames=False`"
+                )
+            processed_videos = []
+            for video, metadata in zip(videos, video_metadata):
+                video, timestamps, duration = self.sample_frames(
+                    video, metadata, num_frames, fps, frame_indexes, skip_secs
+                )
+                timestamps_list.append(timestamps)
+                durations_list.append(duration)
+                processed_videos.append(video)
+        else:
+            timestamps_list = [[int((idx / 24)) for idx in range(len(video))] for video in videos]
+            durations_list = [len(video) // 24 for video in videos]
+
+        grouped_videos, grouped_videos_index = group_videos_by_shape(processed_videos)
         resized_videos_grouped = {}
+
         for shape, stacked_videos in grouped_videos.items():
             num_frames, height, width = stacked_videos.shape[1], stacked_videos.shape[3], stacked_videos.shape[4]
             if do_resize:
@@ -170,7 +280,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
                     height=height,
                     width=width,
                     t_factor=temporal_patch_size,
-                    factor=patch_size * merge_size
+                    factor=patch_size * merge_size,
                 )
                 stacked_videos = F.resize(
                     stacked_videos, size=(resized_height, resized_width), interpolation=interpolation
@@ -185,16 +295,13 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
 
         for shape, stacked_videos in grouped_videos.items():
             resized_height, resized_width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
-
-            # Fused rescale and normalize
             stacked_videos = self.rescale_and_normalize(
                 stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
             patches = stacked_videos
 
-            # Check that videos have `num_frames` divisible by `temporal_patch_size`
             if patches.shape[1] % temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(1, self.temporal_patch_size - 1, 1, 1, 1)
+                repeats = patches[:, -1:].repeat(1, temporal_patch_size - 1, 1, 1, 1)
                 patches = torch.cat([patches, repeats], dim=1)
 
             batch_size, grid_t, channel = patches.shape[:3]
@@ -226,13 +333,16 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         processed_grids = reorder_videos(processed_grids, grouped_videos_index)
         pixel_values_videos = torch.cat(processed_videos, dim=0)
         video_grid_thw = torch.tensor(processed_grids)
-
-        # turn video_grid_thw into a list of lists for model process
         total_frames = video_grid_thw[0][0].item()
         h = video_grid_thw[0][1].item()
         w = video_grid_thw[0][2].item()
         video_grid_thw = [[1, h, w] for _ in range(total_frames)]
-        return BatchFeature(
-            data={"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thw},
-            tensor_type=return_tensors,
-        )
+
+        data = {
+            "pixel_values_videos": pixel_values_videos,
+            "video_grid_thw": video_grid_thw,
+            "timestamps": timestamps_list,
+            "durations": durations_list,
+        }
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
