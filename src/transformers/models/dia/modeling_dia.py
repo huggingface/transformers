@@ -910,10 +910,6 @@ class DiaModel(DiaPreTrainedModel):
                 # (2*bsz, 1, channel)
                 decoder_input_ids = torch.full((encoder_outputs[0].shape[0], 1, 9), 1026, device=self.device)
 
-        # We forward with a 2D tensor (bsz * channels, seq_len) on generate
-        # but internally we always use a 3D tensor (bsz, seq_len, channels)
-        decoder_input_ids = decoder_input_ids.reshape(encoder_outputs[0].shape[0], decoder_input_ids.shape[1], -1)
-
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=None,  # TODO: if we prefix audio we will need a mask when left padding - `audio_attention_mask`
@@ -970,7 +966,6 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-        # TODO: we expect (bsz * channels, seq_len)
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         decoder_position_ids: Optional[torch.LongTensor] = None,
@@ -1001,6 +996,9 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
             cache_position=cache_position,
         )
 
+        # Note: Everything is done in (bsz, seq_len, channels) but we return (bsz * channels, seq_len, vocab) logits
+        # instead of the possibly expected (bsz, seq_len, channels, vocab). This is due to the generation framework
+        # revolving around 2d input.
         last_hidden_state = outputs[0]
         batch_size = last_hidden_state.shape[0]
         audio_logits = self.logits_dense(last_hidden_state).view((batch_size * self.num_channels, -1, self.vocab_size))

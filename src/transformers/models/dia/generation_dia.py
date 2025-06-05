@@ -230,137 +230,11 @@ class DiaEosTokenCriteria(StoppingCriteria):
 
 
 class DiaGenerationMixin(GenerationMixin):
-    def _prepare_generation_config(
-        self,
-        generation_config: Optional[GenerationConfig],
-        use_model_defaults: Optional[bool] = None,
-        **kwargs: Dict
-    ) -> Tuple[GenerationConfig, Dict]:
-        generation_config, model_kwargs = super()._prepare_generation_config(
-            generation_config, use_model_defaults, **kwargs
-        )
-
-        # We allow generation up to max length + max delay pattern
-        # (will revert back to max length after generation)
-        # TODO: check where max delay wasn't considered but added afterwards
-        generation_config.max_length += max(self.config.delay_pattern)
-
-        # TODO: move default value in saved generation config and make it dependent on this - disallow non-cfg?
-        # TODO: decoder prep in prepare_for_gen...
-        # Indicating cfg to prepare unconditioned input
-        model_kwargs["uses_cfg"] = True
-
-        # We need this for our custom logit processors and stopping criteria
-        self.config.eos_token_id = self.config.eos_token_id or generation_config.eos_token_id
-        self.config.pad_token_id = self.config.pad_token_id or generation_config.pad_token_id
-        self.config.bos_token_id = self.config.bos_token_id or generation_config.bos_token_id
-
-        return generation_config, model_kwargs
-
-    def _prepare_model_inputs(
-        self,
-        inputs: Optional[torch.Tensor] = None,
-        bos_token_id: Optional[torch.Tensor] = None,
-        model_kwargs: Optional[Dict[str, torch.Tensor]] = None,
-    ) -> Tuple[torch.Tensor, Optional[str], Dict[str, torch.Tensor]]:
-        inputs, input_name, model_kwargs = super()._prepare_model_inputs(
-            inputs=inputs,
-            bos_token_id=bos_token_id,
-            model_kwargs=model_kwargs,
-        )
-
-        # If CFG is requested we fill in the unconditioned parts
-        if model_kwargs["uses_cfg"]:
-            inputs = inputs[:, None, :]
-            unconditioned_inputs = torch.zeros_like(inputs)
-            inputs = torch.stack([unconditioned_inputs, inputs], dim=1).view(-1, inputs.shape[-1])
-
-            if model_kwargs.get("attention_mask", None) is not None:
-                model_kwargs["attention_mask"] = model_kwargs["attention_mask"].repeat_interleave(2, dim=0)
-
-        return inputs, input_name, model_kwargs
-
-    def _prepare_decoder_input_ids_for_generation(
-        self,
-        batch_size: int,
-        model_input_name: str,
-        model_kwargs: Dict[str, torch.Tensor],
-        decoder_start_token_id: torch.Tensor,
-        device: Optional[torch.device] = None,
-    ) -> Tuple[torch.LongTensor, Dict[str, torch.Tensor]]:
-        """Prepares `decoder_input_ids` for generation with encoder-decoder models"""
-        # TODO: check for correctness - in the case audio is provided
-
-        # 1. Check whether the user has defined `decoder_input_ids` and `decoder_attention_mask` manually.
-        decoder_input_ids = decoder_attention_mask = None
-        if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
-            decoder_input_ids = model_kwargs.pop("decoder_input_ids")
-        if model_kwargs is not None and "decoder_attention_mask" in model_kwargs:
-            decoder_attention_mask = model_kwargs.pop("decoder_attention_mask")
-
-        # 2. Prepare audio into being shifted according to the delay patterns
-        # Some default values from our config
-        num_channels = self.config.decoder_config.num_channels
-        delay_pattern = self.config.delay_pattern
-
-        # Default to all bos tokens if nothing is provided
-        if decoder_input_ids is None:
-            decoder_input_ids = torch.full((batch_size, 1, num_channels), decoder_start_token_id, dtype=torch.long, device=device)
-
-        # Get all audio and padding lengths
-        if decoder_attention_mask is not None:
-            # DAC in hf only works with right padding, we already know that this needs to be flipped
-            decoder_attention_mask = decoder_attention_mask.flip(dims=[1])
-            padding_lens = decoder_attention_mask.shape[-1] - decoder_attention_mask.sum(dim=-1)
-            audio_lens = decoder_attention_mask.shape[-1] - padding_lens
-        else:
-            decoder_attention_mask = torch.ones(size=(batch_size, decoder_input_ids.shape[1]), dtype=torch.long, device=device)
-            padding_lens = [0] * batch_size
-            audio_lens = [decoder_input_ids.shape[1]] * batch_size
-        # +1 for bos
-        max_seq_len = max(audio_lens) + max(delay_pattern) + 1
-
-        # 3. Create delayed batch (and hence also the mask)
-        prefill = torch.full(
-            (batch_size, max_seq_len, num_channels),
-            fill_value=-1,
-            dtype=torch.int,
-        )
-
-        max_audio_len = 0
-        for i in range(batch_size):
-            padding_size = padding_lens[i]
-            prefill[i, :padding_size + 1, :] = decoder_start_token_id
-
-            # Right padded due to DAC
-            prompt = decoder_input_ids[i, :audio_lens[i], ...]
-
-            # Second condition in case no audio has been given
-            if prompt is not None and not (prompt == decoder_start_token_id).any():
-                prompt = prompt.to(dtype=torch.int)
-                prefill[i, padding_size + 1 : prompt.shape[0] + 1, :] = prompt
-                max_audio_len = max(max_audio_len, prompt.shape[0])
-
-        delay_precomp = self.build_delay_indices(
-            B=batch_size,
-            T=max_seq_len,
-            C=num_channels,
-            delay_pattern=delay_pattern,
-        )
-
-        delayed_batch = self.apply_audio_delay(
-            audio_BxTxC=prefill,
-            pad_value=-1,
-            bos_value=decoder_start_token_id,
-            precomp=delay_precomp,
-        )
-
-        # 4. Overwrite and convert to 2D
-        decoder_input_ids = delayed_batch[:, :max_audio_len + 1, :].reshape(batch_size * num_channels, -1)
-        model_kwargs["decoder_attention_mask"] = decoder_attention_mask[:, :max_audio_len + 1]
-        model_kwargs["decoder_delay_mask"] = delayed_batch
-
-        return decoder_input_ids, model_kwargs
+    # A few special cases in Dia that we need for custom preprocessing:
+    #   1. "uses_cfg": Indicates CFG which needs preparation to be properly handled by repeats
+    #   2. "cfg_guidance_top_k": Unique to Dia used for logits processing
+    #   3. "eos_scale": Unique to Dia used for logits processing
+    _valid_external_model_kwargs = ["uses_cfg", "cfg_guidance_top_k", "eos_scale"]
 
     def _get_logits_processor(
         self,
@@ -374,11 +248,6 @@ class DiaGenerationMixin(GenerationMixin):
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
     ) -> LogitsProcessorList:
-        # TODO: hangover processor is removed --> use mask to overwrite the first xxx tokens with mask
-        # TODO: make input_ids of audio (bsz * num_channels, seq_len)
-        # --> reshape in forward/generate prep
-        # --> logits can be processed by any of the other methods
-
         custom_processors = LogitsProcessorList()
 
         cfg_processor = None
@@ -454,6 +323,171 @@ class DiaGenerationMixin(GenerationMixin):
             **kwargs,
         )
 
+    def _prepare_generation_config(
+        self,
+        generation_config: Optional[GenerationConfig],
+        use_model_defaults: Optional[bool] = None,
+        **kwargs: Dict
+    ) -> Tuple[GenerationConfig, Dict]:
+        generation_config, model_kwargs = super()._prepare_generation_config(
+            generation_config, use_model_defaults, **kwargs
+        )
+
+        # We allow generation up to max length + max delay pattern
+        # (will revert back to max length after generation)
+        # TODO: check where max delay wasn't considered but added afterwards
+        generation_config.max_length += max(self.config.delay_pattern)
+
+        # TODO: move default value in saved generation config and make it dependent on this - disallow non-cfg?
+        # TODO: decoder prep in prepare_for_gen...
+        # Indicating cfg to prepare unconditioned input
+        model_kwargs["uses_cfg"] = True
+
+        # We need this for our custom logit processors and stopping criteria
+        self.config.eos_token_id = self.config.eos_token_id or generation_config.eos_token_id
+        self.config.pad_token_id = self.config.pad_token_id or generation_config.pad_token_id
+        self.config.bos_token_id = self.config.bos_token_id or generation_config.bos_token_id
+
+        return generation_config, model_kwargs
+
+    def _prepare_model_inputs(
+        self,
+        inputs: Optional[torch.Tensor] = None,
+        bos_token_id: Optional[torch.Tensor] = None,
+        model_kwargs: Optional[Dict[str, torch.Tensor]] = None,
+    ) -> Tuple[torch.Tensor, Optional[str], Dict[str, torch.Tensor]]:
+        inputs, input_name, model_kwargs = super()._prepare_model_inputs(
+            inputs=inputs,
+            bos_token_id=bos_token_id,
+            model_kwargs=model_kwargs,
+        )
+
+        # If CFG is requested we fill in the unconditioned parts
+        if model_kwargs["uses_cfg"]:
+            inputs = inputs[:, None, :]
+            unconditioned_inputs = torch.zeros_like(inputs)
+            inputs = torch.stack([unconditioned_inputs, inputs], dim=1).view(-1, inputs.shape[-1])
+
+            if model_kwargs.get("attention_mask", None) is not None:
+                model_kwargs["attention_mask"] = model_kwargs["attention_mask"].repeat_interleave(2, dim=0)
+
+        return inputs, input_name, model_kwargs
+
+    def _prepare_decoder_input_ids_for_generation(
+        self,
+        batch_size: int,
+        model_input_name: str,
+        model_kwargs: Dict[str, torch.Tensor],
+        decoder_start_token_id: torch.Tensor,
+        device: Optional[torch.device] = None,
+    ) -> Tuple[torch.LongTensor, Dict[str, torch.Tensor]]:
+        """Prepares `decoder_input_ids` for generation with encoder-decoder models"""
+        # TODO: check for correctness - in the case audio is provided
+
+        # 1. Check whether the user has defined `decoder_input_ids` and `decoder_attention_mask` manually.
+        decoder_input_ids = decoder_attention_mask = None
+        if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
+            decoder_input_ids = model_kwargs.pop("decoder_input_ids")
+        if model_kwargs is not None and "decoder_attention_mask" in model_kwargs:
+            decoder_attention_mask = model_kwargs.pop("decoder_attention_mask")
+
+        # 2. Prepare audio into being shifted according to the delay patterns
+        # Some default values
+        num_channels = self.config.decoder_config.num_channels
+        delay_pattern = self.config.delay_pattern
+        real_batch_size = batch_size // 2 if model_kwargs["uses_cfg"] else batch_size
+
+        # Default to all bos tokens if nothing is provided
+        if decoder_input_ids is None:
+            decoder_input_ids = torch.full((real_batch_size, 1, num_channels), decoder_start_token_id, dtype=torch.long, device=device)
+
+        # Get all audio and padding lengths
+        if decoder_attention_mask is not None:
+            # DAC in hf only works with right padding, we already know that this needs to be flipped
+            decoder_attention_mask = decoder_attention_mask.flip(dims=[1])
+            padding_lens = decoder_attention_mask.shape[-1] - decoder_attention_mask.sum(dim=-1)
+            audio_lens = decoder_attention_mask.shape[-1] - padding_lens
+        else:
+            decoder_attention_mask = torch.ones(size=(real_batch_size, decoder_input_ids.shape[1]), dtype=torch.long, device=device)
+            padding_lens = [0] * real_batch_size
+            audio_lens = [decoder_input_ids.shape[1]] * real_batch_size
+        # +1 for bos
+        max_seq_len = max(audio_lens) + max(delay_pattern) + 1
+
+        # 3. Create delayed batch (and hence also the mask)
+        prefill = torch.full(
+            (real_batch_size, max_seq_len, num_channels),
+            fill_value=-1,
+            dtype=torch.int,
+        )
+
+        max_audio_len = 0
+        for i in range(real_batch_size):
+            padding_size = padding_lens[i]
+            prefill[i, :padding_size + 1, :] = decoder_start_token_id
+
+            # Right padded due to DAC
+            prompt = decoder_input_ids[i, :audio_lens[i], ...]
+
+            # Second condition in case no audio has been given
+            if prompt is not None and not (prompt == decoder_start_token_id).any():
+                prompt = prompt.to(dtype=torch.int)
+                prefill[i, padding_size + 1 : prompt.shape[0] + 1, :] = prompt
+                max_audio_len = max(max_audio_len, prompt.shape[0])
+
+        delay_precomp = self.build_delay_indices(
+            B=real_batch_size,
+            T=max_seq_len,
+            C=num_channels,
+            delay_pattern=delay_pattern,
+        )
+
+        delayed_batch = self.apply_audio_delay(
+            audio_BxTxC=prefill,
+            pad_value=-1,
+            bos_value=decoder_start_token_id,
+            precomp=delay_precomp,
+        )
+
+        # 4. Overwrite and convert to 2D
+        decoder_input_ids = delayed_batch[:, :max_audio_len + 1, :].reshape(real_batch_size * num_channels, -1)
+        model_kwargs["decoder_attention_mask"] = decoder_attention_mask[:, :max_audio_len + 1]
+        model_kwargs["decoder_delay_mask"] = delayed_batch
+
+        return decoder_input_ids, model_kwargs
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        encoder_outputs=None,  # Using this to easily get the batch size
+        decoder_delay_mask=None,
+        uses_cfg=None,
+        **kwargs,
+    ):
+        # Base method handles most things except CFG and the delay pattern mask
+        model_inputs = super().prepare_inputs_for_generation(input_ids, encoder_outputs=encoder_outputs, **kwargs)
+
+        # Post processing for CFG and overwriting via delay pattern mask
+        # 1. Reshape (bsz * channels, seq_len) to (bsz, seq_len, channels)
+        batch_size = encoder_outputs[0].shape[0] // 2 if uses_cfg else encoder_outputs[0].shape[0]
+        model_inputs["decoder_input_ids"] = model_inputs["decoder_input_ids"].reshape(batch_size, -1, self.config.decoder_config.num_channels)
+
+        # 2. Delay pattern mask -- force tokens if not allowed to predict (!= -1 in mask)
+        model_inputs["decoder_input_ids"] = self.apply_delay_mask(model_inputs["decoder_input_ids"], decoder_delay_mask)
+
+        # 3. Apply CFG duplication if needed
+        if uses_cfg:
+            model_inputs["decoder_input_ids"] = model_inputs["decoder_input_ids"].repeat_interleave(2, dim=0)
+
+            if model_inputs["decoder_attention_mask"] is not None:
+                model_inputs["decoder_attention_mask"] = model_inputs["decoder_attention_mask"].repeat_interleave(2, dim=0)
+
+        # Specifically avoid kwarg clashesh
+        for key in ["uses_cfg", "cfg_guidance_top_k", "eos_scale"]:
+            model_inputs.pop(key, None)
+
+        return model_inputs
+
     def generate(
         self,
         inputs: Optional[torch.Tensor] = None,
@@ -473,11 +507,9 @@ class DiaGenerationMixin(GenerationMixin):
         decoder_input_ids = kwargs.get("decoder_input_ids", None)
         decoder_input_length = decoder_input_ids.shape[1] if decoder_input_ids is not None else 0
 
-        # A few special cases in Dia that do we need for custom preprocessing:
-        #   1. "uses_cfg": Indicates CFG which needs preparation to be properly handled by repeats
-        #   2. "cfg_guidance_top_k": Unique to Dia used for logits processing
-        #   3. "eos_scale": Unique to Dia used for logits processing
-        kwargs["valid_external_model_kwargs"] = ["uses_cfg", "cfg_guidance_top_k", "eos_scale"]
+        # A few special cases in Dia that we need for custom preprocessing
+        # Check `self._valid_external_model_kwargs` for more details
+        kwargs["valid_external_model_kwargs"] = self._valid_external_model_kwargs
 
         # TODO: find a way for generation mode to be forced to greedy / sample
 
@@ -531,6 +563,18 @@ class DiaGenerationMixin(GenerationMixin):
             output = output_sequences
 
         return output
+
+    @staticmethod
+    def apply_delay_mask(input_ids: torch.Tensor, delay_mask: Optional[torch.Tensor]) -> torch.Tensor:
+        # TODO: check this, prototype
+        if delay_mask is None:
+            return input_ids
+
+        mask_len = min(input_ids.shape[1], delay_mask.shape[1])
+        valid_mask = delay_mask[:, :mask_len, :]
+        valid_input = input_ids[:, :mask_len, :]
+
+        return torch.where(valid_mask == -1, valid_input, valid_mask)
 
     @staticmethod
     def build_delay_indices(B: int, T: int, C: int, delay_pattern: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
