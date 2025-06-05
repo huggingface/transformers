@@ -16,13 +16,17 @@
 import inspect
 import unittest
 
+import datasets
 import pytest
 from parameterized import parameterized
 
-from transformers import MoshiAsrConfig, is_torch_available
+from transformers import MoshiAsrConfig, MoshiAsrForConditionalGeneration, MoshiAsrProcessor, is_torch_available
 from transformers.testing_utils import (
+    cleanup,
     require_torch,
+    require_torch_accelerator,
     require_torch_sdpa,
+    slow,
     torch_device,
 )
 
@@ -516,266 +520,135 @@ class MoshiAsrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                     )
 
 
-# @require_torch_accelerator
-# class MoshiAsrIntegrationTest(unittest.TestCase):
-#     def tearDown(self):
-#         # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
-#         # some memory allocated in the cache, which means some object is not being released properly. This causes some
-#         # unoptimal memory usage, e.g. after certain tests a 7B model in FP16 no longer fits in a 24GB GPU.
-#         # Investigate the root cause.
-#         cleanup(torch_device, gc_collect=False)
+class MoshiAsrForConditionalGenerationIntegrationTests(unittest.TestCase):
+    _dataset = None
 
-#     @slow
-#     @require_read_token
-#     def test_llama_3_1_hard(self):
-#         """
-#         An integration test for llama 3.1. It tests against a long output to ensure the subtle numerical differences
-#         from llama 3.1.'s RoPE can be detected
-#         """
-#         # diff on `EXPECTED_TEXT`:
-#         # 2024-08-26: updating from torch 2.3.1 to 2.4.0 slightly changes the results.
-#         EXPECTED_TEXT = (
-#             "Tell me about the french revolution. The french revolution was a period of radical political and social "
-#             "upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked "
-#             "by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the "
-#             "First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative "
-#             "assembly that had not met since 1614. The Third Estate, which represented the common people, "
-#             "demanded greater representation and eventually broke away to form the National Assembly. This marked "
-#             "the beginning of the end of the absolute monarchy and the rise of the middle class.\n"
-#         )
+    def setUp(self):
+        # TODO: @eustlb, update with correct moshi-asr repo
+        self.model_checkpoint = "/Users/eustachelebihan/dev/add-moshi-asr/tmp"
 
-#         tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-MoshiAsr-3.1-8B-Instruct")
-#         model = MoshiAsrForCausalLM.from_pretrained(
-#             "meta-llama/Meta-MoshiAsr-3.1-8B-Instruct", device_map="auto", torch_dtype=torch.bfloat16
-#         )
-#         input_text = ["Tell me about the french revolution."]
-#         model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
 
-#         generated_ids = model.generate(**model_inputs, max_new_tokens=128, do_sample=False)
-#         generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-#         self.assertEqual(generated_text, EXPECTED_TEXT)
+    @classmethod
+    def _load_dataset(cls):
+        # Lazy loading of the dataset. Because it is a class method, it will only be loaded once per pytest process.
+        if cls._dataset is None:
+            cls._dataset = datasets.load_dataset(
+                "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+            )
+            # using 24000 here for simplicity, should rather be processor.feature_extractor.sampling_rate
+            cls._dataset = cls._dataset.cast_column("audio", datasets.Audio(sampling_rate=24000))
 
-#     @slow
-#     @require_read_token
-#     def test_model_7b_logits_bf16(self):
-#         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
+    def _load_datasamples(self, num_samples):
+        self._load_dataset()
+        ds = self._dataset
+        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        return [x["array"] for x in speech_samples]
 
-#         model = MoshiAsrForCausalLM.from_pretrained(
-#             "meta-llama/MoshiAsr-2-7b-hf", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
-#         )
+    @slow
+    @require_torch_accelerator
+    def test_generation(self):
+        """
+        TODO: @eustlb, add reproducer pointer.
+        DISCLAIMER: we are testing for pretty short inputs. Indeed, reproducing correct expected outputs for longer is not possible
+        as implementation choices (qkv matrix in one linear for original code vs three for hf) create growing divergence with context lenght,
+        ultimately giving different outputs.
+        """
+        # TODO
+        processor = MoshiAsrProcessor.from_pretrained(self.model_checkpoint)
+        model = MoshiAsrForConditionalGeneration.from_pretrained(self.model_checkpoint, device_map=torch_device)
 
-#         with torch.no_grad():
-#             out = model(torch.tensor([input_ids]).to(torch_device))
-#         # Expected mean on dim = -1
+        ### SHOULD BE BY DEFAULT
+        # TODO: @eustlb
+        model.config.codec_config.use_cache = True
+        model.config.codec_config.sliding_window = 250
 
-#         # fmt: off
-#         expected_means = Expectations(
-#             {
-#             ("xpu", 3): torch.tensor([[-6.5208, -4.1218, -4.9377, -3.2536,  0.8127, -2.9811,  1.2918, -3.3848]]),
-#             ("cuda", 7): torch.tensor([[-6.5061, -4.1147, -4.9669, -3.2038, 0.8069, -2.9694, 1.2864, -3.3786]]),
-#             ("cuda", 8): torch.tensor([[-6.5208, -4.1218, -4.9377, -3.2536,  0.8127, -2.9811,  1.2918, -3.3848]])
-#          })
+        model.config.sliding_window = 750
 
-#         expected_mean = expected_means.get_expectation()
-#         self.assertTrue(
-#             torch.allclose(
-#                 expected_mean.to(torch_device),
-#                 out.logits.float().mean(-1),
-#                 atol=1e-2,
-#                 rtol=1e-2
-#             )
-#         )
+        model.generation_config.cache_implementation = "sliding_window"
+        model.generation_config.codec_cache_implementation = "sliding_window"
+        ###
 
-#         # slicing logits[0, 0, 0:15]
-#         expected_slices = Expectations(
-#             {
-#             ("xpu", 3): torch.tensor([[-12.5625,  -7.1250,  -0.6289,  -7.8750,  -6.9688,  -7.8125,  -6.5000, -7.4375,  -7.6562,  -6.9688,  -6.0312,  -7.0312,  -1.8203,   1.8750, -8.5000]]),
-#             ("cuda", 7): torch.tensor([[-12.5000, -7.0625, -0.6289, -7.8750, -6.9688, -7.8125, -6.4688, -7.4375, -7.6875, -6.9375, -6.0312, -7.0000, -1.8594, 1.8438, -8.5000]]),
-#             ("cuda", 8): torch.tensor([[-12.5625,  -7.1250,  -0.6289,  -7.8750,  -6.9688,  -7.8125,  -6.5000, -7.4375,  -7.6562,  -6.9688,  -6.0312,  -7.0312,  -1.8203,   1.8750, -8.5000]])
-#         })
-#         # fmt: on
-#         expected_slice = expected_slices.get_expectation()
-#         self.assertTrue(
-#             torch.allclose(
-#                 expected_slice.to(torch_device),
-#                 out.logits[0, 0, :15].float(),
-#                 atol=1e-2,
-#                 rtol=1e-2,
-#             )
-#         )
+        samples = self._load_datasamples(4)
+        out_list = []
+        for i, sample in enumerate(samples):
+            inputs = processor(
+                sample,
+            ).to(torch_device)
 
-#     @slow
-#     @require_read_token
-#     def test_model_7b_logits(self):
-#         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
+            # TODO: @eustlb, audio_window_size=1 should be default
+            out = model.generate(**inputs, audio_window_size=1)
+            out_list.append(out)
 
-#         model = MoshiAsrForCausalLM.from_pretrained(
-#             "meta-llama/MoshiAsr-2-7b-hf", device_map="auto", torch_dtype=torch.float16
-#         )
+        # fmt: off
+        EXPECTED_TOKENS_LIST = [
+            torch.tensor([
+                [48000, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 1, 3239, 364, 3, 0, 6361, 21936, 0, 379, 3, 0, 365, 3, 3, 3, 0, 38677, 3, 0, 367, 0, 365, 3, 0, 2492, 3, 3, 3, 0, 2858, 362, 3, 3, 0, 370, 0, 460, 405, 3, 3, 0, 20915, 3, 0, 373, 3, 3, 0, 11063, 3, 0, 458, 3, 3, 3, 3, 0, 25466]
 
-#         with torch.no_grad():
-#             out = model(torch.tensor([input_ids]).to(torch_device))
+            ]),
+            torch.tensor([
+                [48000, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 1, 3695, 0, 379, 3, 0, 3239, 364, 3, 3, 3, 3, 3, 0, 13701, 21936, 378, 366, 4173, 3, 3, 0, 1006, 3, 3, 3, 3, 3, 3, 0, 2343, 3, 0, 512, 3, 3, 3, 0, 458, 3, 3, 3, 0, 1681]
 
-#         # fmt: off
-#         # Expected mean on dim = -1
-#         expected_means = Expectations(
-#           {
-#             ("xpu", 3): torch.tensor([[-6.6544, -4.1259, -4.9840, -3.2456,  0.8261, -3.0124,  1.2971, -3.3641]]),
-#             ("cuda", 7): torch.tensor([[-6.6420, -4.1227, -4.9809, -3.2041, 0.8261, -3.0052, 1.2957, -3.3648]]),
-#             ("cuda", 8): torch.tensor([[-6.6544, -4.1259, -4.9840, -3.2456,  0.8261, -3.0124,  1.2971, -3.3641]]),
-#         })
 
-#         expected_mean = expected_means.get_expectation()
-#         self.assertTrue(
-#             torch.allclose(
-#                 expected_mean.to(torch_device),
-#                 out.logits.float().mean(-1),
-#                 atol=1e-2,
-#                 rtol=1e-2
-#             )
-#         )
+            ]),
+            torch.tensor([
+                [48000, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 1, 491, 3, 0, 6058, 3, 3, 0, 1153, 3, 3, 0, 385, 3, 0, 409, 3, 0, 419, 3, 3, 3, 0, 7029, 1328, 3, 3, 3, 0, 1013, 3, 0, 367, 3, 0, 365, 3, 0, 801, 362, 3, 3, 3, 3, 3, 3, 0, 392, 3, 3, 3, 3, 0, 10404, 3, 3, 0, 370, 3, 3, 0, 32691, 3, 3, 0, 28289, 3, 3, 3, 0, 363, 30464, 437, 0, 701, 3, 3, 3, 0, 1153, 362, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 8649, 366, 3, 0, 5685, 3, 0, 407, 3, 3, 0, 8835, 3, 3, 0, 370, 0, 530, 3, 3, 3, 0, 741, 3, 3, 3, 3, 0, 2788, 3, 3, 0, 598, 3, 3, 3, 0, 12469, 3, 0, 373, 3, 0, 365, 3, 0, 2057]
 
-#         # slicing logits[0, 0, 0:15]
-#         expected_slices = Expectations(
-#             {
-#               ("xpu", 3): torch.tensor([-12.8281,  -7.4609,  -0.4668,  -8.0703,  -7.2539,  -8.0078,  -6.4961, -7.7734,  -7.8516,  -7.0352,  -6.2188,  -7.1367,  -1.8564,   1.9922, -8.6328]),
-#               ("cuda", 7): torch.tensor([-12.8125, -7.3359, -0.4846, -8.0234, -7.2383, -7.9922, -6.4805, -7.7344, -7.8125, -7.0078, -6.1797, -7.1094, -1.8633, 1.9736, -8.6016]),
-#               ("cuda", 8): torch.tensor([-12.8281,  -7.4609,  -0.4668,  -8.0703,  -7.2539,  -8.0078,  -6.4961, -7.7734,  -7.8516,  -7.0352,  -6.2188,  -7.1367,  -1.8564,   1.9922, -8.6328])
-#         })
-#         # fmt: on
 
-#         expected_slice = expected_slices.get_expectation()
-#         self.assertTrue(
-#             torch.allclose(
-#                 expected_slice.to(torch_device),
-#                 out.logits[0, 0, :15].float(),
-#                 atol=1e-2,
-#                 rtol=1e-2,
-#             )
-#         )
+            ]),
+            torch.tensor([
+                [48000, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 1, 491, 0, 454, 3, 3, 0, 8104, 3, 3, 3, 0, 5538, 366, 3, 3, 3, 0, 1181, 3, 3, 0, 3273, 3, 3, 0, 8875, 3, 3, 3, 3, 3, 0, 537, 478, 924, 378, 366, 623, 0, 379, 3, 3, 0, 1088, 3, 3, 3, 3, 3, 0, 3144, 3, 3, 3, 0, 556, 3, 3, 3, 0, 473, 362, 3, 3, 3, 3, 3, 3, 0, 370, 3, 0, 430, 3, 3, 3, 0, 9411, 3, 0, 371, 0, 404, 3, 0, 449, 3, 3, 0, 1394, 3, 3, 3, 3, 3, 0, 367, 3, 3, 3, 0, 30833, 3, 3, 3, 3, 3, 0]
 
-#     @slow
-#     def test_model_7b_dola_generation(self):
-#         # ground truth text generated with dola_layers="low", repetition_penalty=1.2
-#         EXPECTED_TEXT_COMPLETION = (
-#             "Simply put, the theory of relativity states that 1) time and space are relative, and 2) the laws of "
-#             "physics are the same for all observers in uniform motion relative to one another.\n\nThe theory of "
-#             "relativity was developed by Albert Einstein in the early 20th century, and it revolutionized our "
-#             "understanding of space and time."
-#         )
-#         prompt = "Simply put, the theory of relativity states that "
-#         tokenizer = MoshiAsrTokenizer.from_pretrained("meta-llama/MoshiAsr-2-7b-chat-hf")
-#         model = MoshiAsrForCausalLM.from_pretrained(
-#             "meta-llama/MoshiAsr-2-7b-chat-hf", device_map="sequential", torch_dtype=torch.float16
-#         )
-#         model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+            ])
+        ]
+        # fmt: on
 
-#         # greedy generation outputs
-#         generated_ids = model.generate(
-#             **model_inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False, dola_layers="low"
-#         )
-#         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-#         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+        for out, expected_out in zip(out_list, EXPECTED_TOKENS_LIST):
+            torch.testing.assert_close(out, expected_out)
 
-#     @slow
-#     @require_torch_accelerator
-#     @require_read_token
-#     def test_compile_static_cache(self):
-#         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
-#         # work as intended. See https://github.com/pytorch/pytorch/issues/121943
-#         if version.parse(torch.__version__) < version.parse("2.3.0"):
-#             self.skipTest(reason="This test requires torch >= 2.3 to run.")
+    @slow
+    # @require_torch_accelerator
+    def test_generation_batched(self):
+        """
+        TODO: @eustlb, add reproducer pointer.
+        DISCLAIMER: we are testing for pretty short inputs. Indeed, reproducing correct expected outputs for longer is not possible
+        as implementation choices (qkv matrix in one linear for original code vs three for hf) create growing divergence with context lenght,
+        ultimately giving different outputs.
+        """
+        # TODO
+        processor = MoshiAsrProcessor.from_pretrained(self.model_checkpoint)
+        model = MoshiAsrForConditionalGeneration.from_pretrained(self.model_checkpoint, device_map=torch_device)
 
-#         NUM_TOKENS_TO_GENERATE = 40
-#         # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
-#         # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
-#         EXPECTED_TEXT_COMPLETION = [
-#             "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
-#             "reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe "
-#             "theory of relativ",
-#             "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, "
-#             "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
-#         ]
+        ### SHOULD BE BY DEFAULT
+        # TODO: @eustlb
+        model.config.codec_config.use_cache = True
+        model.config.codec_config.sliding_window = 250
 
-#         prompts = [
-#             "Simply put, the theory of relativity states that ",
-#             "My favorite all time favorite condiment is ketchup.",
-#         ]
-#         tokenizer = MoshiAsrTokenizer.from_pretrained("meta-llama/MoshiAsr-2-7b-hf", pad_token="</s>", padding_side="right")
-#         model = MoshiAsrForCausalLM.from_pretrained(
-#             "meta-llama/MoshiAsr-2-7b-hf", device_map=torch_device, torch_dtype=torch.float16
-#         )
-#         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+        model.config.sliding_window = 750
 
-#         # Dynamic Cache
-#         generated_ids = model.generate(**inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False)
-#         dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-#         self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
+        model.generation_config.cache_implementation = "sliding_window"
+        model.generation_config.codec_cache_implementation = "sliding_window"
+        ###
 
-#         # Static Cache + compile (`generate()` internally compiles each decoding step when static cache is used)
-#         generated_ids = model.generate(
-#             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-#         )
-#         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-#         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
+        samples = self._load_datasamples(4)
+        inputs = processor(
+            samples,
+        ).to(torch_device)
 
-#     @slow
-#     @require_read_token
-#     def test_export_static_cache(self):
-#         if version.parse(torch.__version__) < version.parse("2.4.0"):
-#             self.skipTest(reason="This test requires torch >= 2.4 to run.")
+        # TODO: @eustlb, audio_window_size=1 should be default
+        out = model.generate(**inputs, audio_window_size=1)
 
-#         from transformers.integrations.executorch import (
-#             TorchExportableModuleWithStaticCache,
-#             convert_and_export_with_cache,
-#         )
+        # fmt: off
+        # TODO: @eustlb
+        # idx 3: difference with expected when non batched.
+        # this is due to the fact that we would need per-batch-idx max_new_tokens to be able to set to correct value
+        EXPECTED_TOKENS = torch.tensor([
+            [48000, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 1, 3239, 364, 3, 0, 6361, 21936, 0, 379, 3, 0, 365, 3, 3, 3, 0, 38677, 3, 0, 367, 0, 365, 3, 0, 2492, 3, 3, 3, 0, 2858, 362, 3, 3, 0, 370, 0, 460, 405, 3, 3, 0, 20915, 3, 0, 373, 3, 3, 0, 11063, 3, 0, 458, 3, 3, 3, 3, 0, 25466, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
+            [48000, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 1, 3695, 0, 379, 3, 0, 3239, 364, 3, 3, 3, 3, 3, 0, 13701, 21936, 378, 366, 4173, 3, 3, 0, 1006, 3, 3, 3, 3, 3, 3, 0, 2343, 3, 0, 512, 3, 3, 3, 0, 458, 3, 3, 3, 0, 1681, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
+            [48000, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 1, 491, 3, 0, 6058, 3, 3, 0, 1153, 3, 3, 0, 385, 3, 0, 409, 3, 0, 419, 3, 3, 3, 0, 7029, 1328, 3, 3, 3, 0, 1013, 3, 0, 367, 3, 0, 365, 3, 0, 801, 362, 3, 3, 3, 3, 3, 3, 0, 392, 3, 3, 3, 3, 0, 10404, 3, 3, 0, 370, 3, 3, 0, 32691, 3, 3, 0, 28289, 3, 3, 3, 0, 363, 30464, 437, 0, 701, 3, 3, 3, 0, 1153, 362, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 8649, 366, 3, 0, 5685, 3, 0, 407, 3, 3, 0, 8835, 3, 3, 0, 370, 0, 530, 3, 3, 3, 0, 741, 3, 3, 3, 3, 0, 2788, 3, 3, 0, 598, 3, 3, 3, 0, 12469, 3, 0, 373, 3, 0, 365, 3, 0, 2057],
+            [48000, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 1, 491, 0, 454, 3, 3, 0, 8104, 3, 3, 3, 0, 5538, 366, 3, 3, 3, 0, 1181, 3, 3, 0, 3273, 3, 3, 0, 8875, 3, 3, 3, 3, 3, 0, 537, 478, 924, 378, 366, 623, 0, 379, 3, 3, 0, 1088, 3, 3, 3, 3, 3, 0, 3144, 3, 3, 3, 0, 556, 3, 3, 3, 0, 473, 362, 3, 3, 3, 3, 3, 3, 0, 370, 3, 0, 430, 3, 3, 3, 0, 9411, 3, 0, 371, 0, 404, 3, 0, 449, 3, 3, 0, 1394, 3, 3, 3, 3, 3, 0, 367, 3, 3, 3, 0, 30833, 3, 3, 3, 3, 3, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
+        ])
+        # fmt: on
 
-#         llama_models = {
-#             "meta-llama/MoshiAsr-3.2-1B": [
-#                 "Simply put, the theory of relativity states that 1) the speed of light is the same for all "
-#                 "observers, regardless of their location, and 2) the laws of physics are the same for all observers"
-#             ],
-#         }
-
-#         for llama_model_ckp, EXPECTED_TEXT_COMPLETION in llama_models.items():
-#             # Load tokenizer
-#             tokenizer = AutoTokenizer.from_pretrained(llama_model_ckp, pad_token="</s>", padding_side="right")
-#             max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
-#                 "input_ids"
-#             ].shape[-1]
-
-#             # Load model
-#             device = "cpu"
-#             dtype = torch.bfloat16
-#             cache_implementation = "static"
-#             attn_implementation = "sdpa"
-#             batch_size = 1
-#             model = MoshiAsrForCausalLM.from_pretrained(
-#                 llama_model_ckp,
-#                 device_map=device,
-#                 torch_dtype=dtype,
-#                 attn_implementation=attn_implementation,
-#                 generation_config=GenerationConfig(
-#                     use_cache=True,
-#                     cache_implementation=cache_implementation,
-#                     max_length=max_generation_length,
-#                     cache_config={
-#                         "batch_size": batch_size,
-#                         "max_cache_len": max_generation_length,
-#                         "device": device,
-#                     },
-#                 ),
-#             )
-
-#             prompts = ["Simply put, the theory of relativity states that "]
-#             prompt_tokens = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
-#             prompt_token_ids = prompt_tokens["input_ids"]
-#             max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
-
-#             # Static Cache + export
-#             exported_program = convert_and_export_with_cache(model)
-#             ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
-#                 exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
-#             )
-#             ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
-#             self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
+        torch.testing.assert_close(out, EXPECTED_TOKENS)
