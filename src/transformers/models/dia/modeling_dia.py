@@ -909,7 +909,7 @@ class DiaModel(DiaPreTrainedModel):
 
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
-            attention_mask=None,  # TODO: if we prefix audio we will need a mask when left padding - `audio_attention_mask`
+            attention_mask=decoder_attention_mask,
             position_ids=decoder_position_ids,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,

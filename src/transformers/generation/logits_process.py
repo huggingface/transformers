@@ -2098,7 +2098,7 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
 
     <Tip warning={true}>
 
-    This logits processor is exclusively compatible with
+    This logits processor is exclusively compatible with certain models such as
     [MusicGen](https://huggingface.co/docs/transformers/main/en/model_doc/musicgen)
 
     </Tip>

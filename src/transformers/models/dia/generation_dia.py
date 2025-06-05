@@ -18,7 +18,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 
-from ...generation.logits_process import LogitsProcessor, LogitsProcessorList
+from ...generation.logits_process import ClassifierFreeGuidanceLogitsProcessor, LogitsProcessor, LogitsProcessorList
 from ...generation.stopping_criteria import StoppingCriteria, StoppingCriteriaList
 from ...generation.streamers import BaseStreamer
 from ...generation.utils import GenerateOutput, GenerationConfig, GenerationMixin
@@ -26,35 +26,7 @@ from ...modeling_utils import PreTrainedModel
 from ...tokenization_utils_base import PreTrainedTokenizerBase
 
 
-class DiaClassifierFreeGuidanceFilterLogitsProcessor(LogitsProcessor):
-    def __init__(self, cfg_scale: float = 3.0, cfg_filter_top_k: int = 50, device: str = "cpu"):
-        self.cfg_scale = torch.tensor(cfg_scale, device=device)
-        self.cfg_filter_top_k = cfg_filter_top_k
-
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        if scores.shape[0] != 2 * input_ids.shape[0]:
-            raise ValueError(
-                f"Logits should have twice the batch size of the input ids, the first half of batches corresponding to "
-                f"the conditional inputs, and the second half of batches corresponding to the unconditional inputs. Got "
-                f"batch size {scores.shape[0]} for the logits and {input_ids.shape[0]} for the input ids."
-            )
-        # TODO: reshape from (B * C, V) to (B, C, V)
-
-        # cfg
-        scores_last = scores.view(scores.shape[0] // 2, 2, *scores.shape[1:])
-        uncond_scores = scores_last[:, 0, :]
-        cond_scores = scores_last[:, 1, :]
-        scores = cond_scores + self.cfg_scale * (cond_scores - uncond_scores)  # Shape [B_orig, C, V]
-
-        # cfg filter top k
-        _, top_k_indices = torch.topk(scores, k=self.cfg_filter_top_k, dim=-1)
-        mask = torch.ones_like(scores, dtype=torch.bool)
-        mask = mask.scatter(dim=-1, index=top_k_indices, value=False)
-        scores = cond_scores.masked_fill(mask, -torch.inf)
-
-        return scores
-
-
+# TODO: move this to logits_process
 class DiaEOSFilterAndScaleLogitsProcessor(LogitsProcessor):
     def __init__(self, eos_value: int, eos_scale: float, device: str = "cpu"):
         self.eos_value = eos_value
@@ -93,6 +65,7 @@ class DiaEOSFilterAndScaleLogitsProcessor(LogitsProcessor):
         return scores
 
 
+# TODO: move this to logits_process
 class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
     def __init__(
         self,
@@ -189,6 +162,7 @@ class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
         return scores
 
 
+# TODO: move this to stopping_criteria
 class DiaEosTokenCriteria(StoppingCriteria):
     """
     This class can be used to stop generation whenever the "end-of-sequence" token is generated.
@@ -222,6 +196,7 @@ class DiaEosTokenCriteria(StoppingCriteria):
         # TODO: reshape from (B * C, V) to (B, C, V)
         # and reshape from (B * C, S) to (B, S, C)
 
+        # TODO: can different samples end at different times? I think this isnt considered atm
         if input_ids.shape[1] < self.max_delay_pattern:
             return torch.zeros(input_ids.shape[0], dtype=torch.bool, device=input_ids.device)
 
@@ -230,11 +205,11 @@ class DiaEosTokenCriteria(StoppingCriteria):
 
 
 class DiaGenerationMixin(GenerationMixin):
+    # TODO: only "uses_cfg" after refactoring every processor etc out
     # A few special cases in Dia that we need for custom preprocessing:
     #   1. "uses_cfg": Indicates CFG which needs preparation to be properly handled by repeats
-    #   2. "cfg_guidance_top_k": Unique to Dia used for logits processing
-    #   3. "eos_scale": Unique to Dia used for logits processing
-    _valid_external_model_kwargs = ["uses_cfg", "cfg_guidance_top_k", "eos_scale"]
+    #   2. "eos_scale": Unique to Dia used for logits processing TODO: should be moved to logits_processor and added as gen config attr
+    _valid_external_model_kwargs = ["uses_cfg", "eos_scale"]
 
     def _get_logits_processor(
         self,
@@ -251,20 +226,18 @@ class DiaGenerationMixin(GenerationMixin):
         custom_processors = LogitsProcessorList()
 
         cfg_processor = None
-        # TODO: save dia generation config with proper values and disallow non-cfg?
-        # if generation_config.guidance_scale is not None and generation_config.guidance_scale != 1:
-        cfg_processor = DiaClassifierFreeGuidanceFilterLogitsProcessor(
-            cfg_scale=generation_config.guidance_scale if generation_config.guidance_scale is not None else 3.0,
-            cfg_filter_top_k=model_kwargs.get("cfg_guidance_top_k", 50),
-            device=device,
-        )
-        # Avoid adding cfg again
-        generation_config.guidance_scale = None
+        if generation_config.guidance_scale is not None and generation_config.guidance_scale != 1:
+            # TODO: check if reshaping on logits doesnt destroy anything (pretty sure it doesn't)
+            cfg_processor = ClassifierFreeGuidanceLogitsProcessor(
+                cfg_scale=generation_config.guidance_scale,
+            )
+            # Avoid adding CFG again
+            generation_config.guidance_scale = None
 
         custom_processors.append(
             DiaEOSFilterAndScaleLogitsProcessor(
-                eos_value=self.config.eos_token_id,
-                eos_scale=model_kwargs.get("eos_scale", 0.8),
+                eos_value=generation_config.eos_token_id,
+                eos_scale=model_kwargs.get("eos_scale", 0.8), # TODO: will become a param in gen config
                 device=device,
             )
         )
@@ -272,8 +245,8 @@ class DiaGenerationMixin(GenerationMixin):
         custom_processors.append(
             DiaEOSDelayPatternLogitsProcessor(
                 delay_pattern=torch.tensor(self.config.delay_pattern, device=device, dtype=torch.long),
-                eos_value=self.config.eos_token_id,
-                pad_value=self.config.pad_token_id,
+                eos_value=generation_config.eos_token_id,
+                pad_value=generation_config.pad_token_id,
                 max_step=generation_config.max_length,
                 device=device,
             )
@@ -309,7 +282,7 @@ class DiaGenerationMixin(GenerationMixin):
         # We end generation after `max delays` if every sample generated eos on their first channel
         custom_stopping_criteria.append(
             DiaEosTokenCriteria(
-                eos_value=self.config.eos_token_id,
+                eos_value=generation_config.eos_token_id,
                 delay_pattern=torch.tensor(self.config.delay_pattern, device=self.device, dtype=torch.long),
                 device=self.device,
             )
@@ -329,20 +302,16 @@ class DiaGenerationMixin(GenerationMixin):
             generation_config, use_model_defaults, **kwargs
         )
 
+        # TODO: move default value in saved generation config and make it dependent on this - disallow non-cfg?
+        generation_config.guidance_scale = 3.0
+
         # We allow generation up to max length + max delay pattern
         # (will revert back to max length after generation)
         # TODO: check where max delay wasn't considered but added afterwards
         generation_config.max_length += max(self.config.delay_pattern)
 
-        # TODO: move default value in saved generation config and make it dependent on this - disallow non-cfg?
-        # TODO: decoder prep in prepare_for_gen...
-        # Indicating cfg to prepare unconditioned input
-        model_kwargs["uses_cfg"] = True
-
-        # We need this for our custom logit processors and stopping criteria
-        self.config.eos_token_id = self.config.eos_token_id or generation_config.eos_token_id
-        self.config.pad_token_id = self.config.pad_token_id or generation_config.pad_token_id
-        self.config.bos_token_id = self.config.bos_token_id or generation_config.bos_token_id
+        # Indicating CFG to prepare unconditioned input
+        model_kwargs["uses_cfg"] = generation_config.guidance_scale is not None and generation_config.guidance_scale != 1
 
         return generation_config, model_kwargs
 
@@ -362,7 +331,7 @@ class DiaGenerationMixin(GenerationMixin):
         if model_kwargs["uses_cfg"]:
             inputs = inputs[:, None, :]
             unconditioned_inputs = torch.zeros_like(inputs)
-            inputs = torch.stack([unconditioned_inputs, inputs], dim=1).view(-1, inputs.shape[-1])
+            inputs = torch.stack([inputs, unconditioned_inputs], dim=1).view(-1, inputs.shape[-1])
 
             if model_kwargs.get("attention_mask", None) is not None:
                 model_kwargs["attention_mask"] = model_kwargs["attention_mask"].repeat_interleave(2, dim=0)
@@ -481,19 +450,9 @@ class DiaGenerationMixin(GenerationMixin):
 
         # 3. Apply CFG duplication if needed
         if uses_cfg:
-            model_inputs["decoder_input_ids"] = model_inputs["decoder_input_ids"].repeat_interleave(2, dim=0)
-
-            if model_inputs["decoder_attention_mask"] is not None:
-                model_inputs["decoder_attention_mask"] = model_inputs["decoder_attention_mask"].repeat_interleave(
-                    2, dim=0
-                )
-
-            if model_inputs["decoder_position_ids"] is not None:
-                model_inputs["decoder_position_ids"] = model_inputs["decoder_position_ids"].repeat_interleave(2, dim=0)
-
-        # Avoid specific kwarg clashes
-        for key in ["uses_cfg", "cfg_guidance_top_k", "eos_scale"]:
-            model_inputs.pop(key, None)
+            for key in ["decoder_input_ids", "decoder_attention_mask", "decoder_position_ids"]:
+                if model_inputs.get(key, None) is not None:
+                    model_inputs[key] = model_inputs[key].repeat_interleave(2, dim=0)
 
         return model_inputs
 
@@ -545,6 +504,8 @@ class DiaGenerationMixin(GenerationMixin):
         else:
             output_sequences = output
 
+        # TODO: postprocessing needs to be rewritten as well
+
         # 1 for bos token
         output_sequences = output_sequences[:, 1 + decoder_input_length :]
         delay_pattern = torch.tensor(self.config.delay_pattern, dtype=torch.long, device=output_sequences.device)
@@ -575,7 +536,6 @@ class DiaGenerationMixin(GenerationMixin):
 
     @staticmethod
     def apply_delay_mask(input_ids: torch.Tensor, delay_mask: Optional[torch.Tensor]) -> torch.Tensor:
-        # TODO: check this, prototype
         if delay_mask is None:
             return input_ids
 
