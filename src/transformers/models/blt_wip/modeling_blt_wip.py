@@ -50,64 +50,11 @@ from .blt_args import (
 
 )
 
-if int(os.environ.get("BLT_ALLOW_MISSING_FLEX_ATTENTION", False)) == 0:
-    flex_attention_comp = torch.compile(flex_attention)
-else:
-    flex_attention_comp = None
-
-
-def patch_reduce(h, max_num_patches, reduction, patch_ids):
-    """
-    Reduce variable length patches to single embedding per patch
-    Note: this works with variable number of patches for different sequences in the batch
-    It handles variable length patches by assuming that patch_lengths will be 0 for any
-    extra patches on the *right*. Since there can be a variable number of patches
-    this function also return the number of patches for each sequence in the batch.
-    Any embeddings on the right that are not allocated to a patch
-    (i.e. if the sum(patch_lengths[i]) < seq_len for any i)
-    will be sent to a dummy patch, which is trimmed before returning.
-    """
-    bs, seq_len, emb_dim = h.shape
-
-    patch_ids = patch_ids.unsqueeze(-1).expand(-1, -1, h.shape[-1])
-
-    reduced_embs = torch.zeros(
-        (bs, max_num_patches, emb_dim), dtype=h.dtype, device=h.device
-    )
-    reduced_embs = reduced_embs.scatter_reduce(
-        src=h,
-        dim=1,
-        index=patch_ids,
-        reduce=reduction,
-        include_self=False,
-    )
-    reduced_embs = reduced_embs[:, :max_num_patches, :]
-
-    return reduced_embs
+flex_attention_comp = flex_attention
 
 
 def causal_mask(b, h, q_idx, kv_idx):
     return q_idx >= kv_idx
-
-
-def tokens_to_seqlen(batch: torch.Tensor, eos_id: int):
-    """
-    0 0 0 1 0 0 0 1 0 0 0
-    0 1 0 0 0 1 0 0 0 0 0
-    -> 4 4 3 2 4 5
-    """
-    mask = batch == eos_id
-    mask[:, -1] = True  # virtual eos at the end of each row
-
-    # 0 0 0 1 0 0 0 1 0 0 X
-    # 0 1 0 0 0 1 0 0 0 0 X
-    row, col = torch.where(mask)
-
-    # row = 0, 0, 0, 1, 1, 1
-    # col = 3, 7, 10, 1, 5, 10
-    seqlens = (col[1:] - col[:-1]) + (row[1:] - row[:-1]) * mask.shape[1]
-    # seqlens = (4, 3, -9, 4, 5) + (0, 0, 11, 0, 0) = (4, 3, 2, 4, 5)
-    return [int(col[0].item() + 1)] + seqlens.tolist()
 
 
 def create_causal_mask(
@@ -723,10 +670,6 @@ class LMTransformer(
             )
 
 
-
-
-
-
 class PatchingModeEnum(str, Enum):
     entropy = "entropy"
     bpe = "bpe"
@@ -738,7 +681,7 @@ class PatchingModeEnum(str, Enum):
 
 class PatcherArgs(BaseModel):
     patching_mode: PatchingModeEnum = PatchingModeEnum.entropy
-    patching_device: str = "cuda"
+    patching_device: str = "cpu"
     entropy_model_checkpoint_dir: str | None = None
     realtime_patching: bool = False
     threshold: float = 1.335442066192627
@@ -746,7 +689,7 @@ class PatcherArgs(BaseModel):
     max_patch_length: int | None = None
     patch_size: float = 4.5
     patching_batch_size: int = 1
-    device: str = "cuda"
+    device: str = "cpu"
     monotonicity: bool = False
     log_time: bool = False
 
@@ -771,12 +714,178 @@ def check_non_zero_after_zero(tensor):
 
 
 def to_device(entropy_model, device=None):
-    if device == "cuda":
+    if device == "cpu":
         rank = get_local_rank()
         device = f"cuda:{rank}"
     entropy_model = entropy_model.to(device)
     return entropy_model, device
 
+
+
+def entropy(scores):
+    """
+    scores: [bs, seq_len, vocab]
+    returns [bs, seq_len]
+
+    Computes the entropy for each token in the batch.
+    Note: uses natural log.
+    """
+    log_probs = F.log_softmax(scores, dim=-1)
+    probs = torch.exp(log_probs)
+    p_log_p = log_probs * probs
+    entropy = -p_log_p.sum(dim=-1)
+    return entropy
+
+
+def calculate_entropies(
+    tokens: torch.tensor,
+    entropy_model,
+    patching_batch_size,
+    device: str | None = None,
+    enable_grad: bool = False,
+):
+    """
+    tokens: 2D tensor of shape [batch_size, seq_len]
+    Return 2D tensor of shape [batch_size, seq_len] with entropies for each token.
+
+    Splits the tokens into chunks of size max_length and calculates entropies for each chunk.
+    Entropy model can be executed on cpu or gpu, specify either 'cuda' or 'cpu' in the device argument.
+    """
+
+    grad_context = nullcontext() if enable_grad else torch.no_grad()
+
+    with grad_context:
+        entropies = []
+        preds = []
+        max_length = getattr(entropy_model, "max_length", 8192)
+        batch_numel = max_length * patching_batch_size
+        splits = torch.split(tokens.flatten(), batch_numel)
+        for split in splits:
+            pad_size = (max_length - (split.numel() % max_length)) % max_length
+            pad = torch.zeros(
+                pad_size, dtype=split.dtype, device=split.device, requires_grad=False
+            )
+            split = torch.cat((split, pad), dim=0)
+            split = split.reshape(-1, max_length)
+            if device is not None:
+                split = split.to(device)
+            # assert torch.all(split >= 0) and torch.all(split < 260)
+            pred = entropy_model(split)
+            pred = pred.reshape(-1, pred.shape[-1])[
+                : split.numel() - pad_size, :
+            ]  # [batch_size * seq_len, vocab]
+            preds.append(pred)
+            pred_entropies = entropy(pred)
+            entropies.append(pred_entropies)
+
+        concat_entropies = torch.cat(entropies, dim=0)
+        concat_entropies = concat_entropies.reshape(tokens.shape)
+        concat_preds = torch.cat(preds, dim=0)
+        concat_preds = concat_preds.reshape(tokens.shape[0], -1)
+    return concat_entropies, concat_preds
+
+
+def patch_start_ids_from_patch_start_mask(patch_start_mask):
+    bs, trunc_seq_len = patch_start_mask.shape
+    max_patches = patch_start_mask.sum(dim=1).max()
+    if max_patches == 0:
+        patch_start_ids = torch.full(
+            (bs, trunc_seq_len),
+            trunc_seq_len,
+            dtype=torch.long,
+            device=patch_start_mask.device,
+        )
+    else:
+        patch_ids = (
+            torch.arange(trunc_seq_len, device=patch_start_mask.device)
+            .unsqueeze(0)
+            .repeat(bs, 1)
+        )
+        extra_patch_ids = torch.full(
+            (bs, trunc_seq_len),
+            trunc_seq_len,
+            dtype=torch.long,
+            device=patch_start_mask.device,
+        )
+        all_patch_ids = torch.cat((patch_ids, extra_patch_ids), dim=1)
+        patch_start_mask_padded = torch.cat(
+            (patch_start_mask, ~patch_start_mask), dim=1
+        )
+        patch_start_ids = all_patch_ids[patch_start_mask_padded].reshape(
+            bs, trunc_seq_len
+        )[:, :max_patches]
+    return patch_start_ids
+
+
+def patch_lengths_from_start_ids(patch_start_ids, seq_len):
+    """
+    Calculate patch lengths from start ids.
+    start ids: ex: [0, 1, 7, 7, 7, 7, 7], it has the start ids of the patches (here 0, 1), and then
+        the rest are filled to the seq len.
+    seq_len: ex: 7 length of the sequence
+
+    returns the patch lengths:
+    [1, 6] for the above example.
+    """
+    last_ids = torch.full_like(patch_start_ids[:, :1], seq_len - 1)
+    patch_end_ids = torch.cat((patch_start_ids[:, 1:] - 1, last_ids), dim=1)
+    patch_lengths = patch_end_ids - patch_start_ids + 1
+    assert torch.all(patch_lengths >= 0), f"{patch_lengths}"
+    assert not check_non_zero_after_zero(patch_lengths), f"{patch_lengths}"
+    return patch_lengths
+
+def find_entropy_patch_start_ids(
+    entropies,
+    patch_size=None,
+    threshold=None,
+    threshold_add=None,
+    monotonicity=False,
+    include_next_token=True,
+):
+    """
+    Use entropies to find the start ids of each patch.
+    Use patch_size or threshold to figure out the total number of patches to allocate.
+
+    When threshold is not None the number of patches is not constant between
+    different sequences, but patches can be identified incrementally rather than
+    decided globally using the entire sequence.
+    """
+    bs, seq_len = entropies.shape[:2]
+
+    first_ids = (
+        torch.tensor([0, 1], dtype=torch.long, device=entropies.device)
+        .unsqueeze(0)
+        .repeat(bs, 1)
+    )
+    preds_truncation_len = first_ids.shape[
+        1
+    ]  # remove the first preds because they will be start of patches.
+    entropies = entropies[:, 1:]
+    if threshold is None:
+        num_patches = seq_len // patch_size
+        patch_start_ids = entropies.topk(num_patches - 2, dim=1).indices
+        patch_start_ids = patch_start_ids.sort(dim=1).values
+    else:
+        # Assumes that there is at least one token going over the threshold
+        if monotonicity:
+            patch_start_mask = patch_start_mask_from_entropy_with_monotonicity(
+                entropies, threshold
+            )
+        elif threshold_add is not None and threshold is not None:
+            patch_start_mask = patch_start_mask_global_and_monotonicity(
+                entropies, threshold, threshold_add
+            )
+        else:
+            patch_start_mask = entropies > threshold
+        if not include_next_token:
+            patch_start_mask = patch_start_mask[:, :-1]
+        # patch_start_mask[1:] |= tokens[:-1] < OFFSET
+        patch_start_ids = patch_start_ids_from_patch_start_mask(patch_start_mask)
+
+    patch_start_ids = torch.cat(
+        (first_ids, patch_start_ids + preds_truncation_len), dim=1
+    )
+    return patch_start_ids
 
 def split_large_numbers(lst, m):
     new_lst = []
@@ -791,12 +900,15 @@ def split_large_numbers(lst, m):
     assert sum(new_lst) == sum(lst), f"{sum(new_lst)} != {sum(lst)}"
     return new_lst
 
-
 class Patcher:
     def __init__(self, patcher_args: PatcherArgs):
         self.patcher_args = patcher_args
         self.patching_mode = patcher_args.patching_mode
         self.realtime_patching = patcher_args.realtime_patching
+        # self.realtime_patching = True
+        # entropy_model_checkpoint_dir = os.path.join(
+        #     "hf-weights", "entropy_model"
+        # )
         if self.realtime_patching:
             assert (
                 patcher_args.entropy_model_checkpoint_dir is not None
@@ -815,8 +927,7 @@ class Patcher:
                 patcher_args.entropy_model_checkpoint_dir,
                 state_path,
             )
-          #  entropy_model, _ = to_device(entropy_model, patcher_args.patching_device)
-            entropy_model = entropy_model.to(patcher_args.patching_device)
+            entropy_model, _ =  to_device(entropy_model, patcher_args.patching_device)
             self.entropy_model = entropy_model
         else:
             self.entropy_model = None
@@ -870,6 +981,41 @@ class Patcher:
             patch_lengths = torch.ones(
                 (bs, seq_len_next_tok), dtype=tokens.dtype, device=tokens.device
             )
+        elif self.patching_mode == PatchingModeEnum.entropy:
+            if self.log_time:
+                s = time.time()
+            if entropies is not None:
+                scores = entropies.to(dtype=torch.float32)
+            elif preds is not None:
+                scores = entropy(preds)
+            else:
+                start_entropies = time.time()
+                scores, _ = calculate_entropies(
+                    tokens,
+                    self.entropy_model,
+                    self.patching_batch_size,
+                    self.device,
+                )
+            if self.log_time:
+                self.log["calculate_entropies"] += time.time() - s
+                s = time.time()
+            patch_start_ids = find_entropy_patch_start_ids(
+                scores,
+                self.patch_size,
+                include_next_token=include_next_token,
+                threshold=threshold if threshold is not None else self.threshold,
+                threshold_add=self.threshold_add,
+                monotonicity=self.monotonicity,
+            )
+            if self.log_time:
+                self.log["find_entropy_patch_start_ids"] += time.time() - s
+                s = time.time()
+            patch_lengths = patch_lengths_from_start_ids(
+                patch_start_ids, seq_len_next_tok
+            )
+            if self.log_time:
+                self.log["patch_lengths_from_start_ids"] += time.time() - s
+                s = time.time()
         else:
             raise NotImplementedError(f"self.patching_mode {self.patching_mode}")
 
@@ -909,6 +1055,8 @@ def load_entropy_model(entropy_model_checkpoint_dir, state_dict_path, device="cp
     with open(os.path.join(entropy_model_checkpoint_dir, "params.json")) as fr:
         reloaded = json.loads(fr.read())
 
+
+    #     with open("/Users/itazaporozhets/.cache/huggingface/hub/models--facebook--blt-1b/snapshots/8134b32f0b1d25d1248c30e8c7bdfd442d3bb380/entropy_model/params.json") as fr:
     torch.set_default_dtype(torch.bfloat16)
     model_params = reloaded["entropy_model"]
     logger.warning(
@@ -927,6 +1075,7 @@ def load_entropy_model(entropy_model_checkpoint_dir, state_dict_path, device="cp
     )
     entropy_model = LMTransformer(entropy_model_args)
 
+    # state_dict_path = /Users/itazaporozhets/.cache/huggingface/hub/models--facebook--blt-1b/snapshots/8134b32f0b1d25d1248c30e8c7bdfd442d3bb380/model.safetensors"
     entropy_model.load_state_dict(
         torch.load(state_dict_path, map_location=device)["model"], strict=False
     )
@@ -1033,22 +1182,20 @@ def decoder_patch_ids_from_lengths(patch_lengths, nb_boe, seq_len):
     return decoder_patch_ids
 
 
-primes = [
-    1000000007,
-    5915587277,
-    1500450271,
-    3267000013,
-    5754853343,
-    4093082899,
-    9576890767,
-    3628273133,
-    2860486313,
-    5463458053,
-    3367900313,
-]
-
-
 def rolling_polynomial_hash(t, hash_func_nb: int = 0):
+    primes = [
+        1000000007,
+        5915587277,
+        1500450271,
+        3267000013,
+        5754853343,
+        4093082899,
+        9576890767,
+        3628273133,
+        2860486313,
+        5463458053,
+        3367900313,
+    ]
     prime = torch.tensor(primes[hash_func_nb], dtype=torch.int64, device=t.device)
     prime_powers = torch.stack([prime**i for i in range(t.shape[-1])])
     return torch.sum(t * prime_powers, dim=-1)
@@ -1147,6 +1294,7 @@ def cross_attn_mask(
             q_len,
             kv_len,
         ), f"{cross_mask.shape} != {(bs, q_len, kv_len)}"
+        block_mask = None
         if block_mask:
 
             def patch_mask(b, h, q_idx, kv_idx):
@@ -1284,26 +1432,6 @@ def patch_ids_from_lengths(patch_lengths, seq_len):
         torch.max(patch_ids) > patch_lengths.shape[-1] or torch.min(patch_ids) < 0
     ), f"{torch.max(patch_ids)} > {patch_lengths.shape[-1]} or {torch.min(patch_ids)} < 0"
     return patch_ids
-
-
-
-def create_global_transformer(args: ByteLatentTransformerArgs):
-    global_args = args.model_copy(
-        deep=True,
-        update=dict(
-            dim=args.dim_global,
-            n_layers=args.n_layers_global,
-            n_heads=args.n_heads_global,
-            n_kv_heads=args.n_kv_heads_global,
-            local_attention_window_len=None,
-            dim_token_emb=get_global_dim_patch_emb(args),
-            dim_patch_emb=None,
-            cross_attn_encoder=False,
-            cross_attn_decoder=False,
-        ),
-    )
-
-    return GlobalTransformer(global_args)
 
 
 class LocalModelBase(nn.Module):
@@ -1543,7 +1671,7 @@ class LocalEncoder(LocalModelBase):
             #     downsampling_by_pooling=self.downsampling_by_pooling,
             #     patch_size=self.patch_size,
             # )
-            patch_embeds = patch_reduce(h, num_patches, "amax", patch_ids)
+            patch_embeds = self.patch_reduce(h, num_patches, "amax", patch_ids)
             if self.patch_embedding_projection is not None:
                 patch_embeds = self.patch_embedding_projection(patch_embeds)
                 patch_embeds = patch_embeds.reshape(
@@ -1557,6 +1685,35 @@ class LocalEncoder(LocalModelBase):
             mask=cross_mask,
         )
         return patch_embeds + patch_embeds_cross
+
+    def patch_reduce(self, h, max_num_patches, reduction, patch_ids):
+        """
+        Reduce variable length patches to single embedding per patch
+        Note: this works with variable number of patches for different sequences in the batch
+        It handles variable length patches by assuming that patch_lengths will be 0 for any
+        extra patches on the *right*. Since there can be a variable number of patches
+        this function also return the number of patches for each sequence in the batch.
+        Any embeddings on the right that are not allocated to a patch
+        (i.e. if the sum(patch_lengths[i]) < seq_len for any i)
+        will be sent to a dummy patch, which is trimmed before returning.
+        """
+        bs, seq_len, emb_dim = h.shape
+
+        patch_ids = patch_ids.unsqueeze(-1).expand(-1, -1, h.shape[-1])
+
+        reduced_embs = torch.zeros(
+            (bs, max_num_patches, emb_dim), dtype=h.dtype, device=h.device
+        )
+        reduced_embs = reduced_embs.scatter_reduce(
+            src=h,
+            dim=1,
+            index=patch_ids,
+            reduce=reduction,
+            include_self=False,
+        )
+        reduced_embs = reduced_embs[:, :max_num_patches, :]
+
+        return reduced_embs
 
 
 class LocalDecoder(LocalModelBase):
@@ -1723,9 +1880,18 @@ class CrossAttention(nn.Module):
         xk = repeat_kv(xk, self.heads_per_group, dim=2)
         xv = repeat_kv(xv, self.heads_per_group, dim=2)
 
-        assert mask is None or isinstance(mask, BlockMask)
+       # assert mask is None or isinstance(mask, BlockMask)
         xq, xk, xv = map(lambda e: e.transpose(1, 2), (xq, xk, xv))
-        output = flex_attention_comp(xq, xk, xv, block_mask=mask)
+        #output = flex_attention_comp(xq, xk, xv, block_mask=mask)
+        is_causal = (mask == "causal") if isinstance(mask, str) else False
+        mask = mask if isinstance(mask, torch.Tensor) else None
+        output = F.scaled_dot_product_attention(
+            xq,
+            xk,
+            xv,
+            is_causal=is_causal,
+            attn_mask=mask,
+        )
         output = output.transpose(1, 2).contiguous()  # B H S D -> B S H D
 
         output = self.wo(output.reshape(output_shape))
@@ -2057,7 +2223,23 @@ class ByteLatentTransformer(
             eos_id=args.eos_id,
         )
 
-        self.global_transformer = create_global_transformer(args)
+        global_args = args.model_copy(
+            deep=True,
+            update=dict(
+                dim=args.dim_global,
+                n_layers=args.n_layers_global,
+                n_heads=args.n_heads_global,
+                n_kv_heads=args.n_kv_heads_global,
+                local_attention_window_len=None,
+                dim_token_emb=get_global_dim_patch_emb(args),
+                dim_patch_emb=None,
+                cross_attn_encoder=False,
+                cross_attn_decoder=False,
+            ),
+        )
+
+        self.global_transformer = GlobalTransformer(global_args)
+
         self.local_decoder = LocalDecoder(local_decoder_args)
         self.encoder_hash_tok_embedding = init_embeddings(
             args,
@@ -2081,7 +2263,7 @@ class ByteLatentTransformer(
                 args.encoder_ngram_to_size_str
             )
             ngram_emb_dim = self.local_encoder.dim
-            for ngram_vocab_size in self.encoder_ngram_to_size.values():
+            for ngram_vocab_size in self.encoderngram_to_size.values():
                 self.encoder_ngram_embedding.append(
                     nn.Embedding(ngram_vocab_size + OFFSET, ngram_emb_dim)
                 )

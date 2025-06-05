@@ -1,11 +1,3 @@
-import os
-
-import torch
-import typer
-
-from transformers.models.blt_wip.modeling_blt_wip import ByteLatentTransformer, ByteLatentTransformerArgs
-from transformers.models.blt_wip.tokenizers.blt_tokenizer import BltTokenizer
-
 from huggingface_hub import hf_hub_download
 import json
 
@@ -14,7 +6,7 @@ import os
 
 import torch
 
-from transformers.models.blt_wip.modeling_blt_wip import Patcher, ByteLatentTransformer
+from transformers.models.blt_wip.modeling_blt_wip import Patcher, ByteLatentTransformer, ByteLatentTransformerArgs
 from transformers.models.blt_wip.tokenizers.blt_tokenizer import BltTokenizer
 
 logger = logging.getLogger()
@@ -77,7 +69,8 @@ def generate(
     ]
     start_pos, end_pos = get_generation_range(prompt_tokens, max_gen_len)
     batch_size = len(prompt_tokens)
-    tokens = torch.full((batch_size, end_pos), tokenizer.pad_id).cuda().long()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    tokens = torch.full((batch_size, end_pos), tokenizer.pad_id, dtype=torch.long, device=device)
 
     # Copy inputs to tensor for generated tokens
     for i, row_tokens in enumerate(prompt_tokens):
@@ -120,19 +113,7 @@ def generate(
 
 
 def main(prompt: str = "my name is", model_name: str = "blt-1b"):
-    # distributed_args = DistributedArgs()
-    # distributed_args.configure_world()
-    # if not torch.distributed.is_initialized():
-    #     setup_torch_distributed(distributed_args)
-
-    # Set device and ensure CUDA is available
-    if not torch.cuda.is_available():
-        raise RuntimeError("CUDA is required but not available")
-    device = torch.device("cuda")
-    torch.cuda.empty_cache()  # Clear any existing CUDA memory
-
-    assert model_name in ["blt-1b", "blt-7b"]
-    model_name = model_name.replace("-", "_")
+    device = "cpu"
 
     #HF
     blt_repo = "facebook/blt-1b"
@@ -155,14 +136,14 @@ def main(prompt: str = "my name is", model_name: str = "blt-1b"):
     patcher_args = entropy_params["data"]["patcher_args"]
     model_args.patch_in_forward = True
     model_args.patch_size = patcher_args["patch_size"]
-    model_args.patching_mode = patcher_args["patching_mode"]
+    model_args.patching_mode = patcher_args["patching_mode"] #TODO: we need to pass "entropy" to run through the Patcher / "entropy model", which is the LMTransformer
     model_args.patching_threshold = patcher_args["threshold"]
     model_args.patching_threshold_add = patcher_args["threshold_add"]
     model_args.max_patch_length = patcher_args["max_patch_length"]
     model_args.patching_batch_size = patcher_args["patching_batch_size"]
     model_args.patching_device = patcher_args["patching_device"]
     model_args.monotonicity = patcher_args["monotonicity"]
-    
+
     model = ByteLatentTransformer.from_pretrained(blt_repo, args=model_args).to(device)
     
     # Configure model's patcher
@@ -192,9 +173,6 @@ def main(prompt: str = "my name is", model_name: str = "blt-1b"):
         print(f'Completion: "{t}"')
         print()
 
-    # Clean up
-    torch.cuda.empty_cache()
-
-
 if __name__ == "__main__":
-    typer.run(main)
+    main()
+
