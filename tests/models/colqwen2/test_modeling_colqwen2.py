@@ -300,7 +300,7 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         model = ColQwen2ForRetrieval.from_pretrained(
             self.model_name,
             torch_dtype=torch.bfloat16,
-            load_in_4bit=True,
+            load_in_8bit=True,
         ).eval()
 
         # Load the test dataset
@@ -330,9 +330,9 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         # Further validation: fine-grained check, with a hardcoded score from the original Hf implementation.
         expected_scores = torch.tensor(
             [
-                [16.2500, 7.9688, 14.7500],
-                [9.5000, 17.1250, 10.6250],
-                [14.8750, 10.8750, 20.0000],
+                [15.1250,  8.6875, 15.0625],
+                [9.2500, 17.2500, 10.3750],
+                [15.9375, 12.3750, 20.2500],
             ],
             dtype=scores.dtype,
         )
