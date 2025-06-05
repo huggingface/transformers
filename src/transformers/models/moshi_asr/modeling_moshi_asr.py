@@ -28,7 +28,7 @@ import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
-from ...generation import GenerationMixin
+from ...generation import GenerationConfig, GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import (
     FlashAttentionKwargs,
@@ -1126,6 +1126,14 @@ class MoshiAsrForConditionalGeneration(MoshiAsrPreTrainedModel, GenerationMixin)
             attentions=outputs.attentions,
         )
 
+    def _prepare_generation_config(self, *args, **kwargs):
+        generation_config, model_kwargs = super()._prepare_generation_config(*args, **kwargs)
+        # this should be passed to the model kwargs for the input preparation
+        model_kwargs["audio_window_size"] = (
+            generation_config.audio_window_size if hasattr(generation_config, "audio_window_size") else None
+        )
+        return generation_config, model_kwargs
+
     def _prepare_model_inputs(
         self,
         inputs: Optional[torch.Tensor] = None,
@@ -1138,7 +1146,7 @@ class MoshiAsrForConditionalGeneration(MoshiAsrPreTrainedModel, GenerationMixin)
             model_kwargs=model_kwargs,
         )
 
-        if "input_values" in model_kwargs:  # TODO: better handling of edge case here
+        if "input_values" in model_kwargs:  # TODO: @eustlb, better handling of edge case here
             audio_window_size = model_kwargs.get("audio_window_size", None)
             if audio_window_size is None:
                 audio_window_size = int(model_kwargs["input_values"].shape[-1] / self.config.frame_size)
@@ -1158,22 +1166,6 @@ class MoshiAsrForConditionalGeneration(MoshiAsrPreTrainedModel, GenerationMixin)
                 .expand(batch_size, -1)
                 .contiguous()
             )
-
-            ### PROTO
-            # TODO: @eustlb, we are in the strange case here where the codec model should have a generation config.
-            from transformers.generation.utils import GenerationConfig
-
-            self.codec_model.generation_config = GenerationConfig()
-            # copy depth decoder generation conf attr to the depth decoder generation config
-            prefix = "codec_"
-            prefix_len = len(prefix)
-            depth_decoder_attrs = {
-                attr[prefix_len:]: value
-                for attr, value in vars(self.generation_config).items()
-                if attr.startswith(prefix)
-            }
-
-            vars(self.codec_model.generation_config).update({"_from_model_config": False, **depth_decoder_attrs})
 
             # let's use generate's cache preparation to prepare the cache for the codec model
             temporary_model_kwargs = {}
@@ -1199,8 +1191,9 @@ class MoshiAsrForConditionalGeneration(MoshiAsrPreTrainedModel, GenerationMixin)
             )
 
             model_kwargs["encoder_past_key_values"] = temporary_model_kwargs["past_key_values"]
+
+            # initialize the padding cache for the codec model
             model_kwargs["padding_cache"] = MimiConv1dPaddingCache()
-            ########
 
         return inputs, input_name, model_kwargs
 
@@ -1259,22 +1252,64 @@ class MoshiAsrForConditionalGeneration(MoshiAsrPreTrainedModel, GenerationMixin)
 
         return model_inputs
 
-    def generate(self, *args, audio_window_size: Optional[int] = None, **kwargs):
-        # TODO: clean
+    # TODO: @eustlb, this should be standardized
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        if kwargs.get("output_loading_info", False):
+            model, loading_info = super().from_pretrained(*args, **kwargs)
+        else:
+            model = super().from_pretrained(*args, **kwargs)
+
+        # we are in an edge case where for the codec_model self.can_generate is False, setting self.codec_model.generation_config to None
+        # yet the codec_model needs a generation config to initalize it's cache for streaming inference
+        # we therefore initialize a generation config for the codec model
+        model.codec_model.generation_config = GenerationConfig()
+
+        # copy depth decoder generation conf attr to the depth decoder generation config
+        prefix = "codec_model_"
+        prefix_len = len(prefix)
+        codec_model_attrs = {
+            attr[prefix_len:]: value
+            for attr, value in vars(model.generation_config).items()
+            if attr.startswith(prefix)
+        }
+
+        vars(model.codec_model.generation_config).update({"_from_model_config": False, **codec_model_attrs})
+
+        # remove the depth decoder generation conf attr from the model generation config
+        for attr in codec_model_attrs:
+            delattr(model.generation_config, prefix + attr)
+
+        if "output_loading_info" in kwargs:
+            return model, loading_info
+        else:
+            return model
+
+    # TODO: @eustlb, this should be standardized
+    def save_pretrained(self, *args, **kwargs):
+        # we are in an edge case where for the codec_model self.can_generate is False, setting self.codec_model.generation_config to None
+        # yet the codec_model needs a generation config to initalize it's cache for streaming inference
+        # we therefore initialize a generation config for the codec model
+        self.codec_model.generation_config = GenerationConfig()
+
+        prefix = "codec_model_"
+        codec_model_attrs = self.codec_model.generation_config.to_diff_dict()
+        codec_model_attrs.pop("transformers_version", None)
+        for attr, value in codec_model_attrs.items():
+            setattr(self.generation_config, prefix + attr, value)
+
+        super().save_pretrained(*args, **kwargs)
+
+    def generate(self, *args, **kwargs):
         padding_mask = kwargs.get("padding_mask")
         max_new_tokens = kwargs.pop("max_new_tokens", None)
-        kwargs["audio_window_size"] = audio_window_size
 
         if padding_mask is not None:
             audio_tokens_mask = self.codec_model.get_audio_codes_mask(padding_mask)
 
-            # TODO: @eustlb, we way padded sequences should be handled from generate would be with max_new_tokens
-            # batch idx specific parameters to that the stopping_criteria handles it
+            # TODO: @eustlb, we should have per-batch-idx values
             max_new_tokens = audio_tokens_mask.sum(dim=-1).max()
             max_new_tokens += self.config.delay_in_tokens
-
-        # TODO: handle when max_new_tokens is in kwargs
-        # TODO: cache_implementation = sliding_window should be in default generation_config
 
         return super().generate(
             *args,
