@@ -38,12 +38,12 @@ from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 
 # Integrations must be imported before ML frameworks:
-# isort: off
+# ruff: isort: off
 from .integrations import (
     get_reporting_integration_callbacks,
 )
 
-# isort: on
+# ruff: isort: on
 
 import huggingface_hub.utils as hf_hub_utils
 import numpy as np
