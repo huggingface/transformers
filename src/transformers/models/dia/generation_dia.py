@@ -27,8 +27,8 @@ from ...modeling_utils import PreTrainedModel
 
 # TODO: move this to logits_process + check if done correctly
 class EOSChannelFilterAndScaleLogitsProcessor(LogitsProcessor):
-    def __init__(self, batch_size: int, eos_value: int, eos_scale: float = 0.8):
-        self.batch_size = batch_size
+    def __init__(self, num_channels: int, eos_value: int, eos_scale: float = 0.8):
+        self.num_channels = num_channels
         self.eos_value = eos_value
         self.eos_scale = eos_scale
 
@@ -46,7 +46,7 @@ class EOSChannelFilterAndScaleLogitsProcessor(LogitsProcessor):
         # Prepare some defaults
         negative_infinity = torch.finfo(scores).min
         # Reshape for easier channel indexing [B, C, V]
-        scores = scores.reshape(self.batch_size, -1, scores.shape[-1])
+        scores = scores.reshape(-1, self.num_channels, scores.shape[-1])
 
         # EOS scaling
         scores[:, 0, self.eos_value] *= self.eos_scale
@@ -243,7 +243,6 @@ class DiaGenerationMixin(GenerationMixin):
         model_kwargs: Optional[Dict[str, Any]] = None,
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
-        batch_size: Optional[int] = None,
     ) -> LogitsProcessorList:
         custom_processors = LogitsProcessorList()
 
@@ -256,13 +255,11 @@ class DiaGenerationMixin(GenerationMixin):
             # Avoid adding CFG again
             generation_config.guidance_scale = None
 
-        batch_size = batch_size // 2 if model_kwargs["uses_cfg"] else batch_size
         custom_processors.append(
             EOSChannelFilterAndScaleLogitsProcessor(
-                batch_size=batch_size,
+                num_channels=len(self.config.delay_pattern),
                 eos_value=generation_config.eos_token_id,
                 eos_scale=model_kwargs.get("eos_scale", 0.8), # TODO: will become a param in gen config
-                device=device,
             )
         )
 
@@ -542,7 +539,10 @@ class DiaGenerationMixin(GenerationMixin):
         valid_mask = delay_mask[:, :mask_len, :]
         valid_input = input_ids[:, :mask_len, :]
 
-        return torch.where(valid_mask == -1, valid_input, valid_mask)
+        # Overwrite the respective parts of the input
+        input_ids[:, :mask_len, :] = torch.where(valid_mask == -1, valid_input, valid_mask)
+
+        return input_ids
 
     @staticmethod
     def build_delay_indices(B: int, T: int, C: int, delay_pattern: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
