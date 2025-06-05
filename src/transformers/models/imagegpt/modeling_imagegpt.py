@@ -26,6 +26,7 @@ from torch.cuda.amp import autocast
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -334,40 +335,61 @@ class ImageGPTAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        layer_past: Optional[bool] = None,
+        layer_past: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
+        cache_position: Optional[torch.Tensor] = None,
     ) -> tuple:
-        if encoder_hidden_states is not None:
+        is_cross_attention = encoder_hidden_states is not None
+        bsz, seq_len, _ = hidden_states.shape
+
+        if layer_past is not None:
+            if isinstance(layer_past, EncoderDecoderCache):
+                is_updated = layer_past.is_updated.get(self.layer_idx)
+                if is_cross_attention:
+                    # after the first generated id, we can subsequently re-use all key/value_states from cache
+                    curr_past_key_value = layer_past.cross_attention_cache
+                else:
+                    curr_past_key_value = layer_past.self_attention_cache
+            else:
+                curr_past_key_value = layer_past
+
+        current_states = encoder_hidden_states if is_cross_attention else hidden_states
+        if is_cross_attention:
             if not hasattr(self, "q_attn"):
                 raise ValueError(
                     "If class is used as cross attention, the weights `q_attn` have to be defined. "
                     "Please make sure to instantiate class with `ImageGPTAttention(..., is_cross_attention=True)`."
                 )
 
-            query = self.q_attn(hidden_states)
-            key, value = self.c_attn(encoder_hidden_states).split(self.split_size, dim=2)
-            attention_mask = encoder_attention_mask
+            if layer_past is not None and is_updated:
+                # reuse k,v, cross_attentions, and compute only q
+                query = query = self.q_attn(hidden_states)
+                key = curr_past_key_value.key_cache[self.layer_idx]
+                value = curr_past_key_value.value_cache[self.layer_idx]
+            else:
+                query = query = self.q_attn(hidden_states)
+                key, value = self.c_attn(current_states).split(self.split_size, dim=2)
+                key = key.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+                value = value.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
         else:
-            query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
-
-        query = self._split_heads(query, self.num_heads, self.head_dim)
-        key = self._split_heads(key, self.num_heads, self.head_dim)
-        value = self._split_heads(value, self.num_heads, self.head_dim)
+            query, key, value = self.c_attn(current_states).split(self.split_size, dim=2)
+            key = key.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+            value = value.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
         if layer_past is not None:
-            past_key, past_value = layer_past
-            key = torch.cat((past_key, key), dim=-2)
-            value = torch.cat((past_value, value), dim=-2)
+            # save all key/value_states to cache to be re-used for fast auto-regressive generation
+            cache_position = cache_position if not is_cross_attention else None
+            key, value = curr_past_key_value.update(key, value, self.layer_idx, {"cache_position": cache_position})
+            # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
+            if is_cross_attention:
+                layer_past.is_updated[self.layer_idx] = True
 
-        if use_cache is True:
-            present = (key, value)
-        else:
-            present = None
+        query = query.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
 
         if self.reorder_and_upcast_attn:
             attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, head_mask)
@@ -378,11 +400,11 @@ class ImageGPTAttention(nn.Module):
         attn_output = self.c_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 
-        outputs = (attn_output, present)
+        outputs = (attn_output, layer_past)
         if output_attentions:
             outputs += (attn_weights,)
 
-        return outputs  # a, present, (attentions)
+        return outputs  # a, layer_past, (attentions)
 
 
 class ImageGPTMLP(nn.Module):
@@ -421,13 +443,14 @@ class ImageGPTBlock(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        layer_past: Optional[bool] = None,
+        layer_past: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
+        cache_position: Optional[torch.Tensor] = None,
     ) -> tuple:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
@@ -438,6 +461,7 @@ class ImageGPTBlock(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            cache_position=cache_position,
         )
         attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attn_outputs[1:]
@@ -455,11 +479,13 @@ class ImageGPTBlock(nn.Module):
             hidden_states = self.ln_cross_attn(hidden_states)
             cross_attn_outputs = self.crossattention(
                 hidden_states,
+                layer_past=layer_past,
                 attention_mask=attention_mask,
                 head_mask=head_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 output_attentions=output_attentions,
+                cache_position=cache_position,
             )
             attn_output = cross_attn_outputs[0]
             # residual connection
@@ -566,6 +592,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.Tensor] = None,
         **kwargs: Any,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
@@ -632,14 +659,28 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
+        return_legacy_cache = False
+        if use_cache and isinstance(past_key_values, (list, tuple)):
+            logger.warning_once(
+                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
+                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
+                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
+            )
+            return_legacy_cache = True
+            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
+
+        past_length = past_key_values.get_seq_length() if past_key_values is not None else past_key_values
+
         if token_type_ids is not None:
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
 
-        if past_key_values is None:
-            past_length = 0
-            past_key_values = tuple([None] * len(self.h))
-        else:
-            past_length = past_key_values[0][0].size(-2)
         if position_ids is None:
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0)
@@ -691,27 +732,16 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
             hidden_states = hidden_states + token_type_embeds
 
         hidden_states = self.drop(hidden_states)
-
         output_shape = input_shape + (hidden_states.size(-1),)
 
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
-        presents = () if use_cache else None
+        next_decoder_cache = None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
         all_hidden_states = () if output_hidden_states else None
-        for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
+        for i, block in enumerate(self.h):
             # Model parallel
             if self.model_parallel:
                 torch.cuda.set_device(hidden_states.device)
-                # Ensure layer_past is on same device as hidden_states (might not be correct)
-                if layer_past is not None:
-                    layer_past = tuple(past_state.to(hidden_states.device) for past_state in layer_past)
                 # Ensure that attention_mask is always on the same device as hidden_states
                 if attention_mask is not None:
                     attention_mask = attention_mask.to(hidden_states.device)
@@ -731,22 +761,24 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
                     encoder_attention_mask,
                     use_cache,
                     output_attentions,
+                    cache_position,
                 )
             else:
                 outputs = block(
                     hidden_states,
-                    layer_past=layer_past,
+                    layer_past=past_key_values,
                     attention_mask=attention_mask,
                     head_mask=head_mask[i],
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
                     use_cache=use_cache,
                     output_attentions=output_attentions,
+                    cache_position=cache_position,
                 )
 
             hidden_states = outputs[0]
             if use_cache is True:
-                presents = presents + (outputs[1],)
+                next_decoder_cache = outputs[1]
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
@@ -760,22 +792,26 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
                         hidden_states = hidden_states.to("cuda:" + str(k + 1))
 
         hidden_states = self.ln_f(hidden_states)
-
         hidden_states = hidden_states.view(*output_shape)
+
         # Add last hidden state
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
+        next_cache = next_decoder_cache if use_cache else None
+        if return_legacy_cache:
+            next_cache = past_key_values.to_legacy_cache()
+
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, presents, all_hidden_states, all_self_attentions, all_cross_attentions]
+                for v in [hidden_states, next_cache, all_hidden_states, all_self_attentions, all_cross_attentions]
                 if v is not None
             )
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=presents,
+            past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
             cross_attentions=all_cross_attentions,
@@ -825,6 +861,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.Tensor] = None,
         **kwargs: Any,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
@@ -907,6 +944,7 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cache_position=cache_position,
         )
         hidden_states = transformer_outputs[0]
 

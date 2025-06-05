@@ -23,6 +23,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from ...cache_utils import DynamicCache
 from ...generation import GenerationMixin
 from ...generation.logits_process import (
     AlternatingCodebooksLogitsProcessor,
@@ -65,7 +66,7 @@ class BarkSelfAttention(nn.Module):
     # adapted from GPTNeoSelfAttention and Bark code
     # BarkSelfAttention can have two attention type, i.e full attention or causal attention
 
-    def __init__(self, config, is_causal=False):
+    def __init__(self, config, is_causal=False, layer_idx=None):
         super().__init__()
 
         # regularization
@@ -89,6 +90,7 @@ class BarkSelfAttention(nn.Module):
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.bias)
 
         self.is_causal = is_causal
+        self.layer_idx = layer_idx
         if is_causal:
             block_size = config.block_size
             bias = torch.tril(torch.ones((block_size, block_size), dtype=bool)).view(1, 1, block_size, block_size)
@@ -154,6 +156,7 @@ class BarkSelfAttention(nn.Module):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
+        cache_position=None,
     ):
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
         query, key, value = self.att_proj(hidden_states).split(self.embed_dim, dim=2)
@@ -163,15 +166,7 @@ class BarkSelfAttention(nn.Module):
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
         if past_key_values is not None:
-            past_key = past_key_values[0]
-            past_value = past_key_values[1]
-            key = torch.cat((past_key, key), dim=-2)
-            value = torch.cat((past_value, value), dim=-2)
-
-        if use_cache is True:
-            present = (key, value)
-        else:
-            present = None
+            key, value = past_key_values.update(key, value, self.layer_idx, {"cache_position": cache_position})
 
         attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
 
@@ -179,7 +174,7 @@ class BarkSelfAttention(nn.Module):
         attn_output = self.out_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 
-        outputs = (attn_output, present)
+        outputs = (attn_output, past_key_values)
         if output_attentions:
             outputs += (attn_weights,)
 
@@ -228,6 +223,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
+        cache_position=None,
     ):
         batch_size, query_len, _ = hidden_states.size()
 
@@ -239,18 +235,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         value = self._split_heads(value, self.num_heads, self.head_dim)
 
         if past_key_values is not None:
-            # (batch, head, seq_length, head_features) -> (batch, seq_length, head, head_features)
-            past_key = past_key_values[0].transpose(1, 2)
-            past_value = past_key_values[1].transpose(1, 2)
-            # and merge on seq_length
-            key = torch.cat((past_key, key), dim=1)
-            value = torch.cat((past_value, value), dim=1)
-
-        if use_cache is True:
-            #  (batch, head, seq_length, head_features)
-            present = (key.transpose(1, 2), value.transpose(1, 2))
-        else:
-            present = None
+            key, value = past_key_values.update(key, value, self.layer_idx, {"cache_position": cache_position})
 
         attn_output = _flash_attention_forward(
             query,
@@ -267,7 +252,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
         attn_output = self.out_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 
-        outputs = (attn_output, present)
+        outputs = (attn_output, cache_position)
         if output_attentions:
             attn_weights = None
             outputs += (attn_weights,)
@@ -310,7 +295,7 @@ class BarkMLP(nn.Module):
 
 
 class BarkBlock(nn.Module):
-    def __init__(self, config, is_causal=False):
+    def __init__(self, config, is_causal=False, layer_idx=None):
         super().__init__()
 
         if is_causal:
@@ -323,7 +308,9 @@ class BarkBlock(nn.Module):
             self.layernorm_1 = nn.LayerNorm(config.hidden_size)
             self.layernorm_2 = nn.LayerNorm(config.hidden_size)
 
-        self.attn = BARK_ATTENTION_CLASSES[config._attn_implementation](config, is_causal=is_causal)
+        self.attn = BARK_ATTENTION_CLASSES[config._attn_implementation](
+            config, is_causal=is_causal, layer_idx=layer_idx
+        )
 
         self.mlp = BarkMLP(config)
 
@@ -335,6 +322,7 @@ class BarkBlock(nn.Module):
         head_mask=None,
         use_cache=False,
         output_attentions=False,
+        cache_position=None,
     ):
         intermediary_hidden_states = self.layernorm_1(hidden_states)
 
@@ -345,6 +333,7 @@ class BarkBlock(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            cache_position=cache_position,
         )
 
         attn_output = attn_outputs[0]  # output_attn: output, present_key_values, (attn_weights)
@@ -423,7 +412,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
 
         self.drop = nn.Dropout(config.dropout)
 
-        self.layers = nn.ModuleList([BarkBlock(config, is_causal=True) for _ in range(config.num_layers)])
+        self.layers = nn.ModuleList([BarkBlock(config, is_causal=True, layer_idx=i) for i in range(config.num_layers)])
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
         self.layernorm_final = BarkLayerNorm(config.hidden_size, bias=config.bias)
@@ -450,7 +439,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         if past_key_values is not None:
             # Omit tokens covered by past_key_values
             seq_len = input_ids.shape[1]
-            past_length = past_key_values[0][0].shape[2]
+            past_length = past_key_values.get_seq_length()
 
             # Some generation methods already pass only the last input ID
             if input_ids.shape[1] > past_length:
@@ -516,6 +505,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.Tensor] = None,
     ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithPast]:
         r"""
         input_embeds (`torch.FloatTensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
@@ -558,11 +548,24 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
 
         device = input_ids.device if input_ids is not None else input_embeds.device
 
-        if past_key_values is None:
-            past_length = 0
-            past_key_values = tuple([None] * len(self.layers))
-        else:
-            past_length = past_key_values[0][0].size(-2)
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
+        return_legacy_cache = False
+        if use_cache and isinstance(past_key_values, (list, tuple)):
+            logger.warning_once(
+                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
+                "You should pass an instance of `DynamicCache` instead, e.g. "
+                "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
+            )
+            return_legacy_cache = True
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+
+        past_length = past_key_values.get_seq_length() if past_key_values is not None else past_key_values
 
         if position_ids is None:
             position_ids = torch.arange(past_length, seq_length + past_length, dtype=torch.long, device=device)
@@ -591,18 +594,11 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         hidden_states = self.drop(input_embeds + position_embeds)
         output_shape = input_shape + (hidden_states.size(-1),)
 
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
-        present_key_values = () if use_cache else None
+        next_decoder_cache = None
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
 
-        for i, (block, past_layer_key_values) in enumerate(zip(self.layers, past_key_values)):
+        for i, block in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -615,21 +611,23 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
                     head_mask[i],
                     use_cache,
                     output_attentions,
+                    cache_position,
                 )
             else:
                 outputs = block(
                     hidden_states,
-                    past_key_values=past_layer_key_values,
+                    past_key_values=past_key_values,
                     attention_mask=attention_mask,
                     head_mask=head_mask[i],
                     use_cache=use_cache,
                     output_attentions=output_attentions,
+                    cache_position=cache_position,
                 )
 
             hidden_states = outputs[0]
 
             if use_cache:
-                present_key_values = present_key_values + (outputs[1],)
+                next_decoder_cache = outputs[1]
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
@@ -644,15 +642,19 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
 
         logits = self.lm_head(hidden_states)
 
+        next_cache = next_decoder_cache if use_cache else None
+        if return_legacy_cache:
+            next_cache = past_key_values.to_legacy_cache()
+
         if not return_dict:
             return tuple(
-                v for v in [None, logits, present_key_values, all_hidden_states, all_self_attentions] if v is not None
+                v for v in [None, logits, next_cache, all_hidden_states, all_self_attentions] if v is not None
             )
 
         return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=present_key_values,
+            past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
@@ -1030,7 +1032,9 @@ class BarkFineModel(BarkPreTrainedModel):
 
         self.drop = nn.Dropout(config.dropout)
 
-        self.layers = nn.ModuleList([BarkBlock(config, is_causal=False) for _ in range(config.num_layers)])
+        self.layers = nn.ModuleList(
+            [BarkBlock(config, is_causal=False, layer_idx=i) for i in range(config.num_layers)]
+        )
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
         self.layernorm_final = nn.LayerNorm(config.hidden_size)
