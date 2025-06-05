@@ -642,7 +642,7 @@ class CpmAntModel(CpmAntPreTrainedModel):
         span = torch.full((batch, seq_length), 0, dtype=dtype, device=device)
 
         return_legacy_cache = False
-        if use_cache and isinstance(past_key_values, (list, tuple)):
+        if use_cache and not isinstance(past_key_values, Cache):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `DynamicCache` instead, e.g. "

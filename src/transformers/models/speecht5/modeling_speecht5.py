@@ -24,7 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, L1Loss
 
 from ...activations import ACT2FN
-from ...cache_utiils import Cache, EncoderDecoderCache
+from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
@@ -940,7 +940,7 @@ class SpeechT5Attention(nn.Module):
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = query_states.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2)
-        query_states = query_states.view(*proj_shape)
+        query_states = query_states.reshape(*proj_shape)
         key_states = key_states.reshape(*proj_shape)
         value_states = value_states.reshape(*proj_shape)
 
@@ -1595,7 +1595,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
                 use_cache = False
 
         return_legacy_cache = False
-        if use_cache and isinstance(past_key_values, (list, tuple)):
+        if use_cache and not isinstance(past_key_values, Cache):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
@@ -1604,7 +1604,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
             return_legacy_cache = True
             past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else past_key_values
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
         attention_mask = _prepare_4d_causal_attention_mask(
             attention_mask, input_shape, hidden_states, past_key_values_length

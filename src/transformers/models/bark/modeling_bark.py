@@ -23,7 +23,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from ...cache_utils import DynamicCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...generation.logits_process import (
     AlternatingCodebooksLogitsProcessor,
@@ -439,7 +439,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         if past_key_values is not None:
             # Omit tokens covered by past_key_values
             seq_len = input_ids.shape[1]
-            past_length = past_key_values.get_seq_length()
+            past_length = past_key_values[0][0].shape[-2]
 
             # Some generation methods already pass only the last input ID
             if input_ids.shape[1] > past_length:
@@ -556,7 +556,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
                 use_cache = False
 
         return_legacy_cache = False
-        if use_cache and isinstance(past_key_values, (list, tuple)):
+        if use_cache and not isinstance(past_key_values, Cache):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `DynamicCache` instead, e.g. "

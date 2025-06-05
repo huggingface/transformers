@@ -24,8 +24,8 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...cache_utils import Cache, EncoderDecoderCache, DynamicCache
 from ...activations import ACT2FN, get_activation
+from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -375,7 +375,7 @@ class RoFormerAttention(nn.Module):
         encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
-        cache_position,
+        cache_position=None,
     ):
         self_outputs = self.self(
             hidden_states,
@@ -449,7 +449,7 @@ class RoFormerLayer(nn.Module):
         encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
-        cache_position,
+        cache_position=None,
     ):
         self_attention_outputs = self.attention(
             hidden_states,
@@ -538,7 +538,7 @@ class RoFormerEncoder(nn.Module):
                 use_cache = False
 
         return_legacy_cache = False
-        if use_cache and isinstance(past_key_values, (list, tuple)):
+        if use_cache and not isinstance(past_key_values, Cache):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `EncoderDecoderCache` instead, e.g. "

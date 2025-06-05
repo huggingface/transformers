@@ -717,6 +717,7 @@ class NllbMoeDecoderLayer(nn.Module):
             dropout=config.attention_dropout,
             is_decoder=True,
             config=config,
+            layer_idx=layer_idx,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -779,41 +780,34 @@ class NllbMoeDecoderLayer(nn.Module):
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
-        # add present self-attn cache to positions 1,2 of present_key_value tuple
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
-            past_key_value=self_attn_past_key_value,
+            past_key_value=past_key_value,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
+            cache_position=cache_position,
         )
         hidden_states = self.attn_dropout(hidden_states)
         hidden_states = residual + hidden_states
 
         # Cross-Attention Block
-        cross_attn_present_key_value = None
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
             hidden_states = self.cross_attention_layer_norm(hidden_states)
 
-            # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
             hidden_states, cross_attn_weights, cross_attn_present_key_value = self.cross_attention(
                 hidden_states=hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
-                past_key_value=cross_attn_past_key_value,
+                past_key_value=past_key_value,
                 attention_mask=encoder_attention_mask,
                 layer_head_mask=cross_attn_layer_head_mask,
                 output_attentions=output_attentions,
+                cache_position=cache_position,
             )
             hidden_states = self.attn_dropout(hidden_states)
             hidden_states = residual + hidden_states
-
-            # add cross-attn to positions 3,4 of present_key_value tuple
-            present_key_value += cross_attn_present_key_value
 
         # Fully Connected
         residual = hidden_states
@@ -833,7 +827,7 @@ class NllbMoeDecoderLayer(nn.Module):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        outputs = (hidden_states, present_key_value)
+        outputs = (hidden_states, past_key_value)
 
         if output_attentions:
             outputs += (self_attn_weights, cross_attn_weights)

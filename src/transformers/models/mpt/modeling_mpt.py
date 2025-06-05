@@ -109,8 +109,7 @@ class MptAttention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2)) * self.softmax_scale
-
-        query_length = seq_length if past_key_value is None else seq_length + past_key_value[0].shape[2]
+        query_length = seq_length if past_key_value is None else seq_length + past_key_value.get_seq_length()
 
         if position_bias is not None:
             if len(position_bias.shape) != 3:
@@ -376,11 +375,8 @@ class MptModel(MptPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
 
         # Compute alibi tensor: check build_alibi_tensor documentation
-        seq_length_with_past = seq_length
-        past_key_values_length = 0
-        if past_key_values[0] is not None:
-            past_key_values_length = past_key_values[0][0].shape[2]
-            seq_length_with_past = seq_length_with_past + past_key_values_length
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        seq_length_with_past = seq_length + past_key_values_length
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length_with_past), device=hidden_states.device)
         else:

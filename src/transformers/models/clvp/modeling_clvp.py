@@ -1085,7 +1085,7 @@ class ClvpDecoder(ClvpPreTrainedModel):
                 use_cache = False
 
         return_legacy_cache = False
-        if use_cache and isinstance(past_key_values, (list, tuple)):
+        if use_cache and not isinstance(past_key_values, Cache):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `DynamicCache` instead, e.g. "
@@ -1363,7 +1363,7 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
         if past_key_values:
-            past_length = past_key_values.get_seq_length()
+            past_length = past_key_values[0][0].shape[-2]
 
             # Some generation methods already pass only the last input ID
             if input_ids.shape[1] > past_length:
@@ -1383,7 +1383,7 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            position_ids = position_ids[:, -input_ids.shape[1] :].unsqueeze(-1)
+            position_ids = position_ids[:, -input_ids.shape[1] :]
         else:
             position_ids = None
 

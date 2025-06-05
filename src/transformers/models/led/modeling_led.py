@@ -843,7 +843,7 @@ class LEDDecoderAttention(nn.Module):
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = query_states.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2)
-        query_states = query_states.view(*proj_shape)
+        query_states = query_states.reshape(*proj_shape)
         key_states = key_states.reshape(*proj_shape)
         value_states = value_states.reshape(*proj_shape)
 
@@ -1890,7 +1890,7 @@ class LEDDecoder(LEDPreTrainedModel):
                 use_cache = False
 
         return_legacy_cache = False
-        if use_cache and isinstance(past_key_values, (list, tuple)):
+        if use_cache and not isinstance(past_key_values, Cache):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
@@ -1899,7 +1899,7 @@ class LEDDecoder(LEDPreTrainedModel):
             return_legacy_cache = True
             past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else past_key_values
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None

@@ -203,8 +203,8 @@ class XmodSelfAttention(nn.Module):
             key_layer = curr_past_key_value.key_cache[self.layer_idx]
             value_layer = curr_past_key_value.value_cache[self.layer_idx]
         else:
-            key_layer = self.transpose_for_scores(self.k_proj(current_states))
-            value_layer = self.transpose_for_scores(self.v_proj(current_states))
+            key_layer = self.transpose_for_scores(self.key(current_states))
+            value_layer = self.transpose_for_scores(self.value(current_states))
 
             if past_key_value is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
@@ -590,7 +590,7 @@ class XmodEncoder(nn.Module):
 
             hidden_states = layer_outputs[0]
             if use_cache:
-                next_decoder_cache += (layer_outputs[-1],)
+                next_decoder_cache = layer_outputs[-1]
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
                 if self.config.add_cross_attention:

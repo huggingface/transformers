@@ -1084,7 +1084,7 @@ class Kosmos2TextTransformer(nn.Module):
                 use_cache = False
 
         return_legacy_cache = False
-        if use_cache and isinstance(past_key_values, (list, tuple)):
+        if use_cache and not isinstance(past_key_values, Cache):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
@@ -1093,7 +1093,7 @@ class Kosmos2TextTransformer(nn.Module):
             return_legacy_cache = True
             past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else past_key_values
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
         # We don't need img info. when `past_key_values_length` > 0
         if past_key_values_length > 0:

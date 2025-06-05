@@ -533,8 +533,6 @@ class ProphetNetAttention(nn.Module):
 
         # previous time steps are cached - no need to recompute key and value if they are static
         query_states = self.query_proj(hidden_states) / (self.head_dim**0.5)
-        # get query proj
-        query_states = self.q_proj(hidden_states) * self.scaling
 
         if past_key_value is not None:
             if isinstance(past_key_value, EncoderDecoderCache):
@@ -553,10 +551,10 @@ class ProphetNetAttention(nn.Module):
             key_states = curr_past_key_value.key_cache[self.layer_idx]
             value_states = curr_past_key_value.value_cache[self.layer_idx]
         else:
-            key_states = self.k_proj(current_states)
-            value_states = self.v_proj(current_states)
-            key_states = key_states.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
-            value_states = value_states.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
+            key_states = self.key_proj(current_states)
+            value_states = self.value_proj(current_states)
+            key_states = key_states.view(batch_size, -1, self.num_attn_heads, self.head_dim).transpose(1, 2)
+            value_states = value_states.view(batch_size, -1, self.num_attn_heads, self.head_dim).transpose(1, 2)
 
             if past_key_value is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
@@ -568,12 +566,9 @@ class ProphetNetAttention(nn.Module):
                 if is_cross_attention:
                     past_key_value.is_updated[self.layer_idx] = True
 
-        proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
-        query_states = query_states.view(batch_size, tgt_len, self.num_heads, self.head_dim).transpose(1, 2)
-        query_states = query_states.view(*proj_shape)
-        key_states = key_states.reshape(*proj_shape)
-        value_states = value_states.reshape(*proj_shape)
+        query_states = query_states.view(batch_size, tgt_len, self.num_attn_heads, self.head_dim).transpose(1, 2)
         src_len = key_states.size(2)
+
         attn_weights = torch.einsum("bsij,bsjk->bsik", query_states, key_states.transpose(2, 3))
         expected_shape = (batch_size, self.num_attn_heads, tgt_len, src_len)
         if attn_weights.size() != expected_shape:
@@ -716,9 +711,9 @@ class ProphetNetNgramSelfAttention(nn.Module):
         value_states = self._shape(value_states, -1, batch_size)
         proj_shape = (batch_size, self.num_attn_heads, -1, self.head_dim)
 
-        query_states = query_states.view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
+        query_states = query_states.reshape(*proj_shape)
+        key_states = key_states.reshape(*proj_shape)
+        value_states = value_states.reshape(*proj_shape)
 
         # chunk into main stream and predict stream
         hidden_states_list = hidden_states.chunk(1 + self.ngram, dim=1)
@@ -731,9 +726,14 @@ class ProphetNetNgramSelfAttention(nn.Module):
         main_key_states, predict_key_states_list = key_states_list[0], key_states_list[1:]
         main_value_states, predict_value_states_list = value_states_list[0], value_states_list[1:]
 
-        # saved states are stored with shape (batch_size, num_attn_heads, seq_len, head_dim)
+        # ProphetNet has two separate attention layers, one for self and one for cross attention
+        # We need to obtain the self attention only for this module, if `EncoderDecoderCache`
         if past_key_value is not None:
-            prev_main_key_states, main_value_states = past_key_value.update(
+            if isinstance(past_key_value, EncoderDecoderCache):
+                curr_past_key_value = past_key_value.self_attention_cache
+            else:
+                curr_past_key_value = past_key_value
+            main_key_states, main_value_states = curr_past_key_value.update(
                 main_key_states, main_value_states, self.layer_idx, {"cache_position": cache_position}
             )
 
@@ -1057,7 +1057,6 @@ class ProphetNetDecoderLayer(nn.Module):
         )
         hidden_states = self.self_attn_layer_norm(hidden_states + ngram_attention_output)
 
-        # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             # 2nd residual block
@@ -1327,7 +1326,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                 use_cache = False
 
         return_legacy_cache = False
-        if use_cache and isinstance(past_key_values, (list, tuple)):
+        if use_cache and not isinstance(past_key_values, Cache):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
@@ -1336,7 +1335,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             return_legacy_cache = True
             past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else past_key_values
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
         if past_key_values_length != 0:
             main_relative_position_buckets, predict_relative_position_buckets = None, None

@@ -204,8 +204,8 @@ class RobertaPreLayerNormSelfAttention(nn.Module):
             key_layer = curr_past_key_value.key_cache[self.layer_idx]
             value_layer = curr_past_key_value.value_cache[self.layer_idx]
         else:
-            key_layer = self.transpose_for_scores(self.k_proj(current_states))
-            value_layer = self.transpose_for_scores(self.v_proj(current_states))
+            key_layer = self.transpose_for_scores(self.key(current_states))
+            value_layer = self.transpose_for_scores(self.value(current_states))
 
             if past_key_value is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
@@ -287,9 +287,11 @@ class RobertaPreLayerNormSelfOutput(nn.Module):
 
 
 class RobertaPreLayerNormAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self, config, position_embedding_type=None, layer_idx=None):
         super().__init__()
-        self.self = RobertaPreLayerNormSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = RobertaPreLayerNormSelfAttention(
+            config, position_embedding_type=position_embedding_type, layer_idx=layer_idx
+        )
         self.output = RobertaPreLayerNormSelfOutput(config)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pruned_heads = set()
@@ -320,8 +322,9 @@ class RobertaPreLayerNormAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
+        cache_position: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor]:
         hidden_states_pre_layer_norm = self.LayerNorm(hidden_states)
         self_outputs = self.self(
@@ -332,6 +335,7 @@ class RobertaPreLayerNormAttention(nn.Module):
             encoder_attention_mask,
             past_key_value,
             output_attentions,
+            cache_position,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -374,7 +378,7 @@ class RobertaPreLayerNormLayer(nn.Module):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = RobertaPreLayerNormAttention(config, layer_idx)
+        self.attention = RobertaPreLayerNormAttention(config, layer_idx=layer_idx)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
@@ -486,7 +490,7 @@ class RobertaPreLayerNormEncoder(nn.Module):
                 use_cache = False
 
         return_legacy_cache = False
-        if use_cache and isinstance(past_key_values, (list, tuple)):
+        if use_cache and not isinstance(past_key_values, Cache):
             logger.warning_once(
                 "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
                 "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
