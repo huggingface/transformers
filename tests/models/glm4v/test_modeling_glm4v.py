@@ -21,8 +21,8 @@ import requests
 from transformers import (
     AutoProcessor,
     Glm4vConfig,
-    Glm4vModel,
     Glm4vForConditionalGeneration,
+    Glm4vModel,
     is_torch_available,
     is_vision_available,
 )

@@ -146,8 +146,6 @@ class Glm4vImageProcessor(BaseImageProcessor):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
         else:
             size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 15000}
-        self.min_pixels = size["shortest_edge"]
-        self.max_pixels = size["longest_edge"]
         self.size = size
 
         self.do_resize = do_resize
@@ -378,8 +376,6 @@ class Glm4vImageProcessor(BaseImageProcessor):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
         else:
             size = {"shortest_edge": 112 * 112, "longest_edge": 28 * 28 * 15000}
-            self.min_pixels = size["shortest_edge"]
-            self.max_pixels = size["longest_edge"]
 
         do_resize = do_resize if do_resize is not None else self.do_resize
 
