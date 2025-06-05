@@ -371,6 +371,8 @@
     - sections:
       - local: model_doc/albert
         title: ALBERT
+      - local: model_doc/arcee
+        title: Arcee
       - local: model_doc/bamba
         title: Bamba
       - local: model_doc/bart
