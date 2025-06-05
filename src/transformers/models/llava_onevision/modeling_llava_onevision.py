@@ -43,7 +43,8 @@ from ...utils import (
 )
 from ..auto import AutoModel
 from .configuration_llava_onevision import LlavaOnevisionConfig
-
+from ..siglip.modeling_siglip import SiglipEncoderLayer
+from ..qwen2.modeling_qwen2 import Qwen2DecoderLayer
 
 logger = logging.get_logger(__name__)
 
@@ -301,7 +302,7 @@ class LlavaOnevisionPreTrainedModel(PreTrainedModel):
     config_class = LlavaOnevisionConfig
     base_model_prefix = ""
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer"]
+    _no_split_modules = ["Qwen2DecoderLayer", "SiglipEncoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_cache_class = True
     _supports_flash_attn_2 = True
