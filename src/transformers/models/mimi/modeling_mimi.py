@@ -86,6 +86,7 @@ class MimiConv1dPaddingCache:
     A padding cache is a list of cached partial hidden states for each convolution layer.
     Hidden states are cached from the previous call to the MimiConv1d forward pass, given the padding size.
     """
+
     def __init__(self):
         self.padding_cache: List[torch.Tensor] = []
 
@@ -111,7 +112,7 @@ class MimiConv1dPaddingCache:
             self.padding_cache.append(padding_states)
         else:
             current_cache = self.padding_cache[layer_idx]
-    
+
         self.padding_cache[layer_idx] = padding_states
 
         return current_cache
@@ -282,8 +283,8 @@ class MimiConv1d(nn.Module):
 
         if self.causal and padding_cache is not None:
             layer_padding_cache = padding_cache.update(
-                hidden_states[:, :, -self.padding_total:] if self.padding_total > 0 else torch.tensor([]),
-                self.layer_idx
+                hidden_states[:, :, -self.padding_total :] if self.padding_total > 0 else torch.tensor([]),
+                self.layer_idx,
             )
 
             if layer_padding_cache is None:
@@ -293,18 +294,23 @@ class MimiConv1d(nn.Module):
                         self.conv.in_channels,
                         self.padding_total,
                         device=hidden_states.device,
-                        dtype=hidden_states.dtype
+                        dtype=hidden_states.dtype,
                     )
                 elif self.pad_mode == "replicate":
-                    layer_padding_cache = torch.ones(
-                        hidden_states.shape[0],
-                        self.conv.in_channels,
-                        self.padding_total,
-                        device=hidden_states.device,
-                        dtype=hidden_states.dtype
-                    ) * hidden_states[:, :, :1]
+                    layer_padding_cache = (
+                        torch.ones(
+                            hidden_states.shape[0],
+                            self.conv.in_channels,
+                            self.padding_total,
+                            device=hidden_states.device,
+                            dtype=hidden_states.dtype,
+                        )
+                        * hidden_states[:, :, :1]
+                    )
                 else:
-                    raise ValueError("`padding_cache` is not supported for convolutions using other than `constant` or `replicate` padding mode.")
+                    raise ValueError(
+                        "`padding_cache` is not supported for convolutions using other than `constant` or `replicate` padding mode."
+                    )
 
             hidden_states = torch.cat([layer_padding_cache, hidden_states], dim=2)
 
@@ -314,9 +320,7 @@ class MimiConv1d(nn.Module):
 
         else:
             hidden_states = self._pad1d(
-                hidden_states,
-                (self.padding_left, self.padding_right + extra_padding),
-                mode=self.pad_mode
+                hidden_states, (self.padding_left, self.padding_right + extra_padding), mode=self.pad_mode
             )
 
         hidden_states = self.conv(hidden_states)
@@ -871,9 +875,7 @@ class MimiSdpaAttention(MimiAttention):
         # is_causal=True with e.g. q_len=2 will use an attention mask in the upper left form while we need lower right
         if is_causal and q_len > 1 and q_len != key_states.shape[-2]:
             causal_mask = torch.tril(
-                torch.ones(
-                    q_len, key_states.shape[-2], device=query_states.device, dtype=torch.bool
-                ),
+                torch.ones(q_len, key_states.shape[-2], device=query_states.device, dtype=torch.bool),
                 diagonal=key_states.shape[-2] - q_len,
             )
             is_causal = False
@@ -1631,7 +1633,7 @@ class MimiModel(MimiPreTrainedModel):
         Encodes the given input using the underlying VQVAE. The padding mask is required to compute the correct scale.
         """
 
-        # TODO: @eustlb, let's make the encoder support padding_mask so that batched inputs are supported. 
+        # TODO: @eustlb, let's make the encoder support padding_mask so that batched inputs are supported.
         embeddings = self.encoder(input_values, padding_cache=padding_cache)
 
         # TODO: @eustlb, convert the padding mask to attention mask.
@@ -1648,7 +1650,7 @@ class MimiModel(MimiPreTrainedModel):
         codes = self.quantizer.encode(embeddings, num_quantizers)
         codes = codes.transpose(0, 1)
         return codes, past_key_values, padding_cache
-    
+
     @property
     def frame_size(self) -> int:
         return int(self.config.sampling_rate / self.config.frame_rate)
@@ -1734,7 +1736,7 @@ class MimiModel(MimiPreTrainedModel):
 
         if channels < 1 or channels > 2:
             raise ValueError(f"Number of audio channels must be 1 or 2, but got {channels}")
-        
+
         if input_length % self.frame_size != 0 or input_length == 0:
             raise ValueError(f"Input length must be a multiple of {self.frame_size}, but got {input_length}")
 
@@ -1742,7 +1744,7 @@ class MimiModel(MimiPreTrainedModel):
             padding_mask = torch.ones_like(input_values).bool()
 
         if use_streaming and padding_cache is None:
-            padding_cache = MimiConv1dPaddingCache() 
+            padding_cache = MimiConv1dPaddingCache()
 
         encoded_frames, encoder_past_key_values, padding_cache = self._encode_frame(
             input_values,
