@@ -27,7 +27,7 @@ from ...modeling_utils import PreTrainedModel
 
 # TODO: move this to logits_process + check if done correctly
 class EOSChannelFilterAndScaleLogitsProcessor(LogitsProcessor):
-    def __init__(self, batch_size: int, eos_value: int, eos_scale: float = 0.8, device: str = "cpu"):
+    def __init__(self, batch_size: int, eos_value: int, eos_scale: float = 0.8):
         self.batch_size = batch_size
         self.eos_value = eos_value
         self.eos_scale = eos_scale
