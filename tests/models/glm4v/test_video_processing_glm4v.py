@@ -275,18 +275,14 @@ class Glm4vVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
             # Test not batched input
             encoded_videos = video_processing(
-                video_inputs_nested[0],
-                video_metadata=[video_metadata[0]],
-                return_tensors="pt"
+                video_inputs_nested[0], video_metadata=[video_metadata[0]], return_tensors="pt"
             )[self.input_name]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
 
             # Test batched
-            encoded_videos = video_processing(
-                video_inputs_nested,
-                video_metadata=video_metadata,
-                return_tensors="pt"
-            )[self.input_name]
+            encoded_videos = video_processing(video_inputs_nested, video_metadata=video_metadata, return_tensors="pt")[
+                self.input_name
+            ]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)

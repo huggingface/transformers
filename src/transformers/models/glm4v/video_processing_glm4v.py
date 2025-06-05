@@ -104,7 +104,8 @@ class Glm4vVideoProcessorInitKwargs(VideosKwargs):
     patch_size: Optional[int] = None
     temporal_patch_size: Optional[int] = None
     merge_size: Optional[int] = None
-
+    image_mean: Optional[List[float]] = None
+    image_std: Optional[List[float]] = None
 
 @add_start_docstrings(
     "Constructs a fast GLM-4V image processor that dynamically resizes videos based on the original videos.",
@@ -142,13 +143,6 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
 
     def __init__(self, **kwargs: Unpack[Glm4vVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
-
-        self.patch_size = kwargs.get("patch_size", self.patch_size)
-        self.temporal_patch_size = kwargs.get("temporal_patch_size", self.temporal_patch_size)
-        self.max_frame_count = kwargs.get("max_frame_count", self.max_frame_count)
-        self.merge_size = kwargs.get("merge_size", self.merge_size)
-        self.num_frames = kwargs.get("num_frames", self.num_frames)
-        self.fps = kwargs.get("fps", self.fps)
 
     def sample_frames(
         self,
