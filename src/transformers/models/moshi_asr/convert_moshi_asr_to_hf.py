@@ -191,6 +191,8 @@ def write_model(
     os.makedirs(output_dir, exist_ok=True)
 
     config = MoshiAsrConfig()
+    config.use_cache = True
+    config.codec_config.sliding_window = 250
 
     model_path = cached_file(
         input_path_or_repo,
@@ -235,8 +237,10 @@ def write_model(
     del model.config.codec_config._name_or_path
 
     # default generation config
-    # TODO: @eustlb
-    # model.generation_config...
+    model.generation_config._from_model_config = False
+    model.generation_config.audio_window_size = 1
+    model.generation_config.cache_implementation = "sliding_window"
+    model.generation_config.codec_cache_implementation = "sliding_window"
 
     print("Saving the model.")
     model.save_pretrained(output_dir, safe_serialization=safe_serialization)
@@ -334,7 +338,7 @@ if __name__ == "__main__":
         "asr300m-pytorch-7b8d3416@150.safetensors",
         "kmhf/asr",
         "mimi-pytorch-e351c8d8@125.safetensors",
-        "./tmp",
+        "/Users/eustachelebihan/dev/add-moshi-asr/tmp",
         safe_serialization=True,
     )
 
@@ -342,5 +346,5 @@ if __name__ == "__main__":
         "kmhf/asr",
         "tokenizer_spm_48k_multi6_2.model",
         "kyutai/mimi",
-        "./tmp",
+        "/Users/eustachelebihan/dev/add-moshi-asr/tmp",
     )
