@@ -25,7 +25,6 @@ from ...test_video_processing_common import VideoProcessingTestMixin, prepare_vi
 
 
 if is_torch_available():
-    import torch
     from PIL import Image
 
 if is_vision_available():

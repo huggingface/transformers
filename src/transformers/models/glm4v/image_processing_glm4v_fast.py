@@ -106,7 +106,6 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
         else:
             size = self.size
-        # backward compatibility: override size with min_pixels and max_pixels if they are provided
 
         super().__init__(size=size, **kwargs)
 
