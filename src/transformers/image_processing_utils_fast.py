@@ -281,6 +281,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 f" {size}."
             )
         # This is a workaround to avoid a bug in torch.compile when dealing with uint8 on AMD MI3XX GPUs
+        # Tracked in PyTorch issue: https://github.com/pytorch/pytorch/issues/155209
         # TODO: remove this once the bug is fixed (detected with torch==2.7.0+git1fee196, torchvision==0.22.0+9eb57cd)
         if torch.compiler.is_compiling() and is_rocm_platform():
             return self.compile_friendly_resize(image, new_size, interpolation, antialias)
