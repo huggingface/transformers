@@ -20,6 +20,7 @@
 # limitations under the License.
 
 import math
+import types
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
@@ -40,6 +41,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import LossKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
 from ..auto import AutoModel
+from ..mimi.modeling_mimi import MimiConv1dPaddingCache
 from .configuration_moshi_asr import MoshiAsrConfig
 
 
@@ -1157,6 +1159,49 @@ class MoshiAsrForConditionalGeneration(MoshiAsrPreTrainedModel, GenerationMixin)
                 .contiguous()
             )
 
+            ### PROTO
+            # TODO: @eustlb, we are in the strange case here where the codec model should have a generation config.
+            from transformers.generation.utils import GenerationConfig
+
+            self.codec_model.generation_config = GenerationConfig()
+            # copy depth decoder generation conf attr to the depth decoder generation config
+            prefix = "codec_"
+            prefix_len = len(prefix)
+            depth_decoder_attrs = {
+                attr[prefix_len:]: value
+                for attr, value in vars(self.generation_config).items()
+                if attr.startswith(prefix)
+            }
+
+            vars(self.codec_model.generation_config).update({"_from_model_config": False, **depth_decoder_attrs})
+
+            # let's use generate's cache preparation to prepare the cache for the codec model
+            temporary_model_kwargs = {}
+
+            # monkey patching the codec model with cache preparation methods since we don't want it to inherit fully from GenerationMixin
+            # Add cache-related methods from GenerationMixin to codec model
+            cache_methods = [
+                "_prepare_cache_for_generation",
+                "_get_cache",
+                "_supports_default_dynamic_cache",
+                "_get_layer_device_map_for_cache_init",
+            ]
+            for method in cache_methods:
+                setattr(self.codec_model, method, types.MethodType(getattr(self, method).__func__, self.codec_model))
+
+            self.codec_model._prepare_cache_for_generation(
+                generation_config=self.codec_model.generation_config,
+                model_kwargs=temporary_model_kwargs,
+                assistant_model=None,
+                batch_size=batch_size,
+                max_cache_length=self.config.codec_config.sliding_window,
+                device=device,
+            )
+
+            model_kwargs["encoder_past_key_values"] = temporary_model_kwargs["past_key_values"]
+            model_kwargs["padding_cache"] = MimiConv1dPaddingCache()
+            ########
+
         return inputs, input_name, model_kwargs
 
     def prepare_inputs_for_generation(
@@ -1167,6 +1212,8 @@ class MoshiAsrForConditionalGeneration(MoshiAsrPreTrainedModel, GenerationMixin)
         padding_mask: Optional[torch.Tensor] = None,
         audio_window_size: Optional[int] = None,
         current_window: Optional[Tuple[int, int]] = None,
+        encoder_past_key_values: Optional[Cache] = None,
+        padding_cache: Optional[MimiConv1dPaddingCache] = None,
         **kwargs,
     ):
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
@@ -1175,14 +1222,19 @@ class MoshiAsrForConditionalGeneration(MoshiAsrPreTrainedModel, GenerationMixin)
             cache_position = model_inputs["cache_position"]
 
             audio_positions = cache_position - self.config.delay_in_tokens
-            start, end = current_window[0]  # closed interval
+            start, end = current_window[0]
             if audio_positions[-1] >= end:
                 # we need to encode the new audio tokens
                 with torch.no_grad():
                     input_values_start_idx = start * self.config.frame_size
                     input_values_end_idx = (start + audio_window_size) * self.config.frame_size
                     current_input_values = input_values[..., input_values_start_idx:input_values_end_idx]
-                    new_audio_tokens = self.codec_model.encode(current_input_values).audio_codes.transpose(1, 2)
+                    codec_model_output = self.codec_model.encode(
+                        current_input_values,
+                        encoder_past_key_values=encoder_past_key_values,
+                        padding_cache=padding_cache,
+                    )
+                    new_audio_tokens = codec_model_output.audio_codes.transpose(1, 2)
 
                 audio_tokens.copy_(new_audio_tokens)
 
@@ -1195,8 +1247,8 @@ class MoshiAsrForConditionalGeneration(MoshiAsrPreTrainedModel, GenerationMixin)
             current_audio_tokens_idxs = (audio_positions - start).clamp(min=0)
             current_audio_tokens = audio_tokens[:, current_audio_tokens_idxs, :]
 
+            current_audio_tokens[:, audio_positions <= 0, :] = self.config.audio_pad_token_id
             current_audio_tokens[:, cache_position == 0, :] = self.config.audio_bos_token_id
-            current_audio_tokens[:, audio_positions < 0, :] = self.config.audio_pad_token_id
 
             input_ids = model_inputs.pop("input_ids")
             input_ids = torch.cat(
@@ -1204,9 +1256,6 @@ class MoshiAsrForConditionalGeneration(MoshiAsrPreTrainedModel, GenerationMixin)
                 dim=2,
             )
             model_inputs["input_ids"] = input_ids
-
-        # input_ids = model_inputs.pop("input_ids")
-        # model_inputs["inputs_embeds"] = self.model.embed_tokens(input_ids)
 
         return model_inputs
 
@@ -1222,6 +1271,8 @@ class MoshiAsrForConditionalGeneration(MoshiAsrPreTrainedModel, GenerationMixin)
             # TODO: @eustlb, we way padded sequences should be handled from generate would be with max_new_tokens
             # batch idx specific parameters to that the stopping_criteria handles it
             max_new_tokens = audio_tokens_mask.sum(dim=-1).max()
+            max_new_tokens += self.config.delay_in_tokens
+
         # TODO: handle when max_new_tokens is in kwargs
         # TODO: cache_implementation = sliding_window should be in default generation_config
 
