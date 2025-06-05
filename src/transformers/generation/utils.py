@@ -1552,7 +1552,7 @@ class GenerationMixin(ContinuousMixin):
                     f"The main and assistant moedels have different tokenizers. Please provide `tokenizer` and `assistant_tokenizer` to `generate()` {doc_reference}."
                 )
 
-    def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
+    def _validate_model_kwargs(self, model_kwargs: Dict[str, Any], valid_external_model_kwargs: Optional[List[str]] = None):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
         # If a `Cache` instance is passed, checks whether the model is compatible with it
         if isinstance(model_kwargs.get("past_key_values", None), Cache) and not self._supports_cache_class:
@@ -1598,9 +1598,14 @@ class GenerationMixin(ContinuousMixin):
                 decoder_model_args = set(inspect.signature(decoder.forward).parameters)
                 model_args |= {f"decoder_{x}" for x in decoder_model_args}
 
+        if valid_external_model_kwargs is None:
+            valid_external_model_kwargs = []
+
         for key, value in model_kwargs.items():
             if value is not None and key not in model_args:
-                unused_model_args.append(key)
+                # External exceptions we allow even if it's not in the signature
+                if key not in valid_external_model_kwargs:
+                    unused_model_args.append(key)
 
         if unused_model_args:
             raise ValueError(
@@ -2365,11 +2370,13 @@ class GenerationMixin(ContinuousMixin):
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
         assistant_tokenizer = kwargs.pop("assistant_tokenizer", None)  # only used for assisted generation
+        # Some kwargs require to be integrated externally as we need it for preparation and not the model forward itself
+        valid_external_model_kwargs = kwargs.pop("valid_external_model_kwargs", None)
 
         generation_config, model_kwargs = self._prepare_generation_config(
             generation_config, use_model_defaults, **kwargs
         )
-        self._validate_model_kwargs(model_kwargs.copy())
+        self._validate_model_kwargs(model_kwargs.copy(), valid_external_model_kwargs)
         self._validate_assistant(assistant_model, tokenizer, assistant_tokenizer)
 
         # 2. Set generation parameters if not already defined

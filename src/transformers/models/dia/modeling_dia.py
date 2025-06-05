@@ -346,10 +346,8 @@ class DiaRMSNorm(nn.Module):
 
 
 def apply_rotary_pos_emb(
-    tensor: torch.Tensor, position_embeddings: Tuple[torch.Tensor, torch.Tensor], unsqueeze_dim: int = 1
+    tensor: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, unsqueeze_dim: int = 1
 ) -> torch.Tensor:
-    cos = position_embeddings[0]
-    sin = position_embeddings[1]
     first_half, second_half = torch.chunk(tensor.to(torch.float32), 2, dim=-1)
     first_part = first_half * cos - second_half * sin
     second_part = second_half * cos + first_half * sin
@@ -458,13 +456,16 @@ class DiaSelfAttention(nn.Module):  # Modular : LlamaAttentions
         key_states = self.k_proj(hidden_states).view(hidden_shape)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        query_states = apply_rotary_pos_emb(query_states, position_embeddings, -2).transpose(1, 2)
-        key_states = apply_rotary_pos_emb(key_states, position_embeddings, -2).transpose(1, 2)
+        cos, sin = position_embeddings
+        query_states = apply_rotary_pos_emb(query_states, cos, sin, -2).transpose(1, 2)
+        key_states = apply_rotary_pos_emb(key_states, cos, sin, -2).transpose(1, 2)
 
         if past_key_values is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             # save all key/value_states to cache to be re-used for fast auto-regressive generation
             key_states, value_states = past_key_values.self_attention_cache.update(
-                key_states, value_states, self.layer_idx, {"cache_positions": cache_position}
+                key_states, value_states, self.layer_idx, cache_kwargs
             )
 
         attention_interface: Callable = eager_attention_forward
@@ -909,9 +910,9 @@ class DiaModel(DiaPreTrainedModel):
                 # (2*bsz, 1, channel)
                 decoder_input_ids = torch.full((encoder_outputs[0].shape[0], 1, 9), 1026, device=self.device)
 
-        # We forward with a 2D tensor (bsz * channels, seq_len) but internally we use a 3D tensor (bsz, seq_len, channels)
-        if decoder_input_ids.ndim == 2:
-            decoder_input_ids = decoder_input_ids.reshape(encoder_outputs[0].shape[0], -1, self.config.num_channels)
+        # We forward with a 2D tensor (bsz * channels, seq_len) on generate
+        # but internally we always use a 3D tensor (bsz, seq_len, channels)
+        decoder_input_ids = decoder_input_ids.reshape(encoder_outputs[0].shape[0], decoder_input_ids.shape[1], -1)
 
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
