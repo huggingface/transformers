@@ -53,7 +53,7 @@ logger = logging.get_logger(__name__)
 
 
 # TODO: temporarily for debugging
-debug = True
+debug = False
 
 
 class DiaPreTrainedModel(PreTrainedModel):
@@ -368,13 +368,8 @@ class DiaRotaryEmbedding(nn.Module):
         self.register_buffer("freqs", freqs, persistent=False)
 
     @torch.no_grad()
-    def forward(self, x: torch.Tensor, position_ids: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        # TODO: this should not be needed when using proper position ids
-        if position_ids.ndim == 1:
-            # Ensure position_ids is at least 2D, e.g., (1, seq_len)
-            position_ids = position_ids.unsqueeze(0)
-
-        position_ids_expanded = position_ids[:, :, None, None].float().repeat(x.shape[0], 1, 1, 1)
+    def forward(self, position_ids: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        position_ids_expanded = position_ids[:, :, None, None].float()
         full_freqs = position_ids_expanded.float() / self.freqs.to(
             device=position_ids_expanded.device, dtype=position_ids_expanded.dtype
         )
@@ -620,8 +615,10 @@ class DiaEncoder(DiaPreTrainedModel):
         # RoPE
         # Note: We expect right padding and hence always generate
         # the position ids on the fly to reduce preparation overhead
-        position_ids = torch.arange(input_ids.shape[-1], device=input_ids.device)[None, :]
-        position_embeddings = self.rotary_embeddings(hidden_states, position_ids)
+        position_ids = torch.arange(input_ids.shape[-1], device=input_ids.device)[None, :].expand(
+            input_ids.shape[0], -1
+        )
+        position_embeddings = self.rotary_embeddings(position_ids)
 
         attention_mask = self._update_full_mask(
             attention_mask,
@@ -750,11 +747,11 @@ class DiaDecoder(DiaPreTrainedModel):
                 past_key_values_length, past_key_values_length + seq_length, device=self.device
             )
         if position_ids is None:
-            position_ids = cache_position[None, :]
+            position_ids = cache_position[None, :].expand(batch_size, -1)
 
         # RoPE
         hidden_states = self.embeddings(input_ids)
-        position_embeddings = self.rotary_embeddings(hidden_states, position_ids)
+        position_embeddings = self.rotary_embeddings(position_ids)
 
         if attention_mask is None and not is_torchdynamo_compiling():
             # required mask seq length can be calculated via length of past cache

@@ -252,10 +252,9 @@ class DiaGenerationMixin(GenerationMixin):
 
         cfg_processor = None
         # TODO: save dia generation config with proper values and disallow non-cfg?
-        #if generation_config.guidance_scale is not None and generation_config.guidance_scale != 1:
+        # if generation_config.guidance_scale is not None and generation_config.guidance_scale != 1:
         cfg_processor = DiaClassifierFreeGuidanceFilterLogitsProcessor(
-            cfg_scale=generation_config.guidance_scale
-            if generation_config.guidance_scale is not None else 3.0,
+            cfg_scale=generation_config.guidance_scale if generation_config.guidance_scale is not None else 3.0,
             cfg_filter_top_k=model_kwargs.get("cfg_guidance_top_k", 50),
             device=device,
         )
@@ -324,10 +323,7 @@ class DiaGenerationMixin(GenerationMixin):
         )
 
     def _prepare_generation_config(
-        self,
-        generation_config: Optional[GenerationConfig],
-        use_model_defaults: Optional[bool] = None,
-        **kwargs: Dict
+        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Dict
     ) -> Tuple[GenerationConfig, Dict]:
         generation_config, model_kwargs = super()._prepare_generation_config(
             generation_config, use_model_defaults, **kwargs
@@ -399,7 +395,9 @@ class DiaGenerationMixin(GenerationMixin):
 
         # Default to all bos tokens if nothing is provided
         if decoder_input_ids is None:
-            decoder_input_ids = torch.full((real_batch_size, 1, num_channels), decoder_start_token_id, dtype=torch.long, device=device)
+            decoder_input_ids = torch.full(
+                (real_batch_size, 1, num_channels), decoder_start_token_id, dtype=torch.long, device=device
+            )
 
         # Get all audio and padding lengths
         if decoder_attention_mask is not None:
@@ -408,7 +406,9 @@ class DiaGenerationMixin(GenerationMixin):
             padding_lens = decoder_attention_mask.shape[-1] - decoder_attention_mask.sum(dim=-1)
             audio_lens = decoder_attention_mask.shape[-1] - padding_lens
         else:
-            decoder_attention_mask = torch.ones(size=(real_batch_size, decoder_input_ids.shape[1]), dtype=torch.long, device=device)
+            decoder_attention_mask = torch.ones(
+                size=(real_batch_size, decoder_input_ids.shape[1]), dtype=torch.long, device=device
+            )
             padding_lens = [0] * real_batch_size
             audio_lens = [decoder_input_ids.shape[1]] * real_batch_size
         # +1 for bos
@@ -424,10 +424,10 @@ class DiaGenerationMixin(GenerationMixin):
         max_audio_len = 0
         for i in range(real_batch_size):
             padding_size = padding_lens[i]
-            prefill[i, :padding_size + 1, :] = decoder_start_token_id
+            prefill[i, : padding_size + 1, :] = decoder_start_token_id
 
             # Right padded due to DAC
-            prompt = decoder_input_ids[i, :audio_lens[i], ...]
+            prompt = decoder_input_ids[i, : audio_lens[i], ...]
 
             # Second condition in case no audio has been given
             if prompt is not None and not (prompt == decoder_start_token_id).any():
@@ -450,8 +450,8 @@ class DiaGenerationMixin(GenerationMixin):
         )
 
         # 4. Overwrite and convert to 2D
-        decoder_input_ids = delayed_batch[:, :max_audio_len + 1, :].reshape(real_batch_size * num_channels, -1)
-        model_kwargs["decoder_attention_mask"] = decoder_attention_mask[:, :max_audio_len + 1]
+        decoder_input_ids = delayed_batch[:, : max_audio_len + 1, :].reshape(real_batch_size * num_channels, -1)
+        model_kwargs["decoder_attention_mask"] = decoder_attention_mask[:, : max_audio_len + 1]
         model_kwargs["decoder_delay_mask"] = delayed_batch
 
         return decoder_input_ids, model_kwargs
@@ -470,19 +470,28 @@ class DiaGenerationMixin(GenerationMixin):
         # Post processing for CFG and overwriting via delay pattern mask
         # 1. Reshape (bsz * channels, seq_len) to (bsz, seq_len, channels)
         batch_size = encoder_outputs[0].shape[0] // 2 if uses_cfg else encoder_outputs[0].shape[0]
-        model_inputs["decoder_input_ids"] = model_inputs["decoder_input_ids"].reshape(batch_size, -1, self.config.decoder_config.num_channels)
+        model_inputs["decoder_input_ids"] = model_inputs["decoder_input_ids"].reshape(
+            batch_size, -1, self.config.decoder_config.num_channels
+        )
 
         # 2. Delay pattern mask -- force tokens if not allowed to predict (!= -1 in mask)
-        model_inputs["decoder_input_ids"] = self.apply_delay_mask(model_inputs["decoder_input_ids"], decoder_delay_mask)
+        model_inputs["decoder_input_ids"] = self.apply_delay_mask(
+            model_inputs["decoder_input_ids"], decoder_delay_mask
+        )
 
         # 3. Apply CFG duplication if needed
         if uses_cfg:
             model_inputs["decoder_input_ids"] = model_inputs["decoder_input_ids"].repeat_interleave(2, dim=0)
 
             if model_inputs["decoder_attention_mask"] is not None:
-                model_inputs["decoder_attention_mask"] = model_inputs["decoder_attention_mask"].repeat_interleave(2, dim=0)
+                model_inputs["decoder_attention_mask"] = model_inputs["decoder_attention_mask"].repeat_interleave(
+                    2, dim=0
+                )
 
-        # Specifically avoid kwarg clashesh
+            if model_inputs["decoder_position_ids"] is not None:
+                model_inputs["decoder_position_ids"] = model_inputs["decoder_position_ids"].repeat_interleave(2, dim=0)
+
+        # Avoid specific kwarg clashes
         for key in ["uses_cfg", "cfg_guidance_top_k", "eos_scale"]:
             model_inputs.pop(key, None)
 
@@ -659,7 +668,9 @@ class DiaGenerationMixin(GenerationMixin):
         return result_BxTxC
 
     @staticmethod
-    def build_revert_indices(B: int, T: int, C: int, delay_pattern: List[int], padding_sizes: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
+    def build_revert_indices(
+        B: int, T: int, C: int, delay_pattern: List[int], padding_sizes: List[int]
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Precompute indices for the revert operation using PyTorch.
 
@@ -678,7 +689,7 @@ class DiaGenerationMixin(GenerationMixin):
 
         # We shift the delays in order to account for left padding (if needed)
         delay_arr = torch.tensor(delay_pattern, dtype=torch.int32, device=device)
-        delay_arr = (delay_arr[None, :] + torch.tensor(padding_sizes ,dtype=torch.int32)[:, None])[:, None, :]
+        delay_arr = (delay_arr[None, :] + torch.tensor(padding_sizes, dtype=torch.int32)[:, None])[:, None, :]
 
         t_idx_BT1 = torch.broadcast_to(torch.arange(T, device=device).unsqueeze(0), [B, T])
         t_idx_BT1 = t_idx_BT1.unsqueeze(-1)
@@ -738,6 +749,8 @@ class DiaGenerationMixin(GenerationMixin):
         # Create T tensor on the correct device for comparison
         T_tensor = torch.tensor(T, device=device)
 
-        result_BxTxC = torch.where(t_idx_BxTxC >= T_tensor, pad_tensor, gathered_BxTxC)  # Changed np.where to torch.where
+        result_BxTxC = torch.where(
+            t_idx_BxTxC >= T_tensor, pad_tensor, gathered_BxTxC
+        )  # Changed np.where to torch.where
 
         return result_BxTxC

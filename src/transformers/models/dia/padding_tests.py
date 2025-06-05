@@ -85,7 +85,9 @@ def apply_audio_delay(
     return result_BxTxC
 
 
-def build_revert_indices(B: int, T: int, C: int, delay_pattern: List[int], padding_sizes: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
+def build_revert_indices(
+    B: int, T: int, C: int, delay_pattern: List[int], padding_sizes: List[int]
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Precompute indices for the revert operation using PyTorch.
 
@@ -100,7 +102,7 @@ def build_revert_indices(B: int, T: int, C: int, delay_pattern: List[int], paddi
 
     # We shift the delays in order to account for left padding (if needed)
     delay_arr = torch.tensor(delay_pattern, dtype=torch.int32, device=device)
-    delay_arr = (delay_arr[None, :] + torch.tensor(padding_sizes ,dtype=torch.int32)[:, None])[:, None, :]
+    delay_arr = (delay_arr[None, :] + torch.tensor(padding_sizes, dtype=torch.int32)[:, None])[:, None, :]
 
     t_idx_BT1 = torch.broadcast_to(torch.arange(T, device=device).unsqueeze(0), [B, T])
     t_idx_BT1 = t_idx_BT1.unsqueeze(-1)
@@ -165,10 +167,11 @@ def revert_audio_delay(
     return result_BxTxC
 
 
-
 def prepare_audio(audios: List[Optional[torch.Tensor]], delay_pattern: List[int], batch_size: Optional[int] = None):
     if audios is None and batch_size is None:
-        raise ValueError("To process audio in Dia, we need either a batch of processed audios or an associated batch size based on the text input.")
+        raise ValueError(
+            "To process audio in Dia, we need either a batch of processed audios or an associated batch size based on the text input."
+        )
 
     audios = [None] * batch_size if audios is None else audios
 
@@ -180,13 +183,15 @@ def prepare_audio(audios: List[Optional[torch.Tensor]], delay_pattern: List[int]
     max_delay = max(delay_pattern)
     batch_size = len(audios)
     # +1 for bos
-    max_len = max_audio_len + max_delay  + 1
+    max_len = max_audio_len + max_delay + 1
     num_channels = len(delay_pattern)
 
     return audios, audio_padding_sizes, (batch_size, max_len, num_channels)
 
 
-def prefill_audios(audios: List[Optional[torch.Tensor]], bos_id: int, delay_pattern: List[int], batch_size: Optional[int] = None):
+def prefill_audios(
+    audios: List[Optional[torch.Tensor]], bos_id: int, delay_pattern: List[int], batch_size: Optional[int] = None
+):
     audios, audio_padding_sizes, (bsz, seq_len, channels) = prepare_audio(audios, delay_pattern, batch_size)
 
     # dummy values
@@ -199,7 +204,7 @@ def prefill_audios(audios: List[Optional[torch.Tensor]], bos_id: int, delay_patt
     # write values with appropriate padding
     for i in range(bsz):
         padding_size = audio_padding_sizes[i]
-        prefill[i, :padding_size + 1, :] = bos_id
+        prefill[i, : padding_size + 1, :] = bos_id
 
         prompt = audios[i]
         if prompt is not None:
@@ -220,14 +225,16 @@ def prefill_audios(audios: List[Optional[torch.Tensor]], bos_id: int, delay_patt
         precomp=delay_precomp,
     )
 
-    delayed_input = delayed_batch[:, :max(audio_padding_sizes) + 1, :]
-    forced_output = delayed_batch[:, max(audio_padding_sizes) + 1:, :]
+    delayed_input = delayed_batch[:, : max(audio_padding_sizes) + 1, :]
+    forced_output = delayed_batch[:, max(audio_padding_sizes) + 1 :, :]
 
     return delayed_batch, delayed_input, forced_output, audio_padding_sizes, (bsz, seq_len, channels)
 
 
 class HangoverLogitsProcessor:
-    def __init__(self, delay_pattern: List[int], forced_output: torch.Tensor, batch_size: int, channels: int, vocab_size: int):
+    def __init__(
+        self, delay_pattern: List[int], forced_output: torch.Tensor, batch_size: int, channels: int, vocab_size: int
+    ):
         delay_tensor = torch.tensor(delay_pattern, dtype=torch.int32)[None, :].expand(batch_size, -1)
         self.cannot_predict_counter = delay_tensor.clone()
 
@@ -248,7 +255,11 @@ class HangoverLogitsProcessor:
             return scores
 
         # force logits to be -inf except for the predetermined chosen vocab
-        all_inf_tensor = (torch.ones(self.vocab_size) * torch.finfo(scores.dtype).min)[None, None, :].expand(self.batch_size, self.channels, -1).clone()
+        all_inf_tensor = (
+            (torch.ones(self.vocab_size) * torch.finfo(scores.dtype).min)[None, None, :]
+            .expand(self.batch_size, self.channels, -1)
+            .clone()
+        )
         current_forced_output = self.forced_output[:, self.force_counter, :]
         all_inf_tensor[self.batch_idx, self.seq_idx, current_forced_output] = 0.0
 
@@ -263,7 +274,13 @@ class HangoverLogitsProcessor:
         return scores
 
 
-def revert_delay(delayed_batch: torch.Tensor, shape: Tuple[int, int, int], delay_pattern: List[int], audio_padding_sizes: List[int], pad_id: int):
+def revert_delay(
+    delayed_batch: torch.Tensor,
+    shape: Tuple[int, int, int],
+    delay_pattern: List[int],
+    audio_padding_sizes: List[int],
+    pad_id: int,
+):
     bsz, seq_len, channels = shape
 
     revert_precomp = build_revert_indices(
@@ -278,7 +295,7 @@ def revert_delay(delayed_batch: torch.Tensor, shape: Tuple[int, int, int], delay
         pad_value=pad_id,
         precomp=revert_precomp,
         T=seq_len,
-    )[:, :-max(delay_pattern), :]
+    )[:, : -max(delay_pattern), :]
 
     min_valid_index = 0
     max_valid_index = 1023
@@ -293,7 +310,9 @@ delay_pattern = [0, 8, 9, 10, 11, 12, 13, 14, 15]
 audio_bos_id = 1026
 audio_pad_id = 1025
 
-delayed_batch, delayed_input, forced_output, audio_padding_sizes, (bsz, seq_len, channels) = prefill_audios(audios, audio_bos_id, delay_pattern)
+delayed_batch, delayed_input, forced_output, audio_padding_sizes, (bsz, seq_len, channels) = prefill_audios(
+    audios, audio_bos_id, delay_pattern
+)
 
 
 bos = 2
@@ -307,6 +326,8 @@ prediction_2 = processor.forward(predictions)
 
 
 # revert
-codebooks = revert_delay(delayed_batch, (bsz, seq_len, channels), delay_pattern, audio_padding_sizes, pad_id=audio_pad_id)
+codebooks = revert_delay(
+    delayed_batch, (bsz, seq_len, channels), delay_pattern, audio_padding_sizes, pad_id=audio_pad_id
+)
 
 print(codebooks)

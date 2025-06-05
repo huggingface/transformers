@@ -1552,7 +1552,9 @@ class GenerationMixin(ContinuousMixin):
                     f"The main and assistant moedels have different tokenizers. Please provide `tokenizer` and `assistant_tokenizer` to `generate()` {doc_reference}."
                 )
 
-    def _validate_model_kwargs(self, model_kwargs: Dict[str, Any], valid_external_model_kwargs: Optional[List[str]] = None):
+    def _validate_model_kwargs(
+        self, model_kwargs: Dict[str, Any], valid_external_model_kwargs: Optional[List[str]] = None
+    ):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
         # If a `Cache` instance is passed, checks whether the model is compatible with it
         if isinstance(model_kwargs.get("past_key_values", None), Cache) and not self._supports_cache_class:
