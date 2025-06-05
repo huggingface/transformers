@@ -148,6 +148,7 @@ class Glm4vProcessor(ProcessorMixin):
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             timestamps = videos_inputs["timestamps"]
             video_grid_thw = videos_inputs["video_grid_thw"]
+
             videos_inputs = {k: v for k, v in videos_inputs.items() if k not in ["timestamps"]}
         else:
             videos_inputs = {}
@@ -167,6 +168,7 @@ class Glm4vProcessor(ProcessorMixin):
                     text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
+
         if video_grid_thw is not None:
             merge_length = self.video_processor.merge_size**2
             video_index = 0
@@ -191,7 +193,7 @@ class Glm4vProcessor(ProcessorMixin):
                         video_structure += frame_structure
                     text[i] = text[i].replace(self.video_token, video_structure, 1)
                     video_index += 1
-                print(text)
+
                 for frame_idx in range(len(video_grid_thw)):
                     if self.image_token in text[i]:
                         num_image_tokens = video_grid_thw[frame_idx].prod() // merge_length

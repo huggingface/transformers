@@ -45,7 +45,6 @@ from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLVisionSdpaAttention,
 )
 from transformers.models.qwen2_5_vl.processing_qwen2_5_vl import (
-    Qwen2_5_VLImagesKwargs,
     Qwen2_5_VLProcessor,
     Qwen2_5_VLProcessorKwargs,
     Qwen2_5_VLVideosProcessorKwargs,
@@ -56,7 +55,7 @@ from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import LossKwargs, is_torchdynamo_compiling
 from ...video_utils import VideoInput
@@ -1255,8 +1254,10 @@ class Glm4vVideosProcessorKwargs(Qwen2_5_VLVideosProcessorKwargs):
     pass
 
 
-class Glm4vImagesKwargs(Qwen2_5_VLImagesKwargs):
-    pass
+class Glm4vImagesKwargs(ImagesKwargs):
+    patch_size: Optional[int]
+    temporal_patch_size: Optional[int]
+    merge_size: Optional[int]
 
 
 class Glm4vProcessorKwargs(Qwen2_5_VLProcessorKwargs):
@@ -1339,7 +1340,7 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
             **kwargs,
         )
         if images is not None:
-            image_inputs = self.image_processor(images=images, videos=None, **output_kwargs["images_kwargs"])
+            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = image_inputs["image_grid_thw"]
         else:
             image_inputs = {}
@@ -1350,7 +1351,7 @@ class Glm4vProcessor(Qwen2_5_VLProcessor):
             timestamps = videos_inputs["timestamps"]
             video_grid_thw = videos_inputs["video_grid_thw"]
 
-            videos_inputs = {k: v for k, v in videos_inputs.items() if k not in ["timestamps", "durations"]}
+            videos_inputs = {k: v for k, v in videos_inputs.items() if k not in ["timestamps"]}
         else:
             videos_inputs = {}
             timestamps = []

@@ -17,11 +17,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast Image processor class for Qwen2-VL."""
+"""Fast Image processor class for CogVLM."""
 
 from typing import Dict, List, Optional, Union
 
-from ...image_processing_utils import BatchFeature
+from ...image_processing_utils import (
+    BatchFeature,
+)
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     DefaultFastImageProcessorKwargs,
@@ -48,7 +50,7 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
-from ...video_utils import VideoInput, make_batched_videos
+from ...video_utils import VideoInput
 from .image_processing_glm4v import smart_resize
 
 
@@ -76,6 +78,7 @@ class Glm4vFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
     """
+
     patch_size: Optional[int]
     temporal_patch_size: Optional[int]
     merge_size: Optional[int]
@@ -192,7 +195,6 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
                 )
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
-
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
         grouped_images, grouped_images_index = group_images_by_shape(resized_images)
@@ -334,6 +336,8 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
             vision_grid_thws = torch.tensor(vision_grid_thws)
             data.update({"pixel_values": pixel_values, "image_grid_thw": vision_grid_thws})
 
+        return BatchFeature(data=data, tensor_type=return_tensors)
+
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
         """
         A utility that returns number of image patches for a given image size.
@@ -348,14 +352,13 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `int`: Number of image patches per image.
         """
-        min_pixels = images_kwargs.get("min_pixels", None) or self.size["shortest_edge"]
-        max_pixels = images_kwargs.get("max_pixels", None) or self.size["longest_edge"]
+        size = images_kwargs.get("size", None) or self.size
         patch_size = images_kwargs.get("patch_size", None) or self.patch_size
         merge_size = images_kwargs.get("merge_size", None) or self.merge_size
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
-            height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
+            height, width, factor, min_pixels=size["shortest_edge"], max_pixels=size["longest_edge"]
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w
