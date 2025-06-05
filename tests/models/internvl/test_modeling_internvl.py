@@ -329,7 +329,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_logits_all = Expectations(
             {
                 ("xpu", 3): torch.tensor([11.7500, 14.7500, 14.1250, 10.5625, 6.7812], dtype=torch.bfloat16),
-                ("cuda", 7): torch.tensor([11.9375, 14.8750, 14.0625, 10.7500, 6.9062], dtype=torch.bfloat16),
+                ("cuda", 7): torch.tensor([11.9375, 14.7500, 14.4375, 10.8125,  7.0938], dtype=torch.bfloat16),
             }
         )  # fmt: skip
         expected_logits = expected_logits_all.get_expectation()
@@ -358,7 +358,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "Whispers of dawn,\nSilent whispers of the night,\nNew day's light.",
-                ("cuda", 7): "Whispers of dawn,\nSilent whispers of the night,\nNew day's light begins.",
+                ("cuda", 7): "Whispers of dawn,\nSilent whispers of the night,\nNew day's light.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -425,7 +425,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Gate"',
-                ("cuda", 7): 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Gate of',
+                ("cuda", 7): 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Arch,"',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -483,7 +483,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the differences:\n\n1. **Foreground",
-                ("cuda", 7): "user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the differences:\n\n1. **Angle",
+                ("cuda", 7): "user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the differences:\n\n1. **Foreground",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -606,7 +606,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image:**\n   - The Statue of Liberty is prominently featured on an",
-                ("cuda", 7): "user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image**: This shows the Statue of Liberty on Liberty Island, with the",
+                ("cuda", 7): "user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image:**\n   - The Statue of Liberty is prominently featured on an",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -620,7 +620,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot.",
-                ("cuda", 7): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nA forehand shot",
+                ("cuda", 7): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -688,13 +688,13 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         actual_logits = output.logits[0, -1, :5].cpu()
-        expected_logits = torch.tensor([-9.8750, -0.4258, 1.4844, -10.3125, -10.3125], dtype=torch.bfloat16)
+        expected_logits = torch.tensor([-9.8750, -0.5703, 1.4297, -10.3125, -10.3125], dtype=torch.bfloat16)
         # The original implementation and the transformers implementation do not match exactly, hence the higher tolerance.
         # The difference is likely due to the different implementations of the attention mechanism (different order of operations)
         # between the transformers Llama model and the original InternLM model.
         # The difference has almost no effect on the output tokens, but it does affect the logits a lot more.
         self.assertTrue(
-            torch.allclose(actual_logits, expected_logits, atol=1),
+            torch.allclose(actual_logits, expected_logits, atol=1e-3),
             f"Actual logits: {actual_logits}"
             f"\nExpected logits: {expected_logits}"
             f"\nDifference: {torch.abs(actual_logits - expected_logits)}",
@@ -765,7 +765,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden path leads to calm lake,\nNature's peaceful grace.",
-                ("cuda", 7): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.",
+                ("cuda", 7): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden path leads to calm lake,\nNature's peaceful grace.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -819,7 +819,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
-        expected_output = 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nA wooden path leads to the sea,\nPeaceful, still waters.'  # fmt: skip
+        expected_output = "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden path leads to calm lake,\nNature's peaceful grace."  # fmt: skip
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -940,7 +940,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After re-examining the images, I can see that they are actually",
-                ("cuda", 7): "user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. Upon closer inspection, the differences between the two images are:\n\n1. **",
+                ("cuda", 7): "user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After re-examining the images, I can see that they are actually",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -970,7 +970,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.",
-                ("cuda", 7): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nA wooden path leads to the sea,\nPeaceful, untouched dreams.",
+                ("cuda", 7): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
