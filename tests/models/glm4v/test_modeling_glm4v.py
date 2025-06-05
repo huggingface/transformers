@@ -21,6 +21,7 @@ import requests
 from transformers import (
     AutoProcessor,
     Glm4vConfig,
+    Glm4vModel,
     Glm4vForConditionalGeneration,
     is_torch_available,
     is_vision_available,
@@ -173,11 +174,7 @@ class Glm4vVisionText2TextModelTester:
 
 @require_torch
 class Glm4vModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    """
-    Model tester for `Glm4vForConditionalGeneration`.
-    """
-
-    all_model_classes = (Glm4vForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (Glm4vModel, Glm4vForConditionalGeneration) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
     _is_composite = True

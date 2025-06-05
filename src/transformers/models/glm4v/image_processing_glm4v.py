@@ -123,7 +123,7 @@ class Glm4vImageProcessor(BaseImageProcessor):
             The merge size of the vision encoder to llm encoder.
     """
 
-    model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
+    model_input_names = ["pixel_values", "image_grid_thw"]
 
     def __init__(
         self,

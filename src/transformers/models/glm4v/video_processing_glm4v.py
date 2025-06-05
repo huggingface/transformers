@@ -101,6 +101,9 @@ def smart_resize(
 
 class Glm4vVideoProcessorInitKwargs(VideosKwargs):
     max_image_size: dict[str, int] = None
+    patch_size: Optional[int] = None
+    temporal_patch_size: Optional[int] = None
+    merge_size: Optional[int] = None
 
 
 @add_start_docstrings(
@@ -190,7 +193,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         do_convert_rgb: bool = True,
         do_resize: bool = True,
         size: SizeDict = None,
-        interpolation: Optional[str] = None,
+        interpolation: Optional[str] = F.InterpolationMode.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255.0,
         do_normalize: bool = True,
@@ -203,13 +206,6 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ):
-        patch_size = patch_size or self.patch_size
-        temporal_patch_size = temporal_patch_size or self.temporal_patch_size
-        merge_size = merge_size or self.merge_size
-        image_mean = image_mean or self.image_mean
-        image_std = image_std or self.image_std
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
-
         timestamps_list = []
         if do_sample_frames:
             if video_metadata is None or (isinstance(video_metadata, list) and video_metadata[0] is None):
