@@ -13,6 +13,7 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
 )
 from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3ForCausalLM, Qwen3Model, Qwen3RotaryEmbedding
+from .configuration_dots1 import Dots1Config
 
 
 logger = logging.get_logger(__name__)
@@ -43,7 +44,9 @@ class Dots1TopkRouter(DeepseekV3TopkRouter):
 
 
 class Dots1DecoderLayer(DeepseekV3DecoderLayer):
-    pass
+    def __init__(self, config: Dots1Config, layer_idx: int):
+        super().__init__()
+        self.attention_type = config.layer_types[layer_idx]
 
 
 class Dots1PreTrainedModel(DeepseekV3PreTrainedModel):
