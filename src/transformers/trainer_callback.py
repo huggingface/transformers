@@ -99,7 +99,7 @@ class TrainerState:
     logging_steps: int = 500
     eval_steps: int = 500
     save_steps: int = 500
-    train_batch_size: int = None
+    train_batch_size: Optional[int] = None
     num_train_epochs: int = 0
     num_input_tokens_seen: int = 0
     total_flos: float = 0
@@ -110,7 +110,7 @@ class TrainerState:
     is_local_process_zero: bool = True
     is_world_process_zero: bool = True
     is_hyper_param_search: bool = False
-    trial_name: str = None
+    trial_name: Optional[str] = None
     trial_params: dict[str, Union[str, float, int, bool]] = None
     stateful_callbacks: list["TrainerCallback"] = None
 
@@ -749,12 +749,12 @@ class EarlyStoppingCallback(TrainerCallback, ExportableState):
                 "Using EarlyStoppingCallback without load_best_model_at_end=True. "
                 "Once training is finished, the best model will not be loaded automatically."
             )
-        assert (
-            args.metric_for_best_model is not None
-        ), "EarlyStoppingCallback requires metric_for_best_model to be defined"
-        assert (
-            args.eval_strategy != IntervalStrategy.NO
-        ), "EarlyStoppingCallback requires IntervalStrategy of steps or epoch"
+        assert args.metric_for_best_model is not None, (
+            "EarlyStoppingCallback requires metric_for_best_model to be defined"
+        )
+        assert args.eval_strategy != IntervalStrategy.NO, (
+            "EarlyStoppingCallback requires IntervalStrategy of steps or epoch"
+        )
 
     def on_evaluate(self, args, state, control, metrics, **kwargs):
         metric_to_check = args.metric_for_best_model

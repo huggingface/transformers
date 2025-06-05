@@ -168,7 +168,7 @@ def convert_biogpt_checkpoint_to_pytorch(biogpt_checkpoint_path, pytorch_dump_fo
     checkpoint_file = os.path.join(biogpt_checkpoint_path, "checkpoint.pt")
     if not os.path.isfile(checkpoint_file):
         raise ValueError(f"path to the file {checkpoint_file} does not exist!")
-    chkpt = torch.load(checkpoint_file, map_location="cpu")
+    chkpt = torch.load(checkpoint_file, map_location="cpu", weights_only=True)
 
     args = chkpt["cfg"]["model"]
 

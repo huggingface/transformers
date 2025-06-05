@@ -95,18 +95,18 @@ class Gemma3ImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = None,
-        do_pan_and_scan: bool = None,
-        pan_and_scan_min_crop_size: int = None,
-        pan_and_scan_max_num_crops: int = None,
-        pan_and_scan_min_ratio_to_activate: float = None,
+        do_convert_rgb: Optional[bool] = None,
+        do_pan_and_scan: Optional[bool] = None,
+        pan_and_scan_min_crop_size: Optional[int] = None,
+        pan_and_scan_max_num_crops: Optional[int] = None,
+        pan_and_scan_min_ratio_to_activate: Optional[float] = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -140,7 +140,7 @@ class Gemma3ImageProcessor(BaseImageProcessor):
     ):
         """
         Pan and Scan and image, by cropping into smaller images when the aspect ratio exceeds
-        minumum allowed ratio.
+        minimum allowed ratio.
 
         Args:
             image (`np.ndarray`):
@@ -240,22 +240,22 @@ class Gemma3ImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        do_convert_rgb: bool = None,
-        do_pan_and_scan: bool = None,
-        pan_and_scan_min_crop_size: int = None,
-        pan_and_scan_max_num_crops: int = None,
-        pan_and_scan_min_ratio_to_activate: float = None,
+        do_convert_rgb: Optional[bool] = None,
+        do_pan_and_scan: Optional[bool] = None,
+        pan_and_scan_min_crop_size: Optional[int] = None,
+        pan_and_scan_max_num_crops: Optional[int] = None,
+        pan_and_scan_min_ratio_to_activate: Optional[float] = None,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.

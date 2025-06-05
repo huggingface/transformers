@@ -56,7 +56,7 @@ python run_object_detection.py \
     --greater_is_better true \
     --load_best_model_at_end true \
     --logging_strategy epoch \
-    --evaluation_strategy epoch \
+    --eval_strategy epoch \
     --save_strategy epoch \
     --save_total_limit 2 \
     --push_to_hub true \

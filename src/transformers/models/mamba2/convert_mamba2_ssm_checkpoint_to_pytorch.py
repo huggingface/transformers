@@ -38,7 +38,7 @@ def load_state_dict_from_safetensors(mamba2_checkpoint_path: str, ckpt_name: str
 
 
 def load_state_dict_from_torch(mamba2_checkpoint_path: str, ckpt_name: str) -> Dict[str, torch.Tensor]:
-    return torch.load(path.join(mamba2_checkpoint_path, ckpt_name), map_location="cpu")
+    return torch.load(path.join(mamba2_checkpoint_path, ckpt_name), map_location="cpu", weights_only=True)
 
 
 def convert_ssm_config_to_hf_config(config_ssm: Dict, mamba2_model_dict: Dict) -> Mamba2Config:

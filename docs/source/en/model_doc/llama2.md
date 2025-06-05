@@ -74,10 +74,10 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers CLI">
 
 ```bash
-transformers-cli chat --model_name_or_path meta-llama/Llama-2-7b-chat-hf --torch_dtype auto --attn_implementation flash_attention_2
+transformers chat meta-llama/Llama-2-7b-chat-hf --torch_dtype auto --attn_implementation flash_attention_2
 ```
 
 </hfoption>
@@ -115,6 +115,10 @@ from transformers.utils.attention_visualizer import AttentionMaskVisualizer
 visualizer = AttentionMaskVisualizer("meta-llama/Llama-2-7b-hf")
 visualizer("Plants create energy through a process known as")
 ```
+
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llama-2-attn-mask.png"/>
+</div>
 
 ## Notes
 
@@ -171,4 +175,3 @@ visualizer("Plants create energy through a process known as")
 
 [[autodoc]] LlamaForSequenceClassification
     - forward
-

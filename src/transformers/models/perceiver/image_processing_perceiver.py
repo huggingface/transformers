@@ -35,6 +35,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils.import_utils import requires
 
 
 if is_vision_available():
@@ -44,6 +45,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("vision",))
 class PerceiverImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Perceiver image processor.
@@ -86,9 +88,9 @@ class PerceiverImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_center_crop: bool = True,
-        crop_size: Dict[str, int] = None,
+        crop_size: Optional[Dict[str, int]] = None,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,

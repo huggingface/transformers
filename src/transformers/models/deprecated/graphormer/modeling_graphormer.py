@@ -15,7 +15,8 @@
 """PyTorch Graphormer model."""
 
 import math
-from typing import Iterable, Iterator, List, Optional, Tuple, Union
+from collections.abc import Iterable, Iterator
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -740,7 +741,7 @@ class GraphormerPreTrainedModel(PreTrainedModel):
         Initialize the weights
         """
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # We might be missing part of the Linear init, dependant on the layer num
+            # We might be missing part of the Linear init, dependent on the layer num
             module.weight.data.normal_(mean=0.0, std=0.02)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -906,3 +907,6 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
         if not return_dict:
             return tuple(x for x in [loss, logits, hidden_states] if x is not None)
         return SequenceClassifierOutput(loss=loss, logits=logits, hidden_states=hidden_states, attentions=None)
+
+
+__all__ = ["GraphormerForGraphClassification", "GraphormerModel", "GraphormerPreTrainedModel"]

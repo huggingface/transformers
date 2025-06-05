@@ -13,10 +13,11 @@
 # limitations under the License.
 
 import warnings
+from collections.abc import Iterable
 from inspect import signature
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, List, Tuple, Union
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 import numpy as np
 from packaging.version import Version, parse
@@ -85,7 +86,7 @@ def export_pytorch(
     config: OnnxConfig,
     opset: int,
     output: Path,
-    tokenizer: "PreTrainedTokenizer" = None,
+    tokenizer: Optional["PreTrainedTokenizer"] = None,
     device: str = "cpu",
 ) -> Tuple[List[str], List[str]]:
     """
@@ -188,7 +189,7 @@ def export_tensorflow(
     config: OnnxConfig,
     opset: int,
     output: Path,
-    tokenizer: "PreTrainedTokenizer" = None,
+    tokenizer: Optional["PreTrainedTokenizer"] = None,
 ) -> Tuple[List[str], List[str]]:
     """
     Export a TensorFlow model to an ONNX Intermediate Representation (IR)
@@ -254,7 +255,7 @@ def export(
     config: OnnxConfig,
     opset: int,
     output: Path,
-    tokenizer: "PreTrainedTokenizer" = None,
+    tokenizer: Optional["PreTrainedTokenizer"] = None,
     device: str = "cpu",
 ) -> Tuple[List[str], List[str]]:
     """
@@ -321,7 +322,7 @@ def validate_model_outputs(
     onnx_model: Path,
     onnx_named_outputs: List[str],
     atol: float,
-    tokenizer: "PreTrainedTokenizer" = None,
+    tokenizer: Optional["PreTrainedTokenizer"] = None,
 ):
     from onnxruntime import InferenceSession, SessionOptions
 

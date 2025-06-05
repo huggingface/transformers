@@ -42,7 +42,7 @@ jobs:
   nightly-torch-deepspeed-docker:
     name: "Nightly PyTorch + DeepSpeed"
     runs-on:
-      group: aws-general-8-plus
+      group: aws-g4dn-2xlarge-cache
     steps:
       -
         name: Set up Docker Buildx

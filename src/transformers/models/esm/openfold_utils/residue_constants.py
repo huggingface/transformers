@@ -18,8 +18,9 @@
 import collections
 import copy
 import functools
+from collections.abc import Mapping, Sequence
 from importlib import resources
-from typing import Dict, List, Mapping, Sequence, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 
@@ -399,13 +400,11 @@ def map_structure_with_atom_order(in_list: list, first_call: bool = True) -> lis
 
 
 @functools.lru_cache(maxsize=None)
-def load_stereo_chemical_props() -> (
-    Tuple[
-        Mapping[str, List[Bond]],
-        Mapping[str, List[Bond]],
-        Mapping[str, List[BondAngle]],
-    ]
-):
+def load_stereo_chemical_props() -> Tuple[
+    Mapping[str, List[Bond]],
+    Mapping[str, List[Bond]],
+    Mapping[str, List[BondAngle]],
+]:
     """Load stereo_chemical_props.txt into a nice structure.
 
     Load literature values for bond lengths and bond angles and translate bond angles into the length of the opposite

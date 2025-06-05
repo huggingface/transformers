@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,6 @@ import inspect
 import os
 import tempfile
 import unittest
-from typing import Dict, List, Tuple
 
 import numpy as np
 from datasets import Audio, load_dataset
@@ -333,10 +331,10 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
+                    if isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
+                    elif isinstance(tuple_object, dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
                             tuple_object.values(), dict_object.values()
                         ):
@@ -418,7 +416,7 @@ class DacIntegrationTest(unittest.TestCase):
 
         model_name = "dac_16khz"
 
-        model_id = "descript/{}".format(model_name)
+        model_id = f"descript/{model_name}"
         model = DacModel.from_pretrained(model_id, force_download=True).to(torch_device).eval()
         processor = AutoProcessor.from_pretrained(model_id)
 
@@ -471,7 +469,7 @@ class DacIntegrationTest(unittest.TestCase):
 
         model_name = "dac_24khz"
 
-        model_id = "descript/{}".format(model_name)
+        model_id = f"descript/{model_name}"
         model = DacModel.from_pretrained(model_id, force_download=True).to(torch_device).eval()
         processor = AutoProcessor.from_pretrained(model_id)
 
@@ -545,7 +543,7 @@ class DacIntegrationTest(unittest.TestCase):
 
         model_name = "dac_44khz"
 
-        model_id = "descript/{}".format(model_name)
+        model_id = f"descript/{model_name}"
         model = DacModel.from_pretrained(model_id).to(torch_device).eval()
         processor = AutoProcessor.from_pretrained(model_id)
 
@@ -600,7 +598,7 @@ class DacIntegrationTest(unittest.TestCase):
 
         model_name = "dac_16khz"
 
-        model_id = "descript/{}".format(model_name)
+        model_id = f"descript/{model_name}"
         model = DacModel.from_pretrained(model_id).to(torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
@@ -657,7 +655,7 @@ class DacIntegrationTest(unittest.TestCase):
 
         model_name = "dac_24khz"
 
-        model_id = "descript/{}".format(model_name)
+        model_id = f"descript/{model_name}"
         model = DacModel.from_pretrained(model_id).to(torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
@@ -714,7 +712,7 @@ class DacIntegrationTest(unittest.TestCase):
 
         model_name = "dac_44khz"
 
-        model_id = "descript/{}".format(model_name)
+        model_id = f"descript/{model_name}"
         model = DacModel.from_pretrained(model_id).to(torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 

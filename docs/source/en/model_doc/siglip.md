@@ -14,184 +14,116 @@ rendered properly in your Markdown viewer.
 
 -->
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+            <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+            <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+            <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
+
 # SigLIP
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[SigLIP](https://huggingface.co/papers/2303.15343) is a multimodal image-text model similar to [CLIP](clip). It uses separate image and text encoders to generate representations for both modalities.
 
-## Overview
+Unlike CLIP, SigLIP employs a pairwise sigmoid loss on image-text pairs during training. This training loss eliminates the need for a global view of all pairwise similarities between images and texts within a batch. Consequently, it enables more efficient scaling to larger batch sizes while also delivering superior performance with smaller batch sizes.
 
-The SigLIP model was proposed in [Sigmoid Loss for Language Image Pre-Training](https://arxiv.org/abs/2303.15343) by Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, Lucas Beyer. SigLIP proposes to replace the loss function used in [CLIP](clip) by a simple pairwise sigmoid loss. This results in better performance in terms of zero-shot classification accuracy on ImageNet.
+You can find all the original SigLIP checkpoints under the [SigLIP](https://huggingface.co/collections/google/siglip-659d5e62f0ae1a57ae0e83ba) collection.
 
-The abstract from the paper is the following:
 
-*We propose a simple pairwise Sigmoid loss for Language-Image Pre-training (SigLIP). Unlike standard contrastive learning with softmax normalization, the sigmoid loss operates solely on image-text pairs and does not require a global view of the pairwise similarities for normalization. The sigmoid loss simultaneously allows further scaling up the batch size, while also performing better at smaller batch sizes. Combined with Locked-image Tuning, with only four TPUv4 chips, we train a SigLiT model that achieves 84.5% ImageNet zero-shot accuracy in two days. The disentanglement of the batch size from the loss further allows us to study the impact of examples vs pairs and negative to positive ratio. Finally, we push the batch size to the extreme, up to one million, and find that the benefits of growing batch size quickly diminish, with a more reasonable batch size of 32k being sufficient.*
+> [!TIP]
+> Click on the SigLIP models in the right sidebar for more examples of how to apply SigLIP to different image and text tasks.
 
-## Usage tips
+The example below demonstrates how to generate similarity scores between texts and image(s) with [`Pipeline`] or the [`AutoModel`] class.
 
-- Usage of SigLIP is similar to [CLIP](clip). The main difference is the training loss, which does not require a global view of all the pairwise similarities of images and texts within a batch. One needs to apply the sigmoid activation function to the logits, rather than the softmax.
-- Training is supported but does not use `torch.distributed` utilities which may limit the scalability of batch size. However, DDP and FDSP works on single-node multi-gpu setup.
-- When using the standalone [`SiglipTokenizer`] or [`SiglipProcessor`], make sure to pass `padding="max_length"` as that's how the model was trained.
-- To get the same results as the pipeline, a prompt template of "This is a photo of {label}." should be used.
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/siglip_table.jpeg"
-alt="drawing" width="600"/>
+```py
+import torch
+from transformers import pipeline
 
-<small> SigLIP evaluation results compared to CLIP. Taken from the <a href="https://arxiv.org/abs/2303.15343">original paper</a>.</small>
+image = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](https://github.com/google-research/big_vision/tree/main).
-
-## Usage example
-
-There are 2 main ways to use SigLIP: either using the pipeline API, which abstracts away all the complexity for you, or by using the `SiglipModel` class yourself.
-
-### Pipeline API
-
-The pipeline allows to use the model in a few lines of code:
-
-```python
->>> from transformers import pipeline
->>> from PIL import Image
->>> import requests
-
->>> # load pipe
->>> image_classifier = pipeline(task="zero-shot-image-classification", model="google/siglip-base-patch16-224")
-
->>> # load image
->>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
->>> image = Image.open(requests.get(url, stream=True).raw)
-
->>> # inference
->>> candidate_labels = ["2 cats", "a plane", "a remote"]
->>> outputs = image_classifier(image, candidate_labels=candidate_labels)
->>> outputs = [{"score": round(output["score"], 4), "label": output["label"] } for output in outputs]
->>> print(outputs)
-[{'score': 0.1979, 'label': '2 cats'}, {'score': 0.0, 'label': 'a remote'}, {'score': 0.0, 'label': 'a plane'}]
+pipeline = pipeline(task="zero-shot-image-classification", model="google/siglip-base-patch16-224", device=0, torch_dtype=torch.bfloat16)
+pipeline(image, candidate_labels=candidate_labels)
 ```
 
-### Using the model yourself
+</hfoption>
+<hfoption id="AutoModel">
 
-If you want to do the pre- and postprocessing yourself, here's how to do that:
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import AutoProcessor, AutoModel
 
-```python
->>> from PIL import Image
->>> import requests
->>> from transformers import AutoProcessor, AutoModel
->>> import torch
+model = AutoModel.from_pretrained("google/siglip-base-patch16-224", torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
 
->>> model = AutoModel.from_pretrained("google/siglip-base-patch16-224")
->>> processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
+texts = [f'This is a photo of {label}.' for label in candidate_labels]
+inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt").to("cuda")
 
->>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw)
+with torch.no_grad():
+    outputs = model(**inputs)
 
->>> candidate_labels = ["2 cats", "2 dogs"]
-# follows the pipeline prompt template to get same results
->>> texts = [f'This is a photo of {label}.' for label in candidate_labels]
-# important: we pass `padding=max_length` since the model was trained with this
->>> inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt")
-
->>> with torch.no_grad():
-...     outputs = model(**inputs)
-
->>> logits_per_image = outputs.logits_per_image
->>> probs = torch.sigmoid(logits_per_image) # these are the probabilities
->>> print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
-19.8% that image 0 is '2 cats'
+logits_per_image = outputs.logits_per_image
+probs = torch.sigmoid(logits_per_image)
+print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 ```
 
-## Resources
+</hfoption>
+</hfoptions>
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SigLIP.
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-- [Zero-shot image classification task guide](../tasks/zero_shot_image_classification)
-- Demo notebooks for SigLIP can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/SigLIP). 🌎
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
 
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+```py
+import torch
+import requests
+from PIL import Image
+from transformers import AutoProcessor, AutoModel, BitsAndBytesConfig
 
+bnb_config = BitsAndBytesConfig(load_in_4bit=True)
+model = AutoModel.from_pretrained("google/siglip-base-patch16-224", quantization_config=bnb_config, device_map="auto", attn_implementation="sdpa")
+processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
 
-## Combining SigLIP and Flash Attention 2
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+image = Image.open(requests.get(url, stream=True).raw)
+candidate_labels = ["a Pallas cat", "a lion", "a Siberian tiger"]
+texts = [f'This is a photo of {label}.' for label in candidate_labels]
+inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt").to("cuda")
 
-First, make sure to install the latest version of Flash Attention 2.
+with torch.no_grad():
+    outputs = model(**inputs)
 
-```bash
-pip install -U flash-attn --no-build-isolation
+logits_per_image = outputs.logits_per_image
+probs = torch.sigmoid(logits_per_image)
+print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 ```
+## Notes
 
-Make also sure that you have a hardware that is compatible with Flash-Attention 2. Read more about it in the official documentation of flash-attn repository. Make also sure to load your model in half-precision (e.g. `torch.float16``)
+- Training is supported for DDP and FSDP on single-node multi-GPU setups. However, it does not use [torch.distributed](https://pytorch.org/tutorials/beginner/dist_overview.html) utilities which may limit the scalability of batch size.
+- When using the standalone [`SiglipTokenizer`] or [`SiglipProcessor`], make sure to pass `padding="max_length"` because that is how the model was trained.
+- To get the same results as the [`Pipeline`], a prompt template of `"This is a photo of {label}."` should be passed to the processor.
+- Toggle the `attn_implementation` parameter to either `"sdpa"` or `"flash_attention_2"` to use a more memory-efficient attention.
+    ```py
+    # pip install -U flash-attn --no-build-isolation
 
-To load and run a model using Flash Attention 2, refer to the snippet below:
+    from transformers import SiglipModel
 
-```python
->>> import torch
->>> import requests
->>> from PIL import Image
->>> from transformers import SiglipProcessor, SiglipModel
->>> device = "cuda" # the device to load the model onto
-
->>> model = SiglipModel.from_pretrained(
-...     "google/siglip-so400m-patch14-384",
-...     attn_implementation="flash_attention_2",
-...     torch_dtype=torch.float16,
-...     device_map=device,
-... )
->>> processor = SiglipProcessor.from_pretrained("google/siglip-so400m-patch14-384")
-
->>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw)
-
->>> candidate_labels = ["2 cats", "2 dogs"]
-# follows the pipeline prompt template to get same results
->>> texts = [f'This is a photo of {label}.' for label in candidate_labels]
-# important: we pass `padding=max_length` since the model was trained with this
->>> inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt").to(device)
-
->>> with torch.no_grad():
-...     with torch.autocast(device):
-...         outputs = model(**inputs)
-
->>> logits_per_image = outputs.logits_per_image
->>> probs = torch.sigmoid(logits_per_image) # these are the probabilities
->>> print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
-19.8% that image 0 is '2 cats'
-```
-
-
-## Using Scaled Dot Product Attention (SDPA)
-
-PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function 
-encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the 
-[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
-or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
-page for more information.
-
-You may set `attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used. Make sure you have `torch>=2.1.1`.
-
-```python
->>> from transformers import SiglipModel
-
->>> model = SiglipModel.from_pretrained(
-...     "google/siglip-so400m-patch14-384",
-...     attn_implementation="sdpa",
-...     torch_dtype=torch.float16,
-...     device_map=device,
-... )
-```
-
-For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
-
-
-## Expected speedups
-
-Below is an expected speedup diagram that compares inference time between the native implementation in transformers using `google/siglip-so400m-patch14-384` checkpoint in `float16` precision and the Flash Attention 2 / SDPA version of the model using different batch sizes.
-
-<div style="text-align: center">
-<img src="https://i.imgur.com/cWm4rsn.png">
-</div>
+    model = SiglipModel.from_pretrained(
+        "google/siglip-so400m-patch14-384",
+        attn_implementation="flash_attention_2",
+        torch_dtype=torch.float16,
+        device_map=device,
+    )
+    ```
 
 
 ## SiglipConfig

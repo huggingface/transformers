@@ -169,10 +169,6 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-    @property
-    def can_save_slow_tokenizer(self) -> bool:
-        return os.path.isfile(self.vocab_file) if self.vocab_file else False
-
     def __getstate__(self):
         state = self.__dict__.copy()
         state["sp_model"] = None
@@ -321,3 +317,6 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
             return token_ids_0 + [self.sep_token_id]
         sep = [self.sep_token_id]
         return token_ids_0 + sep + token_ids_1 + sep
+
+
+__all__ = ["XLMProphetNetTokenizer"]

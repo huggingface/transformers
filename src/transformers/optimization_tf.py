@@ -59,7 +59,7 @@ class WarmUp(schedules.LearningRateSchedule):
         decay_schedule_fn: Callable,
         warmup_steps: int,
         power: float = 1.0,
-        name: str = None,
+        name: Optional[str] = None,
     ):
         super().__init__()
         self.initial_learning_rate = initial_learning_rate

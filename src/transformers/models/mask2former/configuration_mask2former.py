@@ -160,7 +160,7 @@ class Mask2FormerConfig(PretrainedConfig):
         init_xavier_std: float = 1.0,
         use_auxiliary_loss: bool = True,
         feature_strides: List[int] = [4, 8, 16, 32],
-        output_auxiliary_logits: bool = None,
+        output_auxiliary_logits: Optional[bool] = None,
         backbone: Optional[str] = None,
         use_pretrained_backbone: bool = False,
         use_timm_backbone: bool = False,

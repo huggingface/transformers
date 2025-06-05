@@ -14,10 +14,11 @@
 # limitations under the License.
 import sys
 from argparse import ArgumentParser
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from pprint import pformat
-from typing import Any, Dict, Iterator, List, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 import requests
 import torch
@@ -581,9 +582,9 @@ def test(original_model, our_model: MaskFormerForInstanceSegmentation, image_pro
         for original_model_feature, our_model_feature in zip(
             original_model_backbone_features.values(), our_model_output.encoder_hidden_states
         ):
-            assert torch.allclose(
-                original_model_feature, our_model_feature, atol=1e-3
-            ), "The backbone features are not the same."
+            assert torch.allclose(original_model_feature, our_model_feature, atol=1e-3), (
+                "The backbone features are not the same."
+            )
 
         original_model_pixel_out = original_model.sem_seg_head.pixel_decoder.forward_features(
             original_model_backbone_features
@@ -602,9 +603,9 @@ def test(original_model, our_model: MaskFormerForInstanceSegmentation, image_pro
 
         our_segmentation = image_processor.post_process_segmentation(our_model_out, target_size=(384, 384))
 
-        assert torch.allclose(
-            original_segmentation, our_segmentation, atol=1e-3
-        ), "The segmentation image is not the same."
+        assert torch.allclose(original_segmentation, our_segmentation, atol=1e-3), (
+            "The segmentation image is not the same."
+        )
 
         logger.info("✅ Test passed!")
 

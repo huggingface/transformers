@@ -22,8 +22,9 @@ import math
 import os
 import re
 import unicodedata
+from collections.abc import Generator
 from dataclasses import dataclass
-from typing import Callable, Dict, Generator, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -247,8 +248,8 @@ class TapasTokenizer(PreTrainedTokenizer):
         tokenize_chinese_chars=True,
         strip_accents=None,
         cell_trim_length: int = -1,
-        max_column_id: int = None,
-        max_row_id: int = None,
+        max_column_id: Optional[int] = None,
+        max_row_id: Optional[int] = None,
         strip_column_names: bool = False,
         update_answer_coordinates: bool = False,
         min_question_length=None,
@@ -2162,7 +2163,7 @@ class WordpieceTokenizer:
         Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
         tokenization using the given vocabulary.
 
-        For example, `input = "unaffable"` wil return as output `["un", "##aff", "##able"]`.
+        For example, `input = "unaffable"` will return as output `["un", "##aff", "##able"]`.
 
         Args:
             text: A single token or whitespace separated tokens. This should have
@@ -2242,8 +2243,8 @@ class NumericValue:
 
 @dataclass
 class NumericValueSpan:
-    begin_index: int = None
-    end_index: int = None
+    begin_index: Optional[int] = None
+    end_index: Optional[int] = None
     values: List[NumericValue] = None
 
 
@@ -2359,7 +2360,7 @@ _ORDINAL_WORDS = [
     "second",
     "third",
     "fourth",
-    "fith",
+    "fifth",
     "sixth",
     "seventh",
     "eighth",

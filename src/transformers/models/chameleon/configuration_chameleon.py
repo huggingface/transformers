@@ -14,7 +14,7 @@
 # limitations under the License.
 """chameleon model configuration"""
 
-from typing import List
+from typing import List, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -75,7 +75,7 @@ class ChameleonVQVAEConfig(PretrainedConfig):
         base_channels: int = 128,
         channel_multiplier: List[int] = [1, 1, 2, 2, 4],
         num_res_blocks: int = 2,
-        attn_resolutions: List[int] = None,
+        attn_resolutions: Optional[List[int]] = None,
         dropout: float = 0.0,
         attn_type: str = "vanilla",
         initializer_range=0.02,
@@ -247,6 +247,7 @@ class ChameleonConfig(PretrainedConfig):
         self.vq_config = ChameleonVQVAEConfig(**vq_config)
 
         self.vocabulary_map = vocabulary_map
+        self.image_token_id = vocabulary_map.get("<image>") if vocabulary_map is not None else None
 
         super().__init__(
             pad_token_id=pad_token_id,

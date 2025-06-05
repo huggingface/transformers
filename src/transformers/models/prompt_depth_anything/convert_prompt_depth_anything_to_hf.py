@@ -18,6 +18,7 @@ https://github.com/DepthAnything/PromptDA"""
 import argparse
 import re
 from pathlib import Path
+from typing import Optional
 
 import requests
 import torch
@@ -112,17 +113,17 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"pretrained.blocks.(\d+).attn.qkv.(weight|bias)": r"qkv_transform_\2_\1",
     # Neck
     r"depth_head.projects.(\d+).(weight|bias)": r"neck.reassemble_stage.layers.\1.projection.\2",
-    r"depth_head.scratch.layer(\d+)_rn.weight": lambda m: f"neck.convs.{int(m.group(1))-1}.weight",
+    r"depth_head.scratch.layer(\d+)_rn.weight": lambda m: f"neck.convs.{int(m.group(1)) - 1}.weight",
     r"depth_head.resize_layers.(\d+).(weight|bias)": r"neck.reassemble_stage.layers.\1.resize.\2",
     # Refinenet (with reversed indices)
-    r"depth_head.scratch.refinenet(\d+).out_conv.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4-int(m.group(1))}.projection.{m.group(2)}",
-    r"depth_head.scratch.refinenet(\d+).resConfUnit1.conv1.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4-int(m.group(1))}.residual_layer1.convolution1.{m.group(2)}",
-    r"depth_head.scratch.refinenet(\d+).resConfUnit1.conv2.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4-int(m.group(1))}.residual_layer1.convolution2.{m.group(2)}",
-    r"depth_head.scratch.refinenet(\d+).resConfUnit2.conv1.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4-int(m.group(1))}.residual_layer2.convolution1.{m.group(2)}",
-    r"depth_head.scratch.refinenet(\d+).resConfUnit2.conv2.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4-int(m.group(1))}.residual_layer2.convolution2.{m.group(2)}",
-    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.0.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4-int(m.group(1))}.prompt_depth_layer.convolution1.{m.group(2)}",
-    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.2.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4-int(m.group(1))}.prompt_depth_layer.convolution2.{m.group(2)}",
-    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.4.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4-int(m.group(1))}.prompt_depth_layer.convolution3.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).out_conv.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4 - int(m.group(1))}.projection.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit1.conv1.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4 - int(m.group(1))}.residual_layer1.convolution1.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit1.conv2.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4 - int(m.group(1))}.residual_layer1.convolution2.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit2.conv1.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4 - int(m.group(1))}.residual_layer2.convolution1.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit2.conv2.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4 - int(m.group(1))}.residual_layer2.convolution2.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.0.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4 - int(m.group(1))}.prompt_depth_layer.convolution1.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.2.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4 - int(m.group(1))}.prompt_depth_layer.convolution2.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.4.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4 - int(m.group(1))}.prompt_depth_layer.convolution3.{m.group(2)}",
     # Head
     r"depth_head.scratch.output_conv1.(weight|bias)": r"head.conv1.\1",
     r"depth_head.scratch.output_conv2.0.(weight|bias)": r"head.conv2.\1",
@@ -130,7 +131,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
     """
     Convert old state dict keys to new keys using regex patterns.
     """
@@ -173,7 +174,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         filename=f"{filename}",
     )
 
-    state_dict = torch.load(filepath, map_location="cpu")["state_dict"]
+    state_dict = torch.load(filepath, map_location="cpu", weights_only=True)["state_dict"]
     state_dict = {key[9:]: state_dict[key] for key in state_dict}
 
     # Convert state dict using mappings

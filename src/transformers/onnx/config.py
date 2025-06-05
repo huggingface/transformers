@@ -16,7 +16,8 @@ import dataclasses
 import warnings
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple, Union
+from collections.abc import Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from packaging import version
@@ -108,7 +109,9 @@ class OnnxConfig(ABC):
         "speech2seq-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
     }
 
-    def __init__(self, config: "PretrainedConfig", task: str = "default", patching_specs: List[PatchingSpec] = None):
+    def __init__(
+        self, config: "PretrainedConfig", task: str = "default", patching_specs: Optional[List[PatchingSpec]] = None
+    ):
         self._config = config
 
         if task not in self._tasks_to_common_outputs:
@@ -291,7 +294,7 @@ class OnnxConfig(ABC):
         sampling_rate: int = 22050,
         time_duration: float = 5.0,
         frequency: int = 220,
-        tokenizer: "PreTrainedTokenizerBase" = None,
+        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
     ) -> Mapping[str, Any]:
         """
         Generate inputs to provide to the ONNX exporter for the specific framework
@@ -445,7 +448,7 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         self,
         config: "PretrainedConfig",
         task: str = "default",
-        patching_specs: List[PatchingSpec] = None,
+        patching_specs: Optional[list[PatchingSpec]] = None,
         use_past: bool = False,
     ):
         super().__init__(config, task=task, patching_specs=patching_specs)
@@ -639,7 +642,7 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
 
     def generate_dummy_inputs(
         self,
-        tokenizer: "PreTrainedTokenizerBase",
+        tokenizer: Optional["PreTrainedTokenizerBase"],
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,

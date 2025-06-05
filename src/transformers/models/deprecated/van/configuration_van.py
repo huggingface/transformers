@@ -105,3 +105,6 @@ class VanConfig(PretrainedConfig):
         self.layer_scale_init_value = layer_scale_init_value
         self.drop_path_rate = drop_path_rate
         self.dropout_rate = dropout_rate
+
+
+__all__ = ["VanConfig"]

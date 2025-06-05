@@ -158,7 +158,7 @@ def _replace_with_bnb_linear(
     """
     Private method that wraps the recursion for module replacement.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
+    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
     """
     for name, module in model.named_children():
         if current_key_name is None:
@@ -280,7 +280,7 @@ def replace_8bit_linear(*args, **kwargs):
     return replace_with_bnb_linear(*args, **kwargs)
 
 
-# For backward compatiblity
+# For backward compatibility
 def set_module_8bit_tensor_to_device(*args, **kwargs):
     warnings.warn(
         "`set_module_8bit_tensor_to_device` will be deprecated in a future version, please use `set_module_quantized_tensor_to_device` instead",
@@ -403,7 +403,7 @@ def _dequantize_and_replace(
     some performance drop compared to the original model before quantization - use it only for specific usecases
     such as QLoRA adapters merging.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
+    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
     """
     quant_method = quantization_config.quantization_method()
 
@@ -496,7 +496,9 @@ def _validate_bnb_multi_backend_availability(raise_exception):
                 "You have Intel IPEX installed but if you're intending to use it for CPU, it might not have the right version. Be sure to double check that your PyTorch and IPEX installs are compatible."
             )
 
-        available_devices.discard("cpu")  # Only Intel CPU is supported by BNB at the moment
+        available_devices = frozenset(
+            [device for device in available_devices if device != "cpu"]
+        )  # Only Intel CPU is supported by BNB at the moment
 
     if not available_devices.intersection(bnb_supported_devices):
         if raise_exception:

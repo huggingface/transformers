@@ -29,8 +29,8 @@ import requests
 
 processor = AutoProcessor.from_pretrained("google/paligemma-3b-pt-224")
 
-prompt = "answer en Where is the cow standing?"
-url = "https://huggingface.co/gv-hf/PaliGemma-test-224px-hf/resolve/main/cow_beach_1.png"
+prompt = "answer en Where is the cat standing?"
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 
 inputs = processor(text=prompt, images=image, return_tensors="pt")
@@ -106,6 +106,8 @@ dataset[0]["text"]
 Remember to resample the sampling rate to match the pretrained models required sampling rate.
 
 ```py
+from datasets import Audio
+
 dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))
 ```
 

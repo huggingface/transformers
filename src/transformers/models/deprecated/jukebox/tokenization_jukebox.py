@@ -402,3 +402,6 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         genres = [self.genres_decoder.get(genre) for genre in genres_index]
         lyrics = [self.lyrics_decoder.get(character) for character in lyric_index]
         return artist, genres, lyrics
+
+
+__all__ = ["JukeboxTokenizer"]

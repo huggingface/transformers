@@ -17,7 +17,7 @@
 """I-BERT configuration"""
 
 from collections import OrderedDict
-from typing import Mapping
+from collections.abc import Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
@@ -74,8 +74,8 @@ class IBertConfig(PretrainedConfig):
         quant_mode (`bool`, *optional*, defaults to `False`):
             Whether to quantize the model or not.
         force_dequant (`str`, *optional*, defaults to `"none"`):
-            Force dequantize specific nonlinear layer. Dequatized layers are then executed with full precision.
-            `"none"`, `"gelu"`, `"softmax"`, `"layernorm"` and `"nonlinear"` are supported. As deafult, it is set as
+            Force dequantize specific nonlinear layer. Dequantized layers are then executed with full precision.
+            `"none"`, `"gelu"`, `"softmax"`, `"layernorm"` and `"nonlinear"` are supported. As default, it is set as
             `"none"`, which does not dequantize any layers. Please specify `"gelu"`, `"softmax"`, or `"layernorm"` to
             dequantize GELU, Softmax, or LayerNorm, respectively. `"nonlinear"` will dequantize all nonlinear layers,
             i.e., GELU, Softmax, and LayerNorm.

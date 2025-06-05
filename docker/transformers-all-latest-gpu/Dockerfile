@@ -14,6 +14,8 @@ ARG PYTORCH='2.6.0'
 ARG INTEL_TORCH_EXT='2.3.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu121'
+# Disable kernel mapping for now until all tests pass
+ENV DISABLE_KERNEL_MAPPING=1
 
 RUN apt update
 RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg git-lfs
@@ -43,7 +45,7 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/pef
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
 
 # For video model testing
-RUN python3 -m pip install --no-cache-dir av==9.2.0
+RUN python3 -m pip install --no-cache-dir av
 
 # Some slow tests require bnb
 RUN python3 -m pip install --no-cache-dir bitsandbytes
@@ -57,7 +59,8 @@ RUN python3 -m pip uninstall -y ninja
 
 # For `dinat` model
 # The `XXX` part in `torchXXX` needs to match `PYTORCH` (to some extent)
-RUN python3 -m pip install --no-cache-dir natten==0.15.1+torch220$CUDA -f https://shi-labs.com/natten/wheels
+# pin `0.17.4` otherwise `cannot import name 'natten2dav' from 'natten.functional'`
+RUN python3 -m pip install --no-cache-dir natten==0.17.4+torch250cu121 -f https://shi-labs.com/natten/wheels
 
 # For `nougat` tokenizer
 RUN python3 -m pip install --no-cache-dir python-Levenshtein
@@ -67,6 +70,12 @@ RUN python3 -m pip install --no-cache-dir g2p-en
 
 # For Some bitsandbytes tests
 RUN python3 -m pip install --no-cache-dir einops
+
+# For Some tests with `@require_liger_kernel`
+RUN python3 -m pip install --no-cache-dir liger-kernel
+
+# `kernels` may give different outputs (within 1e-5 range) even with the same model (weights) and the same inputs
+RUN python3 -m pip uninstall -y kernels
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.

@@ -79,8 +79,11 @@ def preserve_case_replace(text, patterns: dict, default_name: str):
 
 def get_cased_name(lowercase_name: str) -> str:
     """From a model name in lowercase in the format `my_model`, return the cased name in the format `MyModel`."""
+    alt_lowercase_name = lowercase_name.replace("_", "-")
     if lowercase_name in CONFIG_MAPPING_NAMES:
         return CONFIG_MAPPING_NAMES[lowercase_name].replace("Config", "")
+    elif alt_lowercase_name in CONFIG_MAPPING_NAMES:
+        return CONFIG_MAPPING_NAMES[alt_lowercase_name].replace("Config", "")
     else:
         return "".join(x.title() for x in lowercase_name.split("_"))
 
@@ -106,6 +109,8 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
 
     def __init__(self, old_name: str, new_name: str, original_new_model_name: str = "", only_doc: bool = False):
         super().__init__()
+        old_name = old_name.replace("-", "_")
+        new_name = new_name.replace("-", "_")
         self.old_name = old_name
         self.new_name = new_name
         self.cased_new_name = get_cased_name(self.new_name)
@@ -253,7 +258,7 @@ def get_docstring_indent(docstring):
     return 0
 
 
-def is_full_docstring(new_docstring: str) -> bool:
+def is_full_docstring(original_docstring: str, new_docstring: str, original_level: int) -> bool:
     """Check if `new_docstring` is a full docstring, or if it is only part of a docstring that should then
     be merged with the existing old one.
     """
@@ -261,6 +266,17 @@ def is_full_docstring(new_docstring: str) -> bool:
     new_docstring = new_docstring.split('"""', 1)[1]
     # The docstring contains Args definition, so it is self-contained
     if re.search(r"\n\s*Args:\n", new_docstring):
+        return True
+    elif re.search(r"\n\s*Args:\n", original_docstring):
+        return False
+    # Check if the docstring contains args docstring (meaning it is self contained):
+    param_pattern = re.compile(
+        # |--- Group 1 ---|| Group 2 ||- Group 3 -||---------- Group 4 ----------|
+        rf"^\s{{0,{original_level}}}(\w+)\s*\(\s*([^, \)]*)(\s*.*?)\s*\)\s*:\s*((?:(?!\n^\s{{0,{original_level}}}\w+\s*\().)*)",
+        re.DOTALL | re.MULTILINE,
+    )
+    match_object = param_pattern.search(new_docstring)
+    if match_object is not None:
         return True
     # If it contains Returns, but starts with text indented with an additional 4 spaces before, it is self-contained
     # (this is the scenario when using `@add_start_docstrings_to_model_forward`, but adding more args to docstring)
@@ -275,7 +291,7 @@ def is_full_docstring(new_docstring: str) -> bool:
 
 def merge_docstrings(original_docstring, updated_docstring):
     original_level = get_docstring_indent(original_docstring)
-    if not is_full_docstring(updated_docstring):
+    if not is_full_docstring(original_docstring, updated_docstring, original_level):
         # Split the docstring at the example section, assuming `"""` is used to define the docstring
         parts = original_docstring.split("```")
         if "```" in updated_docstring and len(parts) > 1:
@@ -286,13 +302,22 @@ def merge_docstrings(original_docstring, updated_docstring):
             parts[1] = new_parts[1]
             updated_docstring = "".join(
                 [
-                    parts[0].rstrip(" \n") + new_parts[0],
                     f"\n{original_level * ' '}```",
                     parts[1],
                     "```",
                     parts[2],
                 ]
             )
+            docstring_opening, original_start_docstring = parts[0].rstrip(" \n").split('"""')[:2]
+            new_start_docstring = new_parts[0].rstrip(" \n")
+            docstring_opening += '"""'
+            if new_start_docstring.startswith(original_start_docstring):
+                updated_docstring = new_start_docstring + "\n" + updated_docstring
+            elif original_start_docstring.endswith(new_start_docstring):
+                updated_docstring = original_start_docstring + "\n" + updated_docstring
+            else:
+                updated_docstring = original_start_docstring + "\n" + new_start_docstring + "\n" + updated_docstring
+            updated_docstring = docstring_opening + updated_docstring
         elif updated_docstring not in original_docstring:
             # add tabulation if we are at the lowest level.
             if re.search(r"\n\s*.*\(.*\)\:\n\s*\w", updated_docstring):
@@ -513,7 +538,7 @@ def find_all_dependencies(
     all_dependencies = set()
     all_dependencies_with_parent = []
     checked_dependencies = set(initial_checked_dependencies)
-    parents = {initial_dep: start_entity for initial_dep in initial_dependencies}
+    parents = dict.fromkeys(initial_dependencies, start_entity)
     while len(dependency_queue) > 0:
         # Pick element to visit
         current = dependency_queue.popleft()
@@ -524,7 +549,7 @@ def find_all_dependencies(
             if current in dependency_mapping.keys():
                 # Update dependency queue
                 dependency_queue.extend(dependency_mapping[current])
-                parents.update({dep: current for dep in dependency_mapping[current]})
+                parents.update(dict.fromkeys(dependency_mapping[current], current))
             # add visited node to the list
             checked_dependencies.add(current)
 
@@ -535,7 +560,7 @@ def find_all_dependencies(
 
 
 # Top-level variables that match the following patterns will always use the value in the `modular_xxx.py` file
-ASSIGNMENTS_REGEX_TO_KEEP = [r"_CHECKPOINT", r"_EXPECTED", r"_FOR_DOC"]
+ASSIGNMENTS_REGEX_TO_KEEP = [r"_CHECKPOINT", r"_EXPECTED", r"_FOR_DOC", r"_HIDDEN_STATES_START_POSITION"]
 
 # Top-level variables that match the following patterns will use the value in the `modular_xxx.py` file only if they are not None
 ASSIGNMENTS_REGEX_TO_KEEP_IF_NOT_NONE = [r"_DOCSTRING"]
@@ -593,6 +618,7 @@ ALL_FILE_TYPES = (
     "tokenization",
     "processing",
     "image_processing",
+    "video_processing",
     "feature_extractor",
 )
 
@@ -616,6 +642,7 @@ class ModuleMapper(CSTVisitor, ABC):
         self.object_dependency_mapping = defaultdict(set)          # immediate function/assignment dependency mapping (i.e. dependencies immediately in the function/assignment definition)
         self.assignments: Dict[str, cst.SimpleStatementLine] = {}  # mapping of global assignments names to Nodes
         self.current_function = None                               # this keeps track of the current module-scope function
+        self.current_class = None                                  # this keeps track of the current module-scope class
         self.current_assignment = None                             # this keeps track of the current module-scope assignment
         # this keeps track of objects imported from modeling files (`from .configuration import Config`) -> `Config` should not be a dependency
         self.objects_imported_from_modeling = set()
@@ -672,7 +699,7 @@ class ModuleMapper(CSTVisitor, ABC):
 
     def visit_If(self, node):
         # If we are inside a function, do not add the import to the list of imports
-        if self.current_function is None:
+        if self.current_function is None and self.current_class is None:
             for stmt in node.body.body:
                 if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
                     self.imports.append(node)
@@ -680,6 +707,10 @@ class ModuleMapper(CSTVisitor, ABC):
     def visit_ClassDef(self, node: ClassDef) -> None:
         """Record class nodes to create their dependencies at the end."""
         self.classes[node.name.value] = node
+        self.current_class = node.name.value
+
+    def leave_ClassDef(self, node):
+        self.current_class = None
 
     def visit_Name(self, node: cst.Call):
         """This is used to create a mapping from module-scope functions and assignments to objects used inside them."""
@@ -1024,11 +1055,20 @@ def replace_class_node(
             new_decorators = (
                 updated_methods[name].decorators if len(updated_methods[name].decorators) > 0 else func.decorators
             )
+
+            # Keep return annotation in `modular_xxx.py` if any, else original return annotation
+            new_return_annotation = updated_methods[name].returns if updated_methods[name].returns else func.returns
+
             if not re.match(
                 r"\ndef .*\(.*\):\n    raise.*Error\(.*",
                 mapper.python_module.code_for_node(updated_methods[name]),
             ):
-                func = func.with_changes(body=updated_methods[name].body, params=new_params, decorators=new_decorators)
+                func = func.with_changes(
+                    body=updated_methods[name].body,
+                    params=new_params,
+                    decorators=new_decorators,
+                    returns=new_return_annotation,
+                )
             else:
                 continue
 
@@ -1094,9 +1134,12 @@ TYPE_TO_FILE_TYPE = {
     "Processor": "processing",
     "ImageProcessor": "image_processing",
     "ImageProcessorFast": "image_processing*_fast",  # "*" indicates where to insert the model name before the "_fast" suffix
+    "VideoProcessor": "video_processing",
+    "VideoProcessorInitKwargs": "video_processing",
     "FastImageProcessorKwargs": "image_processing*_fast",
     "FeatureExtractor": "feature_extractor",
     "ProcessorKwargs": "processing",
+    "VideosKwargs": "processing",
     "ImagesKwargs": "processing",
     "TextKwargs": "processing",
 }
@@ -1136,7 +1179,7 @@ def append_new_import_node(
     import_node = node.body[0]
     names_to_keep = []
     for name in import_node.names:
-        name_value = name.evaluated_name
+        name_value = name.evaluated_alias or name.evaluated_name
         if name_value not in unused_imports and name_value not in added_names:
             names_to_keep.append(name.with_changes(comma=cst.MaybeSentinel.DEFAULT))
             added_names.add(name_value)
@@ -1447,6 +1490,10 @@ class ModularFileMapper(ModuleMapper):
                 suffix = common_partial_suffix(class_name, modeling_bases[0])
                 if len(suffix) > 0 and suffix[0].isupper():
                     cased_model_name = class_name.replace(suffix, "")
+                    # If both the old model and new model share the last part of their name, is is detected as a common
+                    # suffix, but it should not be the case -> use the full name in this case
+                    if len(cased_model_name) < len(cased_default_name) and cased_default_name in class_name:
+                        cased_model_name = cased_default_name
                 prefix_model_name_mapping[filename].update([cased_model_name])
 
         # Check if we found multiple prefixes for some modeling files
@@ -1742,6 +1789,17 @@ if __name__ == "__main__":
         args.files_to_parse = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
     if args.files_to_parse == ["examples"]:
         args.files_to_parse = glob.glob("examples/**/modular_*.py", recursive=True)
+    else:
+        for i, model_name in enumerate(args.files_to_parse):
+            if os.sep not in model_name:
+                full_path = os.path.join("src", "transformers", "models", model_name, f"modular_{model_name}.py")
+                # If it does not exist, try in the examples section
+                if not os.path.isfile(full_path):
+                    full_path = os.path.join("examples", "modular-transformers", f"modular_{model_name}.py")
+                # We did not find it anywhere
+                if not os.path.isfile(full_path):
+                    raise ValueError(f"Cannot find a modular file for {model_name}. Please provide the full path.")
+                args.files_to_parse[i] = full_path
 
     priority_list, _ = find_priority_list(args.files_to_parse)
     assert len(priority_list) == len(args.files_to_parse), "Some files will not be converted"

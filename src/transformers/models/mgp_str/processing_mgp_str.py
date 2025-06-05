@@ -21,6 +21,7 @@ from transformers.utils import is_torch_available
 from transformers.utils.generic import ExplicitEnum
 
 from ...processing_utils import ProcessorMixin
+from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -36,6 +37,7 @@ class DecodeType(ExplicitEnum):
 SUPPORTED_ANNOTATION_FORMATS = (DecodeType.CHARACTER, DecodeType.BPE, DecodeType.WORDPIECE)
 
 
+@requires(backends=("sentencepiece",))
 class MgpstrProcessor(ProcessorMixin):
     r"""
     Constructs a MGP-STR processor which wraps an image processor and MGP-STR tokenizers into a single
@@ -182,7 +184,7 @@ class MgpstrProcessor(ProcessorMixin):
         for index in range(batch_size):
             pred_eos = preds_str[index].find(eos_str)
             pred = preds_str[index][:pred_eos]
-            pred_index = preds_index[index].cpu().tolist()
+            pred_index = preds_index[index].tolist()
             pred_eos_index = pred_index.index(eos_token) if eos_token in pred_index else -1
             pred_max_prob = preds_max_prob[index][: pred_eos_index + 1]
             confidence_score = pred_max_prob.cumprod(dim=0)[-1] if pred_max_prob.nelement() != 0 else 0.0
