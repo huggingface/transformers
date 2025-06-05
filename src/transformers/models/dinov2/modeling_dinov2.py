@@ -491,7 +491,7 @@ class Dinov2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "dinov2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Dinov2SwiGLUFFN"]
+    _no_split_modules = ["Dinov2Layer"]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
     _supports_flex_attn = True
