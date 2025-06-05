@@ -721,8 +721,9 @@ class ModelTesterMixin:
                     # skip 2.5% of elements on each side to avoid issues caused by `nn.init.trunc_normal_` described in
                     # https://github.com/huggingface/transformers/pull/27906#issuecomment-1846951332
                     n_elements_to_skip_on_each_side = int(n_elements * 0.025)
-                    sorted_data = torch.sort(data).values
-                    data_to_check = sorted_data[n_elements_to_skip_on_each_side:-n_elements_to_skip_on_each_side]
+                    data_to_check = torch.sort(data).values
+                    if n_elements_to_skip_on_each_side > 0:
+                        data_to_check = data_to_check[n_elements_to_skip_on_each_side:-n_elements_to_skip_on_each_side]
                     self.assertIn(
                         ((data_to_check.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
