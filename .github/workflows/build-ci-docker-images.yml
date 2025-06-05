@@ -3,7 +3,7 @@ name: Build pr ci-docker
 on:
   push:
     branches:
-      - try_torch_2.7_on_circleci_jobs_xxx
+      - try_torch_2.7_on_circleci_jobs
   repository_dispatch:
   workflow_call:
     inputs:
