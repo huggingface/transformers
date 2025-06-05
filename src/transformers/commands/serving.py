@@ -152,8 +152,8 @@ class ServeCommand(BaseTransformersCLICommand):
         self.model, self.tokenizer = self.load_model_and_tokenizer(args)
         self.use_continuous_batching = self.args.attn_implementation == "sdpa_paged"
 
-        cb_logger = logging.get_logger("transformers.generation.continuous_batching")
-        cb_logger.setLevel(getLevelNamesMapping()[self.args.log_level.upper()])
+        transformers_logger = logging.get_logger("transformers")
+        transformers_logger.setLevel(getLevelNamesMapping()[self.args.log_level.upper()])
 
     def build_chunk(self, content: str, request_id: str, finish_reason: Optional[str] = None) -> str:
         payload = {
