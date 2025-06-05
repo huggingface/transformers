@@ -24,7 +24,6 @@ from transformers import MoshiAsrConfig, MoshiAsrForConditionalGeneration, Moshi
 from transformers.testing_utils import (
     cleanup,
     require_torch,
-    require_torch_accelerator,
     require_torch_sdpa,
     slow,
     torch_device,
@@ -547,7 +546,7 @@ class MoshiAsrForConditionalGenerationIntegrationTests(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     @slow
-    @require_torch_accelerator
+    # @require_torch_accelerator
     def test_generation(self):
         """
         TODO: @eustlb, add reproducer pointer.
@@ -555,20 +554,8 @@ class MoshiAsrForConditionalGenerationIntegrationTests(unittest.TestCase):
         as implementation choices (qkv matrix in one linear for original code vs three for hf) create growing divergence with context lenght,
         ultimately giving different outputs.
         """
-        # TODO
         processor = MoshiAsrProcessor.from_pretrained(self.model_checkpoint)
         model = MoshiAsrForConditionalGeneration.from_pretrained(self.model_checkpoint, device_map=torch_device)
-
-        ### SHOULD BE BY DEFAULT
-        # TODO: @eustlb
-        model.config.codec_config.use_cache = True
-        model.config.codec_config.sliding_window = 250
-
-        model.config.sliding_window = 750
-
-        model.generation_config.cache_implementation = "sliding_window"
-        model.generation_config.codec_cache_implementation = "sliding_window"
-        ###
 
         samples = self._load_datasamples(4)
         out_list = []
@@ -578,7 +565,7 @@ class MoshiAsrForConditionalGenerationIntegrationTests(unittest.TestCase):
             ).to(torch_device)
 
             # TODO: @eustlb, audio_window_size=1 should be default
-            out = model.generate(**inputs, audio_window_size=1)
+            out = model.generate(**inputs)
             out_list.append(out)
 
         # fmt: off
@@ -616,7 +603,6 @@ class MoshiAsrForConditionalGenerationIntegrationTests(unittest.TestCase):
         as implementation choices (qkv matrix in one linear for original code vs three for hf) create growing divergence with context lenght,
         ultimately giving different outputs.
         """
-        # TODO
         processor = MoshiAsrProcessor.from_pretrained(self.model_checkpoint)
         model = MoshiAsrForConditionalGeneration.from_pretrained(self.model_checkpoint, device_map=torch_device)
 
