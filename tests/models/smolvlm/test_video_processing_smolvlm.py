@@ -15,22 +15,16 @@
 
 import unittest
 
-import numpy as np
-
 from transformers.image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_video_processing_common import VideoProcessingTestMixin, prepare_video_inputs
 
 
-if is_torch_available():
-    import torch
-
 if is_vision_available():
     if is_torchvision_available():
         from transformers import SmolVLMVideoProcessor
-        from transformers.models.smolvlm.video_processing_smolvlm import get_resize_output_image_size
 
 
 class SmolVLMVideoProcessingTester:
@@ -58,6 +52,7 @@ class SmolVLMVideoProcessingTester:
         self.max_resolution = max_resolution
         self.do_resize = do_resize
         self.size = size
+        self.max_image_size = size
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -71,17 +66,16 @@ class SmolVLMVideoProcessingTester:
             "image_mean": self.image_mean,
             "image_std": self.image_std,
             "do_convert_rgb": self.do_convert_rgb,
+            "max_image_size": self.max_image_size,
         }
 
     def expected_output_video_shape(self, videos):
-        max_height, max_width = 0, 0
-        if not isinstance(videos[0], torch.Tensor):
-            videos = [torch.tensor(np.array(video)).permute(0, -1, -3, -2) for video in videos]
-        for video in videos:
-            height, width = get_resize_output_image_size(video, self.size["longest_edge"])
-            max_height = max(height, max_height)
-            max_width = max(width, max_width)
-        return [self.num_frames, self.num_channels, max_height, max_width]
+        return [
+            self.num_frames,
+            self.num_channels,
+            self.max_image_size["longest_edge"],
+            self.max_image_size["longest_edge"],
+        ]
 
     def prepare_video_inputs(self, equal_resolution=False, return_tensors="pil"):
         videos = prepare_video_inputs(
@@ -116,3 +110,58 @@ class SmolVLMVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
         video_processor = self.fast_video_processing_class.from_dict(self.video_processor_dict, size=42)
         self.assertEqual(video_processor.size, {"height": 42, "width": 42})
+
+    # overwrite, SmolVLM requires to have metadata no matter how we sample
+    def test_call_sample_frames(self):
+        for video_processing_class in self.video_processor_list:
+            video_processing = video_processing_class(**self.video_processor_dict)
+
+            prev_num_frames = self.video_processor_tester.num_frames
+            self.video_processor_tester.num_frames = 8
+            video_inputs = self.video_processor_tester.prepare_video_inputs(
+                equal_resolution=False,
+                return_tensors="torch",
+            )
+
+            # Force set sampling to False. No sampling is expected even when `num_frames` exists
+            video_processing.do_sample_frames = False
+
+            encoded_videos = video_processing(video_inputs[0], return_tensors="pt", num_frames=3)[self.input_name]
+            encoded_videos_batched = video_processing(video_inputs, return_tensors="pt", num_frames=3)[self.input_name]
+            self.assertEqual(encoded_videos.shape[1], 8)
+            self.assertEqual(encoded_videos_batched.shape[1], 8)
+
+            # Set sampling to True. Video frames should be sampled with `num_frames` in the output
+            video_processing.do_sample_frames = True
+            metadata = [[{"duration": 2.0, "total_num_frames": 8, "fps": 4}]]
+            batched_metadata = metadata * len(video_inputs)
+
+            # Sample with `fps` requires metadata to infer number of frames from total duration
+            with self.assertRaises(ValueError):
+                encoded_videos = video_processing(video_inputs[0], return_tensors="pt", num_frames=6, fps=3)[
+                    self.input_name
+                ]
+                encoded_videos_batched = video_processing(video_inputs, return_tensors="pt", num_frames=6, fps=3)[
+                    self.input_name
+                ]
+
+            encoded_videos = video_processing(
+                video_inputs[0], return_tensors="pt", num_frames=6, fps=3, video_metadata=metadata
+            )[self.input_name]
+            encoded_videos_batched = video_processing(
+                video_inputs, return_tensors="pt", num_frames=6, fps=3, video_metadata=batched_metadata
+            )[self.input_name]
+            self.assertEqual(encoded_videos.shape[1], 6)
+            self.assertEqual(encoded_videos_batched.shape[1], 6)
+
+            # We should raise error when asked to sample more frames than there are in input video
+            with self.assertRaises(ValueError):
+                encoded_videos = video_processing(video_inputs[0], return_tensors="pt", fps=10, num_frames=20)[
+                    self.input_name
+                ]
+                encoded_videos_batched = video_processing(video_inputs, return_tensors="pt", fps=10, num_frames=20)[
+                    self.input_name
+                ]
+
+            # Assign back the actual num frames in tester
+            self.video_processor_tester.num_frames = prev_num_frames
