@@ -107,6 +107,7 @@ class Glm4vVideoProcessorInitKwargs(VideosKwargs):
     image_mean: Optional[List[float]] = None
     image_std: Optional[List[float]] = None
 
+
 @add_start_docstrings(
     "Constructs a fast GLM-4V image processor that dynamically resizes videos based on the original videos.",
     BASE_VIDEO_PROCESSOR_DOCSTRING,
@@ -133,7 +134,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
     do_sample_frames = True
     patch_size = 14
     temporal_patch_size = 2
-    max_frame_count = 300
+    max_duration = 300
     merge_size = 2
     valid_kwargs = Glm4vVideoProcessorInitKwargs
     num_frames = 16
@@ -154,10 +155,11 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
         timestamps = [i / video_fps for i in range(total_frames)]
         duration = math.floor(max(timestamps))
 
-        if duration <= self.max_frame_count:
+        if duration <= self.max_duration:
             target_seconds = np.arange(0, duration + 1, 1.0 / self.fps)
         else:
-            target_seconds = np.linspace(0, duration, self.fps * self.max_frame_count, endpoint=True)
+            num_samples = int(self.max_duration * self.fps)
+            target_seconds = np.linspace(0, duration, num_samples, endpoint=True)
 
         frame_indices = []
         for t in target_seconds:
@@ -172,6 +174,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
                 unique_frame_indices.append(idx)
 
         frame_indices = unique_frame_indices
+
         if len(frame_indices) % 2 != 0:
             frame_indices.append(frame_indices[-1])
 
