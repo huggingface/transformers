@@ -298,6 +298,7 @@ class OpenaiAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
     def forward(
         self,
@@ -352,6 +353,7 @@ class OpenaiDecoderLayer(GradientCheckpointingLayer):
         self.mlp = OpenaiMLP(config)
         self.input_layernorm = OpenaiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = OpenaiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.attention_type = config.layer_types[layer_idx]
 
     def forward(
         self,
@@ -502,13 +504,21 @@ class OpenaiModel(OpenaiPreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = create_sliding_window_causal_mask(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            past_key_values=past_key_values,
-        )
+        # It may already have been prepared by e.g. `generate`
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "input_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
+            }
+            # Create the masks
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
+            }
 
         hidden_states = inputs_embeds
 
@@ -526,7 +536,7 @@ class OpenaiModel(OpenaiPreTrainedModel):
 
             layer_outputs = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
+                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
                 position_ids=position_ids,
                 past_key_value=past_key_values,
                 output_attentions=output_attentions,
