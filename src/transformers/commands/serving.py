@@ -144,7 +144,9 @@ class ServeCommand(BaseTransformersCLICommand):
 
     def __init__(self, args: ServeArguments):
         if not is_pydantic_available() or not is_fastapi_available() or not is_uvicorn_available():
-            raise ImportError("uvicorn, fastapi, and pydantic are required dependencies for the serving CLI.")
+            raise ImportError(
+                "Missing dependencies for the serving CLI. Please install with `pip install transformers[serving]`"
+            )
 
         self.args = args
         self.model, self.tokenizer = self.load_model_and_tokenizer(args)

@@ -24,10 +24,10 @@ import warnings
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
 from threading import Thread
-from typing import Optional
+from typing import AsyncIterator, Optional
 
 import yaml
-from huggingface_hub import AsyncInferenceClient
+from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
 
 from transformers import (
     AutoTokenizer,
@@ -135,7 +135,7 @@ class RichInterface:
         else:
             self.user_name = user_name
 
-    async def stream_output(self, stream) -> tuple[str, int]:
+    async def stream_output(self, stream: AsyncIterator[ChatCompletionStreamOutput]) -> tuple[str, int]:
         self._console.print(f"[bold blue]<{self.model_name}>:")
         with Live(console=self._console, refresh_per_second=4) as live:
             text = ""
@@ -353,15 +353,6 @@ class ChatCommand(BaseTransformersCLICommand):
         chat_parser.set_defaults(func=chat_command_factory)
 
     def __init__(self, args):
-        if not is_rich_available() and not is_torch_available():
-            raise ImportError(
-                "You need to install rich and torch to use the chat interface. (`pip install rich torch`)"
-            )
-        elif not is_rich_available():
-            raise ImportError("You need to install rich to use the chat interface. (`pip install rich`)")
-        elif not is_torch_available():
-            raise ImportError("You need to install torch to use the chat interface. (`pip install torch`)")
-
         args = self._handle_deprecated_args(args)
 
         if args.model_name_or_path_or_address is not None:
@@ -369,16 +360,29 @@ class ChatCommand(BaseTransformersCLICommand):
             if name.startswith("http") or name.startswith("https") or name.startswith("localhost"):
                 self.spawn_backend = False
 
-                if not (args.host == "localhost" and args.port == 8000):
+                if args.host != "localhost" or args.port != 8000:
                     raise ValueError(
-                        "Cannot indicate a server as a positional argument as well as with a custom host and port. "
-                        "Please only provide one."
+                        "Looks like you’ve set both a server address and a custom host/port. "
+                        "Please pick just one way to specify the server."
                     )
 
                 args.host, args.port = args.model_name_or_path_or_address.rsplit(":", 1)
             else:
                 self.spawn_backend = True
                 args.model_name_or_path = args.model_name_or_path_or_address
+
+        if not is_rich_available() and (not is_torch_available() and self.spawn_backend):
+            raise ImportError(
+                "You need to install rich to use the chat interface. Additionally, you have not specified a remote "
+                "endpoint and are therefore spawning a backend. Torch is required for this: (`pip install rich torch`)"
+            )
+        elif not is_rich_available():
+            raise ImportError("You need to install rich to use the chat interface. (`pip install rich`)")
+        elif not is_torch_available() and self.spawn_backend:
+            raise ImportError(
+                "You have not specified a remote endpoint and are therefore spawning a backend. Torch is required "
+                "for this: (`pip install rich torch`)"
+            )
 
         self.args = args
 
@@ -686,7 +690,6 @@ class ChatCommand(BaseTransformersCLICommand):
     def run(self):
         if self.spawn_backend:
             serve_args = ServeArguments(
-                system_prompt=self.args.system_prompt,
                 model_revision=self.args.model_revision,
                 device=self.args.device,
                 torch_dtype=self.args.torch_dtype,
@@ -704,6 +707,7 @@ class ChatCommand(BaseTransformersCLICommand):
             serve_command = ServeCommand(serve_args)
 
             thread = Thread(target=serve_command.run)
+            thread.daemon = True
             thread.start()
 
         host = "http://localhost" if self.args.host == "localhost" else self.args.host
