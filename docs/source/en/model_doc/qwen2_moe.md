@@ -41,6 +41,11 @@ For more details refer to the [release blog post](https://qwenlm.github.io/blog/
 
 In the following, we demonstrate how to use `Qwen1.5-MoE-A2.7B-Chat` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
 
+The example below demonstrates how to generate text with a Qwen2MoE “chat” model using the [`pipeline`] API or the lower-level [`AutoModelForCausalLM`] class.
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 >>> device = "cuda" # the device to load the model onto
@@ -62,6 +67,41 @@ In the following, we demonstrate how to use `Qwen1.5-MoE-A2.7B-Chat` for the inf
 
 >>> response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 ```
+
+<hfoption id="AutoModel">
+from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+# Load the Qwen2MoE Chat model and tokenizer
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen1.5-MoE-A2.7B-Chat",
+    device_map="auto"
+)
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-MoE-A2.7B-Chat")
+
+# Prepare a chat prompt using ChatML formatting
+prompt = "User: What are the benefits of a Mixture-of-Experts model?\nAssistant:"
+encoded = tokenizer(prompt, return_tensors="pt").to(device)
+
+# Generate response
+generated_ids = model.generate(
+    **encoded,
+    max_new_tokens=256,
+    do_sample=True,
+    temperature=0.7
+)
+decoded = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+print(decoded)
+
+</hfoption> <hfoption id="transformers-cli">
+# If you want to use your local Transformers CLI to push or inspect model files:
+# (e.g., log in, then push a local checkpoint)
+transformers-cli login
+transformers-cli repo create Qwen2MoE-Local-Experiment
+transformers-cli upload ./my-local-qwen2moe-model --repo_id=Qwen/Qwen2MoE-Local-Experiment
+</hfoption> </hfoptions> ```
 
 ## Qwen2MoeConfig
 
