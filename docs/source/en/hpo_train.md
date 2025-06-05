@@ -20,8 +20,7 @@ Hyperparameter search discovers an optimal set of hyperparameters that produces 
 This guide will go over how to set up a hyperparameter search for each of the backends.
 
 > [!WARNING]
-> The [SigOpt](https://github.com/sigopt/sigopt-server) library is in public archive mode and will not receive security or 
-  bugfix updates. It is recommended to use Optuna, Weights & Biases or Ray Tune for Hyperparameter search.
+> The [SigOpt](https://github.com/sigopt/sigopt-server) library is in public archive mode and will not receive security or bugfix updates. It is recommended to use Optuna, Weights & Biases or Ray Tune for Hyperparameter search.
 
 ```bash
 pip install optuna/sigopt/wandb/ray[tune]
