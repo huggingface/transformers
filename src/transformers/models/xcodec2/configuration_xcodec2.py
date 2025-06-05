@@ -38,7 +38,8 @@ class XCodec2Config(PretrainedConfig):
             Hidden size for the codec encoder model.
         codec_decoder_hidden_size (`int`, *optional*, defaults to 1024):
             Hidden size for the codec decoder model.
-        initializer_range (`float`, *optional*, defaults to 0.02): <fill_docstring>
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         audio_channels (`int`, *optional*, defaults to 1):
             Number of channels in the audio data. Either 1 for mono or 2 for stereo.
         sampling_rate (`int`, *optional*, defaults to 16000):
@@ -53,7 +54,8 @@ class XCodec2Config(PretrainedConfig):
             Number of attention heads for the model.
         num_key_value_heads (`int`, *optional*, defaults to 16):
             Number of key value heads for the model.
-        num_hidden_layers (`int`, *optional*, defaults to 12): <fill_docstring>
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             Dropout rate for the attention layer.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -62,15 +64,16 @@ class XCodec2Config(PretrainedConfig):
             Epsilon for RMS normalization.
         head_dim (`int`, *optional*, defaults to 64):
             Head dimension for the model.
-        up_ratios (`tuple`, *optional*, defaults to `(2, 2, 4, 4, 5)`):
+        up_ratios (`tuple`, *optional*, defaults to `[2, 2, 4, 4, 5]`):
             Up sampling ratios for the model.
-        dilations (`tuple`, *optional*, defaults to `(1, 3, 9)`):
+        dilations (`tuple`, *optional*, defaults to `[1, 3, 9]`):
             Dilation values for the model.
         depth (`int`, *optional*, defaults to 12):
             Depth for the model.
-        vq_num_quantizers (`int`, *optional*, defaults to 1):
+        num_quantizers (`int`, *optional*, defaults to 1):
             Number of VQ quantizers for the model.
-        hop_length (`int`, *optional*, defaults to 320): <fill_docstring>
+        hop_length (`int`, *optional*, defaults to 320):
+            The hop length for STFT.
         vq_dim (`int`, *optional*, defaults to 2048):
             Dimension for the VQ codebook.
         vq_commit_weight (`float`, *optional*, defaults to 0.25):
@@ -83,8 +86,10 @@ class XCodec2Config(PretrainedConfig):
             Number of discret codes that make up VQVAE.
         codebook_dim (`int`, *optional*, defaults to 16):
             Dimension of the codebook vectors. If not defined, uses `hidden_size`.
-        max_position_embeddings (`int`, *optional*, defaults to 4096): <fill_docstring>
-        rope_theta (`float`, *optional*, defaults to 10000.0): <fill_docstring>
+        max_position_embeddings (`int`, *optional*, defaults to 4096):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+        rope_theta (`float`, *optional*, defaults to 10000.0):
+            The base period of the rotary position embeddings.
     """
 
     model_type = "xcodec2"
@@ -107,10 +112,10 @@ class XCodec2Config(PretrainedConfig):
         attention_bias: bool = False,
         rms_norm_eps: float = 1e-6,
         head_dim: int = 64,
-        up_ratios: tuple = (2, 2, 4, 4, 5),
-        dilations: tuple = (1, 3, 9),
+        up_ratios: tuple = [2, 2, 4, 4, 5],
+        dilations: tuple = [1, 3, 9],
         depth: int = 12,
-        vq_num_quantizers: int = 1,
+        num_quantizers: int = 1,
         hop_length: int = 320,
         vq_dim: int = 2048,
         vq_commit_weight: float = 0.25,
@@ -142,7 +147,7 @@ class XCodec2Config(PretrainedConfig):
         self.up_ratios = up_ratios
         self.dilations = dilations
         self.depth = depth
-        self.vq_num_quantizers = vq_num_quantizers
+        self.num_quantizers = num_quantizers
         self.hop_length = hop_length
         self.vq_dim = vq_dim
         self.vq_commit_weight = vq_commit_weight

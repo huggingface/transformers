@@ -136,6 +136,7 @@ def convert_checkpoint(
     feature_extractor = EncodecFeatureExtractor(
         feature_size=config.audio_channels,
         sampling_rate=config.sampling_rate,
+        return_attention_mask=False,
     )
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
     original_checkpoint = safetensors.torch.load_file(checkpoint_path)
