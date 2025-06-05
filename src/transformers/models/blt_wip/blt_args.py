@@ -51,6 +51,8 @@ class ByteLatentTransformerArgs(BaseTransformerArgs):
     weight_tying: bool = False
     patch_in_forward: bool = False
 
+    realtime_patching: bool = True
+
     # Architecture and dimensions
     dim_token: int | None = None
     dim_global: int = 512
