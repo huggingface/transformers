@@ -221,7 +221,7 @@ In order to match the logits of the [original implementation](https://github.com
 ```python
 from transformers import LlavaImageProcessor
 
-image_processor = LlavaImageProcessor.from_pretrained("https://huggingface.co/llava-hf/llava-1.5-7b-hf", do_pad=True)
+image_processor = LlavaImageProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf", do_pad=True)
 ```
 
 ### Using Flash Attention 2
