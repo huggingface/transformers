@@ -24,11 +24,9 @@ rendered properly in your Markdown viewer.
 
 # Aria
 
-[Aria](https://huggingface.co/papers/2410.05993) is Rhymes AI’s from-scratch, open-source multimodal model—natively integrating text, images, video and code without forcing visuals through text-only bottlenecks.
+[Aria](https://huggingface.co/papers/2410.05993) is a multimodal mixture-of-experts (MoE) model. The goal of this model is to open-source a training recipe for creating a multimodal native model from scratch. Aria has 3.9B and 3.5B activated parameters per visual and text token respectively. Text is handled by a MoE decoder and visual inputs are handled by a lightweight visual encoder. It is trained in 4 stages, language pretraining, multimodal pretraining, multimodal long-context pretraining, and multimodal post-training.
 
-Its Mixture-of-Experts design activates just 3.9 billion parameters per visual token (3.5 billion per text token), cutting compute while preserving each modality’s unique spatial and hierarchical structure. This efficient, native architecture outperforms other models of similar size on multimodal, language and coding benchmarks.
-
-You can find all the original Aria checkpoints under the [Aria](https://huggingface.co/rhymes-ai/Aria) collection.
+You can find all the original Aria checkpoints under the [Aria](https://huggingface.co/rhymes-ai?search_models=aria) organization.
 
 > [!TIP]
 > Click on the Aria models in the right sidebar for more examples of how to apply Aria to different multimodal tasks.
@@ -39,25 +37,19 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoption id="Pipeline">
 
 ```python
+import torch
 from transformers import pipeline
-from PIL import Image
-import requests
 
-# Initialize pipeline for multimodal tasks
-aria_pipe = pipeline("image-to-text", model="rhymes-ai/Aria")
-
-# Process image and text query
-image_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image = Image.open(requests.get(image_url, stream=True).raw)
-
-response = aria_pipe(
-    image,
-    prompt="what is the image?",
-    max_new_tokens=500,
-    temperature=0.9
+pipeline = pipeline(
+    "image-to-text",
+    model="rhymes-ai/Aria",
+    device=0,
+    torch_dtype=torch.bfloat16
 )
-
-print(response[0]['generated_text'])
+pipeline(
+    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+    text="What is shown in this image?"
+)
 ```
 
 </hfoption>
@@ -66,63 +58,88 @@ print(response[0]['generated_text'])
 ```python
 import torch
 from transformers import AutoModelForCausalLM, AutoProcessor
-from PIL import Image
-import requests
 
-# Load model with precision control
 model = AutoModelForCausalLM.from_pretrained(
     "rhymes-ai/Aria",
     device_map="auto",
     torch_dtype=torch.bfloat16,
-    trust_remote_code=True
+    attn_implementation="sdpa"
 )
 
-processor = AutoProcessor.from_pretrained("rhymes-ai/Aria", trust_remote_code=True)
+processor = AutoProcessor.from_pretrained("rhymes-ai/Aria")
 
-# Prepare multimodal input
-image = Image.open(requests.get("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/cat.png", stream=True).raw)
-messages = [{
-    "role": "user",
-    "content": [
-        {"type": "image"},
-        {"text": "Describe this image", "type": "text"}
-    ]
-}]
+messages = [
+    {
+        "role": "user", "content": [
+            {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+            {"type": "text", "text": "What is shown in this image?"},
+        ]
+    },
+]
 
-# Process and generate
-text = processor.apply_chat_template(messages, add_generation_prompt=True)
-inputs = processor(text=text, images=image, return_tensors="pt")
-inputs = {k: v.to(model.device).to(model.dtype) for k, v in inputs.items()}
+inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt")
+ipnuts = inputs.to(model.device, torch.bfloat16)
 
-with torch.inference_mode():
-    outputs = model.generate(
-        **inputs,
-        max_new_tokens=500,
-        do_sample=True,
-        temperature=0.9,
-        pad_token_id=processor.tokenizer.eos_token_id
-    )
-
-response = processor.decode(outputs[0], skip_special_tokens=True)
+output = model.generate(
+    **inputs,
+    max_new_tokens=15,
+    stop_strings=["<|im_end|>"],
+    tokenizer=processor.tokenizer,
+    do_sample=True,
+    temperature=0.9,
+)
+output_ids = output[0][inputs["input_ids"].shape[1]:]
+response = processor.decode(output_ids, skip_special_tokens=True)
 print(response)
 ```
 
 </hfoption>
 </hfoptions>
 
-## Quantization
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+	
+The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4 and the [rhymes-ai/Aria-sequential_mlp](https://huggingface.co/rhymes-ai/Aria-sequential_mlp) checkpoint. This checkpoint replaces grouped GEMM with `torch.nn.Linear` layers for easier quantization.
 
-The original Aria model uses a custom grouped-gemm implementation, which is not compatible with standard quantization tools. To make quantization feasible, the community provides the [rhymes-ai/Aria-sequential_mlp](https://huggingface.co/rhymes-ai/Aria-sequential_mlp) fork, which replaces grouped-gemm with standard `nn.Linear` layers, enabling successful 4-bit and 8-bit quantization using libraries like bitsandbytes and TorchAO. We suggest you to use quantization-friendly fork or other pre-quantized weights(listed below) to run Aria efficiently on GPUs with limited memory, as the original model architecture does not natively support standard quantization workflows.
+```py
+# pip install torchao
+import torch
+from transformers import TorchAoConfig, AutoModelForCausalLM, AutoProcessor
 
-**Pre-quantized versions:**
+quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
+model = AutoModelForCausalLM.from_pretrained(
+    "rhymes-ai/Aria-sequential_mlp",
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+    quantization_config=quantization_config
+)
+processor = AutoProcessor.from_pretrained(
+    "rhymes-ai/Aria-sequential_mlp",
+)
 
-- [FP8 dynamic quantization (llm-compressor)](https://huggingface.co/leon-se/Aria-sequential_mlp-FP8-dynamic) – ~30GB VRAM.
-- [4-bit NF4 quantization (bitsandbytes)](https://huggingface.co/leon-se/Aria-sequential_mlp-bnb_nf4) – ~15.5GB VRAM.
-- [int8 quantization (TorchAO, official)](https://huggingface.co/rhymes-ai/Aria-torchao-int8wo) – ~30GB VRAM.
+messages = [
+    {
+        "role": "user", "content": [
+            {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+            {"type": "text", "text": "What is shown in this image?"},
+        ]
+    },
+]
 
-## Notes
+inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt")
+inputs = inputs.to(model.device, torch.bfloat16)
 
-- Context window: 64,000 tokens for long multimodal documents.
+output = model.generate(
+    **inputs,
+    max_new_tokens=15,
+    stop_strings=["<|im_end|>"],
+    tokenizer=processor.tokenizer,
+    do_sample=True,
+    temperature=0.9,
+)
+output_ids = output[0][inputs["input_ids"].shape[1]:]
+response = processor.decode(output_ids, skip_special_tokens=True)
+print(response)
+```
 
 
 ## AriaImageProcessor
