@@ -28,8 +28,8 @@ from transformers.models.colqwen2.configuration_colqwen2 import ColQwen2Config
 from transformers.models.colqwen2.modeling_colqwen2 import ColQwen2ForRetrieval, ColQwen2ForRetrievalOutput
 from transformers.models.colqwen2.processing_colqwen2 import ColQwen2Processor
 from transformers.testing_utils import (
+    require_bitsandbytes,
     require_torch,
-    require_torch_large_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -291,7 +291,7 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         gc.collect()
         torch.cuda.empty_cache()
 
-    @require_torch_large_accelerator
+    @require_bitsandbytes
     @slow
     def test_model_integration_test(self):
         """
@@ -300,7 +300,7 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         model = ColQwen2ForRetrieval.from_pretrained(
             self.model_name,
             torch_dtype=torch.bfloat16,
-            device_map=torch_device,
+            load_in_4bit=True,
         ).eval()
 
         # Load the test dataset
