@@ -53,6 +53,10 @@ def ForCausalLMLoss(
     shift_labels: Optional[torch.Tensor] = None,
     **kwargs,
 ) -> torch.Tensor:
+
+    if labels is None and shift_labels is None:
+        return None
+
     # Upcast to float if we need to compute the loss to avoid potential precision issues
     logits = logits.float()
 
