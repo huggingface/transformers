@@ -35,9 +35,6 @@ You can find all the original mBART checkpoints under the [AI at Meta](https://h
 > [!TIP]
 > Click on the mBART models in the right sidebar for more examples of applying mBART to different language tasks.
 
-> [!NOTE]
-> The `head_mask` argument is ignored when using all attention implementation other than "eager". If you have a `head_mask` and want it to have effect, load the model with `XXXModel.from_pretrained(model_id, attn_implementation="eager")`
-
 The example below demonstrates how to translate text with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
@@ -82,6 +79,14 @@ print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
 ## Notes
 
 - You can check the full list of language codes via `tokenizer.lang_code_to_id.keys()`.
+- The `head_mask` argument is ignored when using any attention implementation other than "eager". If you want to use a `head_mask`, set `attn_implementation="eager"` as shown below.
+
+    ```py
+    from transformers import AutoModelForSeq2SeqLM
+
+    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-en-ro", torch_dtype=torch.bfloat16, attn_implementation="eager", device_map="auto")
+    ```
+    
 - mBART requires a special language id token in the source and target text during training. The source text format is `X [eos, src_lang_code]` where `X` is the source text. The target text format is `[tgt_lang_code] X [eos]`. The `bos` token is never used. The [`~PreTrainedTokenizerBase._call_`] encodes the source text format passed as the first argument or with the `text` keyword. The target text format is passed with the `text_label` keyword.
 - Set the `decoder_start_token_id` to the target language id for mBART.
 

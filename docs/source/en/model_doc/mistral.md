@@ -80,8 +80,8 @@ The example below demonstrates how to chat with [`Pipeline`] or the [`AutoModel`
 </hfoption>
 <hfoption id="transformers CLI">
 
-```python
-echo -e "My favorite condiment is" | transformers chat mistralai/Mistral-7B-v0.3 --torch_dtype auto --device 0 --attn_implementation flash_attention_2
+```bash
+transformers chat mistralai/Mistral-7B-v0.3 --torch_dtype auto --device 0 --attn_implementation flash_attention_2
 ```
 
 </hfoption>
