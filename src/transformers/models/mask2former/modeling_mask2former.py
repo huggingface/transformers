@@ -2129,7 +2129,8 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
                     nn.init.xavier_uniform_(p, gain=xavier_std)
 
         elif isinstance(module, Mask2FormerPixelLevelModule):
-            for submodule in module.modules():
+            # encoder was already innitialized by load_config
+            for submodule in module.decoder.modules():
                 if isinstance(submodule, (nn.Conv2d, nn.Linear)):
                     submodule.weight.data.normal_(mean=0.0, std=std)
                     if submodule.bias is not None:
