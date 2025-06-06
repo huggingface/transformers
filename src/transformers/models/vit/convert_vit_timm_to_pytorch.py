@@ -231,14 +231,16 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
     if "deit" in vit_name:
         pass
     else:
-        transformations = transforms.Compose([
-            transforms.Resize((224, 224), interpolation=transforms.InterpolationMode.BICUBIC),
-            transforms.ToTensor(),
-            transforms.Normalize(
-                mean=IMAGENET_STANDARD_MEAN, # Google ViT uses IMAGENET_STANDARD_MEAN - [0.5, 0.5, 0.5]
-                std=IMAGENET_STANDARD_STD # Google ViT uses IMAGENET_STANDARD_STD - [0.5, 0.5, 0.5]
-            ),
-        ])
+        transformations = transforms.Compose(
+            [
+                transforms.Resize((224, 224), interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=IMAGENET_STANDARD_MEAN,  # Google ViT uses IMAGENET_STANDARD_MEAN - [0.5, 0.5, 0.5]
+                    std=IMAGENET_STANDARD_STD,  # Google ViT uses IMAGENET_STANDARD_STD - [0.5, 0.5, 0.5]
+                ),
+            ]
+        )
 
     original_pixel_values = transformations(image).unsqueeze(0)
     assert torch.allclose(pixel_values, original_pixel_values, atol=1e-3)
