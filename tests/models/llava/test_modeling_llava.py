@@ -29,12 +29,13 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_bitsandbytes,
     require_torch,
     require_vision,
     slow,
-    torch_device, require_torch_large_accelerator, Expectations,
+    torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -483,8 +484,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_OUTPUT = [
             "\n \nUSER: What's the difference of two images?\nASSISTANT: The difference between the two images is that one of them has a dog standing on a field, while",
-            '\nUSER: Describe the image.\nASSISTANT: The image features a brown and white dog sitting on a sidewalk. The dog is holding a small',
-            '\nUSER: Describe the image.\nASSISTANT: The image features a lone llama standing on a grassy hill. The llama is the',
+            "\nUSER: Describe the image.\nASSISTANT: The image features a brown and white dog sitting on a sidewalk. The dog is holding a small",
+            "\nUSER: Describe the image.\nASSISTANT: The image features a lone llama standing on a grassy hill. The llama is the",
         ]
 
         generate_ids = model.generate(**inputs, max_new_tokens=20)
@@ -571,6 +572,8 @@ The first image shows a black dog sitting on a wooden surface. The dog has a glo
 
 The second image depicts a scenic mountain landscape. The mountains are rugged and covered with patches of green vegetation. The sky is clear, and the scene conveys a sense of tranquility and natural beauty. The mountains extend into the
 """
+        # Remove the first and last empty character.
+        EXPECTED_GENERATION = EXPECTED_GENERATION[1:-1]
         # fmt: on
         # check that both inputs are handled correctly and generate the same output
         self.assertEqual(output, EXPECTED_GENERATION)
