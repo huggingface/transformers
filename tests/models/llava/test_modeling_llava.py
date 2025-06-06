@@ -363,7 +363,14 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
-        EXPECTED_DECODED_TEXT = "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Finally, be respectful of the environment and other visitors, and follow any posted rules or guidelines for the area."  # fmt: skip
+
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                ("cuda", 7): "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Finally, be respectful of the environment and other visitors, and follow any posted rules or guidelines for the area.",
+                ("cuda", 8): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Lastly, be respectful of the environment and other visitors, as the pier is a shared space where people can enjoy the view, relax, or engage in recreational activities.',
+            }
+        )  # fmt: skip
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
 
         self.assertEqual(
             processor.decode(output[0], skip_special_tokens=True),
@@ -416,10 +423,20 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = [
-            'USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring.',
-            'USER:  \nWhat is this?\nASSISTANT: Cats'
-        ]  # fmt: skip
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                ("cuda", 7): [
+                    'USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring.',
+                    'USER:  \nWhat is this?\nASSISTANT: Cats',
+                ],
+                ("cuda", 8): [
+                    'USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring along',
+                    'USER:  \nWhat is this?\nASSISTANT: Cats',
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
+
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -482,11 +499,21 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         model = model.eval()
 
-        EXPECTED_OUTPUT = [
-            "\n \nUSER: What's the difference of two images?\nASSISTANT: The difference between the two images is that one of them has a dog standing on a field, while",
-            "\nUSER: Describe the image.\nASSISTANT: The image features a brown and white dog sitting on a sidewalk. The dog is holding a small",
-            "\nUSER: Describe the image.\nASSISTANT: The image features a lone llama standing on a grassy hill. The llama is the",
-        ]
+        EXPECTED_OUTPUTS = Expectations(
+            {
+                ("cuda", 7): [
+                    "\n \nUSER: What's the difference of two images?\nASSISTANT: The difference between the two images is that one of them has a dog standing on a field, while",
+                    "\nUSER: Describe the image.\nASSISTANT: The image features a brown and white dog sitting on a sidewalk. The dog is holding a small",
+                    "\nUSER: Describe the image.\nASSISTANT: The image features a lone llama standing on a grassy hill. The llama is the",
+                ],
+                ("cuda", 8): [
+                    "\n \nUSER: What's the difference of two images?\nASSISTANT: The difference between the two images is that one of them has a dog standing on a field, while",
+                    '\nUSER: Describe the image.\nASSISTANT: The image features a beautiful blonde dog sitting on a sidewalk. The dog is holding a small',
+                    '\nUSER: Describe the image.\nASSISTANT: The image features a lone llama standing on a grassy hill. The llama is the',
+                ],
+            }
+        )  # fmt: skip
+        EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
 
         generate_ids = model.generate(**inputs, max_new_tokens=20)
         outputs = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
