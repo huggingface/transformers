@@ -339,7 +339,7 @@ class Attention(nn.Module):
             xq, xk, xv = map(lambda e: e.transpose(1, 2), (xq, xk, xv))
             assert mask is None or isinstance(mask, (str, torch.Tensor))
             is_causal = (mask == "causal") if isinstance(mask, str) else False
-            mask = mask if isinstance(mask, torch.Tensor) else None
+            mask = mask.to(xq.device) if isinstance(mask, torch.Tensor) else None
             output = F.scaled_dot_product_attention(
                 xq,
                 xk,
@@ -1688,7 +1688,7 @@ class CrossAttention(nn.Module):
         #output = flex_attention_comp(xq, xk, xv, block_mask=mask)
         is_causal = (mask == "causal") if isinstance(mask, str) else False
         mask = mask if isinstance(mask, torch.Tensor) else None
-        mask = mask.to(dtype=xq.dtype)
+        mask = mask.to(dtype=xq.dtype).to(xq.device)
         output = F.scaled_dot_product_attention(
             xq,
             xk,
@@ -2211,7 +2211,7 @@ class ByteLatentTransformer(
         # Generate patch IDs from patch_lengths
         patch_ids = patch_ids_from_lengths(
             patch_lengths, local_encoder_tokens.shape[-1]
-        )
+        ).to(tokens.device)
         assert torch.max(patch_ids) + 1 <= torch.max(
             (patch_lengths != 0).sum(dim=-1)
         ), f"{torch.max(patch_ids) + 1} > {torch.max((patch_lengths != 0).sum(dim=-1))}"
