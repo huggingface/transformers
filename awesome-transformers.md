@@ -9,6 +9,12 @@ In this list, we showcase incredibly impactful and novel projects that have push
 adding other projects to the list. If you believe a project should be here and it's not, then please, open a PR 
 to add it.
 
+## [◉ Universal Intelligence](https://github.com/blueraai/universal-intelligence)
+
+[Universal Intelligence](https://github.com/blueraai/universal-intelligence) aims to make AI development accessible to everyone through a simple interface, which can optionally be customized to grow with you as you learn, up to production readiness.
+
+Keywords: Protocol, Open-source, LLMs, Large Language Models, Agents, Low-code
+
 ## [gpt4all](https://github.com/nomic-ai/gpt4all)
 
 [gpt4all](https://github.com/nomic-ai/gpt4all) is an ecosystem of open-source chatbots trained on massive collections of clean assistant data including code, stories and dialogue. It offers open-source, large language models such as LLaMA and GPT-J trained in an assistant-style.
