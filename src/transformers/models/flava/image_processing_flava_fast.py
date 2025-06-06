@@ -16,8 +16,9 @@
 
 import math
 import random
+from collections.abc import Iterable
 from functools import lru_cache
-from typing import Any, Dict, Iterable, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
