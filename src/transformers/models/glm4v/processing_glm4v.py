@@ -138,7 +138,7 @@ class Glm4vProcessor(ProcessorMixin):
             **kwargs,
         )
         if images is not None:
-            image_inputs = self.image_processor(images=images, videos=None, **output_kwargs["images_kwargs"])
+            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = image_inputs["image_grid_thw"]
         else:
             image_inputs = {}

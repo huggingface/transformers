@@ -104,7 +104,7 @@ class Glm4vTextConfig(Qwen2_5_VLTextConfig):
     This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a
     GLM-4V-0414 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
-    GLM-4V-9B-0414 [THUDM/GLM-4V-9B-0414](https://huggingface.co/THUDM/GLM-4V-9B-0414).
+    GLM-4V-9B-0414 [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -196,7 +196,7 @@ class Glm4vConfig(Qwen2_5_VLConfig):
     This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a
     GLM-4V-0414 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
-    GLM-4V-9B-0414 [THUDM/GLM-4V-9B-0414](https://huggingface.co/THUDM/GLM-4V-9B-0414).
+    GLM-4V-9B-0414 [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -927,7 +927,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
                         f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
                     )
 
-                mask = input_ids == self.config.image_token_id  # CogVLM use image_token_id for video
+                mask = input_ids == self.config.image_token_id  # GLM-4.1V use image_token_id for video
                 mask_unsqueezed = mask.unsqueeze(-1)
                 mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
                 video_mask = mask_expanded.to(inputs_embeds.device)
@@ -1140,8 +1140,8 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         >>> import requests
         >>> from transformers import AutoProcessor, Glm4vForConditionalGeneration
 
-        >>> model = Glm4vForConditionalGeneration.from_pretrained("THUDM/GLM-4V-9B-0414")
-        >>> processor = AutoProcessor.from_pretrained("THUDM/GLM-4V-9B-0414")
+        >>> model = Glm4vForConditionalGeneration.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
+        >>> processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
 
         >>> messages = [
             {

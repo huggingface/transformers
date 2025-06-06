@@ -923,7 +923,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
                         f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
                     )
 
-                mask = input_ids == self.config.image_token_id  # CogVLM use image_token_id for video
+                mask = input_ids == self.config.image_token_id  # GLM-4.1V use image_token_id for video
                 mask_unsqueezed = mask.unsqueeze(-1)
                 mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
                 video_mask = mask_expanded.to(inputs_embeds.device)
@@ -1604,8 +1604,8 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
         >>> import requests
         >>> from transformers import AutoProcessor, Glm4vForConditionalGeneration
 
-        >>> model = Glm4vForConditionalGeneration.from_pretrained("THUDM/GLM-4V-9B-0414")
-        >>> processor = AutoProcessor.from_pretrained("THUDM/GLM-4V-9B-0414")
+        >>> model = Glm4vForConditionalGeneration.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
+        >>> processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
 
         >>> messages = [
             {

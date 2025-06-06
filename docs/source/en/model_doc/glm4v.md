@@ -21,7 +21,7 @@ rendered properly in your Markdown viewer.
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">    </div>
 </div>
 
-# GLM-4V-0414
+# GLM-4.1V
 
 The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
@@ -33,7 +33,7 @@ import torch
 from transformers import pipeline
 pipe = pipeline(
     task="image-text-to-text",
-    model="THUDM/GLM-4V-9B-0414",
+    model="THUDM/GLM-4.1V-9B-Thinking",
     device=0,
     torch_dtype=torch.bfloat16
 )
@@ -61,12 +61,12 @@ import torch
 from transformers import Glm4vForConditionalGeneration, AutoProcessor
 
 model = Glm4vForConditionalGeneration.from_pretrained(
-    "THUDM/GLM-4V-9B-0414",
+    "THUDM/GLM-4.1V-9B-Thinking",
     torch_dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
-processor = AutoProcessor.from_pretrained("THUDM/GLM-4V-9B-0414")
+processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
 messages = [
     {
         "role":"user",
@@ -114,7 +114,7 @@ from transformers import TorchAoConfig, Glm4vForConditionalGeneration, AutoProce
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 model = Glm4vForConditionalGeneration.from_pretrained(
-    "THUDM/GLM-4V-9B-0414",
+    "THUDM/GLM-4.1V-9B-Thinking",
     torch_dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
@@ -157,12 +157,12 @@ model = Glm4vForConditionalGeneration.from_pretrained(
     from transformers import Glm4vForConditionalGeneration, AutoProcessor
     
     model = Glm4vForConditionalGeneration.from_pretrained(
-        "THUDM/GLM-4V-9B-0414",
+        "THUDM/GLM-4.1V-9B-Thinking",
         torch_dtype=torch.float16,
         device_map="auto",
         attn_implementation="sdpa"
     )
-    processor = AutoProcessor.from_pretrained("THUDM/GLM-4V-9B-0414")
+    processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
     conversation = [
         {
             "role": "user",
@@ -210,7 +210,7 @@ model = Glm4vForConditionalGeneration.from_pretrained(
     ```python
     min_pixels = 224*224
     max_pixels = 2048*2048
-    processor = AutoProcessor.from_pretrained("THUDM/GLM-4V-9B-0414", min_pixels=min_pixels, max_pixels=max_pixels)
+    processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking", min_pixels=min_pixels, max_pixels=max_pixels)
     ```
     
     Higher resolution can require more compute whereas reducing the resolution can save memory as follows:
@@ -218,7 +218,7 @@ model = Glm4vForConditionalGeneration.from_pretrained(
     ```python
     min_pixels = 256*28*28
     max_pixels = 1024*28*28 
-    processor = AutoProcessor.from_pretrained("THUDM/GLM-4V-9B-0414", min_pixels=min_pixels, max_pixels=max_pixels)
+    processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking", min_pixels=min_pixels, max_pixels=max_pixels)
     ```
 ## Glm4vConfig
 

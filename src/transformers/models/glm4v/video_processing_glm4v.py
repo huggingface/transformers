@@ -216,7 +216,7 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
                 timestamps_list.append(timestamps)
                 processed_videos.append(video)
         else:
-            raise AssertionError("Must set `do_sample_frames=True` to sample frames from CogVLM Model.")
+            raise AssertionError("Must set `do_sample_frames=True` to sample frames from GLM-4.1V Model.")
 
         grouped_videos, grouped_videos_index = group_videos_by_shape(processed_videos)
         resized_videos_grouped = {}
