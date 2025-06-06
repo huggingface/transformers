@@ -14,7 +14,8 @@
 # limitations under the License.
 """Image processor class for TVP."""
 
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
