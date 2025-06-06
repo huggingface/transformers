@@ -557,7 +557,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
             Image.open(requests.get("https://picsum.photos/id/231/200/300", stream=True).raw),
         ]
-        PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][IMG][IMG][/INST]"
+        PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][/INST]"
 
         # image = Image.open(requests.get(url, stream=True).raw)
         inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(model.device)
