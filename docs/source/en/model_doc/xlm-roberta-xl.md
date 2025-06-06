@@ -45,7 +45,7 @@ pipeline = pipeline(
     torch_dtype=torch.float16,  
     device=0  
 )  
-pipeline("Bonjour, je suis un modèle [MASK].")  
+pipeline("Bonjour, je suis un modèle <mask>.")  
 ```
 
 </hfoption>
@@ -64,7 +64,7 @@ model = AutoModelForMaskedLM.from_pretrained(
     device_map="auto",  
     attn_implementation="sdpa"  
 )  
-inputs = tokenizer("Bonjour, je suis un modèle [MASK].", return_tensors="pt").to("cuda")  
+inputs = tokenizer("Bonjour, je suis un modèle <mask>.", return_tensors="pt").to("cuda")  
 
 with torch.no_grad():  
     outputs = model(**inputs)  
