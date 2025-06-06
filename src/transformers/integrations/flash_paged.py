@@ -46,6 +46,12 @@ def paged_attention_forward(
     """
     k, v = cache.update(k, v, module.layer_idx, cumulative_seqlens_k=cumulative_seqlens_k, **kwargs)
 
+    window_size = (-1, -1)  # Default: infinite context window
+    if cache is not None and hasattr(cache, "is_sliding_window") and cache.is_sliding_window:
+        # For sliding window attention, set left context to sliding_window - 1, right context to 0
+        # This means we can attend to sliding_window tokens to the left and no tokens to the right
+        window_size = (cache.sliding_window - 1, 0)
+
     attn_output = flash_attn_varlen_func(
         q.transpose(1, 2).squeeze(0),
         k.transpose(1, 2).squeeze(0),
@@ -56,7 +62,7 @@ def paged_attention_forward(
         max_seqlen_k,
         softmax_scale=module.scaling,
         causal=True,  # kind of a must, it automatically aligns the mask for q < k
-        window_size=(-1, -1),  # -1 means infinite context window
+        window_size=window_size,
         # block_table=block_tables, -> torch.Tensor
         # **kwargs,
     )

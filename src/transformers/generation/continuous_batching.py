@@ -174,6 +174,15 @@ class PagedAttentionCache(Cache):
         )
         self.num_hidden_layers = config.num_hidden_layers
 
+        self.sliding_window = getattr(config, "sliding_window", None)
+        if self.sliding_window is not None:
+            if self.sliding_window <= 0:
+                raise ValueError(f"sliding_window must be positive, got {self.sliding_window}")
+            self.is_sliding_window = True
+            logger.info(f"Sliding window attention enabled with window size: {self.sliding_window}")
+        else:
+            self.is_sliding_window = False
+
         # Calculate optimal block size and number if not provided
         num_blocks = getattr(generation_config, "num_blocks", None)
         block_size = getattr(generation_config, "block_size", None)
@@ -240,6 +249,10 @@ class PagedAttentionCache(Cache):
         """Returns the block table for a request."""
         return self._block_tables.get(request_id, [])
 
+    def get_sliding_window_size(self) -> Optional[int]:
+        """Returns the sliding window size if sliding window is enabled, None otherwise."""
+        return self.sliding_window if self.is_sliding_window else None
+
     @traced
     def _get_physical_indices(self, state: RequestState, logical_indices: List[int]) -> List[int]:
         """
@@ -280,6 +293,89 @@ class PagedAttentionCache(Cache):
 
         return physical_indices
 
+    def _get_sliding_window_indices(self, logical_indices: List[int], current_seq_len: int) -> List[int]:
+        """
+        Apply sliding window logic to logical indices.
+
+        Args:
+            logical_indices: The logical indices to apply sliding window to
+            current_seq_len: Current sequence length
+
+        Returns:
+            List of logical indices within the sliding window
+        """
+        if not self.is_sliding_window:
+            return logical_indices
+
+        # Calculate the sliding window start position
+        window_start = max(0, current_seq_len - self.sliding_window)
+
+        # Filter indices to only include those within the sliding window
+        windowed_indices = [idx for idx in logical_indices if idx >= window_start]
+
+        return windowed_indices
+
+    def _sliding_window_update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        write_index: torch.Tensor,
+        read_index: torch.Tensor,
+        current_seq_len: int,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Update cache with sliding window logic, similar to SlidingWindowCache.
+        """
+        # Reshape cache for easier indexing
+        total_slots = self.num_blocks * self.block_size
+        k_cache_flat = self.key_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
+        v_cache_flat = self.value_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
+
+        # Check if we need to implement sliding window behavior
+        if current_seq_len > self.sliding_window:
+            # For sequences longer than sliding window, we need to use circular buffer logic
+            query_len = key_states.shape[2]  # Number of new tokens being added
+
+            # Calculate effective positions within the sliding window
+            effective_positions = torch.arange(query_len, device=write_index.device) + (current_seq_len - query_len)
+
+            # Map to circular buffer positions
+            to_shift = current_seq_len > self.sliding_window
+            circular_positions = (effective_positions + to_shift.int()) % self.sliding_window
+
+            # Update the circular positions in the cache
+            k_cache_circular = k_cache_flat[:, : self.sliding_window, :]
+            v_cache_circular = v_cache_flat[:, : self.sliding_window, :]
+
+            # Update positions
+            update_positions = circular_positions.clamp(0, self.sliding_window - 1)
+            k_cache_circular[:, update_positions, :] = key_states[0]
+            v_cache_circular[:, update_positions, :] = value_states[0]
+
+            # For reading, ensure we read the correct circular positions
+            read_positions = torch.arange(self.sliding_window, device=read_index.device)
+            circular_read_positions = (read_positions + to_shift.int()) % self.sliding_window
+
+            return k_cache_circular[None, :, circular_read_positions, :], v_cache_circular[
+                None, :, circular_read_positions, :
+            ]
+        else:
+            # Normal behavior when sequence is within sliding window
+            k_cache_flat[:, write_index, :] = key_states[0]
+            v_cache_flat[:, write_index, :] = value_states[0]
+
+            # Apply sliding window to read indices
+            if isinstance(read_index, torch.Tensor):
+                read_indices_list = read_index.tolist()
+            else:
+                read_indices_list = list(read_index)
+
+            windowed_read_indices = self._get_sliding_window_indices(read_indices_list, current_seq_len)
+            windowed_read_index = torch.tensor(windowed_read_indices, device=read_index.device, dtype=read_index.dtype)
+
+            return k_cache_flat[None, :, windowed_read_index, :], v_cache_flat[None, :, windowed_read_index, :]
+
     @traced
     def update(
         self,
@@ -290,7 +386,22 @@ class PagedAttentionCache(Cache):
         write_index,
         **kwargs,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        # Reshape cache for easier indexing
+        # Handle sliding window logic if enabled
+        if self.is_sliding_window:
+            # Get current sequence length from cumulative_seqlens_k - required for sliding window
+            cumulative_seqlens_k = kwargs.get("cumulative_seqlens_k")
+            if cumulative_seqlens_k is None or len(cumulative_seqlens_k) <= 1:
+                raise ValueError(
+                    "Sliding window attention is enabled but `cumulative_seqlens_k` is not provided or is empty. "
+                    "This parameter is required to determine sequence length for sliding window logic."
+                )
+
+            current_seq_len = cumulative_seqlens_k[-1].item()
+            return self._sliding_window_update(
+                key_states, value_states, layer_idx, write_index, read_index, current_seq_len
+            )
+
+        # Default behavior for non-sliding window case
         total_slots = self.num_blocks * self.block_size
         k_cache_flat = self.key_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
         v_cache_flat = self.value_cache[layer_idx].view(self.num_key_value_heads, total_slots, self.head_dim)
