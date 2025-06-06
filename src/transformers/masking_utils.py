@@ -766,9 +766,9 @@ def create_sliding_window_causal_mask(
             useful to easily overlay another mask on top of the sliding causal one, for example for image tokens handling.
     """
     # If we have an HybridCache structure, here we want to create the mask for the sliding layers
-    if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
+    try:
         layer_idx = past_key_values.is_sliding.index(True)
-    else:
+    except (ValueError, AttributeError):
         layer_idx = 0
 
     early_exit, attention_mask, kv_length, kv_offset = _preprocess_mask_arguments(
