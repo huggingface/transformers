@@ -490,7 +490,6 @@ class VJEPA2PatchEmbeddings(nn.Module):
         )
 
     def forward(self, x):
-        B, C, H, W = x.shape
         x = self.proj(x).flatten(2).transpose(1, 2)
         return x
 
@@ -524,7 +523,6 @@ class VJEPA2PatchEmbeddings3D(nn.Module):
         )
 
     def forward(self, x, **kwargs):
-        B, C, T, H, W = x.shape
         x = self.proj(x).flatten(2).transpose(1, 2)
         return x
 
@@ -554,9 +552,7 @@ class VJEPA2Embeddings(nn.Module):
         self.config = config
 
     def _init_pos_embed(self, pos_embed):
-        grid_size = (
-            self.config.crop_size // self.config.patch_size
-        )  
+        grid_size = self.config.crop_size // self.config.patch_size
         grid_depth = self.config.frames_per_clip // self.config.tubelet_size
         sincos = get_3d_sincos_pos_embed(
             self.config.hidden_size,
@@ -570,7 +566,6 @@ class VJEPA2Embeddings(nn.Module):
     def interpolate_pos_encoding(self, x, pos_embed):
 
         _, N, dim = pos_embed.shape
-
 
         # If pos_embed already corret size, just return
         _, _, T, H, W = x.shape
@@ -602,7 +597,7 @@ class VJEPA2Embeddings(nn.Module):
             mode="trilinear",
         )
         pos_embed = pos_embed.permute(0, 2, 3, 4, 1).view(1, -1, dim)
-        return pos_embed 
+        return pos_embed
 
     def forward(
         self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None
