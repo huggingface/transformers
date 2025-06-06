@@ -12,32 +12,55 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+import time
 from argparse import ArgumentParser, Namespace
-from typing import Any, List, Optional
+from dataclasses import dataclass, field
+from logging import getLevelNamesMapping
+from threading import Thread
+from typing import Any, Dict, Optional
 
-from ..pipelines import Pipeline, get_supported_tasks, pipeline
-from ..utils import logging
+from transformers.utils.import_utils import is_fastapi_available, is_pydantic_available, is_uvicorn_available
+
+from .. import PreTrainedTokenizerFast, TextIteratorStreamer
+from ..generation.continuous_batching import ContinuousBatchingManager, RequestStatus
+from ..utils import is_torch_available, logging
 from . import BaseTransformersCLICommand
 
 
-try:
-    from fastapi import Body, FastAPI, HTTPException
-    from fastapi.routing import APIRoute
+if is_torch_available():
+    import torch
+
+    from transformers import (
+        AutoModelForCausalLM,
+        AutoTokenizer,
+        BitsAndBytesConfig,
+        GenerationConfig,
+        PreTrainedModel,
+    )
+
+
+if is_pydantic_available():
+    import uvicorn
+    from fastapi import FastAPI
+    from fastapi.responses import StreamingResponse
     from pydantic import BaseModel
-    from starlette.responses import JSONResponse
-    from uvicorn import run
 
-    _serve_dependencies_installed = True
-except (ImportError, AttributeError):
-    BaseModel = object
+    class Message(BaseModel):
+        role: str
+        content: str
 
-    def Body(*x, **y):
-        pass
+    class ChatCompletionInput(BaseModel):
+        messages: list[Message]
+        stream: Optional[bool] = False
+        model: Optional[str] = None
+        generation_config: Optional[dict] = None
+        request_id: Optional[str] = None
+        extra_body: Optional[Dict] = None
+        tools: Any = None
 
-    _serve_dependencies_installed = False
 
-
-logger = logging.get_logger("transformers/serving")
+logger = logging.get_logger(__name__)
 
 
 def serve_command_factory(args: Namespace):
@@ -46,47 +69,61 @@ def serve_command_factory(args: Namespace):
 
     Returns: ServeCommand
     """
-    nlp = pipeline(
-        task=args.task,
-        model=args.model if args.model else None,
-        config=args.config,
-        tokenizer=args.tokenizer,
-        device=args.device,
+    return ServeCommand(args)
+
+
+@dataclass
+class ServeArguments:
+    r"""
+    Arguments for the serve CLI.
+
+    See the metadata arg for each argument's description -- the metadata will be printed with
+    `transformers serve --help`
+    """
+
+    # Model loading
+    model_revision: str = field(
+        default="main",
+        metadata={"help": "Specific model version to use (can be a branch name, tag name or commit id)."},
     )
-    return ServeCommand(nlp, args.host, args.port, args.workers)
+    device: str = field(default="cpu", metadata={"help": "Device to use for inference."})
+    torch_dtype: Optional[str] = field(
+        default="auto",
+        metadata={
+            "help": "Override the default `torch.dtype` and load the model under this dtype. If `'auto'` is passed, "
+            "the dtype will be automatically derived from the model's weights.",
+            "choices": ["auto", "bfloat16", "float16", "float32"],
+        },
+    )
+    trust_remote_code: bool = field(
+        default=False, metadata={"help": "Whether to trust remote code when loading a model."}
+    )
+    attn_implementation: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Which attention implementation to use; you can run --attn_implementation=flash_attention_2, in "
+            "which case you must install this manually by running `pip install flash-attn --no-build-isolation`."
+        },
+    )
+    load_in_8bit: bool = field(
+        default=False,
+        metadata={"help": "Whether to use 8 bit precision for the base model - works only with LoRA."},
+    )
+    load_in_4bit: bool = field(
+        default=False,
+        metadata={"help": "Whether to use 4 bit precision for the base model - works only with LoRA."},
+    )
+    bnb_4bit_quant_type: str = field(default="nf4", metadata={"help": "Quantization type.", "choices": ["fp4", "nf4"]})
+    use_bnb_nested_quant: bool = field(default=False, metadata={"help": "Whether to use nested quantization."})
 
+    # Serving settings
+    host: str = field(default="localhost", metadata={"help": "Interface the server will listen to.."})
+    port: int = field(default=8000, metadata={"help": "Port the server will listen to."})
 
-class ServeModelInfoResult(BaseModel):
-    """
-    Expose model information
-    """
-
-    infos: dict
-
-
-class ServeTokenizeResult(BaseModel):
-    """
-    Tokenize result model
-    """
-
-    tokens: List[str]
-    tokens_ids: Optional[List[int]]
-
-
-class ServeDeTokenizeResult(BaseModel):
-    """
-    DeTokenize result model
-    """
-
-    text: str
-
-
-class ServeForwardResult(BaseModel):
-    """
-    Forward result model
-    """
-
-    output: Any
+    # Other settings
+    log_level: str = field(
+        default="info", metadata={"help": "Logging level as a string. Example: 'info' or 'warning'."}
+    )
 
 
 class ServeCommand(BaseTransformersCLICommand):
@@ -98,131 +135,195 @@ class ServeCommand(BaseTransformersCLICommand):
         Args:
             parser: Root parser to register command-specific arguments
         """
-        serve_parser = parser.add_parser(
-            "serve", help="CLI tool to run inference requests through REST and GraphQL endpoints."
-        )
-        serve_parser.add_argument(
-            "--task",
-            type=str,
-            choices=get_supported_tasks(),
-            help="The task to run the pipeline on",
-        )
-        serve_parser.add_argument("--host", type=str, default="localhost", help="Interface the server will listen on.")
-        serve_parser.add_argument("--port", type=int, default=8888, help="Port the serving will listen to.")
-        serve_parser.add_argument("--workers", type=int, default=1, help="Number of http workers")
-        serve_parser.add_argument("--model", type=str, help="Model's name or path to stored model.")
-        serve_parser.add_argument("--config", type=str, help="Model's config name or path to stored model.")
-        serve_parser.add_argument("--tokenizer", type=str, help="Tokenizer name to use.")
-        serve_parser.add_argument(
-            "--device",
-            type=int,
-            default=-1,
-            help="Indicate the device to run onto, -1 indicates CPU, >= 0 indicates GPU (default: -1)",
-        )
+        dataclass_types = (ServeArguments,)
+        serve_parser = parser.add_parser("serve", dataclass_types=dataclass_types)
+
+        group = serve_parser.add_argument_group("Positional arguments")
+        group.add_argument("model_name_or_path", type=str, default=None, help="Name of the pre-trained model.")
         serve_parser.set_defaults(func=serve_command_factory)
 
-    def __init__(self, pipeline: Pipeline, host: str, port: int, workers: int):
-        self._pipeline = pipeline
-
-        self.host = host
-        self.port = port
-        self.workers = workers
-
-        if not _serve_dependencies_installed:
-            raise RuntimeError(
-                "Using serve command requires FastAPI and uvicorn. "
-                'Please install transformers with [serving]: pip install "transformers[serving]". '
-                "Or install FastAPI and uvicorn separately."
+    def __init__(self, args: ServeArguments):
+        if not is_pydantic_available() or not is_fastapi_available() or not is_uvicorn_available():
+            raise ImportError(
+                "Missing dependencies for the serving CLI. Please install with `pip install transformers[serving]`"
             )
-        else:
-            logger.info(f"Serving model over {host}:{port}")
-            self._app = FastAPI(
-                routes=[
-                    APIRoute(
-                        "/",
-                        self.model_info,
-                        response_model=ServeModelInfoResult,
-                        response_class=JSONResponse,
-                        methods=["GET"],
-                    ),
-                    APIRoute(
-                        "/tokenize",
-                        self.tokenize,
-                        response_model=ServeTokenizeResult,
-                        response_class=JSONResponse,
-                        methods=["POST"],
-                    ),
-                    APIRoute(
-                        "/detokenize",
-                        self.detokenize,
-                        response_model=ServeDeTokenizeResult,
-                        response_class=JSONResponse,
-                        methods=["POST"],
-                    ),
-                    APIRoute(
-                        "/forward",
-                        self.forward,
-                        response_model=ServeForwardResult,
-                        response_class=JSONResponse,
-                        methods=["POST"],
-                    ),
-                ],
-                timeout=600,
-            )
+
+        self.args = args
+        self.model, self.tokenizer = self.load_model_and_tokenizer(args)
+        self.use_continuous_batching = self.args.attn_implementation == "sdpa_paged"
+
+        cb_logger = logging.get_logger("transformers.generation.continuous_batching")
+        cb_logger.setLevel(getLevelNamesMapping()[self.args.log_level.upper()])
+
+    def build_chunk(self, content: str, request_id: str, finish_reason: Optional[str] = None) -> str:
+        payload = {
+            "object": "chat.completion.chunk",
+            "id": request_id,
+            "created": int(time.time()),
+            "model": self.args.model_name_or_path,
+            "system_fingerprint": "",
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"role": "assistant", "content": content, "tool_calls": []},
+                    "logprobs": None,
+                    "finish_reason": finish_reason,
+                }
+            ],
+        }
+        return f"data: {json.dumps(payload)}\n\n"
 
     def run(self):
-        run(self._app, host=self.host, port=self.port, workers=self.workers)
+        app = FastAPI()
 
-    def model_info(self):
-        return ServeModelInfoResult(infos=vars(self._pipeline.model.config))
+        if self.use_continuous_batching:
+            self.continuous_batching(app)
+        else:
+            self.generate(app)
 
-    def tokenize(self, text_input: str = Body(None, embed=True), return_ids: bool = Body(False, embed=True)):
-        """
-        Tokenize the provided input and eventually returns corresponding tokens id: - **text_input**: String to
-        tokenize - **return_ids**: Boolean flags indicating if the tokens have to be converted to their integer
-        mapping.
-        """
-        try:
-            tokens_txt = self._pipeline.tokenizer.tokenize(text_input)
+        uvicorn.run(app, host=self.args.host, port=self.args.port, log_level=self.args.log_level)
 
-            if return_ids:
-                tokens_ids = self._pipeline.tokenizer.convert_tokens_to_ids(tokens_txt)
-                return ServeTokenizeResult(tokens=tokens_txt, tokens_ids=tokens_ids)
-            else:
-                return ServeTokenizeResult(tokens=tokens_txt)
+    def continuous_batching(self, app):
+        generation_config = GenerationConfig(
+            eos_token_id=self.tokenizer.eos_token_id,
+            pad_token_id=self.tokenizer.pad_token_id,
+            use_cache=False,
+            num_blocks=1,
+            block_size=1024,
+            do_sample=False,
+            max_batch_tokens=10,
+            scheduler="fifo",
+        )
 
-        except Exception as e:
-            raise HTTPException(status_code=500, detail={"model": "", "error": str(e)})
+        manager: ContinuousBatchingManager = self.model.init_continuous_batching(
+            generation_config=generation_config, streaming=True
+        )
+        manager.start()
 
-    def detokenize(
-        self,
-        tokens_ids: List[int] = Body(None, embed=True),
-        skip_special_tokens: bool = Body(False, embed=True),
-        cleanup_tokenization_spaces: bool = Body(True, embed=True),
-    ):
-        """
-        Detokenize the provided tokens ids to readable text: - **tokens_ids**: List of tokens ids -
-        **skip_special_tokens**: Flag indicating to not try to decode special tokens - **cleanup_tokenization_spaces**:
-        Flag indicating to remove all leading/trailing spaces and intermediate ones.
-        """
-        try:
-            decoded_str = self._pipeline.tokenizer.decode(tokens_ids, skip_special_tokens, cleanup_tokenization_spaces)
-            return ServeDeTokenizeResult(model="", text=decoded_str)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail={"model": "", "error": str(e)})
+        @app.post("/v1/chat/completions")
+        def _serve(req: ChatCompletionInput):
+            if not req.stream:
+                return {"error": "Only streaming mode is supported."}
 
-    async def forward(self, inputs=Body(None, embed=True)):
-        """
-        **inputs**: **attention_mask**: **tokens_type_ids**:
-        """
+            chat = req.messages
 
-        # Check we don't have empty string
-        if len(inputs) == 0:
-            return ServeForwardResult(output=[], attention=[])
+            inputs = self.tokenizer.apply_chat_template(
+                chat, return_tensors="pt", add_generation_prompt=True, tools=req.tools
+            ).to(self.model.device)
 
-        try:
-            # Forward through the model
-            output = self._pipeline(inputs)
-            return ServeForwardResult(output=output)
-        except Exception as e:
-            raise HTTPException(500, {"error": str(e)})
+            generation_config = GenerationConfig(**(req.generation_config or {}))
+
+            def stream_response(_inputs):
+                max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 256
+                request_id = manager.add_request(_inputs, request_id=req.request_id, max_new_tokens=max_new_tokens)
+                queue_is_flushed = False
+
+                for result in manager:
+                    if req.request_id is not None and not queue_is_flushed:
+                        if result.status == RequestStatus.FINISHED:
+                            continue
+                        else:
+                            queue_is_flushed = True
+
+                    finish_reason = "stop" if result.status == RequestStatus.FINISHED else None
+                    yield self.build_chunk(result.next_token, request_id=request_id, finish_reason=finish_reason)
+
+                    if result.status == RequestStatus.FINISHED:
+                        break
+
+                yield "data: [DONE]\n\n"
+
+            return StreamingResponse(stream_response(inputs[0]), media_type="text/event-stream")
+
+    def generate(self, app):
+        @app.post("/v1/chat/completions")
+        def _serve(req: ChatCompletionInput):
+            if not req.stream:
+                return {"error": "Only streaming mode is supported."}
+
+            text = self.tokenizer.apply_chat_template(
+                req.messages, tools=req.tools, add_generation_prompt=True, tokenize=False
+            )
+
+            inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)["input_ids"]
+            request_id = req.request_id if req.request_id is not None else "req_0"
+
+            generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
+
+            if req.generation_config is None:
+                req.generation_config = {}
+
+            generation_config = GenerationConfig(**req.generation_config)
+
+            generation_kwargs = {
+                "inputs": inputs,
+                "attention_mask": torch.ones_like(inputs),
+                "streamer": generation_streamer,
+                "generation_config": generation_config,
+            }
+
+            def stream_response(streamer, _request_id):
+                thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
+                thread.start()
+
+                for result in streamer:
+                    yield self.build_chunk(result, _request_id)
+                yield "data: [DONE]\n\n"
+
+                thread.join()
+
+            return StreamingResponse(stream_response(generation_streamer, request_id), media_type="text/event-stream")
+
+    @staticmethod
+    def get_quantization_config(model_args: ServeArguments) -> Optional["BitsAndBytesConfig"]:
+        if model_args.load_in_4bit:
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                # For consistency with model weights, we use the same value as `torch_dtype`
+                bnb_4bit_compute_dtype=model_args.torch_dtype,
+                bnb_4bit_quant_type=model_args.bnb_4bit_quant_type,
+                bnb_4bit_use_double_quant=model_args.use_bnb_nested_quant,
+                bnb_4bit_quant_storage=model_args.torch_dtype,
+            )
+        elif model_args.load_in_8bit:
+            quantization_config = BitsAndBytesConfig(
+                load_in_8bit=True,
+            )
+        else:
+            quantization_config = None
+
+        return quantization_config
+
+    def load_model_and_tokenizer(self, args: ServeArguments) -> tuple[PreTrainedModel, PreTrainedTokenizerFast]:
+        tokenizer = AutoTokenizer.from_pretrained(
+            args.model_name_or_path,
+            revision=args.model_revision,
+            trust_remote_code=args.trust_remote_code,
+        )
+
+        torch_dtype = args.torch_dtype if args.torch_dtype in ["auto", None] else getattr(torch, args.torch_dtype)
+        quantization_config = self.get_quantization_config(args)
+
+        model_kwargs = {
+            "revision": args.model_revision,
+            "attn_implementation": args.attn_implementation,
+            "torch_dtype": torch_dtype,
+            "device_map": "auto",
+            "quantization_config": quantization_config,
+            "trust_remote_code": args.trust_remote_code,
+        }
+
+        model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path, **model_kwargs)
+
+        if model.generation_config.max_new_tokens is not None and model.generation_config.max_new_tokens < 256:
+            model.generation_config.max_new_tokens = 256
+
+        if getattr(model, "hf_device_map", None) is None:
+            model = model.to(args.device)
+
+        return model, tokenizer
+
+
+if __name__ == "__main__":
+    serve = ServeCommand()
+    serve.run()
