@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Un
 
 import numpy as np
 import torch
+from torch._prims_common import Dim
 import torch.distributed as dist
 from huggingface_hub import file_exists
 from packaging import version
@@ -1976,6 +1977,7 @@ class GenerationMixin(ContinuousMixin):
             and "jamba" not in self.__class__.__name__.lower()
             and "zamba" not in self.__class__.__name__.lower()
             and "bamba" not in self.__class__.__name__.lower()
+            and "minimax" not in self.__class__.__name__.lower()
         )
 
     def _prepare_cache_for_generation(
@@ -4407,12 +4409,42 @@ class GenerationMixin(ContinuousMixin):
 
                 # reshape for beam search
                 next_token_scores = next_token_scores.view(batch_size, group_size * vocab_size)
+                
+                if generation_config.do_sample: 
+                    warpers = [p for p in logits_processor if getattr(p,'is_warper',False)] 
+                
+                    for warper in warpers: 
+                        next_token_scores = warper(group_input_ids, next_token_scores) 
+                    
+                    num_possible_tokens = torch.sum( next_token_scores > -float('inf'), dim = -1).item()
+                    n_eos_tokens = eos_token_id.shape[0] if eos_token_id is not None else 0
+                    next_candidate = max(2,1 + n_eos_tokens)* group_size 
 
-                # Sample 1 + len(eos_token_id) next tokens for each beam so we have at least 1 non eos token per beam.
-                n_eos_tokens = eos_token_id.shape[0] if eos_token_id is not None else 0
-                next_token_scores, next_tokens = torch.topk(
-                    next_token_scores, max(2, 1 + n_eos_tokens) * group_size, dim=1, largest=True, sorted=True
-                )
+                    mini_possible_tokens = min(
+                        num_possible_tokens, 
+                        next_candidate
+                    )
+                    probs = torch.nn.functional.softmax(
+                        next_token_scores , 
+                        dim = -1
+                    )
+                    
+                    next_tokens = torch.multinomial(
+                        input = probs ,  
+                        num_samples = int(mini_possible_tokens)
+                    )
+                    next_token_scores = torch.gather(
+                        input = probs,
+                        dim= -1, 
+                        index = next_tokens   
+                    )
+
+                else : 
+                    # Sample 1 + len(eos_token_id) next tokens for each beam so we have at least 1 non eos token per beam.
+                    n_eos_tokens = eos_token_id.shape[0] if eos_token_id is not None else 0
+                    next_token_scores, next_tokens = torch.topk(
+                        next_token_scores, max(2, 1 + n_eos_tokens) * group_size, dim=1, largest=True, sorted=True
+                    )
 
                 next_indices = torch.div(next_tokens, vocab_size, rounding_mode="floor")
                 next_tokens = next_tokens % vocab_size

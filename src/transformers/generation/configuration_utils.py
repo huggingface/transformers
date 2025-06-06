@@ -735,8 +735,6 @@ class GenerationConfig(PushToHubMixin):
                     "`diversity_penalty` is not 0.0 or `num_beam_groups` is not 1, triggering group beam search. In "
                     "this generation mode, "
                 )
-                if self.do_sample is True:
-                    raise ValueError(group_error_prefix + "`do_sample` must be set to `False`")
                 if self.num_beams % self.num_beam_groups != 0:
                     raise ValueError(group_error_prefix + "`num_beams` should be divisible by `num_beam_groups`")
                 if self.diversity_penalty == 0.0:
