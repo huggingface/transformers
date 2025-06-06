@@ -142,7 +142,11 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format)
 
         # Resize the image
-        resized_image = F.resize(image, (new_height, new_width), interpolation=interpolation)
+        resized_image = self.resize(
+            image=image,
+            size=SizeDict(height=new_height, width=new_width),
+            interpolation=interpolation,
+        )
 
         return resized_image
 
