@@ -538,12 +538,8 @@ class VJEPA2Embeddings(nn.Module):
         super().__init__()
 
         self.config = config
-        self.is_video = config.frames_per_clip > 1
-        self.patch_embeddings = (
-            VJEPA2PatchEmbeddings3D(config)
-            if self.is_video
-            else VJEPA2PatchEmbeddings(config)
-        )
+        self.patch_embeddings = VJEPA2PatchEmbeddings3D(config)
+
         self.num_patches = self.patch_embeddings.num_patches
         if not self.config.use_rope:
             # position embeddings
@@ -561,19 +557,14 @@ class VJEPA2Embeddings(nn.Module):
         grid_size = (
             self.config.crop_size // self.config.patch_size
         )  # TODO: update; initialization currently assumes square input
-        if self.is_video:
-            grid_depth = self.config.frames_per_clip // self.config.tubelet_size
-            sincos = get_3d_sincos_pos_embed(
-                self.config.hidden_size,
-                grid_size,
-                grid_depth,
-                cls_token=False,
-                uniform_power=self.config.uniform_power,
-            )
-        else:
-            sincos = get_2d_sincos_pos_embed(
-                self.config.hidden_size, grid_size, cls_token=False
-            )
+        grid_depth = self.config.frames_per_clip // self.config.tubelet_size
+        sincos = get_3d_sincos_pos_embed(
+            self.config.hidden_size,
+            grid_size,
+            grid_depth,
+            cls_token=False,
+            uniform_power=self.config.uniform_power,
+        )
         pos_embed.copy_(torch.from_numpy(sincos).float().unsqueeze(0))
 
     def interpolate_pos_encoding(self, x, pos_embed):
@@ -1259,7 +1250,6 @@ class VJEPA2PredictorEmbeddings(nn.Module):
 
         # self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.config = config
-        self.is_video = config.frames_per_clip > 1
         self.predictor_embeddings = nn.Linear(
             config.enc_hidden_size, config.hidden_size
         )
@@ -1300,19 +1290,15 @@ class VJEPA2PredictorEmbeddings(nn.Module):
 
     def _init_pos_embed(self, pos_embed):
         grid_size = self.config.crop_size // self.config.patch_size
-        if self.is_video:
-            grid_depth = self.config.frames_per_clip // self.config.tubelet_size
-            sincos = get_3d_sincos_pos_embed(
-                self.config.hidden_size,
-                grid_size,
-                grid_depth,
-                cls_token=False,
-                uniform_power=self.config.uniform_power,
-            )
-        else:
-            sincos = get_2d_sincos_pos_embed(
-                self.config.hidden_size, grid_size, cls_token=False
-            )
+        grid_depth = self.config.frames_per_clip // self.config.tubelet_size
+        sincos = get_3d_sincos_pos_embed(
+            self.config.hidden_size,
+            grid_size,
+            grid_depth,
+            cls_token=False,
+            uniform_power=self.config.uniform_power,
+        )
+
         pos_embed.copy_(torch.from_numpy(sincos).float().unsqueeze(0))
 
     def forward(
