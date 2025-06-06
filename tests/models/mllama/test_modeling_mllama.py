@@ -366,15 +366,15 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     def test_assisted_decoding_with_num_logits_to_keep(self):
         pass
 
-    @unittest.skip(reason="Mllama uses self.weights dirrectly causing device mismatch when offloading`")
+    @unittest.skip(reason="Mllama uses self.weights directly causing device mismatch when offloading`")
     def test_cpu_offload(self):
         pass
 
-    @unittest.skip(reason="Mllama uses self.weights dirrectly causing device mismatch when offloading`")
+    @unittest.skip(reason="Mllama uses self.weights directly causing device mismatch when offloading`")
     def test_disk_offload_bin(self):
         pass
 
-    @unittest.skip(reason="Mllama uses self.weights dirrectly causing device mismatch when offloading`")
+    @unittest.skip(reason="Mllama uses self.weights directly causing device mismatch when offloading`")
     def test_disk_offload_safetensors(self):
         pass
 
