@@ -561,14 +561,16 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # image = Image.open(requests.get(url, stream=True).raw)
         inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(model.device)
-        generate_ids = model.generate(**inputs, max_new_tokens=200)
+        generate_ids = model.generate(**inputs, max_new_tokens=100)
         output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
         # fmt: off
         EXPECTED_GENERATION = """
+Describe the images.
+The first image shows a black dog sitting on a wooden surface. The dog has a glossy coat and is looking directly at the camera with a calm expression. The wooden background appears to be made of weathered wooden planks, giving the image a rustic feel.
 
+The second image depicts a scenic mountain landscape. The mountains are rugged and covered with patches of green vegetation. The sky is clear, and the scene conveys a sense of tranquility and natural beauty. The mountains extend into the
 """
-        breakpoint()
         # fmt: on
         # check that both inputs are handled correctly and generate the same output
         self.assertEqual(output, EXPECTED_GENERATION)
@@ -593,14 +595,12 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_GENERATIONS = Expectations(
             {
                 ("cuda", 7): "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a black Labrador",
-                ("cuda", 8): "",
                 ("xpu", 3): "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which covers the entire background. The dog appears to be the main focus",
             }
         )  # fmt: skip
         EXPECTED_GENERATION = EXPECTED_GENERATIONS.get_expectation()
         self.assertTrue(output in EXPECTED_GENERATION)
 
-    @require_torch_large_accelerator
     @slow
     @require_bitsandbytes
     def test_pixtral_batched(self):
