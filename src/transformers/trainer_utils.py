@@ -323,19 +323,6 @@ def default_hp_space_ray(trial) -> dict[str, float]:
     }
 
 
-def default_hp_space_sigopt(trial):
-    return [
-        {"bounds": {"min": 1e-6, "max": 1e-4}, "name": "learning_rate", "type": "double", "transformation": "log"},
-        {"bounds": {"min": 1, "max": 6}, "name": "num_train_epochs", "type": "int"},
-        {"bounds": {"min": 1, "max": 40}, "name": "seed", "type": "int"},
-        {
-            "categorical_values": ["4", "8", "16", "32", "64"],
-            "name": "per_device_train_batch_size",
-            "type": "categorical",
-        },
-    ]
-
-
 def default_hp_space_wandb(trial) -> dict[str, float]:
     from .integrations import is_wandb_available
 
@@ -357,7 +344,6 @@ def default_hp_space_wandb(trial) -> dict[str, float]:
 class HPSearchBackend(ExplicitEnum):
     OPTUNA = "optuna"
     RAY = "ray"
-    SIGOPT = "sigopt"
     WANDB = "wandb"
 
 

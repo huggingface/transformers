@@ -1787,10 +1787,18 @@ class Trainer:
         elif self.hp_search_backend == HPSearchBackend.RAY:
             params = trial
             params.pop("wandb", None)
-        elif self.hp_search_backend == HPSearchBackend.SIGOPT:
-            params = {k: int(v) if isinstance(v, str) else v for k, v in trial.assignments.items()}
         elif self.hp_search_backend == HPSearchBackend.WANDB:
             params = trial
+        elif self.hp_search_backend == "sigopt":
+            import warnings
+
+            warnings.warn(
+                "SigOpt backend is deprecated and will be removed in a future version. "
+                "Please use Optuna, Ray Tune, or Weights & Biases instead.",
+                FutureWarning,
+                stacklevel=2,
+            )
+            params = {k: int(v) if isinstance(v, str) else v for k, v in trial.assignments.items()}
 
         for key, value in params.items():
             if not hasattr(self.args, key):
@@ -1807,10 +1815,9 @@ class Trainer:
             setattr(self.args, key, value)
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             logger.info(f"Trial: {trial.params}")
-        if self.hp_search_backend == HPSearchBackend.SIGOPT:
-            logger.info(f"SigOpt Assignments: {trial.assignments}")
         if self.hp_search_backend == HPSearchBackend.WANDB:
             logger.info(f"W&B Sweep parameters: {trial}")
+
         if self.is_deepspeed_enabled:
             if self.args.deepspeed is None:
                 raise ValueError("For sweeps with deepspeed, `args.deepspeed` must be set")
@@ -2738,12 +2745,18 @@ class Trainer:
                 import ray.train
 
                 run_id = ray.train.get_context().get_trial_id()
-            elif self.hp_search_backend == HPSearchBackend.SIGOPT:
-                run_id = trial.id
             elif self.hp_search_backend == HPSearchBackend.WANDB:
-                import wandb
+                run_id = trial.id
+            elif self.hp_search_backend == "sigopt":
+                import warnings
 
-                run_id = wandb.run.id
+                warnings.warn(
+                    "SigOpt backend is deprecated and will be removed in a future version. "
+                    "Please use Optuna, Ray Tune, or Weights & Biases instead.",
+                    FutureWarning,
+                    stacklevel=2,
+                )
+                run_id = trial.id
             run_name = self.hp_name(trial) if self.hp_name is not None else f"run-{run_id}"
             run_dir = os.path.join(self.args.output_dir, run_name)
         else:
@@ -3562,7 +3575,7 @@ class Trainer:
         **kwargs,
     ) -> Union[BestRun, list[BestRun]]:
         """
-        Launch an hyperparameter search using `optuna` or `Ray Tune` or `SigOpt`. The optimized quantity is determined
+        Launch an hyperparameter search using `optuna` or `Ray Tune` or `Weights & Biases`. The optimized quantity is determined
         by `compute_objective`, which defaults to a function returning the evaluation loss when no metric is provided,
         the sum of all metrics otherwise.
 
@@ -3579,7 +3592,7 @@ class Trainer:
             hp_space (`Callable[["optuna.Trial"], Dict[str, float]]`, *optional*):
                 A function that defines the hyperparameter search space. Will default to
                 [`~trainer_utils.default_hp_space_optuna`] or [`~trainer_utils.default_hp_space_ray`] or
-                [`~trainer_utils.default_hp_space_sigopt`] depending on your backend.
+                [`~trainer_utils.default_hp_space_wandb`] depending on your backend.
             compute_objective (`Callable[[Dict[str, float]], float]`, *optional*):
                 A function computing the objective to minimize or maximize from the metrics returned by the `evaluate`
                 method. Will default to [`~trainer_utils.default_compute_objective`].
@@ -3592,7 +3605,7 @@ class Trainer:
                 `"minimize"` and `"maximize"`, you should pick `"minimize"` when optimizing the validation loss,
                 `"maximize"` when optimizing one or several metrics.
             backend (`str` or [`~training_utils.HPSearchBackend`], *optional*):
-                The backend to use for hyperparameter search. Will default to optuna or Ray Tune or SigOpt, depending
+                The backend to use for hyperparameter search. Will default to optuna or Ray Tune or Weights & Biases, depending
                 on which one is installed. If all are installed, will default to optuna.
             hp_name (`Callable[["optuna.Trial"], str]]`, *optional*):
                 A function that defines the trial/run name. Will default to None.
@@ -3607,14 +3620,23 @@ class Trainer:
                   If `resources_per_trial` is not set in the `kwargs`, it defaults to 1 CPU core and 1 GPU (if available).
                   If `progress_reporter` is not set in the `kwargs`,
                   [ray.tune.CLIReporter](https://docs.ray.io/en/latest/tune/api/doc/ray.tune.CLIReporter.html) is used.
-                - `sigopt`: the parameter `proxies` from
-                  [sigopt.Connection.set_proxies](https://docs.sigopt.com/support/faq#how-do-i-use-sigopt-with-a-proxy).
+                - `wandb`: the parameter `proxies` from
+                  [wandb.sweep](https://docs.wandb.ai/guides/sweeps/configuration).
 
         Returns:
             [`trainer_utils.BestRun` or `List[trainer_utils.BestRun]`]: All the information about the best run or best
             runs for multi-objective optimization. Experiment summary can be found in `run_summary` attribute for Ray
             backend.
         """
+        if backend == "sigopt":
+            import warnings
+
+            warnings.warn(
+                "SigOpt backend is deprecated and will be removed in a future version. "
+                "Please use Optuna, Ray Tune, or Weights & Biases instead.",
+                FutureWarning,
+                stacklevel=2,
+            )
         if backend is None:
             backend = default_hp_search_backend()
         backend = HPSearchBackend(backend)
