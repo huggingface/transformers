@@ -670,7 +670,7 @@ class EoMTPatchEmbeddings(nn.Module):
 
 class EoMTEmbeddings(nn.Module):
     """
-    Construct the CLS token, mask token, register tokens, position and patch embeddings.
+    Construct the CLS token, mask token, position and patch embeddings.
     """
 
     def __init__(self, config: EoMTConfig) -> None:
@@ -705,7 +705,6 @@ class EoMTEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.dinov2_with_registers.modeling_dinov2_with_registers.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -716,19 +715,12 @@ def eager_attention_forward(
     dropout: float = 0.0,
     **kwargs,
 ):
-    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
-
-    # Normalize the attention scores to probabilities.
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-
-    # This is actually dropping out entire tokens to attend to, which might
-    # seem a bit unusual, but is taken from the original Transformer paper.
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    # Mask heads if we want to
     if attention_mask is not None:
-        attn_weights = attn_weights * attention_mask
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -807,25 +799,6 @@ class EoMTAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class EoMTMLP(nn.Module):
-    def __init__(self, config) -> None:
-        super().__init__()
-        in_features = out_features = config.hidden_size
-        hidden_features = int(config.hidden_size * config.mlp_ratio)
-        self.fc1 = nn.Linear(in_features, hidden_features, bias=True)
-        if isinstance(config.hidden_act, str):
-            self.activation = ACT2FN[config.hidden_act]
-        else:
-            self.activation = config.hidden_act
-        self.fc2 = nn.Linear(hidden_features, out_features, bias=True)
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.fc1(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        hidden_state = self.fc2(hidden_state)
-        return hidden_state
-
-
 class EoMTLayerScale(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
@@ -869,6 +842,42 @@ class EoMTDropPath(nn.Module):
         return "p={}".format(self.drop_prob)
 
 
+class EoMTMLP(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+        in_features = out_features = config.hidden_size
+        hidden_features = int(config.hidden_size * config.mlp_ratio)
+        self.fc1 = nn.Linear(in_features, hidden_features, bias=True)
+        if isinstance(config.hidden_act, str):
+            self.activation = ACT2FN[config.hidden_act]
+        else:
+            self.activation = config.hidden_act
+        self.fc2 = nn.Linear(hidden_features, out_features, bias=True)
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.fc1(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        hidden_state = self.fc2(hidden_state)
+        return hidden_state
+
+
+class EoMTSwiGLUFFN(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+        in_features = out_features = config.hidden_size
+        hidden_features = int(config.hidden_size * config.mlp_ratio)
+        hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
+
+        self.weights_in = nn.Linear(in_features, 2 * hidden_features, bias=True)
+        self.weights_out = nn.Linear(hidden_features, out_features, bias=True)
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.weights_in(hidden_state)
+        x1, x2 = hidden_state.chunk(2, dim=-1)
+        hidden = nn.functional.silu(x1) * x2
+        return self.weights_out(hidden)
+
+
 class EoMTLayer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
 
@@ -881,7 +890,11 @@ class EoMTLayer(nn.Module):
         self.drop_path = EoMTDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = EoMTMLP(config)
+
+        if config.use_swiglu_ffn:
+            self.mlp = EoMTSwiGLUFFN(config)
+        else:
+            self.mlp = EoMTMLP(config)
         self.layer_scale2 = EoMTLayerScale(config)
 
     def forward(
@@ -1008,7 +1021,7 @@ class EoMTPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
             module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.data.normal_(mean=0.0, std=1)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, EoMTLayerScale):
@@ -1016,9 +1029,7 @@ class EoMTPreTrainedModel(PreTrainedModel):
                 module.lambda1.data.fill_(self.config.layerscale_value)
         elif isinstance(module, EoMTEmbeddings):
             module.cls_token.data = nn.init.trunc_normal_(
-                module.cls_token.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
+                module.cls_token.data.to(torch.float32), mean=0.0, std=std
             ).to(module.cls_token.dtype)
             module.register_tokens.data.zero_()
 
@@ -1029,6 +1040,8 @@ class EoMTPreTrainedModel(PreTrainedModel):
     """
 )
 class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
+    main_input_name = "pixel_values"
+
     def __init__(self, config: EoMTConfig) -> None:
         super().__init__(config)
         self.config = config
@@ -1057,9 +1070,6 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
 
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
-
     def get_loss_dict(
         self,
         masks_queries_logits: Tensor,
@@ -1068,7 +1078,6 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
         class_labels: Tensor,
         auxiliary_predictions: Dict[str, Tensor],
     ) -> Dict[str, Tensor]:
-        """Perform weighted loss computation."""
         loss_dict: Dict[str, Tensor] = self.criterion(
             masks_queries_logits=masks_queries_logits,
             class_queries_logits=class_queries_logits,
@@ -1077,6 +1086,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
             auxiliary_predictions=auxiliary_predictions,
         )
 
+        # weight each loss by `self.weight_dict[<LOSS_NAME>]` including auxiliary losses
         for key, weight in self.weight_dict.items():
             for loss_key, loss in loss_dict.items():
                 if key in loss_key:
@@ -1087,33 +1097,6 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
     def get_loss(self, loss_dict: Dict[str, Tensor]) -> Tensor:
         return sum(loss_dict.values())
 
-    def predict(self, logits: torch.Tensor):
-        query_tokens = logits[:, : self.config.num_queries, :]
-        class_logits = self.class_predictor(query_tokens)
-
-        prefix_tokens = logits[:, self.config.num_queries + self.embeddings.num_prefix_tokens :, :]
-        prefix_tokens = prefix_tokens.transpose(1, 2)
-
-        prefix_tokens = prefix_tokens.reshape(prefix_tokens.shape[0], -1, *self.grid_size)
-
-        query_tokens = self.mask_head(query_tokens)
-        prefix_tokens = self.upscale_block(prefix_tokens)
-
-        mask_logits = torch.einsum("bqc, bchw -> bqhw", query_tokens, prefix_tokens)
-
-        return mask_logits, class_logits
-
-    @staticmethod
-    def _disable_attention_mask(attn_mask, prob, num_query_tokens, encoder_start_tokens, device):
-        if prob < 1:
-            # Generate random queries to disable based on the probs
-            random_queries = torch.rand(attn_mask.shape[0], num_query_tokens, device=device) > prob
-
-            # Disable attention to the query tokens, considering the prefix tokens
-            attn_mask[:, :num_query_tokens, encoder_start_tokens:][random_queries] = 1
-
-        return attn_mask
-
     @auto_docstring
     @can_return_tuple
     def forward(
@@ -1123,7 +1106,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
         class_labels: Optional[List[Tensor]] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
-    ):
+    ) -> EoMTForUniversalSegmentationOutput:
         r"""
         mask_labels (`List[torch.Tensor]`, *optional*):
             List of mask labels of shape `(num_labels, height, width)` to be fed to a model
@@ -1192,6 +1175,7 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
 
                 # Expand attention mask to 4d mask.
                 attention_mask = attention_mask[:, None, ...].expand(-1, self.config.num_attention_heads, -1, -1)
+                attention_mask = attention_mask.float().masked_fill(~attention_mask, -1e9)
 
             layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
             hidden_states = layer_outputs[0]
@@ -1230,6 +1214,36 @@ class EoMTForUniversalSegmentation(EoMTPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_attentions,
         )
+
+    def get_input_embeddings(self):
+        return self.embeddings.patch_embeddings
+
+    def predict(self, logits: torch.Tensor):
+        query_tokens = logits[:, : self.config.num_queries, :]
+        class_logits = self.class_predictor(query_tokens)
+
+        prefix_tokens = logits[:, self.config.num_queries + self.embeddings.num_prefix_tokens :, :]
+        prefix_tokens = prefix_tokens.transpose(1, 2)
+
+        prefix_tokens = prefix_tokens.reshape(prefix_tokens.shape[0], -1, *self.grid_size)
+
+        query_tokens = self.mask_head(query_tokens)
+        prefix_tokens = self.upscale_block(prefix_tokens)
+
+        mask_logits = torch.einsum("bqc, bchw -> bqhw", query_tokens, prefix_tokens)
+
+        return mask_logits, class_logits
+
+    @staticmethod
+    def _disable_attention_mask(attn_mask, prob, num_query_tokens, encoder_start_tokens, device):
+        if prob < 1:
+            # Generate random queries to disable based on the probs
+            random_queries = torch.rand(attn_mask.shape[0], num_query_tokens, device=device) > prob
+
+            # Disable attention to the query tokens, considering the prefix tokens
+            attn_mask[:, :num_query_tokens, encoder_start_tokens:][random_queries] = 1
+
+        return attn_mask
 
 
 __all__ = ["EoMTPreTrainedModel", "EoMTForUniversalSegmentation"]
