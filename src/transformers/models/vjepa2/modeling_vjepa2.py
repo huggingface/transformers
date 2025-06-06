@@ -556,7 +556,7 @@ class VJEPA2Embeddings(nn.Module):
     def _init_pos_embed(self, pos_embed):
         grid_size = (
             self.config.crop_size // self.config.patch_size
-        )  # TODO: update; initialization currently assumes square input
+        )  
         grid_depth = self.config.frames_per_clip // self.config.tubelet_size
         sincos = get_3d_sincos_pos_embed(
             self.config.hidden_size,
@@ -571,60 +571,38 @@ class VJEPA2Embeddings(nn.Module):
 
         _, N, dim = pos_embed.shape
 
-        if self.is_video:
 
-            # If pos_embed already corret size, just return
-            _, _, T, H, W = x.shape
-            if (
-                H == self.config.img_height
-                and W == self.config.img_width
-                and T == self.config.frames_per_clip
-            ):
-                return pos_embed
-
-            # Convert depth, height, width of input to be measured in patches
-            # instead of pixels/frames
-            T = T // self.config.tubelet_size
-            H = H // self.patch_size
-            W = W // self.patch_size
-
-            # Compute the initialized shape of the positional embedding measured
-            # in patches
-            N_t = self.config.frames_per_clip // self.config.tubelet_size
-            N_h = self.config.img_height // self.patch_size
-            N_w = self.config.img_width // self.patch_size
-
-            # Compute scale factor for spatio-temporal interpolation
-            scale_factor = (T / N_t, H / N_h, W / N_w)
-
-            pos_embed = nn.functional.interpolate(
-                pos_embed.reshape(1, N_t, N_h, N_w, dim).permute(0, 4, 1, 2, 3),
-                scale_factor=scale_factor,
-                mode="trilinear",
-            )
-            pos_embed = pos_embed.permute(0, 2, 3, 4, 1).view(1, -1, dim)
+        # If pos_embed already corret size, just return
+        _, _, T, H, W = x.shape
+        if (
+            H == self.config.img_height
+            and W == self.config.img_width
+            and T == self.config.frames_per_clip
+        ):
             return pos_embed
 
-        else:
+        # Convert depth, height, width of input to be measured in patches
+        # instead of pixels/frames
+        T = T // self.config.tubelet_size
+        H = H // self.patch_size
+        W = W // self.patch_size
 
-            # If pos_embed already corret size, just return
-            _, _, H, W = x.shape
-            if H == self.config.img_height and W == self.config.img_width:
-                return pos_embed
+        # Compute the initialized shape of the positional embedding measured
+        # in patches
+        N_t = self.config.frames_per_clip // self.config.tubelet_size
+        N_h = self.config.img_height // self.patch_size
+        N_w = self.config.img_width // self.patch_size
 
-            # Compute scale factor for spatial interpolation
-            npatch = (H // self.patch_size) * (W // self.patch_size)
-            scale_factor = math.sqrt(npatch / N)
+        # Compute scale factor for spatio-temporal interpolation
+        scale_factor = (T / N_t, H / N_h, W / N_w)
 
-            pos_embed = nn.functional.interpolate(
-                pos_embed.reshape(1, int(math.sqrt(N)), int(math.sqrt(N)), dim).permute(
-                    0, 3, 1, 2
-                ),
-                scale_factor=scale_factor,
-                mode="bicubic",
-            )
-            pos_embed = pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-            return pos_embed
+        pos_embed = nn.functional.interpolate(
+            pos_embed.reshape(1, N_t, N_h, N_w, dim).permute(0, 4, 1, 2, 3),
+            scale_factor=scale_factor,
+            mode="trilinear",
+        )
+        pos_embed = pos_embed.permute(0, 2, 3, 4, 1).view(1, -1, dim)
+        return pos_embed 
 
     def forward(
         self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None
