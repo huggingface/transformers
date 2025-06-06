@@ -524,7 +524,7 @@ class MoshiAsrForConditionalGenerationIntegrationTests(unittest.TestCase):
 
     def setUp(self):
         # TODO: @eustlb, update with correct moshi-asr repo
-        self.model_checkpoint = "/Users/eustachelebihan/dev/add-moshi-asr/tmp"
+        self.model_checkpoint = "eustlb/moshi-asr"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
