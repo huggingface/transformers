@@ -58,7 +58,6 @@ def resize_clip(clip, size, interpolation="bilinear"):
             if clip[0].shape[-1] == 3:
                 im_h, im_w, im_c = clip[0].shape
             else:
-                assert clip[0].shape[0] == 3
                 im_c, im_h, im_w = clip[0].shape
             # Min spatial dim already matches minimal size
             if (im_w <= im_h and im_w == size) or (im_h <= im_w and im_h == size):
@@ -131,7 +130,6 @@ def crop_clip(clip, min_h, min_w, h, w):
         if clip[0].shape[-1] == 3:
             cropped = [img[min_h : min_h + h, min_w : min_w + w, :] for img in clip]
         else:
-            assert clip[0].shape[0] == 3
             cropped = [img[:, min_h : min_h + h, min_w : min_w + w] for img in clip]
 
     elif isinstance(clip[0], PIL.Image.Image):
@@ -171,7 +169,6 @@ class CenterCrop(object):
             if clip[0].shape[-1] == 3:
                 im_h, im_w, im_c = clip[0].shape
             else:
-                assert clip[0].shape[0] == 3
                 im_c, im_h, im_w = clip[0].shape
         elif isinstance(clip[0], PIL.Image.Image):
             im_w, im_h = clip[0].size
@@ -224,7 +221,6 @@ class ClipToTensor(object):
         # Retrieve shape
         if isinstance(clip[0], np.ndarray):
             h, w, ch = clip[0].shape
-            assert ch == self.channel_nb, "Got {0} instead of 3 channels".format(ch)
         elif isinstance(clip[0], Image.Image):
             w, h = clip[0].size
         elif isinstance(clip[0], torch.Tensor):
@@ -404,7 +400,6 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
     pos: a list of positions to be encoded: size (M,)
     returns: (M, D)
     """
-    assert embed_dim % 2 == 0
     omega = np.arange(embed_dim // 2, dtype=float)
     omega /= embed_dim / 2.0
     omega = 1.0 / 10000**omega  # (D/2,)
@@ -449,7 +444,6 @@ class VJEPA2ImageProcessor(BaseImageProcessor):
     def preprocess(self, images, return_tensors):
         if isinstance(images, Image.Image):
             images = to_numpy_array(images)  # H x W x 3
-            assert images.ndim == 3
             images = np.expand_dims(images, axis=0)  # T=1 x H x W x C
         else:
             # to adapt video data
@@ -608,7 +602,6 @@ class VJEPA2Embeddings(nn.Module):
             N_t = self.config.frames_per_clip // self.config.tubelet_size
             N_h = self.config.img_height // self.patch_size
             N_w = self.config.img_width // self.patch_size
-            assert N_h * N_w * N_t == N, "Positional embedding initialized incorrectly"
 
             # Compute scale factor for spatio-temporal interpolation
             scale_factor = (T / N_t, H / N_h, W / N_w)
@@ -784,10 +777,7 @@ class VJEPA2SelfAttention(nn.Module):
 
 
 def rotate_queries_or_keys(x, pos):
-    B, num_heads, N, D = x.size()
-    assert (
-        D % 2 == 0
-    ), "Embedding dimension must be a multiple of 2 for block matrix rotation"
+    B, num_heads, N, D = x.size() 
 
     # similar to inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
     # they are computing this every time. instead HF style is to compute the inv_freq once and store it
@@ -1592,11 +1582,8 @@ def _convert_head_mask_to_5d(head_mask, num_hidden_layers):
         - [num_hidden_layers x batch x num_heads x seq_length x seq_length] | [num_hidden_layers]
     """
     if head_mask is not None:
-        assert head_mask.dim() == 3
-        assert head_mask.size(1) == head_mask.size(2)
         head_mask = head_mask.unsqueeze(1).unsqueeze(0)
         head_mask = head_mask.expand(num_hidden_layers, -1, -1, -1, -1)
-        assert head_mask.dim() == 5, f"head_mask.dim != 5, instead {head_mask.dim()}"
         # head_mask = head_mask.to(dtype=self.dtype)  # switch to float if need + fp16 compatibility
     else:
         head_mask = [None] * num_hidden_layers
