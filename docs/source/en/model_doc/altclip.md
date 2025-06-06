@@ -1,116 +1,131 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
-
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
-
+<!--
+Copyright 2022 The HuggingFace Team
+SPDX-License-Identifier: Apache-2.0
 -->
 
-# AltCLIP
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <!-- example badge -->
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-## Overview
+# altCLIP
 
-The AltCLIP model was proposed in [AltCLIP: Altering the Language Encoder in CLIP for Extended Language Capabilities](https://arxiv.org/abs/2211.06679v2) by Zhongzhi Chen, Guang Liu, Bo-Wen Zhang, Fulong Ye, Qinghong Yang, Ledell Wu. AltCLIP
-(Altering the Language Encoder in CLIP) is a neural network trained on a variety of image-text and text-text pairs. By switching CLIP's
-text encoder with a pretrained multilingual text encoder XLM-R, we could obtain very close performances with CLIP on almost all tasks, and extended original CLIP's capabilities such as multilingual understanding.
+[altCLIP](https://arxiv.org/abs/2211.06679v2) swaps CLIP’s original English text encoder for a **multilingual XLM-R** encoder and then realigns image and text representations with a two-stage (teacher → contrastive) schedule.  
+Result: you get CLIP-level zero-shot performance in English **plus** strong retrieval in many other languages — without retraining a separate model for each locale 🎉.
 
-The abstract from the paper is the following:
+You can find all the original **altCLIP** checkpoints under the [altCLIP](https://huggingface.co/models?search=AltCLIP) collection.
 
-*In this work, we present a conceptually simple and effective method to train a strong bilingual multimodal representation model. 
-Starting from the pretrained multimodal representation model CLIP released by OpenAI, we switched its text encoder with a pretrained 
-multilingual text encoder XLM-R, and aligned both languages and image representations by a two-stage training schema consisting of 
-teacher learning and contrastive learning. We validate our method through evaluations of a wide range of tasks. We set new state-of-the-art 
-performances on a bunch of tasks including ImageNet-CN, Flicker30k- CN, and COCO-CN. Further, we obtain very close performances with 
-CLIP on almost all tasks, suggesting that one can simply alter the text encoder in CLIP for extended capabilities such as multilingual understanding.*
+> [!TIP]
+> Click on the *altCLIP* models in the right sidebar for more examples of how to apply altCLIP to different **image-text retrieval** tasks.
 
-This model was contributed by [jongjyh](https://huggingface.co/jongjyh).
+The examples below show how to get similarity scores between an image and one or more captions with the [`AutoModel`] class (a pipeline is not yet registered for altCLIP).
 
-## Usage tips and example
+<hfoptions id="usage">
 
-The usage of AltCLIP is very similar to the CLIP. the difference between CLIP is the text encoder. Note that we use bidirectional attention instead of casual attention
-and we take the [CLS] token in XLM-R to represent text embedding.
+<hfoption id="Pipeline">
 
-AltCLIP is a multi-modal vision and language model. It can be used for image-text similarity and for zero-shot image
-classification. AltCLIP uses a ViT like transformer to get visual features and a bidirectional language model to get the text
-features. Both the text and visual features are then projected to a latent space with identical dimension. The dot
-product between the projected image and text features is then used as a similar score.
+`pipeline()` isn’t available because altCLIP currently exposes only its contrastive head (image × text similarity) and no dedicated *visual-question-answering* or *captioning* head.  
+Use the AutoModel path shown below instead.
 
-To feed images to the Transformer encoder, each image is split into a sequence of fixed-size non-overlapping patches,
-which are then linearly embedded. A [CLS] token is added to serve as representation of an entire image. The authors
-also add absolute position embeddings, and feed the resulting sequence of vectors to a standard Transformer encoder.
-The [`CLIPImageProcessor`] can be used to resize (or rescale) and normalize images for the model.
+</hfoption>
 
-The [`AltCLIPProcessor`] wraps a [`CLIPImageProcessor`] and a [`XLMRobertaTokenizer`] into a single instance to both
-encode the text and prepare the images. The following example shows how to get the image-text similarity scores using
-[`AltCLIPProcessor`] and [`AltCLIPModel`].
+<hfoption id="AutoModel">
 
 ```python
->>> from PIL import Image
->>> import requests
+from PIL import Image
+import requests
+from transformers import AltCLIPProcessor, AltCLIPModel
 
->>> from transformers import AltCLIPModel, AltCLIPProcessor
+model_id  = "BAAI/AltCLIP"
+processor = AltCLIPProcessor.from_pretrained(model_id)
+model     = AltCLIPModel.from_pretrained(model_id)
 
->>> model = AltCLIPModel.from_pretrained("BAAI/AltCLIP")
->>> processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
+url   = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+texts = ["a photo of a cat", "a photo of a dog"]
 
->>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
->>> image = Image.open(requests.get(url, stream=True).raw)
+inputs  = processor(text=texts, images=image, return_tensors="pt", padding=True)
+outputs = model(**inputs)
 
->>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True)
-
->>> outputs = model(**inputs)
->>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
->>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
+probs = outputs.logits_per_image.softmax(dim=1)
+print(probs)   # tensor([[0.9996, 0.0004]])
 ```
 
-<Tip>
+</hfoption>
 
-This model is based on `CLIPModel`, use it like you would use the original [CLIP](clip).
+<hfoption id="transformers-cli">
 
-</Tip>
+altCLIP does **not** require `transformers-cli` at inference time, but the tool is handy for quantisation (see next section).
 
-## AltCLIPConfig
+</hfoption>
 
-[[autodoc]] AltCLIPConfig
-    - from_text_vision_configs
+</hfoptions>
 
-## AltCLIPTextConfig
+---
 
-[[autodoc]] AltCLIPTextConfig
+## Quantization
 
-## AltCLIPVisionConfig
+Quantization reduces the memory burden of large models by storing weights in lower precision.  
+See the [Quantization](../quantization/overview) overview for all available back-ends.
 
-[[autodoc]] AltCLIPVisionConfig
+The example below uses **[dynamic INT-8](../quantization/overview#dynamic-quantization)** to quantize the **Linear** layers to 8-bit integers while keeping Embedding layers in FP32 (PyTorch doesn’t yet support INT-8 Embeddings through `quantize_dynamic`).
 
-## AltCLIPProcessor
+```bash
+# one-liner via transformers-cli
+transformers-cli quantize BAAI/AltCLIP \
+  --method dynamic \
+  --dtype int8 \
+  --modules Linear \
+  --output AltCLIP-int8
+```
 
-[[autodoc]] AltCLIPProcessor
+Or do it in plain PyTorch:
 
-## AltCLIPModel
+```python
+from transformers import AltCLIPModel
+from torch.quantization import quantize_dynamic
+import torch, psutil, os
 
-[[autodoc]] AltCLIPModel
-    - forward
-    - get_text_features
-    - get_image_features
+def mb() -> int:  # quick RAM meter
+    return psutil.Process(os.getpid()).memory_info().rss // 1024**2
 
-## AltCLIPTextModel
+print(f"RAM before load : {mb():>4} MB")
 
-[[autodoc]] AltCLIPTextModel
-    - forward
+model = AltCLIPModel.from_pretrained("BAAI/AltCLIP")
+print(f"FP32 checkpoint : {mb():>4} MB")
 
-## AltCLIPVisionModel
+# dynamic INT-8 (Linear layers only)
+model_int8 = quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
+print(f"INT-8 Linear-only: {mb():>4} MB")
+```
 
-[[autodoc]] AltCLIPVisionModel
-    - forward
+On a typical machine the INT-8 checkpoint occupies **≈ ½ the RAM** of the full-precision model with negligible accuracy drop.
+
+> ℹ️ Embedding layers can be quantized with *float-qparams weight-only* configs once PyTorch exposes them via the public API.
+
+
+---
+
+## Attention visualisation
+
+[AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/main/src/transformers/utils/attention_visualizer.py) is **NOT** compatible yet with encoder models. It may be used **once encoder support lands** (current release only handles decoder-style LLMs).
+
+In the meantime you can manually retrieve ViT self-attention:
+
+```py
+outputs = model(**inputs, output_attentions=True)
+attn = outputs.vision_model_output.attentions  # list[num_layers] of (B,H,S,S)
+```
+
+
+## Notes
+
+- altCLIP’s ViT backbone uses **16 × 16 pixel patches**, so a 224 × 224 image becomes a 14 × 14 patch grid.  
+  When you reshape attention scores remember to use that grid size.
+
+```py
+grid_len = int((attn[-1].size(-1) - 1) ** 0.5)  # 14 for ViT-B/16
+heatmap  = attn[-1][0, 0, 1:, 0].reshape(grid_len, grid_len)
+```
