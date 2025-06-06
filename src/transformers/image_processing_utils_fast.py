@@ -49,6 +49,7 @@ from .utils import (
     is_vision_available,
     logging,
 )
+from .utils.import_utils import is_rocm_platform
 
 
 if is_vision_available():
@@ -280,7 +281,33 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
                 f" {size}."
             )
+        # This is a workaround to avoid a bug in torch.compile when dealing with uint8 on AMD MI3XX GPUs
+        # Tracked in PyTorch issue: https://github.com/pytorch/pytorch/issues/155209
+        # TODO: remove this once the bug is fixed (detected with torch==2.7.0+git1fee196, torchvision==0.22.0+9eb57cd)
+        if torch.compiler.is_compiling() and is_rocm_platform():
+            return self.compile_friendly_resize(image, new_size, interpolation, antialias)
         return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
+
+    @staticmethod
+    def compile_friendly_resize(
+        image: "torch.Tensor",
+        new_size: tuple[int, int],
+        interpolation: Optional["F.InterpolationMode"] = None,
+        antialias: bool = True,
+    ) -> "torch.Tensor":
+        """
+        A wrapper around `F.resize` so that it is compatible with torch.compile when the image is a uint8 tensor.
+        """
+        if image.dtype == torch.uint8:
+            image = image.float() / 256
+            image = F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
+            image = image * 256
+            image = image.masked_fill(image > 255, 255)
+            image = image.masked_fill(image < 0, 0)
+            image = image.round().to(torch.uint8)
+        else:
+            image = F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
+        return image
 
     def rescale(
         self,
