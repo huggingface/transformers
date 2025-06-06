@@ -129,8 +129,8 @@ class Dots1IntegrationTest(unittest.TestCase):
             """To be or not to be, that is the question:\nWhether 'tis nobler in the mind to suffer\nThe"""
         )
         prompt = "To be or not to"
-        tokenizer = AutoTokenizer.from_pretrained("rednote-hilab/dots.llm1.test", use_fast=False)
-        model = Dots1ForCausalLM.from_pretrained("rednote-hilab/dots.llm1.test", device_map="auto")
+        tokenizer = AutoTokenizer.from_pretrained("redmoe-ai-v1/dots.llm1.test", use_fast=False)
+        model = Dots1ForCausalLM.from_pretrained("redmoe-ai-v1/dots.llm1.test", device_map="auto")
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
