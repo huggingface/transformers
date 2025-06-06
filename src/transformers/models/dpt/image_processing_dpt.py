@@ -15,7 +15,8 @@
 """Image processor class for DPT."""
 
 import math
-from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 from ...utils.import_utils import requires
 

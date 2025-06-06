@@ -28,10 +28,11 @@ class DecoderConfig(PretrainedConfig):
 
     model_type = "fsmt_decoder"
 
-    def __init__(self, vocab_size=0, bos_token_id=0):
+    def __init__(self, vocab_size=0, bos_token_id=0, is_encoder_decoder=True):
         super().__init__()
         self.vocab_size = vocab_size
         self.bos_token_id = bos_token_id
+        self.is_encoder_decoder = is_encoder_decoder
 
 
 class FSMTConfig(PretrainedConfig):
@@ -187,7 +188,9 @@ class FSMTConfig(PretrainedConfig):
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
 
-        self.decoder = DecoderConfig(vocab_size=tgt_vocab_size, bos_token_id=eos_token_id)
+        self.decoder = DecoderConfig(
+            vocab_size=tgt_vocab_size, bos_token_id=eos_token_id, is_encoder_decoder=is_encoder_decoder
+        )
         if "decoder" in common_kwargs:
             del common_kwargs["decoder"]
 
