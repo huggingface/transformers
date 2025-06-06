@@ -56,6 +56,7 @@ def generate(
     top_k: int = 0,
     top_p: float = 0.0,
     remove_prompts: bool = True,
+    device: torch.device = torch.device("cpu"),
 ) -> list[list[int]]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -113,8 +114,8 @@ def generate(
 
 
 
-def main(prompt: str = "my name is", model_name: str = "blt-1b"):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def main(prompt: str = "hi", model_name: str = "blt-1b"):
+    device = "mps"
 
     #HF
     blt_repo = "facebook/blt-1b"
@@ -163,7 +164,8 @@ def main(prompt: str = "my name is", model_name: str = "blt-1b"):
         prompts, 
         model=model, 
         tokenizer=tokenizer,
-        max_gen_len=100
+        max_gen_len=4,
+        device=device
     )
     
     text_outputs = [tokenizer.decode(t) for t in outputs]
