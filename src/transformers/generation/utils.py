@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Un
 
 import numpy as np
 import torch
-from torch._prims_common import Dim
 import torch.distributed as dist
 from huggingface_hub import file_exists
 from packaging import version
