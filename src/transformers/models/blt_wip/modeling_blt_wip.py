@@ -624,7 +624,7 @@ class LMTransformer(
         bsz, seqlen = token_values.shape
 
         h = self.tok_embeddings(token_values)
-
+     #   attn_impl = "sdpa"
         mask = (
             mask
             if mask is not None
@@ -711,16 +711,6 @@ def check_non_zero_after_zero(tensor):
     )
     non_zero_after_zero = (tensor != 0) & shifted_mask
     return non_zero_after_zero.any()
-
-
-def to_device(entropy_model, device=None):
-    if device == "cpu":
-        rank = get_local_rank()
-        device = f"cuda:{rank}"
-    entropy_model = entropy_model.to(device)
-    return entropy_model, device
-
-
 
 def entropy(scores):
     """
@@ -866,17 +856,7 @@ def find_entropy_patch_start_ids(
         patch_start_ids = entropies.topk(num_patches - 2, dim=1).indices
         patch_start_ids = patch_start_ids.sort(dim=1).values
     else:
-        # Assumes that there is at least one token going over the threshold
-        if monotonicity:
-            patch_start_mask = patch_start_mask_from_entropy_with_monotonicity(
-                entropies, threshold
-            )
-        elif threshold_add is not None and threshold is not None:
-            patch_start_mask = patch_start_mask_global_and_monotonicity(
-                entropies, threshold, threshold_add
-            )
-        else:
-            patch_start_mask = entropies > threshold
+        patch_start_mask = entropies > threshold
         if not include_next_token:
             patch_start_mask = patch_start_mask[:, :-1]
         # patch_start_mask[1:] |= tokens[:-1] < OFFSET
@@ -905,10 +885,7 @@ class Patcher:
         self.patcher_args = patcher_args
         self.patching_mode = patcher_args.patching_mode
         self.realtime_patching = patcher_args.realtime_patching
-        # self.realtime_patching = True
-        # entropy_model_checkpoint_dir = os.path.join(
-        #     "hf-weights", "entropy_model"
-        # )
+        self.realtime_patching = True
         if self.realtime_patching:
             assert (
                 patcher_args.entropy_model_checkpoint_dir is not None
@@ -927,7 +904,7 @@ class Patcher:
                 patcher_args.entropy_model_checkpoint_dir,
                 state_path,
             )
-            entropy_model, _ =  to_device(entropy_model, patcher_args.patching_device)
+            entropy_model = entropy_model.to(patcher_args.patching_device)
             self.entropy_model = entropy_model
         else:
             self.entropy_model = None
@@ -1055,8 +1032,6 @@ def load_entropy_model(entropy_model_checkpoint_dir, state_dict_path, device="cp
     with open(os.path.join(entropy_model_checkpoint_dir, "params.json")) as fr:
         reloaded = json.loads(fr.read())
 
-
-    #     with open("/Users/itazaporozhets/.cache/huggingface/hub/models--facebook--blt-1b/snapshots/8134b32f0b1d25d1248c30e8c7bdfd442d3bb380/entropy_model/params.json") as fr:
     torch.set_default_dtype(torch.bfloat16)
     model_params = reloaded["entropy_model"]
     logger.warning(
@@ -1070,12 +1045,11 @@ def load_entropy_model(entropy_model_checkpoint_dir, state_dict_path, device="cp
         ffn_dim_multiplier=model_params["ffn_dim_multiplier"],
         vocab_size=model_params["vocab_size"],
         attn_bias_type="local_block_causal",
-        attn_impl="xformers",
+        attn_impl="sdpa", #originally xformers
         sliding_window=512,
     )
     entropy_model = LMTransformer(entropy_model_args)
 
-    # state_dict_path = /Users/itazaporozhets/.cache/huggingface/hub/models--facebook--blt-1b/snapshots/8134b32f0b1d25d1248c30e8c7bdfd442d3bb380/model.safetensors"
     entropy_model.load_state_dict(
         torch.load(state_dict_path, map_location=device)["model"], strict=False
     )
@@ -1885,6 +1859,7 @@ class CrossAttention(nn.Module):
         #output = flex_attention_comp(xq, xk, xv, block_mask=mask)
         is_causal = (mask == "causal") if isinstance(mask, str) else False
         mask = mask if isinstance(mask, torch.Tensor) else None
+        mask = mask.to(dtype=xq.dtype)
         output = F.scaled_dot_product_attention(
             xq,
             xk,
@@ -2281,6 +2256,7 @@ class ByteLatentTransformer(
                     patching_threshold_add=args.patching_threshold_add,
                     monotonicity=args.monotonicity,
                     max_patch_length=args.max_patch_length,
+                    entropy_model_checkpoint_dir=args.entropy_model_checkpoint_dir
                 )
             )
 

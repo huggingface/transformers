@@ -122,6 +122,8 @@ def main(prompt: str = "my name is", model_name: str = "blt-1b"):
     print("Loading model configuration...")
     config_path = hf_hub_download(repo_id=blt_repo, filename="config.json")
     entropy_params_path = hf_hub_download(repo_id=blt_repo, filename="entropy_model/params.json")
+    entropy_checkpoint_path = hf_hub_download(repo_id=blt_repo, filename="entropy_model/consolidated.pth")
+    entropy_dir = os.path.dirname(entropy_checkpoint_path)
     
     with open(config_path, 'r') as f:
         config = json.load(f)
@@ -136,13 +138,15 @@ def main(prompt: str = "my name is", model_name: str = "blt-1b"):
     patcher_args = entropy_params["data"]["patcher_args"]
     model_args.patch_in_forward = True
     model_args.patch_size = patcher_args["patch_size"]
-    model_args.patching_mode = patcher_args["patching_mode"] #TODO: we need to pass "entropy" to run through the Patcher / "entropy model", which is the LMTransformer
+    model_args.patching_mode = "entropy"  #patcher_args["patching_mode"] #TODO: we need to pass "entropy" to run through the Patcher / "entropy model", which is the LMTransformer
     model_args.patching_threshold = patcher_args["threshold"]
     model_args.patching_threshold_add = patcher_args["threshold_add"]
     model_args.max_patch_length = patcher_args["max_patch_length"]
     model_args.patching_batch_size = patcher_args["patching_batch_size"]
     model_args.patching_device = patcher_args["patching_device"]
     model_args.monotonicity = patcher_args["monotonicity"]
+    model_args.entropy_model_checkpoint_dir = entropy_dir #original args on the hub don't set this
+
 
     model = ByteLatentTransformer.from_pretrained(blt_repo, args=model_args).to(device)
     
