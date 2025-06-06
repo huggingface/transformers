@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     require_torch_sdpa,
     slow,
     torch_device,
+    require_torch_accelerator,
 )
 
 from ...generation.test_utils import GenerationTesterMixin

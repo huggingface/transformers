@@ -283,7 +283,7 @@ class MimiConv1d(nn.Module):
 
         if self.causal and padding_cache is not None:
             layer_padding_cache = padding_cache.update(
-                hidden_states[:, :, -self.padding_total :] if self.padding_total > 0 else torch.tensor([]),
+                hidden_states[:, :, -self.padding_total :] if self.padding_total > 0 else torch.tensor([], dtype=hidden_states.dtype, device=hidden_states.device),
                 self.layer_idx,
             )
 
