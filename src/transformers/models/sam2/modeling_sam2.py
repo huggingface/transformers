@@ -20,7 +20,6 @@ import copy
 import math
 import warnings
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
@@ -1148,6 +1147,7 @@ class Sam2LayerNorm(nn.Module):
         return x
 
 
+# TODO refactor
 def do_pool(x: torch.Tensor, pool: nn.Module, norm: nn.Module = None) -> torch.Tensor:
     if pool is None:
         return x
@@ -1162,6 +1162,7 @@ def do_pool(x: torch.Tensor, pool: nn.Module, norm: nn.Module = None) -> torch.T
     return x
 
 
+# TODO refactor
 class Sam2MultiScaleAttention(nn.Module):
     def __init__(
         self,
@@ -1219,6 +1220,7 @@ class Sam2MultiScaleAttention(nn.Module):
         return outputs
 
 
+# TODO refactor or remove?
 # Copied from transformers.models.convnext.modeling_convnext.drop_path
 def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
@@ -1255,6 +1257,7 @@ class Sam2DropPath(nn.Module):
         return "p={}".format(self.drop_prob)
 
 
+# TODO refactor
 class Sam2MultiScaleBlock(nn.Module):
     def __init__(
         self,
@@ -1401,54 +1404,6 @@ class Sam2MultiScaleBlock(nn.Module):
         return outputs
 
 
-def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
-    ndim = x.ndim
-    assert 0 <= 1 < ndim
-    assert freqs_cis.shape == (x.shape[-2], x.shape[-1])
-    shape = [d if i >= ndim - 2 else 1 for i, d in enumerate(x.shape)]
-    return freqs_cis.view(*shape)
-
-
-def init_t_xy(end_x: int, end_y: int):
-    t = torch.arange(end_x * end_y, dtype=torch.float32)
-    t_x = (t % end_x).float()
-    t_y = torch.div(t, end_x, rounding_mode="floor").float()
-    return t_x, t_y
-
-
-def compute_axial_cis(dim: int, end_x: int, end_y: int, theta: float = 10000.0):
-    freqs_x = 1.0 / (theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
-    freqs_y = 1.0 / (theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
-
-    t_x, t_y = init_t_xy(end_x, end_y)
-    freqs_x = torch.outer(t_x, freqs_x)
-    freqs_y = torch.outer(t_y, freqs_y)
-    freqs_cis_x = torch.polar(torch.ones_like(freqs_x), freqs_x)
-    freqs_cis_y = torch.polar(torch.ones_like(freqs_y), freqs_y)
-    return torch.cat([freqs_cis_x, freqs_cis_y], dim=-1)
-
-
-def apply_rotary_enc(
-    xq: torch.Tensor,
-    xk: torch.Tensor,
-    freqs_cis: torch.Tensor,
-    repeat_freqs_k: bool = False,
-):
-    xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
-    xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2)) if xk.shape[-2] != 0 else None
-    freqs_cis = reshape_for_broadcast(freqs_cis, xq_)
-    xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3)
-    if xk_ is None:
-        # no keys to rotate, due to dropout
-        return xq_out.type_as(xq).to(xq.device), xk
-    # repeat freqs along seq_len dim to match k seq_len
-    if repeat_freqs_k:
-        r = xk_.shape[-2] // xq_.shape[-2]
-        freqs_cis = freqs_cis.repeat(*([1] * (freqs_cis.ndim - 2)), r, 1)
-    xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
-    return xq_out.type_as(xq).to(xq.device), xk_out.type_as(xk).to(xk.device)
-
-
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -1561,6 +1516,109 @@ class Sam2Attention(nn.Module):
         return attn_output
 
 
+def init_2d_position_ids(end_x: int, end_y: int):
+    """Generate 2D position indices for axial rotary embedding."""
+    t = torch.arange(end_x * end_y, dtype=torch.long)
+    t_x = t % end_x
+    t_y = torch.div(t, end_x, rounding_mode="floor")
+    return t_x, t_y
+
+
+class Sam2VisionRotaryEmbedding(nn.Module):
+    """
+    Vision Rotary Position Embedding for SAM2, following transformers library standards.
+    Supports 2D (axial) rotary embeddings for spatial dimensions.
+    """
+
+    def __init__(self, dim: int, end_x: int, end_y: int, theta: float = 10000.0, device=None):
+        super().__init__()
+        # Ensure even dimension for proper axial splitting
+        assert dim % 4 == 0, "Dimension must be divisible by 4 for axial RoPE"
+
+        self.dim = dim
+        self.theta = theta
+        self.max_end_x = end_x
+
+        freqs = 1.0 / (self.theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
+        t_x, t_y = init_2d_position_ids(end_x, end_y)
+        freqs_x = torch.outer(t_x, freqs).float()
+        freqs_y = torch.outer(t_y, freqs).float()
+        self.register_buffer("inv_freq", torch.cat([freqs_x, freqs_y], dim=-1), persistent=False)
+
+    @torch.no_grad()
+    def forward(self, feat_sizes: Tuple[int, int]) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Generate cosine and sine position embeddings for 2D spatial dimensions.
+
+        Args:
+            feat_sizes: Tuple of (width, height) for the feature map
+
+        Returns:
+            Tuple of (cos, sin) tensors of shape (seq_len, dim)
+        """
+        end_x, end_y = feat_sizes
+        freqs = self.inv_freq[: end_x * end_y]  # TODO check that this is correct
+        cos = freqs.cos()
+        sin = freqs.sin()
+        return cos, sin
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x_rotated = torch.zeros_like(x, dtype=x.dtype, device=x.device)
+    x_rotated[..., ::2] = -x[..., 1::2]
+    x_rotated[..., 1::2] = x[..., ::2]
+    return x_rotated
+
+
+# TODO: This leads to ~1e-07 max diff and ~1e-09 avg diff for q_embed and k_embed from the original implementation, most likely due to the use of complex tensors in the original implementation.
+def apply_rotary_pos_emb_2d(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+    repeat_freqs_k: bool = False,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Apply rotary position embedding to query and key tensors for vision models.
+    Follows the standard transformers library pattern.
+
+    Args:
+        q: Query tensor of shape (..., seq_len, head_dim)
+        k: Key tensor of shape (..., seq_len, head_dim)
+        cos: Cosine position embedding of shape (seq_len, head_dim)
+        sin: Sine position embedding of shape (seq_len, head_dim)
+        repeat_freqs_k: Whether to repeat frequencies for keys (for cross-attention)
+
+    Returns:
+        Rotated (q, k) tensors
+    """
+    cos = cos[None, None, :, :]  # (1, 1, seq_len, head_dim)
+    sin = sin[None, None, :, :]  # (1, 1, seq_len, head_dim)
+    cos = torch.flatten(torch.cat((cos.unsqueeze(-1), cos.unsqueeze(-1)), dim=-1), -2)
+    sin = torch.flatten(torch.cat((sin.unsqueeze(-1), sin.unsqueeze(-1)), dim=-1), -2)
+    q_embed = q.float()  # force upscale to float32 as in the original implementation
+    q_embed = (q_embed * cos) + (rotate_half(q_embed) * sin)
+    if k.shape[-2] == 0:
+        # Handle case where keys might be empty due to dropout
+        return q_embed.type_as(q), k
+
+    # Handle key tensor - may need to repeat frequencies if different sequence length
+    if repeat_freqs_k and k.shape[-2] != q.shape[-2]:
+        # Repeat cos/sin to match key sequence length
+        repeat_factor = k.shape[-2] // q.shape[-2]
+        cos_k = cos.repeat(1, 1, repeat_factor, 1)
+        sin_k = sin.repeat(1, 1, repeat_factor, 1)
+    else:
+        cos_k = cos
+        sin_k = sin
+
+    # Apply rotary embedding to keys
+    k_embed = k.float()  # force upscale to float32 as in the original implementation
+    k_embed = (k_embed * cos_k) + (rotate_half(k_embed) * sin_k)
+    return q_embed.type_as(q), k_embed.type_as(k)
+
+
 class Sam2RoPEAttention(Sam2Attention):
     """Attention with rotary position encoding."""
 
@@ -1571,18 +1629,31 @@ class Sam2RoPEAttention(Sam2Attention):
         # whether to repeat q rope to match k length
         # this is needed for cross-attention to memories
         rope_k_repeat=False,
-        feat_sizes=(32, 32),  # [w, h] for stride 16 feats at 512 resolution
+        feat_sizes=(64, 64),  # [w, h] for stride 16 feats at 512 resolution
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
 
-        self.compute_cis = partial(compute_axial_cis, dim=self.internal_dim // self.num_heads, theta=rope_theta)
-        freqs_cis = self.compute_cis(end_x=feat_sizes[0], end_y=feat_sizes[1])
-        self.freqs_cis = freqs_cis
+        # Initialize the standardized vision rotary embedding
+        head_dim = self.internal_dim // self.num_heads
+        self.rotary_emb = Sam2VisionRotaryEmbedding(
+            dim=head_dim, end_x=feat_sizes[0], end_y=feat_sizes[1], theta=rope_theta
+        )
         self.rope_k_repeat = rope_k_repeat
+        self.feat_sizes = feat_sizes
+
+        # Cache for position embeddings
+        self._cached_cos = None
+        self._cached_sin = None
+        self._cached_feat_sizes = None
 
     def forward(
-        self, q: Tensor, k: Tensor, v: Tensor, num_k_exclude_rope: int = 0, **kwargs: Unpack[FlashAttentionKwargs]
+        self,
+        q: Tensor,
+        k: Tensor,
+        v: Tensor,
+        num_k_exclude_rope: int = 0,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tensor:
         point_batch_size = q.shape[1]
         # Input projections
@@ -1595,21 +1666,41 @@ class Sam2RoPEAttention(Sam2Attention):
         k = self._separate_heads(k, self.num_heads)
         v = self._separate_heads(v, self.num_heads)
 
-        # Apply rotary position encoding
-        w = h = math.sqrt(q.shape[-2])
-        self.freqs_cis = self.freqs_cis.to(q.device)
-        if self.freqs_cis.shape[0] != q.shape[-2]:
-            self.freqs_cis = self.compute_cis(end_x=w, end_y=h).to(q.device)
-        if q.shape[-2] != k.shape[-2]:
-            assert self.rope_k_repeat
+        # Determine feature map size - assume square for simplicity or infer from sequence length
+        seq_len = q.shape[-2]
+        w = h = int(math.sqrt(seq_len))
+        current_feat_sizes = (w, h)
 
-        num_k_rope = k.size(-2) - num_k_exclude_rope
-        q, k[:, :, :num_k_rope] = apply_rotary_enc(
-            q,
-            k[:, :, :num_k_rope],
-            freqs_cis=self.freqs_cis,
-            repeat_freqs_k=self.rope_k_repeat,
-        )
+        # Generate or use cached position embeddings
+        if self._cached_cos is None or self._cached_sin is None or self._cached_feat_sizes != current_feat_sizes:
+            cos, sin = self.rotary_emb(current_feat_sizes)
+            # Move to the same device as the input tensors
+            # polar_freqs = polar_freqs.to(q.device)
+            # Cache the embeddings
+            self._cached_cos = cos
+            self._cached_sin = sin
+            self._cached_feat_sizes = current_feat_sizes
+        else:
+            # cos = self._cached_cos
+            # sin = self._cached_sin
+            cos = self._cached_cos
+            sin = self._cached_sin
+
+        # Apply rotary position encoding, excluding some keys if specified
+        if num_k_exclude_rope > 0:
+            # Split keys into rope and non-rope parts
+            k_rope = k[:, :, :-num_k_exclude_rope]
+            k_no_rope = k[:, :, -num_k_exclude_rope:]
+
+            # Apply rope only to the rope part
+            q_rope, k_rope = apply_rotary_pos_emb_2d(q, k_rope, cos, sin, repeat_freqs_k=self.rope_k_repeat)
+
+            # Concatenate back
+            k = torch.cat([k_rope, k_no_rope], dim=-2)
+            q = q_rope
+        else:
+            # Apply rope to all queries and keys
+            q, k = apply_rotary_pos_emb_2d(q, k, cos, sin, repeat_freqs_k=self.rope_k_repeat)
 
         scale = q.shape[-1] ** -0.5
 
@@ -1704,16 +1795,12 @@ class Sam2MemoryAttentionLayer(nn.Module):
         queries = queries + self.dropout1(query)
 
         # Cross-Attention
-        kwds = {}
-        if num_k_exclude_rope > 0:
-            assert isinstance(self.cross_attn_image, Sam2RoPEAttention)
-            kwds = {"num_k_exclude_rope": num_k_exclude_rope}
         query = self.layer_norm2(queries)
         query = self.cross_attn_image(
             q=query + query_point_embedding if self.apply_pe_at_cross_attn_queries else query,
             k=keys + key_point_embedding if self.apply_pe_at_cross_attn_keys else keys,
             v=keys,
-            **kwds,
+            num_k_exclude_rope=num_k_exclude_rope,
         )
         queries = queries + self.dropout2(query)
         # MLP
@@ -1734,8 +1821,6 @@ class Sam2MemoryAttention(nn.Module):
 
         self.hidden_size = config.hidden_size
         self.layer_norm = nn.LayerNorm(self.hidden_size)
-        self.apply_pe_at_input = config.apply_pe_at_input
-        self.batch_first = config.batch_first
 
     def forward(
         self,
@@ -1759,61 +1844,41 @@ class Sam2MemoryAttention(nn.Module):
                 The number of object pointer tokens.
         """
         if isinstance(current_vision_features, list):
-            assert isinstance(current_vision_position_embeddings, list)
-            assert len(current_vision_features) == len(current_vision_position_embeddings) == 1
             current_vision_features, current_vision_position_embeddings = (
                 current_vision_features[0],
                 current_vision_position_embeddings[0],
             )
 
-        assert current_vision_features.shape[1] == memory.shape[1], "Batch size must be the same for curr and memory"
-
         output = current_vision_features
-        if self.apply_pe_at_input and current_vision_position_embeddings is not None:
+        if current_vision_position_embeddings is not None:
             output = output + 0.1 * current_vision_position_embeddings
 
-        if self.batch_first:
-            # Convert to batch first
-            output = output.transpose(0, 1)
-            current_vision_position_embeddings = current_vision_position_embeddings.transpose(0, 1)
-            memory = memory.transpose(0, 1)
-            memory_posision_embeddings = memory_posision_embeddings.transpose(0, 1)
+        # Convert to batch first
+        output = output.transpose(0, 1)
+        current_vision_position_embeddings = current_vision_position_embeddings.transpose(0, 1)
+        memory = memory.transpose(0, 1)
+        memory_posision_embeddings = memory_posision_embeddings.transpose(0, 1)
 
         for layer in self.layers:
-            kwds = {}
-            if isinstance(layer.cross_attn_image, Sam2RoPEAttention):
-                kwds = {"num_k_exclude_rope": num_object_pointer_tokens}
             output = layer(
                 queries=output.unsqueeze(1) if output.ndim == 3 else output,
                 keys=memory.unsqueeze(1),
                 query_point_embedding=current_vision_position_embeddings.unsqueeze(1),
                 key_point_embedding=memory_posision_embeddings.unsqueeze(1),
-                **kwds,
+                num_k_exclude_rope=num_object_pointer_tokens,
             )
 
         normed_output = self.layer_norm(output)
 
-        if self.batch_first:
-            # Convert back to seq first
-            normed_output = normed_output.transpose(0, 1)
-            current_vision_position_embeddings = current_vision_position_embeddings.transpose(0, 1)
+        # Convert back to seq first
+        normed_output = normed_output.transpose(0, 1)
+        current_vision_position_embeddings = current_vision_position_embeddings.transpose(0, 1)
 
         return normed_output
 
 
 # Lightly adapted from ConvNext (https://github.com/facebookresearch/ConvNeXt)
 class Sam2MemoryFuserCXBlock(nn.Module):
-    r"""ConvNeXt Block. There are two equivalent implementations:
-    (1) DwConv -> LayerNorm (channels_first) -> 1x1 Conv -> GELU -> 1x1 Conv; all in (N, C, H, W)
-    (2) DwConv -> Permute to (N, H, W, C); LayerNorm (channels_last) -> Linear -> GELU -> Linear; Permute back
-    We use (2) as we find it slightly faster in PyTorch
-
-    Args:
-        dim (int): Number of input channels.
-        drop_path (float): Stochastic depth rate. Default: 0.0
-        layer_scale_init_value (float): Init value for Layer Scale. Default: 1e-6.
-    """
-
     def __init__(
         self,
         config,
@@ -1835,12 +1900,8 @@ class Sam2MemoryFuserCXBlock(nn.Module):
             memory_fuser_embed_dim, 4 * memory_fuser_embed_dim
         )  # pointwise/1x1 convs, implemented with linear layers
         self.pointwise_conv2 = nn.Linear(4 * memory_fuser_embed_dim, memory_fuser_embed_dim)
-        self.scale = (
-            nn.Parameter(
-                memory_fuser_layer_scale_init_value * torch.ones((memory_fuser_embed_dim)), requires_grad=True
-            )
-            if memory_fuser_layer_scale_init_value > 0
-            else None
+        self.scale = nn.Parameter(
+            memory_fuser_layer_scale_init_value * torch.ones((memory_fuser_embed_dim)), requires_grad=True
         )
         self.drop_path = Sam2DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
@@ -1852,8 +1913,7 @@ class Sam2MemoryFuserCXBlock(nn.Module):
         hidden_states = self.pointwise_conv1(hidden_states)
         hidden_states = self.activation(hidden_states)
         hidden_states = self.pointwise_conv2(hidden_states)
-        if self.scale is not None:
-            hidden_states = self.scale * hidden_states
+        hidden_states = self.scale * hidden_states
         hidden_states = hidden_states.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
 
         hidden_states = input + self.drop_path(hidden_states)
@@ -1863,17 +1923,10 @@ class Sam2MemoryFuserCXBlock(nn.Module):
 class Sam2MemoryFuser(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.input_projection = nn.Identity()
-        layer = Sam2MemoryFuserCXBlock(config)
-        self.layers = get_clones(layer, config.memory_fuser_num_layers)
-        if config.memory_fuser_input_projection:
-            assert config.memory_fuser_embed_dim is not None
-            embed_dim = config.memory_fuser_embed_dim
-            self.input_projection = nn.Conv2d(embed_dim, embed_dim, kernel_size=1)
+        self.layers = nn.ModuleList([Sam2MemoryFuserCXBlock(config) for _ in range(config.memory_fuser_num_layers)])
 
     def forward(self, hidden_states):
         # normally hidden_states: (N, C, H, W)
-        hidden_states = self.input_projection(hidden_states)
         for layer in self.layers:
             hidden_states = layer(hidden_states)
         return hidden_states

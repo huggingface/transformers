@@ -86,10 +86,6 @@ class Sam2MemoryAttentionConfig(PretrainedConfig):
             Dimensionality of the hidden states.
         num_layers (`int`, *optional*, defaults to 4):
             The number of layers in the memory attention module.
-        batch_first (`bool`, *optional*, defaults to `True`):
-            Whether the input and output tensors are provided in batch-first format.
-        apply_pe_at_input (`bool`, *optional*, defaults to `True`):
-            Whether to apply positional encoding at the input of the memory attention module.
         hidden_act (`str`, *optional*, defaults to `"relu"`):
             The non-linear activation function in the memory attention module.
         dim_feedforward (`int`, *optional*, defaults to 2048):
@@ -121,8 +117,6 @@ class Sam2MemoryAttentionConfig(PretrainedConfig):
         self,
         hidden_size=256,
         num_layers=4,
-        batch_first=True,
-        apply_pe_at_input=True,
         hidden_act="relu",
         dim_feedforward=2048,
         dropout=0.1,
@@ -140,8 +134,6 @@ class Sam2MemoryAttentionConfig(PretrainedConfig):
         super().__init__(**kwargs)
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-        self.batch_first = batch_first
-        self.apply_pe_at_input = apply_pe_at_input
         self.hidden_act = hidden_act
         self.dim_feedforward = dim_feedforward
         self.dropout = dropout
@@ -185,8 +177,6 @@ class Sam2MemoryEncoderConfig(PretrainedConfig):
             The number of layers in the memory fuser.
         memory_fuser_embed_dim (`int`, *optional*, defaults to 256):
             The dimension of the memory fuser embedding.
-        memory_fuser_input_projection (`bool`, *optional*, defaults to `False`):
-            Whether to use an input projection for the memory fuser.
         memory_fuser_kernel_size (`int`, *optional*, defaults to 7):
             The kernel size for the memory fuser.
         memory_fuser_padding (`int`, *optional*, defaults to 3):
@@ -212,7 +202,6 @@ class Sam2MemoryEncoderConfig(PretrainedConfig):
         mask_downsampler_hidden_act="gelu",
         memory_fuser_num_layers=2,
         memory_fuser_embed_dim=256,
-        memory_fuser_input_projection=False,
         memory_fuser_kernel_size=7,
         memory_fuser_padding=3,
         memory_fuser_layer_scale_init_value=1e-6,
@@ -237,7 +226,6 @@ class Sam2MemoryEncoderConfig(PretrainedConfig):
         self.mask_downsampler_hidden_act = mask_downsampler_hidden_act
         self.memory_fuser_num_layers = memory_fuser_num_layers
         self.memory_fuser_embed_dim = memory_fuser_embed_dim
-        self.memory_fuser_input_projection = memory_fuser_input_projection
         self.memory_fuser_kernel_size = memory_fuser_kernel_size
         self.memory_fuser_padding = memory_fuser_padding
         self.memory_fuser_layer_scale_init_value = memory_fuser_layer_scale_init_value
