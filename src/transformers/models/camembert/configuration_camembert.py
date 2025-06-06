@@ -16,7 +16,7 @@
 """CamemBERT configuration"""
 
 from collections import OrderedDict
-from typing import Mapping
+from collections.abc import Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig

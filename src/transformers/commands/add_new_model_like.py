@@ -21,7 +21,8 @@ from dataclasses import dataclass
 from datetime import date
 from itertools import chain
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
+from re import Pattern
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import yaml
 

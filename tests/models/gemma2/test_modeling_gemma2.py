@@ -258,10 +258,14 @@ class Gemma2IntegrationTest(unittest.TestCase):
         # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
         EXPECTED_BATCH_TEXTS = Expectations(
             {
+                ("xpu", 3): [
+                    "Hello I am doing a project on the 1960s and I am trying to find out what the average",
+                    "Hi today I'm going to be talking about the 10 most powerful characters in the Naruto series.",
+                ],
                 ("cuda", 8): [
                     "Hello I am doing a project on the 1960s and I am trying to find out what the average",
                     "Hi today I'm going to be talking about the 10 most powerful characters in the Naruto series.",
-                ]
+                ],
             }
         )
         EXPECTED_BATCH_TEXT = EXPECTED_BATCH_TEXTS.get_expectation()
@@ -315,6 +319,9 @@ class Gemma2IntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b", pad_token="</s>", padding_side="right")
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {
+                ("xpu", 3): [
+                    "Hello I am doing a project for my school and I need to know how to make a program that will take a number"
+                ],
                 ("cuda", 7): [
                     "Hello I am doing a project for my school and I need to know how to make a program that will take a number"
                 ],
