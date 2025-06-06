@@ -1068,7 +1068,7 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
 
         # past_key_values_length
         past_key_values_length = (
-            past_key_values[0][0].shape[2] - self.config.query_length if past_key_values is not None else 0
+            past_key_values.get_seq_length() - self.config.query_length if past_key_values is not None else 0
         )
 
         query_length = query_embeds.shape[1] if query_embeds is not None else 0

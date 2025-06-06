@@ -558,7 +558,7 @@ class Speech2Text2Decoder(Speech2Text2PreTrainedModel):
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
@@ -899,7 +899,7 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
             attention_mask = input_ids.new_ones(input_ids.shape)
 
         if past_key_values:
-            past_length = past_key_values[0][0].shape[2]
+            past_length = past_key_values.get_seq_length()
 
             # Some generation methods already pass only the last input ID
             if input_ids.shape[1] > past_length:

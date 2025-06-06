@@ -900,7 +900,7 @@ class RoCBertModel(RoCBertPreTrainedModel):
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
@@ -1487,7 +1487,7 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel, GenerationMixin):
 
         # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
+            past_length = past_key_values.get_seq_length()
 
             # Some generation methods already pass only the last input ID
             if input_ids.shape[1] > past_length:

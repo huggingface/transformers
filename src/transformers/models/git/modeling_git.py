@@ -1151,7 +1151,7 @@ class GitModel(GitPreTrainedModel):
         past_key_values_length = 0
         if past_key_values is not None:
             past_key_values_length = (
-                past_key_values[0][0].shape[2]
+                past_key_values.get_seq_length()
                 if not isinstance(past_key_values, Cache)
                 else past_key_values.get_seq_length()
             )

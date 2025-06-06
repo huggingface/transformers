@@ -1363,7 +1363,7 @@ class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
         if past_key_values:
-            past_length = past_key_values[0][0].shape[-2]
+            past_length = past_key_values.get_seq_length()
 
             # Some generation methods already pass only the last input ID
             if input_ids.shape[1] > past_length:

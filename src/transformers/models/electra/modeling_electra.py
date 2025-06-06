@@ -788,7 +788,7 @@ class ElectraModel(ElectraPreTrainedModel):
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=device)

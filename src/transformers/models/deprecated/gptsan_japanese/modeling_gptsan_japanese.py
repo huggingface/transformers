@@ -919,7 +919,7 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
         num_batch = input_ids.shape[0]
         pasts_or_spout_value = None
         if past_key_values is not None:
-            num_pasts_contexts = past_key_values[0][0].shape[2]
+            num_pasts_contexts = past_key_values.get_seq_length()
         elif self.config.d_spout and spout is not None:
             # `spout` is a special input vector specific to GPTSAN
             # This controls the output by projecting embedded information such as the class of sentences during learning.

@@ -1189,7 +1189,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
 
         # past_key_values_length
         past_key_values_length = (
-            past_key_values[0][0].shape[2] - self.config.query_length if past_key_values is not None else 0
+            past_key_values.get_seq_length() - self.config.query_length if past_key_values is not None else 0
         )
 
         query_length = (

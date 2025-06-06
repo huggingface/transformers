@@ -591,7 +591,7 @@ class OpenLlamaModel(OpenLlamaPreTrainedModel):
                 use_cache = False
 
         if past_key_values is not None:
-            past_key_values_length = past_key_values[0][0].shape[2]
+            past_key_values_length = past_key_values.get_seq_length()
             seq_length_with_past = seq_length_with_past + past_key_values_length
 
         if position_ids is None:
@@ -804,7 +804,7 @@ class OpenLlamaForCausalLM(OpenLlamaPreTrainedModel):
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
         if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
+            past_length = past_key_values.get_seq_length()
 
             # Some generation methods already pass only the last input ID
             if input_ids.shape[1] > past_length:

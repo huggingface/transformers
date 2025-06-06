@@ -439,7 +439,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         if past_key_values is not None:
             # Omit tokens covered by past_key_values
             seq_len = input_ids.shape[1]
-            past_length = past_key_values[0][0].shape[-2]
+            past_length = past_key_values.get_seq_length()
 
             # Some generation methods already pass only the last input ID
             if input_ids.shape[1] > past_length:

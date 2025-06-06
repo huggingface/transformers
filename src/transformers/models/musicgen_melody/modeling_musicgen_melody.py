@@ -532,7 +532,7 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
 
         if inputs_embeds is None:
             inputs_embeds = sum([self.embed_tokens[codebook](input[:, codebook]) for codebook in range(num_codebooks)])
@@ -1813,7 +1813,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel, GenerationMixin):
                 decoder_attention_mask = decoder_attention_mask.repeat((2, 1))
 
         if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
+            past_length = past_key_values.get_seq_length()
 
             # Some generation methods already pass only the last input ID
             if decoder_input_ids.shape[1] > past_length:

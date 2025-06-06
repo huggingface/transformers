@@ -736,7 +736,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         r"""
         input_ids (`torch.Tensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
+            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
@@ -1056,7 +1056,7 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
         r"""
         input_ids (`torch.Tensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
+            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
@@ -1169,7 +1169,7 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
         r"""
         input_ids (`torch.Tensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
+            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
@@ -1300,7 +1300,7 @@ class GPTBigCodeForTokenClassification(GPTBigCodePreTrainedModel):
         r"""
         input_ids (`torch.Tensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
-            `past_key_values[0][0].shape[-2]` (`sequence_length` of input past key value states). Indices of input
+            `past_key_values.get_seq_length()` (`sequence_length` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
