@@ -2108,6 +2108,9 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
             The guidance scale for classifier free guidance (CFG). CFG is enabled by setting `guidance_scale > 1`.
             Higher guidance scale encourages the model to generate samples that are more closely linked to the input
             prompt, usually at the expense of poorer quality.
+        guidance_top_k (int, *optional*):
+            The number of highest probability vocabulary tokens to keep for top-k-filtering. However, we do not keep
+            the logits of the combined CFG output, but the conditioned output only.
 
     Examples:
 
@@ -2126,7 +2129,7 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, guidance_scale):
+    def __init__(self, guidance_scale: float, guidance_top_k: Optional[int] = None):
         if guidance_scale > 1:
             self.guidance_scale = guidance_scale
         else:
@@ -2134,6 +2137,7 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
                 "Require guidance scale >1 to use the classifier free guidance processor, got guidance scale "
                 f"{guidance_scale}."
             )
+        self.guidance_top_k = guidance_top_k
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
@@ -2145,9 +2149,20 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
                 f"the conditional inputs, and the second half of batches corresponding to the unconditional inputs. Got "
                 f"batch size {scores.shape[0]} for the logits and {input_ids.shape[0]} for the input ids."
             )
+        # Base CFG
         unguided_bsz = scores.shape[0] // 2
         cond_logits, uncond_logits = scores.split(unguided_bsz, dim=0)
         scores_processed = uncond_logits + (cond_logits - uncond_logits) * self.guidance_scale
+
+        # Optional CFG top k filtering
+        if self.guidance_top_k is not None:
+            # Create top k based on the combined CFG output
+            _, top_k_indices = torch.topk(scores_processed, k=self.guidance_top_k, dim=-1)
+            top_k_mask = torch.ones_like(scores_processed, dtype=torch.bool)
+            top_k_mask = top_k_mask.scatter(dim=-1, index=top_k_indices, value=False)
+            # Only return conditioned logits with top k
+            scores_processed = cond_logits.masked_fill(top_k_mask, torch.finfo(scores_processed).min)
+
         return scores_processed
 
 

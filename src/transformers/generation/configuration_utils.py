@@ -291,6 +291,9 @@ class GenerationConfig(PushToHubMixin):
             The guidance scale for classifier free guidance (CFG). CFG is enabled by setting `guidance_scale > 1`.
             Higher guidance scale encourages the model to generate samples that are more closely linked to the input
             prompt, usually at the expense of poorer quality.
+        guidance_top_k (`int`, *optional*):
+            The same as `top_k` but directly applied after classifier free guidance (CFG) to filter on the conditioned
+            output of CFG.
         low_memory (`bool`, *optional*):
             Switch to sequential beam search and sequential topk for contrastive search to reduce peak memory.
             Used with beam search and contrastive search.
@@ -442,6 +445,7 @@ class GenerationConfig(PushToHubMixin):
         self.sequence_bias = kwargs.pop("sequence_bias", None)
         self.token_healing = kwargs.pop("token_healing", False)
         self.guidance_scale = kwargs.pop("guidance_scale", None)
+        self.guidance_top_k = kwargs.pop("guidance_top_k", None)
         self.low_memory = kwargs.pop("low_memory", None)
         watermarking_config = kwargs.pop("watermarking_config", None)
         if watermarking_config is None:

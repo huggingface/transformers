@@ -18,7 +18,11 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 
-from ...generation.logits_process import ClassifierFreeGuidanceLogitsProcessor, LogitsProcessor, LogitsProcessorList
+from ...generation.logits_process import (
+    ClassifierFreeGuidanceLogitsProcessor,
+    LogitsProcessor,
+    LogitsProcessorList,
+)
 from ...generation.stopping_criteria import StoppingCriteria, StoppingCriteriaList
 from ...generation.streamers import BaseStreamer
 from ...generation.utils import GenerateOutput, GenerationConfig, GenerationMixin
@@ -249,8 +253,10 @@ class DiaGenerationMixin(GenerationMixin):
         cfg_processor = None
         if generation_config.guidance_scale is not None and generation_config.guidance_scale != 1:
             # TODO: check if reshaping on logits doesnt destroy anything (pretty sure it doesn't)
+            # TODO: check if top k works as intended
             cfg_processor = ClassifierFreeGuidanceLogitsProcessor(
                 guidance_scale=generation_config.guidance_scale,
+                guidance_top_k=generation_config.guidance_top_k,
             )
             # Avoid adding CFG again
             generation_config.guidance_scale = None
@@ -298,8 +304,9 @@ class DiaGenerationMixin(GenerationMixin):
             generation_config, use_model_defaults, **kwargs
         )
 
-        # TODO: move default value in saved generation config and make it dependent on this - disallow non-cfg?
+        # TODO: move default value in saved generation config and make it dependent on this
         generation_config.guidance_scale = 3.0
+        generation_config.guidance_top_k = 45
 
         # We allow generation up to max length + max delay pattern
         # (will revert back to max length after generation)
