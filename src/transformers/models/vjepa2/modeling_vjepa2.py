@@ -964,10 +964,8 @@ class VJEPA2Attention(nn.Module):
 
         attention_output = self_outputs[0]
 
-        outputs = (attention_output,) + self_outputs[
-            1:
-        ]  # add attentions if we output them
-        return self_outputs
+        outputs = (attention_output,) + self_outputs[1:]
+        return outputs
 
 
 # Copied from transformers.models.beit.modeling_dinov2.drop_path
