@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch ColQwen2 model."""
 
-import gc
 import unittest
 from typing import ClassVar
 
@@ -29,6 +28,7 @@ from transformers.models.colqwen2.modeling_colqwen2 import ColQwen2ForRetrieval,
 from transformers.models.colqwen2.processing_colqwen2 import ColQwen2Processor
 from transformers.testing_utils import (
     Expectations,
+    cleanup,
     require_bitsandbytes,
     require_torch,
     require_vision,
@@ -289,8 +289,7 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         self.processor = ColQwen2Processor.from_pretrained(self.model_name)
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @require_bitsandbytes
     @slow
