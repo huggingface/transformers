@@ -350,7 +350,7 @@ class DeepseekV2Attention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         position_ids: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
