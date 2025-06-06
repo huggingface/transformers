@@ -23,7 +23,10 @@ from collections.abc import Callable, Iterator, KeysView, ValuesView
 from typing import Any, TypeVar, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
+from ...dynamic_module_utils import (
+    get_class_from_dynamic_module,
+    resolve_trust_remote_code,
+)
 from ...utils import CONFIG_NAME, logging
 
 
@@ -364,6 +367,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("vitpose_backbone", "VitPoseBackboneConfig"),
         ("vits", "VitsConfig"),
         ("vivit", "VivitConfig"),
+        ("vjepa2", "VJEPA2Config"),
         ("wav2vec2", "Wav2Vec2Config"),
         ("wav2vec2-bert", "Wav2Vec2BertConfig"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerConfig"),
@@ -748,6 +752,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("vitpose_backbone", "ViTPoseBackbone"),
         ("vits", "VITS"),
         ("vivit", "ViViT"),
+        ("vjepa2", "VJEPA2Model"),
         ("wav2vec2", "Wav2Vec2"),
         ("wav2vec2-bert", "Wav2Vec2-BERT"),
         ("wav2vec2-conformer", "Wav2Vec2-Conformer"),
@@ -1170,12 +1175,19 @@ class AutoConfig:
             else:
                 upstream_repo = None
             trust_remote_code = resolve_trust_remote_code(
-                trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
+                trust_remote_code,
+                pretrained_model_name_or_path,
+                has_local_code,
+                has_remote_code,
+                upstream_repo,
             )
 
         if has_remote_code and trust_remote_code:
             config_class = get_class_from_dynamic_module(
-                class_ref, pretrained_model_name_or_path, code_revision=code_revision, **kwargs
+                class_ref,
+                pretrained_model_name_or_path,
+                code_revision=code_revision,
+                **kwargs,
             )
             config_class.register_for_auto_class()
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)

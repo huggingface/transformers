@@ -1,14 +1,9 @@
 """VJEPA 2 model configuration"""
 
-import os
-from typing import Union
-
 from ...configuration_utils import PretrainedConfig
-from ...modeling_outputs import dataclass
 
 
 class VJEPA2PredictorConfig(PretrainedConfig):
-
     patch_size: int = 16
     crop_size: int = 224
     frames_per_clip: int = 16

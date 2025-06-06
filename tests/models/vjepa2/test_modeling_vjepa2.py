@@ -26,10 +26,10 @@ from transformers.testing_utils import (
 )
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
-from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+
 
 if is_torch_available():
     import torch
@@ -170,9 +170,7 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = VJEPA2ModelTester(self)
-        self.config_tester = ConfigTester(
-            self, config_class=VJEPA2Config, has_text_modality=False, hidden_size=37
-        )
+        self.config_tester = ConfigTester(self, config_class=VJEPA2Config, has_text_modality=False, hidden_size=37)
 
     @is_flaky(max_attempts=3, description="`torch.nn.init.trunc_normal_` is flaky.")
     def test_initialization(self):
@@ -238,11 +236,7 @@ def prepare_img():
 class VJEPA2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            AutoImageProcessor.from_pretrained(VJEPA_HF_MODEL)
-            if is_vision_available()
-            else None
-        )
+        return AutoImageProcessor.from_pretrained(VJEPA_HF_MODEL) if is_vision_available() else None
 
     @slow
     def test_inference_no_head(self):
@@ -268,6 +262,4 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
             ],
             device=torch_device,
         )
-        torch.testing.assert_close(
-            outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3
-        )
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
