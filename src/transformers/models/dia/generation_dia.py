@@ -19,7 +19,7 @@ import torch
 
 from ...generation.logits_process import (
     ClassifierFreeGuidanceLogitsProcessor,
-    DiaEOSChannelScaleAndFilterLogitsProcessor,
+    DiaEOSChannelFilterLogitsProcessor,
     LogitsProcessor,
     LogitsProcessorList,
 )
@@ -127,9 +127,8 @@ class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
 
 
 class DiaGenerationMixin(GenerationMixin):
-    # Special case of Dia that we need for custom preprocessing:
-    #   "uses_cfg": Indicates CFG which needs preparation to be properly handled by repeats
-    _valid_external_model_kwargs = ["uses_cfg"]
+    # Indicates CFG which needs preparation to be properly handled by repeats
+    _uses_cfg = None
 
     def _get_logits_processor(
         self,
@@ -151,16 +150,15 @@ class DiaGenerationMixin(GenerationMixin):
             # TODO: check if top k works as intended
             cfg_processor = ClassifierFreeGuidanceLogitsProcessor(
                 guidance_scale=generation_config.guidance_scale,
-                guidance_top_k=generation_config.guidance_top_k,
+                guidance_top_k=generation_config.top_k,
             )
             # Avoid adding CFG again
             generation_config.guidance_scale = None
 
         custom_processors.append(
-            DiaEOSChannelScaleAndFilterLogitsProcessor(
+            DiaEOSChannelFilterLogitsProcessor(
                 num_channels=len(self.config.delay_pattern),
                 eos_token_id=generation_config.eos_token_id,
-                eos_scaling=generation_config.eos_scaling,
             )
         )
 
@@ -199,19 +197,13 @@ class DiaGenerationMixin(GenerationMixin):
             generation_config, use_model_defaults, **kwargs
         )
 
-        # TODO: move default value in saved generation config and make it dependent on this
-        # TODO: are we really adding new attributes? I.e. `guidance_top_k` and `eos_scaling`
-        generation_config.guidance_scale = 3.0
-        generation_config.guidance_top_k = 45
-        generation_config.eos_scaling = 0.8
-
         # We allow generation up to max length + max delay pattern
         # (will revert back to max length after generation)
         # TODO: check where max delay wasn't considered but added afterwards
         generation_config.max_length += max(self.config.delay_pattern)
 
-        # Indicating CFG to prepare unconditioned input
-        model_kwargs["uses_cfg"] = generation_config.guidance_scale is not None and generation_config.guidance_scale != 1
+        # Internal flag to indicate CFG that needs to prepare unconditioned input
+        self._uses_cfg = generation_config.guidance_scale is not None and generation_config.guidance_scale != 1
 
         return generation_config, model_kwargs
 
@@ -228,10 +220,9 @@ class DiaGenerationMixin(GenerationMixin):
         )
 
         # If CFG is requested we fill in the unconditioned parts
-        if model_kwargs["uses_cfg"]:
-            inputs = inputs[:, None, :]
+        if self._uses_cfg:
             unconditioned_inputs = torch.zeros_like(inputs)
-            inputs = torch.stack([inputs, unconditioned_inputs], dim=1).view(-1, inputs.shape[-1])
+            inputs = torch.cat([inputs, unconditioned_inputs], dim=0)
 
             if model_kwargs.get("attention_mask", None) is not None:
                 model_kwargs["attention_mask"] = model_kwargs["attention_mask"].repeat_interleave(2, dim=0)
@@ -260,7 +251,7 @@ class DiaGenerationMixin(GenerationMixin):
         # Some default values
         num_channels = self.config.decoder_config.num_channels
         delay_pattern = self.config.delay_pattern
-        real_batch_size = batch_size // 2 if model_kwargs["uses_cfg"] else batch_size
+        real_batch_size = batch_size // 2 if self._uses_cfg else batch_size
 
         # Default to all bos tokens if nothing is provided
         if decoder_input_ids is None:
@@ -338,7 +329,7 @@ class DiaGenerationMixin(GenerationMixin):
 
         # Post processing for CFG and overwriting via delay pattern mask
         # 1. Reshape (bsz * channels, seq_len) to (bsz, seq_len, channels)
-        batch_size = encoder_outputs[0].shape[0] // 2 if uses_cfg else encoder_outputs[0].shape[0]
+        batch_size = encoder_outputs[0].shape[0] // 2 if self._uses_cfg else encoder_outputs[0].shape[0]
         model_inputs["decoder_input_ids"] = model_inputs["decoder_input_ids"].reshape(
             batch_size, -1, self.config.decoder_config.num_channels
         )
@@ -349,7 +340,7 @@ class DiaGenerationMixin(GenerationMixin):
         )
 
         # 3. Apply CFG duplication if needed
-        if uses_cfg:
+        if self._uses_cfg:
             for key in ["decoder_input_ids", "decoder_attention_mask", "decoder_position_ids"]:
                 if model_inputs.get(key, None) is not None:
                     model_inputs[key] = model_inputs[key].repeat_interleave(2, dim=0)
@@ -374,10 +365,6 @@ class DiaGenerationMixin(GenerationMixin):
     ) -> Union[GenerateOutput, torch.LongTensor]:
         decoder_input_ids = kwargs.get("decoder_input_ids", None)
         decoder_input_length = decoder_input_ids.shape[1] if decoder_input_ids is not None else 0
-
-        # A few special cases in Dia that we need for custom preprocessing
-        # Check `self._valid_external_model_kwargs` for more details
-        kwargs["valid_external_model_kwargs"] = self._valid_external_model_kwargs
 
         # TODO: find a way for generation mode to be forced to greedy / sample
 

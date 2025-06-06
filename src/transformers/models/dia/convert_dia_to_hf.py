@@ -28,6 +28,7 @@ from transformers import (
     DiaForConditionalGeneration,
     DiaProcessor,
     DiaTokenizer,
+    GenerationConfig,
 )
 from transformers.utils.import_utils import _is_package_available
 
@@ -158,6 +159,18 @@ def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
     converted_state_dict.update(embeddings)
     print(f"Saved converted checkpoint to {pytorch_dump_folder_path}")
     model_class.load_state_dict(converted_state_dict, assign=True)
+
+    # Generation config
+    model_generation_config = GenerationConfig.from_model_config(DiaConfig())
+    model_generation_config._from_model_config = False
+    model_generation_config.do_sample = True
+    model_generation_config.top_k = 45
+    model_generation_config.top_p = 0.95
+    model_generation_config.temperature = 1.2
+    model_generation_config.guidance_scale = 3.0
+
+    model_class.generation_config = model_generation_config
+
     return model_class
 
 
@@ -168,7 +181,7 @@ if __name__ == "__main__":
         "--checkpoint_path", type=str, default="nari-labs/Dia-1.6B", help="Path to the downloaded checkpoints"
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default="converted_dia_ckpt", type=str, help="Path to the output PyTorch model."
+        "--pytorch_dump_folder_path", default="AntonV/Dia-1.6B", type=str, help="Path to the output PyTorch model."
     )
     parser.add_argument(
         "--convert_preprocessor",
@@ -192,4 +205,4 @@ if __name__ == "__main__":
             processor = DiaProcessor(DacFeatureExtractor(), DiaTokenizer())
             processor.save_pretrained(args.pytorch_dump_folder_path)
 
-    model.save_pretrained("AntonV/Dia-1.6B")
+    model.save_pretrained(args.pytorch_dump_folder_path)
