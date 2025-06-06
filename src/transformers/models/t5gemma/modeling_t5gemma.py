@@ -1428,8 +1428,9 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
     T5GEMMA_START_DOCSTRING,
 )
 class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
-    def __init__(self, config: T5GemmaConfig, is_encoder_decoder: bool = True):
-        config.is_encoder_decoder = is_encoder_decoder
+    def __init__(self, config: T5GemmaConfig, is_encoder_decoder: Optional[bool] = None):
+        if is_encoder_decoder is not None:
+            config.is_encoder_decoder = is_encoder_decoder
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = T5GemmaModel(config)
