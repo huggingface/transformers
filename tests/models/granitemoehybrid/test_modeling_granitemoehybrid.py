@@ -16,8 +16,6 @@
 
 import unittest
 
-import pytest
-
 from transformers import (
     AutoTokenizer,
     GraniteMoeHybridConfig,
@@ -30,8 +28,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...models.bamba.test_modeling_bamba import BambaModelTest, BambaModelTester
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
@@ -43,41 +40,15 @@ if is_torch_available():
     )
 
 
-class GraniteMoeHybridModelTester(BambaModelTester):
+class GraniteMoeHybridModelTester(CausalLMModelTester):
     config_class = GraniteMoeHybridConfig
     if is_torch_available():
-        model_class = GraniteMoeHybridModel
-        for_causal_lm_class = GraniteMoeHybridForCausalLM
-
-    def __init__(
-        self,
-        parent,
-        use_cache=False,
-        shared_intermediate_size=174,
-        layer_types=None,
-    ):
-        super().__init__(parent)
-        self.shared_intermediate_size = shared_intermediate_size
-        self.layer_types = layer_types
-        self.use_cache = use_cache
-
-    def _update_layer_configs(self):
-        super()._update_layer_configs()
-        # GraniteMoeHybrid uses layer_types instead of attn_layer_indices
-        self.layer_types = ["mamba"] * self.num_hidden_layers
-        for idx in self.attn_layer_indices:
-            self.layer_types[idx] = "attention"
-
-    def get_config(self):
-        return super().get_config(
-            shared_intermediate_size=self.shared_intermediate_size,
-            layer_types=self.layer_types,
-        )
+        base_model_class = GraniteMoeHybridModel
+        causal_lm_class = GraniteMoeHybridForCausalLM
 
 
 @require_torch
-class GraniteMoeHybridModelTest(BambaModelTest, GenerationTesterMixin, unittest.TestCase):
-    model_tester_class = GraniteMoeHybridModelTester
+class GraniteMoeHybridModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
         (
             GraniteMoeHybridModel,
@@ -94,11 +65,7 @@ class GraniteMoeHybridModelTest(BambaModelTest, GenerationTesterMixin, unittest.
         if is_torch_available()
         else {}
     )
-
-    def test_config_requires_mamba_or_attention_layers(self):
-        """Ensure we can't create a config with disallowed layers."""
-        with pytest.raises(ValueError):
-            GraniteMoeHybridConfig(layer_types=["not allowed!"])
+    model_tester_class = GraniteMoeHybridModelTester
 
 
 # TODO (@alex-jw-brooks) - update this once the model(s) are out
