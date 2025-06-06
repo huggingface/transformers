@@ -284,6 +284,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
     def setUp(self):
         self.small_model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
         self.medium_model_checkpoint = "OpenGVLab/InternVL3-2B-hf"
+        cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -648,6 +649,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.small_model_checkpoint = "OpenGVLab/InternVL2_5-2B-MPO-hf"
         self.medium_model_checkpoint = "OpenGVLab/InternVL2_5-8B-MPO-hf"
+        cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
