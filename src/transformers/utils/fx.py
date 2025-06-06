@@ -64,6 +64,7 @@ from .import_utils import (
     is_peft_available,
 )
 
+
 if is_peft_available():
     from peft import PeftModel
 
@@ -165,7 +166,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "t5",
     "trocr",
     "vit",
-    "vjepa2", 
+    "vjepa2",
     "xglm",
     "wav2vec2",
     #    "xlnet",
