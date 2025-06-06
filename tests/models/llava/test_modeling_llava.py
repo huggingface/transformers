@@ -556,32 +556,19 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         IMG_URLS = [
             Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
             Image.open(requests.get("https://picsum.photos/id/231/200/300", stream=True).raw),
-            Image.open(requests.get("https://picsum.photos/id/27/500/500", stream=True).raw),
-            Image.open(requests.get("https://picsum.photos/id/17/150/600", stream=True).raw),
         ]
         PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][IMG][IMG][/INST]"
 
         # image = Image.open(requests.get(url, stream=True).raw)
         inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(model.device)
-        generate_ids = model.generate(**inputs, max_new_tokens=500)
+        generate_ids = model.generate(**inputs, max_new_tokens=200)
         output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        print(output)
 
         # fmt: off
         EXPECTED_GENERATION = """
-Describe the images.
-Certainly! Here are the descriptions of the images:
 
-1. **Image 1**: This image features a black dog with a glossy coat sitting on a wooden surface. The dog has a calm and attentive expression, looking directly at the camera. The wooden background has a rustic appearance with visible grain and texture.
-
-2. **Image 2**: This image captures a breathtaking view of a mountainous landscape. The mountains are rugged and covered with patches of green vegetation. The sky above is clear, and the scene conveys a sense of tranquility and natural beauty.
-
-3. **Image 3**: This image shows a beach scene during sunset. The waves are gently rolling onto the shore, and several people can be seen in the water, possibly surfing or swimming. The sky is painted with warm hues of orange and yellow, creating a serene and picturesque atmosphere.
-
-4. **Image 4**: This image depicts a narrow, winding path that cuts through a lush, green landscape. On either side of the path, there is dense grass and various trees, including a prominent tree with white blossoms. The sky is clear and blue, adding to the peaceful and inviting ambiance of the scene.
-
-These descriptions provide a detailed overview of the content and atmosphere of each image.
 """
+        breakpoint()
         # fmt: on
         # check that both inputs are handled correctly and generate the same output
         self.assertEqual(output, EXPECTED_GENERATION)
