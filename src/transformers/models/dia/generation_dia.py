@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch Dia model."""
 
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -20,74 +19,14 @@ import torch
 
 from ...generation.logits_process import (
     ClassifierFreeGuidanceLogitsProcessor,
+    DiaEOSChannelScaleAndFilterLogitsProcessor,
     LogitsProcessor,
     LogitsProcessorList,
 )
-from ...generation.stopping_criteria import StoppingCriteria, StoppingCriteriaList
+from ...generation.stopping_criteria import StoppingCriteriaList
 from ...generation.streamers import BaseStreamer
 from ...generation.utils import GenerateOutput, GenerationConfig, GenerationMixin
 from ...modeling_utils import PreTrainedModel
-
-
-# TODO: move this to logits_process + check if done correctly
-class EOSChannelFilterAndScaleLogitsProcessor(LogitsProcessor):
-    def __init__(self, num_channels: int, eos_value: int, eos_scale: float = 0.8):
-        self.num_channels = num_channels
-        self.eos_value = eos_value
-        self.eos_scale = eos_scale
-
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        """
-        1. EOS scaling
-        2. EOS filter
-            2.1. Only channel 0 can generate EOS
-            2.2. If channel 0 has EOS with highest logit, it will be the only candidate
-            2.3. If channel 0 has EOS not with highest logit, it will be suppressed
-
-        2.2. and 2.3. are especially important in contexts where we allow sampling to guarantee the
-        respective tokens to be (not) sampled.
-        """
-        # Prepare some defaults
-        negative_infinity = torch.finfo(scores).min
-        # Reshape for easier channel indexing [B, C, V]
-        scores = scores.reshape(-1, self.num_channels, scores.shape[-1])
-
-        # EOS scaling
-        scores[:, 0, self.eos_value] *= self.eos_scale
-
-        # EOS filter
-        # 1. Condition: Only the first channel can generate the EOS token
-        # Side condition of disabling generation of special tokens (e.g. audio pad, bos, ...)
-        # (Assumes them to be greater than audio eos token position)
-        scores[:, 1:, self.eos_value :] = torch.full_like(
-            scores[:, 1:, self.eos_value :],
-            fill_value=negative_infinity,
-        )
-        scores[:, 0, self.eos_value + 1 :] = torch.full_like(
-            scores[:, 0, self.eos_value + 1 :],
-            fill_value=negative_infinity,
-        )
-
-        # 2+3 Conditions: Force/Suppress EOS if (not) highest logit
-        # Reshape back to original shape
-        scores = scores.view(-1, scores.shape[-1])
-
-        # Sample highest tokens
-        top_logit_indices = torch.argmax(scores, dim=-1)
-
-        # 2. Force EOS
-        eos_highest_mask = top_logit_indices == self.eos_value
-        mask_eos_highest = torch.zeros_like(scores, dtype=torch.bool)
-        mask_eos_highest[eos_highest_mask, : self.eos_value] = True
-        scores = scores.masked_fill(mask_eos_highest, negative_infinity)
-
-        # 3. Suppress EOS
-        eos_not_highest_mask = top_logit_indices != self.eos_value
-        mask_eos_unless_highest = torch.zeros_like(scores, dtype=torch.bool)
-        mask_eos_unless_highest[eos_not_highest_mask, self.eos_value] = True
-        scores = scores.masked_fill(mask_eos_unless_highest, negative_infinity)
-
-        return scores
 
 
 # TODO: move this to logits_process
@@ -187,54 +126,10 @@ class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
         return scores
 
 
-# TODO: We do not need this --> eos criteria is sufficient --> logits processor needs to handle the delays
-class DiaEosTokenCriteria(StoppingCriteria):
-    """
-    This class can be used to stop generation whenever the "end-of-sequence" token is generated.
-    By default, it uses the `model.generation_config.eos_token_id`.
-
-    Args:
-        eos_token_id (`Union[int, List[int], torch.Tensor]`):
-            The id(s) of the *end-of-sequence* token.
-    """
-
-    def __init__(self, eos_value: int, delay_pattern: torch.Tensor, device: str = "cpu"):
-        self.eos_token_id = torch.tensor(eos_value, device=device)
-        self.max_delay_pattern = delay_pattern.max().item()
-
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
-        """
-        This stopping criteria is used to stop generation when EOS is generated.
-
-        If delay pattern is [0, 2, 3, 4] then:
-
-            s   s+1 s+2 s+3 s+4 s+5 ...
-            |   |   |   |   |   |
-        C0: EOS PAD PAD PAD PAD PAD ...
-        C1: x   x   EOS PAD PAD PAD ...
-        C2: x   x   x   EOS PAD PAD ...
-        C3: x   x   x   x   EOS PAD ...
-
-        We need to stop generation in step s+3, where all of the information is generated.
-        We check by if the first channel has EOS in the `step - max_delay_pattern + 1` step.
-        """
-        # TODO: reshape from (B * C, V) to (B, C, V)
-        # and reshape from (B * C, S) to (B, S, C)
-
-        # TODO: can different samples end at different times? I think this isnt considered atm
-        if input_ids.shape[1] < self.max_delay_pattern:
-            return torch.zeros(input_ids.shape[0], dtype=torch.bool, device=input_ids.device)
-
-        is_done = input_ids[:, -self.max_delay_pattern + 1, 0] == self.eos_token_id
-        return is_done
-
-
 class DiaGenerationMixin(GenerationMixin):
-    # TODO: only "uses_cfg" after refactoring every processor etc out
-    # A few special cases in Dia that we need for custom preprocessing:
-    #   1. "uses_cfg": Indicates CFG which needs preparation to be properly handled by repeats
-    #   2. "eos_scale": Unique to Dia used for logits processing TODO: should be moved to logits_processor and added as gen config attr
-    _valid_external_model_kwargs = ["uses_cfg", "eos_scale"]
+    # Special case of Dia that we need for custom preprocessing:
+    #   "uses_cfg": Indicates CFG which needs preparation to be properly handled by repeats
+    _valid_external_model_kwargs = ["uses_cfg"]
 
     def _get_logits_processor(
         self,
@@ -262,10 +157,10 @@ class DiaGenerationMixin(GenerationMixin):
             generation_config.guidance_scale = None
 
         custom_processors.append(
-            EOSChannelFilterAndScaleLogitsProcessor(
+            DiaEOSChannelScaleAndFilterLogitsProcessor(
                 num_channels=len(self.config.delay_pattern),
-                eos_value=generation_config.eos_token_id,
-                eos_scale=model_kwargs.get("eos_scale", 0.8), # TODO: will become a param in gen config
+                eos_token_id=generation_config.eos_token_id,
+                eos_scaling=generation_config.eos_scaling,
             )
         )
 
@@ -305,8 +200,10 @@ class DiaGenerationMixin(GenerationMixin):
         )
 
         # TODO: move default value in saved generation config and make it dependent on this
+        # TODO: are we really adding new attributes? I.e. `guidance_top_k` and `eos_scaling`
         generation_config.guidance_scale = 3.0
         generation_config.guidance_top_k = 45
+        generation_config.eos_scaling = 0.8
 
         # We allow generation up to max length + max delay pattern
         # (will revert back to max length after generation)

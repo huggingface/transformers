@@ -301,6 +301,8 @@ class GenerationConfig(PushToHubMixin):
             Arguments used to watermark the model outputs by adding a small bias to randomly selected set of "green"
             tokens. See the docs of [`SynthIDTextWatermarkingConfig`] and [`WatermarkingConfig`] for more
             details. If passed as `Dict`, it will be converted to a `WatermarkingConfig` internally.
+        eos_scaling (`float`, *optional*):
+            Scaling factor on the logits of the eos token.
 
         > Parameters that define the output variables of generate
 
@@ -447,6 +449,7 @@ class GenerationConfig(PushToHubMixin):
         self.guidance_scale = kwargs.pop("guidance_scale", None)
         self.guidance_top_k = kwargs.pop("guidance_top_k", None)
         self.low_memory = kwargs.pop("low_memory", None)
+        self.eos_scaling = kwargs.pop("eos_scaling", None)
         watermarking_config = kwargs.pop("watermarking_config", None)
         if watermarking_config is None:
             self.watermarking_config = None

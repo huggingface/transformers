@@ -2137,7 +2137,10 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
                 "Require guidance scale >1 to use the classifier free guidance processor, got guidance scale "
                 f"{guidance_scale}."
             )
+
         self.guidance_top_k = guidance_top_k
+        if self.guidance_top_k is not None and self.guidance_top_k < 1:
+            raise ValueError(f"`guidance_top_k` has to be a strictly positive integer if given, but is {self.guidance_top_k}")
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
@@ -2989,3 +2992,85 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
             The expected mean g-value for watermarked text.
         """
         return coinflip_prob + coinflip_prob * (1 - coinflip_prob) * (1 - (1 / vocab_size))
+
+
+class DiaEOSChannelScaleAndFilterLogitsProcessor(LogitsProcessor):
+    r"""Specialized processor that ensures certain properties around EOS sampling, the processor is split
+    into two part:
+        1. EOS scaling
+        2. EOS filter
+            2.1. Only channel 0 can generate EOS
+            2.2. If channel 0 has EOS with highest logit, it will be the only candidate
+            2.3. If channel 0 has EOS not with highest logit, it will be suppressed
+
+    2.2. and 2.3. are especially important in contexts where we allow sampling to guarantee the
+    respective tokens to be (not) sampled.
+
+    <Tip warning={true}>
+
+    This logits processor is exclusively compatible with
+    [Dia](https://huggingface.co/docs/transformers/en/model_doc/dia).
+
+    </Tip>
+
+    Args:
+        num_channels (`int`):
+            Number of audio codebooks. Simplifies access to the first channel on the logits.
+        eos_token_id (`int`):
+            The id of *end-of-sequence* token.
+        eos_scaling (`float`, *optional*):
+            Scaling value for the logits of the eos token.
+    """
+
+    def __init__(self, num_channels: int, eos_token_id: int, eos_scaling: Optional[float] = None):
+        if num_channels < 1:
+            raise ValueError(f"Audio codebooks need at least one channel, but found {num_channels} channels.")
+        if eos_token_id < 1:
+            raise ValueError(f"Expected `eos_token_id` to be a positive integer, found {eos_token_id} instead.")
+
+        self.num_channels = num_channels
+        self.eos_id = eos_token_id
+        self.eos_scaling = eos_scaling if eos_scaling is not None else 1.0
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        # Prepare some defaults
+        negative_infinity = torch.finfo(scores).min
+        # Reshape for easier channel indexing [B, C, V]
+        scores = scores.reshape(-1, self.num_channels, scores.shape[-1])
+
+        # EOS scaling
+        scores[:, 0, self.eos_id] *= self.eos_scaling
+
+        # EOS filter
+        # 1. Condition: Only the first channel can generate the EOS token
+        # Side condition of disabling generation of special tokens (e.g. audio pad, bos, ...)
+        # (Assumes them to be greater than audio eos token position)
+        scores[:, 1:, self.eos_id :] = torch.full_like(
+            scores[:, 1:, self.eos_id :],
+            fill_value=negative_infinity,
+        )
+        scores[:, 0, self.eos_id + 1 :] = torch.full_like(
+            scores[:, 0, self.eos_id + 1 :],
+            fill_value=negative_infinity,
+        )
+
+        # 2+3 Conditions: Force/Suppress EOS if (not) highest logit
+        # Reshape back to original shape
+        scores = scores.view(-1, scores.shape[-1])
+
+        # Sample highest tokens
+        top_logit_indices = torch.argmax(scores, dim=-1)
+
+        # 2. Force EOS
+        eos_highest_mask = top_logit_indices == self.eos_id
+        mask_eos_highest = torch.zeros_like(scores, dtype=torch.bool)
+        mask_eos_highest[eos_highest_mask, : self.eos_id] = True
+        scores = scores.masked_fill(mask_eos_highest, negative_infinity)
+
+        # 3. Suppress EOS
+        eos_not_highest_mask = top_logit_indices != self.eos_id
+        mask_eos_unless_highest = torch.zeros_like(scores, dtype=torch.bool)
+        mask_eos_unless_highest[eos_not_highest_mask, self.eos_id] = True
+        scores = scores.masked_fill(mask_eos_unless_highest, negative_infinity)
+
+        return scores
