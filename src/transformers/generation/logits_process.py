@@ -3120,7 +3120,6 @@ class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
 
         # Check if eos has been generated in any batch
         channel_generated_eos = torch.argmax(scores, dim=-1)[:, 0] == self.eos_token_id
-        channel_generated_eos[0] = True
 
         # Update active batches
         self.active_batches |= channel_generated_eos
