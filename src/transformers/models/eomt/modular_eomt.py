@@ -89,14 +89,7 @@ class EoMTHungarianMatcher(Mask2FormerHungarianMatcher):
 
 
 class EoMTLoss(Mask2FormerLoss):
-    def __init__(self, config: EoMTConfig, weight_dict: Dict[str, float]):
-        super().__init__()
-        self.matcher = EoMTHungarianMatcher(
-            cost_class=2.0,
-            cost_dice=config.dice_weight,
-            cost_mask=config.mask_weight,
-            num_points=self.num_points,
-        )
+    pass
 
 
 class EoMTPatchEmbeddings(Dinov2PatchEmbeddings):

@@ -351,8 +351,9 @@ class EoMTLoss(nn.Module):
         self.num_points = config.train_num_points
         self.oversample_ratio = config.oversample_ratio
         self.importance_sample_ratio = config.importance_sample_ratio
+
         self.matcher = EoMTHungarianMatcher(
-            cost_class=2.0,
+            cost_class=config.class_weight,
             cost_dice=config.dice_weight,
             cost_mask=config.mask_weight,
             num_points=self.num_points,
