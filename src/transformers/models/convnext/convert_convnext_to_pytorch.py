@@ -311,7 +311,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--checkpoint_url",
-        default="http://dl.fbaipublicfiles.com/convnext/convnext_tiny_1k_224_ema.pth",
+        default="https://dl.fbaipublicfiles.com/convnext/convnext_tiny_1k_224_ema.pth",
         type=str,
         help="URL of the original ConvNeXT checkpoint you'd like to convert.",
     )
