@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from .bigbird_pegasus import *
     from .biogpt import *
     from .bit import *
+    from .bitnet import *
     from .blenderbot import *
     from .blenderbot_small import *
     from .blip import *
@@ -61,14 +62,17 @@ if TYPE_CHECKING:
     from .cohere import *
     from .cohere2 import *
     from .colpali import *
+    from .colqwen2 import *
     from .conditional_detr import *
     from .convbert import *
     from .convnext import *
     from .convnextv2 import *
     from .cpm import *
     from .cpmant import *
+    from .csm import *
     from .ctrl import *
     from .cvt import *
+    from .d_fine import *
     from .dab_detr import *
     from .dac import *
     from .data2vec import *
@@ -101,6 +105,7 @@ if TYPE_CHECKING:
     from .ernie import *
     from .esm import *
     from .falcon import *
+    from .falcon_h1 import *
     from .falcon_mamba import *
     from .fastspeech2_conformer import *
     from .flaubert import *
@@ -128,11 +133,13 @@ if TYPE_CHECKING:
     from .granite import *
     from .granite_speech import *
     from .granitemoe import *
+    from .granitemoehybrid import *
     from .granitemoeshared import *
     from .grounding_dino import *
     from .groupvit import *
     from .helium import *
     from .herbert import *
+    from .hgnet_v2 import *
     from .hiera import *
     from .hubert import *
     from .ibert import *
@@ -179,6 +186,7 @@ if TYPE_CHECKING:
     from .megatron_gpt2 import *
     from .mgp_str import *
     from .mimi import *
+    from .minimax import *
     from .mistral import *
     from .mistral3 import *
     from .mixtral import *
@@ -254,6 +262,7 @@ if TYPE_CHECKING:
     from .rt_detr_v2 import *
     from .rwkv import *
     from .sam import *
+    from .sam_hq import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
     from .segformer import *

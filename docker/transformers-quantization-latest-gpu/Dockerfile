@@ -84,8 +84,14 @@ RUN python3 -m pip install --no-cache-dir compressed-tensors
 # Add AMD Quark for quantization testing
 RUN python3 -m pip install --no-cache-dir amd-quark
 
+# Add AutoRound for quantization testing
+RUN python3 -m pip install --no-cache-dir "auto-round>=0.5.0"
+
 # Add transformers in editable mode
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch]
+
+# `kernels` may give different outputs (within 1e-5 range) even with the same model (weights) and the same inputs
+RUN python3 -m pip uninstall -y kernels
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.

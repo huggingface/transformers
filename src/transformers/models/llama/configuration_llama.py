@@ -28,6 +28,7 @@ class LlamaConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`LlamaModel`]. It is used to instantiate an LLaMA
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the LLaMA-7B.
+    e.g. [meta-llama/Llama-2-7b-hf](https://huggingface.co/meta-llama/Llama-2-7b-hf)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

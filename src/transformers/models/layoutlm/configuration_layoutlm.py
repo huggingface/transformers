@@ -15,7 +15,8 @@
 """LayoutLM model configuration"""
 
 from collections import OrderedDict
-from typing import Any, List, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any, List, Optional
 
 from ... import PretrainedConfig, PreTrainedTokenizer
 from ...onnx import OnnxConfig, PatchingSpec
@@ -139,7 +140,7 @@ class LayoutLMOnnxConfig(OnnxConfig):
         self,
         config: PretrainedConfig,
         task: str = "default",
-        patching_specs: List[PatchingSpec] = None,
+        patching_specs: Optional[List[PatchingSpec]] = None,
     ):
         super().__init__(config, task=task, patching_specs=patching_specs)
         self.max_2d_positions = config.max_2d_position_embeddings - 1

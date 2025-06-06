@@ -64,8 +64,12 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
+        video_processor = self.get_component("video_processor")
         processor = self.processor_class(
-            tokenizer=tokenizer, feature_extractor=feature_extractor, image_processor=image_processor
+            tokenizer=tokenizer,
+            video_processor=video_processor,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
         )
         self.skip_processor_without_typed_kwargs(processor)
         input_str = "lower newer"
@@ -91,8 +95,12 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
+        video_processor = self.get_component("video_processor")
         processor = self.processor_class(
-            tokenizer=tokenizer, feature_extractor=feature_extractor, image_processor=image_processor
+            tokenizer=tokenizer,
+            video_processor=video_processor,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
         )
         self.skip_processor_without_typed_kwargs(processor)
 
@@ -125,8 +133,12 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
+        video_processor = self.get_component("video_processor")
         processor = self.processor_class(
-            tokenizer=tokenizer, feature_extractor=feature_extractor, image_processor=image_processor
+            tokenizer=tokenizer,
+            video_processor=video_processor,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
         )
         self.skip_processor_without_typed_kwargs(processor)
 
@@ -159,7 +171,13 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
-        self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, image_processor=image_processor)
+        video_processor = self.get_component("video_processor")
+        _ = self.processor_class(
+            tokenizer=tokenizer,
+            video_processor=video_processor,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+        )  # Why delete test? TODO: raushan double check tests after cleaning model
 
     @require_torch
     def test_kwargs_overrides_default_tokenizer_kwargs_audio(self):
@@ -175,13 +193,18 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
-        self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, image_processor=image_processor)
+        video_processor = self.get_component("video_processor")
+        _ = self.processor_class(
+            tokenizer=tokenizer,
+            video_processor=video_processor,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+        )
 
     @classmethod
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
-        processor_kwargs = cls.prepare_processor_dict()
-        processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B", **processor_kwargs)
+        processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
         processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
@@ -190,14 +213,14 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
+    def get_video_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
+
     def get_feature_extractor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).feature_extractor
 
-    @staticmethod
-    def prepare_processor_dict():
-        return {
-            "chat_template": "{% set audio_count = namespace(value=0) %}{% set image_count = namespace(value=0) %}{% set video_count = namespace(value=0) %}{% for message in messages %}{% if loop.first and message['role'] != 'system' %}<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n{% endif %}<|im_start|>{{ message['role'] }}\n{% if message['content'] is string %}{{ message['content'] }}<|im_end|>\n{% else %}{% for content in message['content'] %}{% if content['type'] == 'image' or 'image' in content or 'image_url' in content %}{% set image_count.value = image_count.value + 1 %}{% if add_vision_id %}Picture {{ image_count.value }}: {% endif %}<|vision_bos|><|IMAGE|><|vision_eos|>{% elif content['type'] == 'audio' or 'audio' in content or 'audio_url' in content %}{% set audio_count.value = audio_count.value + 1 %}{% if add_audio_id %}Audio {{ audio_count.value }}: {% endif %}<|audio_bos|><|AUDIO|><|audio_eos|>{% elif content['type'] == 'video' or 'video' in content %}{% set video_count.value = video_count.value + 1 %}{% if add_vision_id %}Video {{ video_count.value }}: {% endif %}<|vision_bos|><|VIDEO|><|vision_eos|>{% elif 'text' in content %}{{ content['text'] }}{% endif %}{% endfor %}<|im_end|>\n{% endif %}{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}"
-        }
+    def get_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     @classmethod
     def tearDownClass(cls):
@@ -212,10 +235,14 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
-
-        processor = Qwen2_5OmniProcessor(
-            image_processor=image_processor, feature_extractor=feature_extractor, tokenizer=tokenizer
+        video_processor = self.get_video_processor()
+        processor = self.processor_class(
+            tokenizer=tokenizer,
+            video_processor=video_processor,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
         )
+
         processor.save_pretrained(self.tmpdirname)
         processor = Qwen2_5OmniProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
@@ -230,9 +257,12 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
-
-        processor = Qwen2_5OmniProcessor(
-            image_processor=image_processor, feature_extractor=feature_extractor, tokenizer=tokenizer
+        video_processor = self.get_video_processor()
+        processor = self.processor_class(
+            tokenizer=tokenizer,
+            video_processor=video_processor,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
         )
 
         image_input = self.prepare_image_inputs()
@@ -247,9 +277,12 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
-
-        processor = Qwen2_5OmniProcessor(
-            image_processor=image_processor, feature_extractor=feature_extractor, tokenizer=tokenizer
+        video_processor = self.get_video_processor()
+        processor = self.processor_class(
+            tokenizer=tokenizer,
+            video_processor=video_processor,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
         )
 
         input_str = "lower newer"
@@ -281,9 +314,12 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
-
-        processor = Qwen2_5OmniProcessor(
-            image_processor=image_processor, feature_extractor=feature_extractor, tokenizer=tokenizer
+        video_processor = self.get_video_processor()
+        processor = self.processor_class(
+            tokenizer=tokenizer,
+            video_processor=video_processor,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
         )
 
         input_str = "lower newer"
@@ -377,7 +413,10 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(input_name in out_dict)
         self.assertEqual(len(out_dict["input_ids"]), batch_size)
         self.assertEqual(len(out_dict["attention_mask"]), batch_size)
-        self.assertEqual(len(out_dict[input_name]), batch_size * 1564)
+
+        video_len = 5760 if batch_size == 1 else 5808  # qwen pixels don't scale with bs same way as other models
+        mm_len = batch_size * 1564 if modality == "image" else video_len
+        self.assertEqual(len(out_dict[input_name]), mm_len)
 
         return_tensor_to_type = {"pt": torch.Tensor, "np": np.ndarray, None: list}
         for k in out_dict:
@@ -433,7 +472,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             num_frames=num_frames,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 9568)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 5760)
 
         # Load with `video_fps` arg
         video_fps = 1
@@ -445,7 +484,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             video_fps=video_fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 23920)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 14400)
 
         # Load with `video_fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -466,7 +505,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 717600)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 432000)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
@@ -484,7 +523,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 5704)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 2904)
 
     @require_av
     def test_apply_chat_template_video_special_processing(self):
@@ -567,7 +606,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             signature.parameters.get("videos") is not None
             and signature.parameters["videos"].annotation == inspect._empty
         ):
-            self.skipTest(f"{self.processor_class} does not suport video inputs")
+            self.skipTest(f"{self.processor_class} does not support video inputs")
 
         if "feature_extractor" not in self.processor_class.attributes:
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")

@@ -21,7 +21,8 @@ from dataclasses import dataclass
 from datetime import date
 from itertools import chain
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
+from re import Pattern
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import yaml
 
@@ -512,7 +513,7 @@ def duplicate_module(
     new_model_patterns: ModelPatterns,
     dest_file: Optional[str] = None,
     add_copied_from: bool = True,
-    attrs_to_remove: List[str] = None,
+    attrs_to_remove: Optional[List[str]] = None,
 ):
     """
     Create a new module from an existing one and adapting all function and classes names from old patterns to new ones.

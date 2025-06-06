@@ -39,6 +39,7 @@ from .utils import (
     ExplicitEnum,
     cached_property,
     is_accelerate_available,
+    is_apex_available,
     is_ipex_available,
     is_safetensors_available,
     is_sagemaker_dp_enabled,
@@ -807,8 +808,8 @@ class TrainingArguments:
         "gradient_checkpointing_kwargs",
         "lr_scheduler_kwargs",
     ]
-
     framework = "pt"
+
     output_dir: Optional[str] = field(
         default=None,
         metadata={
@@ -907,7 +908,7 @@ class TrainingArguments:
         default="linear",
         metadata={"help": "The scheduler type to use."},
     )
-    lr_scheduler_kwargs: Optional[Union[dict, str]] = field(
+    lr_scheduler_kwargs: Optional[Union[dict[str, Any], str]] = field(
         default_factory=dict,
         metadata={
             "help": (
@@ -920,7 +921,7 @@ class TrainingArguments:
     )
     warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
-    log_level: Optional[str] = field(
+    log_level: str = field(
         default="passive",
         metadata={
             "help": (
@@ -931,7 +932,7 @@ class TrainingArguments:
             "choices": trainer_log_levels.keys(),
         },
     )
-    log_level_replica: Optional[str] = field(
+    log_level_replica: str = field(
         default="warning",
         metadata={
             "help": "Logger log level to use on replica nodes. Same choices and defaults as ``log_level``",
@@ -1230,11 +1231,11 @@ class TrainingArguments:
             )
         },
     )
-    fsdp_config: Optional[Union[dict, str]] = field(
+    fsdp_config: Optional[Union[dict[str, Any], str]] = field(
         default=None,
         metadata={
             "help": (
-                "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The value is either a "
+                "Config to be used with FSDP (Pytorch Fully Sharded Data Parallel). The value is either a "
                 "fsdp json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`."
             )
         },
@@ -1366,7 +1367,7 @@ class TrainingArguments:
             "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
         },
     )
-    gradient_checkpointing_kwargs: Optional[Union[dict, str]] = field(
+    gradient_checkpointing_kwargs: Optional[Union[dict[str, Any], str]] = field(
         default=None,
         metadata={
             "help": "Gradient checkpointing key word arguments such as `use_reentrant`. Will be passed to `torch.utils.checkpoint.checkpoint` through `model.gradient_checkpointing_enable`."
@@ -1451,7 +1452,7 @@ class TrainingArguments:
             )
         },
     )
-    ddp_timeout: Optional[int] = field(
+    ddp_timeout: int = field(
         default=1800,
         metadata={
             "help": "Overrides the default timeout for distributed training (value should be given in seconds)."
@@ -1646,10 +1647,11 @@ class TrainingArguments:
                             "--load_best_model_at_end requires the saving steps to be a multiple of the evaluation "
                             f"steps, but found {self.save_steps}, which is not a multiple of {self.eval_steps}."
                         )
-                raise ValueError(
-                    "--load_best_model_at_end requires the saving steps to be a round multiple of the evaluation "
-                    f"steps, but found {self.save_steps}, which is not a round multiple of {self.eval_steps}."
-                )
+                else:
+                    raise ValueError(
+                        "--load_best_model_at_end requires the saving steps to be a round multiple of the evaluation "
+                        f"steps, but found {self.save_steps}, which is not a round multiple of {self.eval_steps}."
+                    )
 
         safetensors_available = is_safetensors_available()
         if self.save_safetensors and not safetensors_available:
@@ -1667,7 +1669,7 @@ class TrainingArguments:
         ) and self.metric_for_best_model is None:
             self.metric_for_best_model = "loss"
         if self.greater_is_better is None and self.metric_for_best_model is not None:
-            self.greater_is_better = not (self.metric_for_best_model.endswith("loss"))
+            self.greater_is_better = not self.metric_for_best_model.endswith("loss")
         if self.run_name is None:
             self.run_name = self.output_dir
         if self.framework == "pt" and is_torch_available():
@@ -1700,6 +1702,19 @@ class TrainingArguments:
         if self.bf16:
             if self.half_precision_backend == "apex":
                 raise ValueError(" `--half_precision_backend apex`: GPU bf16 is not supported by apex.")
+
+        if self.half_precision_backend == "apex":
+            if not is_apex_available():
+                raise ImportError(
+                    "Using FP16 with APEX but APEX is not installed, please refer to"
+                    " https://www.github.com/nvidia/apex."
+                )
+            try:
+                from apex import amp  # noqa: F401
+            except ImportError as e:
+                raise ImportError(
+                    f"apex.amp is deprecated in the latest version of apex, causing this error {e}. Either revert to an older version or use pytorch amp by setting half_precision_backend='auto' instead. See https://github.com/NVIDIA/apex/pull/1896 "
+                )
 
         if self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU:
             if self.eval_strategy == IntervalStrategy.NO:
@@ -1872,10 +1887,12 @@ class TrainingArguments:
                 warnings.warn("`--fsdp_config` is useful only when `--fsdp` is specified.")
             with open(self.fsdp_config, encoding="utf-8") as f:
                 self.fsdp_config = json.load(f)
-                for k in list(self.fsdp_config.keys()):
-                    if k.startswith("fsdp_"):
-                        v = self.fsdp_config.pop(k)
-                        self.fsdp_config[k[5:]] = v
+
+        if self.fsdp_config is not None and isinstance(self.fsdp_config, dict):
+            for k in list(self.fsdp_config.keys()):
+                if k.startswith("fsdp_"):
+                    v = self.fsdp_config.pop(k)
+                    self.fsdp_config[k[5:]] = v
 
         if self.fsdp_min_num_params > 0:
             warnings.warn("using `--fsdp_min_num_params` is deprecated. Use fsdp_config instead ", FutureWarning)
@@ -2138,7 +2155,7 @@ class TrainingArguments:
                     f"Please run `pip install transformers[torch]` or `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
                 )
         # We delay the init of `PartialState` to the end for clarity
-        accelerator_state_kwargs = {"enabled": True, "use_configured_state": False}
+        accelerator_state_kwargs: dict[str, Any] = {"enabled": True, "use_configured_state": False}
         if isinstance(self.accelerator_config, AcceleratorConfig):
             accelerator_state_kwargs["use_configured_state"] = self.accelerator_config.pop(
                 "use_configured_state", False

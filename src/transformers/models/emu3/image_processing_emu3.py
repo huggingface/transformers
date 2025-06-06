@@ -15,7 +15,8 @@
 # limitations under the License.
 
 import math
-from typing import Dict, Iterable, List, Optional, Union
+from collections.abc import Iterable
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
@@ -27,7 +28,6 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    VideoInput,
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
@@ -166,7 +166,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
 
     def _preprocess(
         self,
-        images: Union[ImageInput, VideoInput],
+        images: ImageInput,
         do_resize: Optional[bool] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
@@ -309,7 +309,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,

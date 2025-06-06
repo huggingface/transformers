@@ -213,7 +213,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         self,
         do_convert_rgb: bool = True,
         do_normalize: bool = True,
-        patch_size: Dict[str, int] = None,
+        patch_size: Optional[Dict[str, int]] = None,
         max_patches: int = 2048,
         is_vqa: bool = False,
         **kwargs,
