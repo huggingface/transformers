@@ -184,6 +184,7 @@ jobs:
             - run: python utils/check_dummies.py
             - run: python utils/check_repo.py
             - run: python utils/check_inits.py
+            - run: python utils/check_pipeline_typing.py
             - run: python utils/check_config_docstrings.py
             - run: python utils/check_config_attributes.py
             - run: python utils/check_doctest_list.py

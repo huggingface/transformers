@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Union
+from typing import Any, Dict, List, Union, overload
 
 from ..generation import GenerationConfig
 from ..utils import (
@@ -111,7 +111,13 @@ class ImageToTextPipeline(Pipeline):
 
         return preprocess_params, forward_params, {}
 
-    def __call__(self, inputs: Union[str, List[str], "Image.Image", List["Image.Image"]] = None, **kwargs):
+    @overload
+    def __call__(self, inputs: Union[str, "Image.Image"], **kwargs: Any) -> List[Dict[str, Any]]: ...
+
+    @overload
+    def __call__(self, inputs: Union[List[str], List["Image.Image"]], **kwargs: Any) -> List[List[Dict[str, Any]]]: ...
+
+    def __call__(self, inputs: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs):
         """
         Assign labels to the image(s) passed as inputs.
 
