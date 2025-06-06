@@ -255,18 +255,16 @@ class T5GemmaConfig(PretrainedConfig):
             # Decouple encoder and decoder config in any case
             encoder_config = T5GemmaModuleConfig(**encoder_config.to_dict())
             decoder_config = T5GemmaModuleConfig(**decoder_config.to_dict())
-            
+
             encoder_config.is_decoder = False
             encoder_config.dropout_rate = dropout_rate
             encoder_config.attention_dropout = attention_dropout
-            encoder_config.classifier_dropout_rate = classifier_dropout_rate
             self.encoder = encoder_config
 
             decoder_config.is_decoder = True            
             decoder_config.use_cache = True
             decoder_config.dropout_rate = dropout_rate
             decoder_config.attention_dropout = attention_dropout
-            decoder_config.classifier_dropout_rate = classifier_dropout_rate
             decoder_config.cross_attention_hidden_size = encoder_config.hidden_size
             self.decoder = decoder_config
 
@@ -277,6 +275,7 @@ class T5GemmaConfig(PretrainedConfig):
         self.initializer_range = kwargs.get("initializer_range", self.decoder.initializer_range)
         self.pad_token_id = kwargs.get("pad_token_id", self.decoder.pad_token_id)
         self.dropout_rate = dropout_rate
+        self.attention_dropout = attention_dropout
         self.classifier_dropout_rate = classifier_dropout_rate
         self.tie_word_embeddings = tie_word_embeddings
 
@@ -285,6 +284,8 @@ class T5GemmaConfig(PretrainedConfig):
             "output_hidden_states",
             "output_attentions",
             "_attn_implementation",
+            "dropout_rate",
+            "attention_dropout",
         ]
         
         if key in shared_attr_with_submodules:
@@ -1350,8 +1351,9 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
     T5GEMMA_START_DOCSTRING,
 )
 class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
-    def __init__(self, config: T5GemmaConfig, is_encoder_decoder: bool = True):
-        config.is_encoder_decoder = is_encoder_decoder
+    def __init__(self, config: T5GemmaConfig, is_encoder_decoder: Optional[bool] = None):
+        if is_encoder_decoder is not None:
+            config.is_encoder_decoder = is_encoder_decoder
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = T5GemmaModel(config)
