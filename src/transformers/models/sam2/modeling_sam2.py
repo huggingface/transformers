@@ -1622,19 +1622,9 @@ def apply_rotary_pos_emb_2d(
 class Sam2RoPEAttention(Sam2Attention):
     """Attention with rotary position encoding."""
 
-    def __init__(
-        self,
-        *args,
-        rope_theta=10000.0,
-        # whether to repeat q rope to match k length
-        # this is needed for cross-attention to memories
-        rope_k_repeat=False,
-        feat_sizes=(64, 64),  # [w, h] for stride 16 feats at 512 resolution
-        **kwargs,
-    ):
+    def __init__(self, *args, rope_theta=10000.0, rope_k_repeat=False, feat_sizes=(64, 64), **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Initialize the standardized vision rotary embedding
         head_dim = self.internal_dim // self.num_heads
         self.rotary_emb = Sam2VisionRotaryEmbedding(
             dim=head_dim, end_x=feat_sizes[0], end_y=feat_sizes[1], theta=rope_theta
@@ -1674,15 +1664,10 @@ class Sam2RoPEAttention(Sam2Attention):
         # Generate or use cached position embeddings
         if self._cached_cos is None or self._cached_sin is None or self._cached_feat_sizes != current_feat_sizes:
             cos, sin = self.rotary_emb(current_feat_sizes)
-            # Move to the same device as the input tensors
-            # polar_freqs = polar_freqs.to(q.device)
-            # Cache the embeddings
             self._cached_cos = cos
             self._cached_sin = sin
             self._cached_feat_sizes = current_feat_sizes
         else:
-            # cos = self._cached_cos
-            # sin = self._cached_sin
             cos = self._cached_cos
             sin = self._cached_sin
 
