@@ -420,6 +420,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {
+                ("xpu", 3): ['Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot in the center representing the star Altair. The star map is set against a black background, with the constellations visible in the night'],
                 ("cuda", 7): ['Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot in the center representing the star Alpha Centauri. The star map is a representation of the night sky, showing the positions of stars in'],
                 ("cuda", 8): ['Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot representing the position of the star Alpha Centauri. Alpha Centauri is the brightest star in the constellation Centaurus and is located'],
             }
@@ -457,6 +458,10 @@ class ChameleonIntegrationTest(unittest.TestCase):
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {
+                ("xpu", 3): [
+                    'Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot in the center representing the star Altair. The star map is set against a black background, with the constellations visible in the night',
+                    'What constellation is this image showing?The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.',
+                ],
                 ("cuda", 7): [
                     'Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue line extending across the center of the image. The line is labeled "390 light years" and is accompanied by a small black and',
                     'What constellation is this image showing?The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.',
