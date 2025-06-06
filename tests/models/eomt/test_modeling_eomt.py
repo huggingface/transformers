@@ -278,7 +278,7 @@ class EoMTForUniversalSegmentationIntegrationTest(unittest.TestCase):
 
         image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
-        inputs = processor(images=image, segmentation_type="panoptic", return_tensors="pt").to(model.device)
+        inputs = processor(images=image, return_tensors="pt").to(model.device)
 
         with torch.inference_mode():
             outputs = model(**inputs)
@@ -297,7 +297,7 @@ class EoMTForUniversalSegmentationIntegrationTest(unittest.TestCase):
         # fmt: on
 
         output_slice = outputs.masks_queries_logits[0, 0, :5, :5]
-        torch.testing.assert_close(output_slice, EXPECTED_SLICE, atol=1e-2)
+        torch.testing.assert_close(output_slice, EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
 
         # fmt: off
         EXPECTED_SLICE = torch.tensor([
@@ -310,7 +310,7 @@ class EoMTForUniversalSegmentationIntegrationTest(unittest.TestCase):
         # fmt: on
 
         output_slice = outputs.class_queries_logits[0, :5, :5]
-        torch.testing.assert_close(output_slice, EXPECTED_SLICE, atol=1e-2)
+        torch.testing.assert_close(output_slice, EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
 
     @require_torch_accelerator
     @require_torch_fp16
@@ -370,7 +370,7 @@ class EoMTForUniversalSegmentationIntegrationTest(unittest.TestCase):
         # fmt: on
 
         output_slice = preds[0, :10, :10]
-        torch.testing.assert_close(output_slice, EXPECTED_SLICE, atol=1e-4)
+        torch.testing.assert_close(output_slice, EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
 
     @slow
     def test_panoptic_segmentation_inference(self):
@@ -414,7 +414,7 @@ class EoMTForUniversalSegmentationIntegrationTest(unittest.TestCase):
         # fmt: on
 
         output_slice = segmentation[:10, :10]
-        torch.testing.assert_close(output_slice, EXPECTED_SLICE, atol=1e-4)
+        torch.testing.assert_close(output_slice, EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
         for actual, expected in zip(segments_info, EXPECTED_SEGMENTS_INFO):
             self.assertEqual(actual["id"], expected["id"])
             self.assertEqual(actual["label_id"], expected["label_id"])

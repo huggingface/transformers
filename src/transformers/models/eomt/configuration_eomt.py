@@ -67,6 +67,8 @@ class EoMTConfig(PretrainedConfig):
             Dropout probability applied after attention projection.
         projection_dropout (`float`, *optional*, defaults to 0.0):
             Dropout probability applied after linear projections.
+        use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
+            Whether to use the SwiGLU feedforward neural network.
         num_blocks (`int`, *optional*, defaults to 4):
             Number of feature blocks or stages in the architecture.
         no_object_weight (`float`, *optional*, defaults to 0.1):
@@ -124,6 +126,7 @@ class EoMTConfig(PretrainedConfig):
         num_upscale_blocks=2,
         attention_dropout=0.0,
         projection_dropout=0.0,
+        use_swiglu_ffn=False,
         num_blocks=4,
         no_object_weight: float = 0.1,
         class_weight: float = 2.0,
@@ -157,6 +160,7 @@ class EoMTConfig(PretrainedConfig):
         self.num_upscale_blocks = num_upscale_blocks
         self.attention_dropout = attention_dropout
         self.projection_dropout = projection_dropout
+        self.use_swiglu_ffn = use_swiglu_ffn
         self.num_blocks = num_blocks
         self.no_object_weight = no_object_weight
         self.class_weight = class_weight
