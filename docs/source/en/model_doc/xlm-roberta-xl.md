@@ -78,7 +78,7 @@ print(f"The predicted token is: {predicted_token}")
 ```
 </hfoption>
 
-<hfoption id="CLI">
+<hfoption id="transformers CLI">
 
 ```bash
 transformers-cli run fill-mask \
