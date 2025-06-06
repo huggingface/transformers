@@ -777,7 +777,7 @@ class VJEPA2SelfAttention(nn.Module):
 
 
 def rotate_queries_or_keys(x, pos):
-    B, num_heads, N, D = x.size() 
+    B, num_heads, N, D = x.size()
 
     # similar to inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
     # they are computing this every time. instead HF style is to compute the inv_freq once and store it
@@ -1387,31 +1387,39 @@ class VJEPA2Predictor(nn.Module):
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.proj = nn.Linear(config.hidden_size, config.enc_hidden_size, bias=True)
 
-    def sort_tokens(self, hidden_states, position_masks, head_mask=None):
-        self.argsort = torch.argsort(position_masks, dim=1)  # [B, N]
-        position_masks = torch.stack(
-            [position_masks[i, row] for i, row in enumerate(self.argsort)], dim=0
-        )
-        hidden_states = torch.stack(
-            [hidden_states[i, row, :] for i, row in enumerate(self.argsort)], dim=0
+    def sort_tokens(self, hidden_states, position_masks, argsort, head_mask=None):
+        position_masks = torch.gather(position_masks, dim=1, index=argsort)
+        hidden_states = torch.gather(
+            hidden_states,
+            dim=1,
+            index=argsort.unsqueeze(-1).expand(-1, -1, hidden_states.size(-1)),
         )
         if head_mask is not None and head_mask[0] is not None:
             head_mask = head_mask.permute(1, 0, 2, 3, 4)
-            head_mask = torch.stack(
-                [head_mask[i, :, :, row, :] for i, row in enumerate(self.argsort)],
-                dim=0,
+            argsort_4d = (
+                argsort.unsqueeze(1)
+                .unsqueeze(1)
+                .expand(-1, head_mask.size(1), head_mask.size(2), -1)
+                .unsqueeze(-1)
+                .expand(-1, -1, -1, -1, head_mask.size(-1))
             )
-            head_mask = torch.stack(
-                [head_mask[i, :, :, :, row] for i, row in enumerate(self.argsort)],
-                dim=0,
+            head_mask = torch.gather(head_mask, dim=3, index=argsort_4d)
+            argsort_5d = (
+                argsort.unsqueeze(1)
+                .unsqueeze(1)
+                .unsqueeze(1)
+                .expand(-1, head_mask.size(1), head_mask.size(2), head_mask.size(3), -1)
             )
+            head_mask = torch.gather(head_mask, dim=4, index=argsort_5d)
             head_mask = head_mask.permute(1, 0, 2, 3, 4)
         return hidden_states, position_masks, head_mask
 
-    def unsort_tokens(self, hidden_states):
-        reverse_argsort = torch.argsort(self.argsort, dim=1)  # [B, N]
-        hidden_states = torch.stack(
-            [hidden_states[i, row, :] for i, row in enumerate(reverse_argsort)], dim=0
+    def unsort_tokens(self, hidden_states, argsort):
+        reverse_argsort = torch.argsort(argsort, dim=1)
+        hidden_states = torch.gather(
+            hidden_states,
+            dim=1,
+            index=reverse_argsort.unsqueeze(-1).expand(-1, -1, hidden_states.size(-1)),
         )
         return hidden_states
 
@@ -1437,8 +1445,9 @@ class VJEPA2Predictor(nn.Module):
         )
 
         # Put tokens in sorted order
+        argsort = torch.argsort(position_masks, dim=1)  # [B, N]
         hidden_states, position_masks, head_mask = self.sort_tokens(
-            hidden_states, position_masks, head_mask
+            hidden_states, position_masks, argsort, head_mask
         )
 
         for i, layer_module in enumerate(self.layer):
@@ -1470,7 +1479,7 @@ class VJEPA2Predictor(nn.Module):
 
         hidden_states = self.layernorm(hidden_states)
         # unsort and extract the predicted tokens
-        hidden_states = self.unsort_tokens(hidden_states)
+        hidden_states = self.unsort_tokens(hidden_states, argsort)
         hidden_states = hidden_states[:, N_ctxt:]
         # projection
         hidden_states = self.proj(hidden_states)
@@ -1688,8 +1697,14 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
             predictor_output = None
 
         if not return_dict:
-            enc_head_outputs = (sequence_output, apply_masks(sequence_output, context_mask))
-            pred_head_outputs = (predictor_outputs[0], apply_masks(sequence_output, target_mask))
+            enc_head_outputs = (
+                sequence_output,
+                apply_masks(sequence_output, context_mask),
+            )
+            pred_head_outputs = (
+                predictor_outputs[0],
+                apply_masks(sequence_output, target_mask),
+            )
             pred_out = pred_head_outputs + predictor_outputs[1:]
             enc_out = enc_head_outputs + encoder_outputs[1:] + pred_out
             return enc_out
