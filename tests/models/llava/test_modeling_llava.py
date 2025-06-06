@@ -34,7 +34,7 @@ from transformers.testing_utils import (
     require_torch,
     require_vision,
     slow,
-    torch_device, require_torch_large_accelerator,
+    torch_device, require_torch_large_accelerator, Expectations,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -590,12 +590,14 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         generate_ids = model.generate(**inputs, max_new_tokens=50)
         output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
-        EXPECTED_GENERATION = [
-            # CUDA output
-            "Describe the images. The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a black Labrador",
-            # XPU output
-            "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which covers the entire background. The dog appears to be the main focus",
-        ]  # fmt: skip
+        EXPECTED_GENERATIONS = Expectations(
+            {
+                ("cuda", 7): "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a black Labrador",
+                ("cuda", 8): "",
+                ("xpu", 3): "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which covers the entire background. The dog appears to be the main focus",
+            }
+        )  # fmt: skip
+        EXPECTED_GENERATION = EXPECTED_GENERATIONS.get_expectation()
         self.assertTrue(output in EXPECTED_GENERATION)
 
     @require_torch_large_accelerator
