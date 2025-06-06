@@ -218,7 +218,7 @@ class MoshiAsrForConditionalGeneration(LlamaForCausalLM, GenerationMixin, PreTra
         model.codec_model.generation_config = GenerationConfig()
 
         # copy depth decoder generation conf attr to the depth decoder generation config
-        prefix = "codec_model_"
+        prefix = "codec_"
         prefix_len = len(prefix)
         codec_model_attrs = {
             attr[prefix_len:]: value
@@ -244,7 +244,7 @@ class MoshiAsrForConditionalGeneration(LlamaForCausalLM, GenerationMixin, PreTra
         # we therefore initialize a generation config for the codec model
         self.codec_model.generation_config = GenerationConfig()
 
-        prefix = "codec_model_"
+        prefix = "codec_"
         codec_model_attrs = self.codec_model.generation_config.to_diff_dict()
         codec_model_attrs.pop("transformers_version", None)
         for attr, value in codec_model_attrs.items():
