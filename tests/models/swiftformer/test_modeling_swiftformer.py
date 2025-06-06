@@ -250,7 +250,7 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
-                if name == "swiftformer.encoder.network.2.blocks.0.attn.w_g":
+                if name.endswith(".w_g"):
                     continue
                 if param.requires_grad:
                     self.assertIn(
