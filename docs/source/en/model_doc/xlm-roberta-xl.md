@@ -81,13 +81,42 @@ print(f"The predicted token is: {predicted_token}")
 <hfoption id="transformers CLI">
 
 ```bash
-transformers-cli run fill-mask \
-    --model facebook/xlm-roberta-xl \
-    --text "Bonjour, je suis un modèle [MASK]." \
-    --device 0
+echo -e "Plants create <mask> through a process known as photosynthesis." | transformers-cli run --task fill-mask --model facebook/xlm-roberta-xl --device 0
 ```
 </hfoption>
 </hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4 and the [facebook/xlm-roberta-xl](https://huggingface.co/facebook/xlm-roberta-xl) checkpoint. This checkpoint replaces grouped GEMM with `torch.nn.Linear` layers for easier quantization.
+
+```py
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer, TorchAoConfig
+
+quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
+tokenizer = AutoTokenizer.from_pretrained(
+    "facebook/xlm-roberta-xl",
+)
+model = AutoModelForMaskedLM.from_pretrained(
+    "facebook/xlm-roberta-xl",
+    torch_dtype=torch.float16,
+    device_map="auto",
+    attn_implementation="sdpa",
+    quantization_config=quantization_config
+)
+inputs = tokenizer("Bonjour, je suis un modèle [MASK].", return_tensors="pt").to("cuda")
+
+with torch.no_grad():
+    outputs = model(**inputs)
+    predictions = outputs.logits
+
+masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
+predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
+predicted_token = tokenizer.decode(predicted_token_id)
+
+print(f"The predicted token is: {predicted_token}")
+```
 
 ## Notes
 
