@@ -488,7 +488,7 @@ def main():
 
     # Get the factor by which the embedding layer should be padded based on the device
     pad_factor = 1
-    if torch.cuda.is_availble():
+    if torch.cuda.is_available():
         pad_factor = 8
 
     elif is_torch_xla_available(check_is_tpu=True):
