@@ -20,6 +20,7 @@ import torch
 from ...generation.logits_process import (
     ClassifierFreeGuidanceLogitsProcessor,
     DiaEOSChannelFilterLogitsProcessor,
+    DiaEOSDelayPatternLogitsProcessor,
     LogitsProcessor,
     LogitsProcessorList,
 )
@@ -29,8 +30,8 @@ from ...generation.utils import GenerateOutput, GenerationConfig, GenerationMixi
 from ...modeling_utils import PreTrainedModel
 
 
-# TODO: move this to logits_process
-class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
+# TODO: superceeded, kept to check in later
+class DiaEOSDelayPatternLogitsProcessor2(LogitsProcessor):
     def __init__(
         self,
         delay_pattern: torch.Tensor,
@@ -164,10 +165,8 @@ class DiaGenerationMixin(GenerationMixin):
 
         custom_processors.append(
             DiaEOSDelayPatternLogitsProcessor(
-                delay_pattern=torch.tensor(self.config.delay_pattern, device=device, dtype=torch.long),
-                eos_value=generation_config.eos_token_id,
-                pad_value=generation_config.pad_token_id,
-                max_step=generation_config.max_length,
+                delay_pattern=self.config.delay_pattern,
+                eos_token_id=generation_config.eos_token_id,
                 device=device,
             )
         )
@@ -321,7 +320,6 @@ class DiaGenerationMixin(GenerationMixin):
         input_ids,
         encoder_outputs=None,  # Using this to easily get the batch size
         decoder_delay_mask=None,
-        uses_cfg=None,
         **kwargs,
     ):
         # Base method handles most things except CFG and the delay pattern mask
