@@ -34,7 +34,7 @@ from transformers.testing_utils import (
     require_torch,
     require_vision,
     slow,
-    torch_device,
+    torch_device, require_torch_large_accelerator,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -482,9 +482,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = model.eval()
 
         EXPECTED_OUTPUT = [
-            "\n \nUSER: What's the difference of two images?\nASSISTANT: The difference between the two images is that one shows a dog standing on a grassy field, while",
-            "\nUSER: Describe the image.\nASSISTANT: The image features a brown and white dog sitting on a sidewalk. The dog is holding a small",
-            "\nUSER: Describe the image.\nASSISTANT: The image features a lone llama standing on a grassy hill. The llama is the",
+            "\n \nUSER: What's the difference of two images?\nASSISTANT: The difference between the two images is that one of them has a dog standing on a field, while",
+            '\nUSER: Describe the image.\nASSISTANT: The image features a brown and white dog sitting on a sidewalk. The dog is holding a small',
+            '\nUSER: Describe the image.\nASSISTANT: The image features a lone llama standing on a grassy hill. The llama is the',
         ]
 
         generate_ids = model.generate(**inputs, max_new_tokens=20)
@@ -611,6 +611,7 @@ These descriptions provide a detailed overview of the content and atmosphere of 
         ]  # fmt: skip
         self.assertTrue(output in EXPECTED_GENERATION)
 
+    @require_torch_large_accelerator
     @slow
     @require_bitsandbytes
     def test_pixtral_batched(self):
