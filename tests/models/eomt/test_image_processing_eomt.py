@@ -182,7 +182,7 @@ class EoMTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         original_sizes = [image.size[::-1]]
 
-        # For semantic segmentation, the BS of output is 2 coz, two crops are created for the image.
+        # For semantic segmentation, the BS of output is 2 coz, two patches are created for the image.
         outputs = self.image_processor_tester.prepare_fake_eomt_outputs(inputs["pixel_values"].shape[0])
         segmentation = processor.post_process_semantic_segmentation(outputs, patch_offsets, original_sizes)
 

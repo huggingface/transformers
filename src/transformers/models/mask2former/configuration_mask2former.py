@@ -150,7 +150,7 @@ class Mask2FormerConfig(PretrainedConfig):
         ignore_value: int = 255,
         num_queries: int = 100,
         no_object_weight: float = 0.1,
-        class_weight: float = 2.0,
+        class_weight: float = 1.0,
         mask_weight: float = 5.0,
         dice_weight: float = 5.0,
         train_num_points: int = 12544,

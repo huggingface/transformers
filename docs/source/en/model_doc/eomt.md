@@ -82,7 +82,7 @@ with torch.inference_mode():
     outputs = model(**inputs)
 
 # Prepare the original image size in the format (height, width)
-original_image_sizes = [image.size]
+original_image_sizes = [(image.size[1], image.size[0])]
 
 # Post-process the model outputs to get final segmentation prediction
 preds = processor.post_process_semantic_segmentation(
@@ -106,7 +106,7 @@ The EoMT model performs instance segmentation using padded inference. The input 
 > **Note:**  
 > To use a custom target size, specify the size as a dictionary in the following format:  
 > `{"shortest_edge": 512, "longest_edge": 512}`  
-> For both instance and panoptic segmentation, input images will be **scaled down** and padded to this target size.
+> For both instance and panoptic segmentation, input images will be **scaled and padded** to this target size.
 
 ```python
 import matplotlib.pyplot as plt
@@ -133,7 +133,7 @@ with torch.inference_mode():
     outputs = model(**inputs)
 
 # Prepare the original image size in the format (height, width)
-original_image_sizes = [image.size]
+original_image_sizes = [(image.size[1], image.size[0])]
 
 # Post-process the model outputs to get final segmentation prediction
 preds = processor.post_process_instance_segmentation(
@@ -178,7 +178,7 @@ with torch.inference_mode():
     outputs = model(**inputs)
 
 # Prepare the original image size in the format (height, width)
-original_image_sizes = [image.size]
+original_image_sizes = [(image.size[1], image.size[0])]
 
 # Post-process the model outputs to get final segmentation prediction
 preds = processor.post_process_panoptic_segmentation(
