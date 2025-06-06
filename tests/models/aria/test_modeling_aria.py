@@ -171,6 +171,7 @@ class AriaVisionText2TextModelTester:
         return config, inputs_dict
 
 
+@slow
 @require_torch
 class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
