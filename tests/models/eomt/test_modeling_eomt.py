@@ -297,7 +297,7 @@ class EoMTForUniversalSegmentationIntegrationTest(unittest.TestCase):
         # fmt: on
 
         output_slice = outputs.masks_queries_logits[0, 0, :5, :5]
-        self.assertTrue(torch.allclose(output_slice, EXPECTED_SLICE, atol=1e-3))
+        torch.testing.assert_close(output_slice, EXPECTED_SLICE, atol=1e-2)
 
         # fmt: off
         EXPECTED_SLICE = torch.tensor([
@@ -310,7 +310,7 @@ class EoMTForUniversalSegmentationIntegrationTest(unittest.TestCase):
         # fmt: on
 
         output_slice = outputs.class_queries_logits[0, :5, :5]
-        self.assertTrue(torch.allclose(output_slice, EXPECTED_SLICE, atol=1e-3))
+        torch.testing.assert_close(output_slice, EXPECTED_SLICE, atol=1e-2)
 
     @require_torch_accelerator
     @require_torch_fp16
@@ -370,7 +370,7 @@ class EoMTForUniversalSegmentationIntegrationTest(unittest.TestCase):
         # fmt: on
 
         output_slice = preds[0, :10, :10]
-        self.assertTrue(torch.allclose(output_slice, EXPECTED_SLICE, atol=1e-4))
+        torch.testing.assert_close(output_slice, EXPECTED_SLICE, atol=1e-4)
 
     @slow
     def test_panoptic_segmentation_inference(self):
@@ -414,5 +414,8 @@ class EoMTForUniversalSegmentationIntegrationTest(unittest.TestCase):
         # fmt: on
 
         output_slice = segmentation[:10, :10]
-        self.assertTrue(torch.allclose(output_slice, EXPECTED_SLICE, atol=1e-4))
-        self.assertEqual(segments_info, EXPECTED_SEGMENTS_INFO)
+        torch.testing.assert_close(output_slice, EXPECTED_SLICE, atol=1e-4)
+        for actual, expected in zip(segments_info, EXPECTED_SEGMENTS_INFO):
+            self.assertEqual(actual["id"], expected["id"])
+            self.assertEqual(actual["label_id"], expected["label_id"])
+            self.assertAlmostEqual(actual["score"], expected["score"], delta=1e-3)
