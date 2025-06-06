@@ -107,6 +107,9 @@ transformers-cli run fill-mask \
 [[autodoc]] XLMRobertaXLForCausalLM
     - forward
 
+## XLMRobertaXLForMaskedLM
+
+[[autodoc]] XLMRobertaXLForMaskedLM
     - forward
 
 ## XLMRobertaXLForSequenceClassification
