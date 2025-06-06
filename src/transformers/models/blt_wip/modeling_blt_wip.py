@@ -21,8 +21,7 @@ from torch.nn import functional as F
 import abc
 
 import os
-import time
-from collections import defaultdict
+from contextlib import nullcontext
 
 from pydantic import BaseModel
 
@@ -40,14 +39,11 @@ RMSNorm = nn.RMSNorm
 
 logger = logging.getLogger()
 
-from .blt_args import (
-    BaseTransformerArgs,
-    ByteLatentTransformerArgs,
-    GlobalTransformerArgs,
-    LocalDecoderArgs,
-    LocalModelArgs,
-    LMTransformerArgs,
-
+from .configuration_blt import (
+    BLTConfig,
+    LMTransformerConfig,
+    PatchingModeEnum,
+    InitStdFactor,
 )
 
 flex_attention_comp = flex_attention
@@ -455,7 +451,7 @@ class FeedForward(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-    def __init__(self, args: BaseTransformerArgs):
+    def __init__(self, args):
         super().__init__()
 
         assert (args.head_dim is not None) or (
@@ -520,25 +516,26 @@ class SequenceModelWithOutput(abc.ABC):
 
 
 class BaseTransformer(nn.Module, SequenceModelWithOutput):
-    def __init__(self, args: BaseTransformerArgs):
+    def __init__(self, config):
         super().__init__()
-        self.dim = args.dim
-        self.init_base_std = args.init_base_std
-        self.attn_impl = args.attn_impl
-        self.attn_bias_type = args.attn_bias_type
-        self.init_std_factor = InitStdFactor(args.init_std_factor)
-        self.max_seqlen = args.max_seqlen
+        self.dim = config.dim
+        self.init_base_std = config.init_base_std
+        self.attn_impl = config.attn_impl
+        self.attn_bias_type = config.attn_bias_type
+        self.init_std_factor = config.init_std_factor
+        self.max_seqlen = config.max_seqlen
         self.rope_embeddings = RotaryEmbedding(
-            theta=args.rope_theta,
-            head_dim=args.head_dim or args.dim // args.n_heads,
-            max_seqlen=args.max_seqlen,
-            rope_use_fp32_in_outer_product=args.rope_use_fp32_in_outer_product,
+            theta=config.rope_theta,
+            head_dim=config.head_dim or config.dim // config.n_heads,
+            max_seqlen=config.max_seqlen,
+            rope_use_fp32_in_outer_product=config.rope_use_fp32_in_outer_product,
         )
-        self.eos_id = args.eos_id
+        # Handle both eos_id and eos_token_id for compatibility
+        self.eos_id = getattr(config, 'eos_id', getattr(config, 'eos_token_id', 2))
 
         self.layers = nn.ModuleList()
-        for _ in range(args.n_layers):
-            self.layers.append(TransformerBlock(args))
+        for _ in range(config.n_layers):
+            self.layers.append(TransformerBlock(config))
 
     def get_output_seq_len(self):
         return self.max_seqlen
@@ -580,30 +577,30 @@ class LMTransformer(
     license_name="fair-noncommercial-research-license",
     license_link="https://huggingface.co/facebook/blt/blob/main/LICENSE",
     coders={
-        LMTransformerArgs: (
-            lambda x: {"args": x.model_dump()},
-            lambda data: LMTransformerArgs(**data),
+        LMTransformerConfig: (
+            lambda x: {"config": x.to_dict()},
+            lambda data: LMTransformerConfig(**data),
         )
     },
 ):
-    def __init__(self, args: LMTransformerArgs):
-        super().__init__(args)
-        self.weight_tying = args.weight_tying
-        self.sliding_window = args.sliding_window
+    def __init__(self, config: LMTransformerConfig):
+        super().__init__(config)
+        self.weight_tying = config.weight_tying
+        self.sliding_window = config.sliding_window
 
-        assert args.vocab_size > 0
+        assert config.vocab_size > 0
 
-        self.tok_embeddings = torch.nn.Embedding(args.vocab_size, args.dim)
+        self.tok_embeddings = torch.nn.Embedding(config.vocab_size, config.dim)
 
-        self.norm = RMSNorm(args.dim, eps=args.norm_eps)
+        self.norm = RMSNorm(config.dim, eps=config.norm_eps)
 
         self.output = nn.Linear(
-            args.dim,
-            args.vocab_size,
+            config.dim,
+            config.vocab_size,
             bias=False,
         )
 
-        if args.weight_tying:
+        if config.weight_tying:
             self.output.weight = self.embeddings.tok_embeddings.weight
 
     def push_to_hub(self, *args, **kwargs):
@@ -669,32 +666,6 @@ class LMTransformer(
                 b=3 * init_std,
             )
 
-
-class PatchingModeEnum(str, Enum):
-    entropy = "entropy"
-    bpe = "bpe"
-    bpe_patcher = "bpe_patcher"
-    space = "space"
-    static = "static"
-    byte = "byte"
-
-
-class PatcherArgs(BaseModel):
-    patching_mode: PatchingModeEnum = PatchingModeEnum.entropy
-    patching_device: str = "cpu"
-    entropy_model_checkpoint_dir: str | None = None
-    realtime_patching: bool = False
-    threshold: float = 1.335442066192627
-    threshold_add: float | None = None
-    max_patch_length: int | None = None
-    patch_size: float = 4.5
-    patching_batch_size: int = 1
-    device: str = "cpu"
-    monotonicity: bool = False
-    log_time: bool = False
-
-    def build(self) -> "Patcher":
-        return Patcher(self)
 
 def rightpad(seq, pad_id, max_len):
     return seq + [pad_id] * (max_len - len(seq))
@@ -880,185 +851,7 @@ def split_large_numbers(lst, m):
     assert sum(new_lst) == sum(lst), f"{sum(new_lst)} != {sum(lst)}"
     return new_lst
 
-class Patcher:
-    def __init__(self, patcher_args: PatcherArgs):
-        self.patcher_args = patcher_args
-        self.patching_mode = patcher_args.patching_mode
-        self.realtime_patching = patcher_args.realtime_patching
-        self.realtime_patching = True
-        if self.realtime_patching:
-            assert (
-                patcher_args.entropy_model_checkpoint_dir is not None
-            ), "Cannot require realtime patching without an entropy model checkpoint"
-            maybe_consolidated = os.path.join(
-                patcher_args.entropy_model_checkpoint_dir,
-                "consolidated/consolidated.pth",
-            )
-            if os.path.exists(maybe_consolidated):
-                state_path = maybe_consolidated
-            else:
-                state_path = os.path.join(
-                    patcher_args.entropy_model_checkpoint_dir, "consolidated.pth"
-                )
-            entropy_model, _ = load_entropy_model(
-                patcher_args.entropy_model_checkpoint_dir,
-                state_path,
-            )
-            entropy_model = entropy_model.to(patcher_args.patching_device)
-            self.entropy_model = entropy_model
-        else:
-            self.entropy_model = None
-        self.threshold = patcher_args.threshold
-        self.threshold_add = patcher_args.threshold_add
-        self.max_patch_length = patcher_args.max_patch_length
-        self.patch_size = patcher_args.patch_size
-        self.patching_batch_size = patcher_args.patching_batch_size
-        self.device = patcher_args.device
-        self.monotonicity = patcher_args.monotonicity
-        self.log_time = patcher_args.log_time
-        if self.log_time:
-            self.log = defaultdict(float)
 
-    def patch(
-        self,
-        tokens: torch.Tensor,
-        include_next_token: bool = False,
-        preds: torch.Tensor | None = None,
-        entropies: torch.Tensor | None = None,
-        threshold: float = None,
-    ) -> torch.Tensor:
-        """
-        tokens: 2D tensor of shape [batch_size, seq_len] that needs to be patched
-        Returns patch lengths and optionally scores associated with the tokens (i.e. entropies, logprobs etc.)
-        -> output tensor: [batch_size, max_num_patches]
-            each tensor is processed independently and gets right padded with zeros.
-
-        Patching with the following modes:
-        1. patching_mode = None: static patch size
-        2. patching_mode = "entropy":
-            calculate entropy of each token, allocate patches so that the total
-            number of patches is the same as static patching but choose to begin
-            patches on tokens where the model is most uncertain (highest entropy).
-
-            When threshold is provided, it uses the threshold to decide when to
-            start a new patch.
-        3. patching_mode = "space":
-            use space like tokens to define the patches.
-        4. patching_mode = "bpe":
-            use bpe delim tokens to define the patches.
-
-        To correctly patch the last token, it may be necessary to include the next token in the patch
-        lengths calculations. This is controlled by the include_next_token argument.
-        """
-        bs, seq_len = tokens.shape
-        seq_len_next_tok = seq_len + 1 if include_next_token else seq_len
-        scores = None
-        # STATIC
-        if self.patching_mode == PatchingModeEnum.byte:
-            patch_lengths = torch.ones(
-                (bs, seq_len_next_tok), dtype=tokens.dtype, device=tokens.device
-            )
-        elif self.patching_mode == PatchingModeEnum.entropy:
-            if self.log_time:
-                s = time.time()
-            if entropies is not None:
-                scores = entropies.to(dtype=torch.float32)
-            elif preds is not None:
-                scores = entropy(preds)
-            else:
-                start_entropies = time.time()
-                scores, _ = calculate_entropies(
-                    tokens,
-                    self.entropy_model,
-                    self.patching_batch_size,
-                    self.device,
-                )
-            if self.log_time:
-                self.log["calculate_entropies"] += time.time() - s
-                s = time.time()
-            patch_start_ids = find_entropy_patch_start_ids(
-                scores,
-                self.patch_size,
-                include_next_token=include_next_token,
-                threshold=threshold if threshold is not None else self.threshold,
-                threshold_add=self.threshold_add,
-                monotonicity=self.monotonicity,
-            )
-            if self.log_time:
-                self.log["find_entropy_patch_start_ids"] += time.time() - s
-                s = time.time()
-            patch_lengths = patch_lengths_from_start_ids(
-                patch_start_ids, seq_len_next_tok
-            )
-            if self.log_time:
-                self.log["patch_lengths_from_start_ids"] += time.time() - s
-                s = time.time()
-        else:
-            raise NotImplementedError(f"self.patching_mode {self.patching_mode}")
-
-        # Apply any processing to patch lengths
-        if self.max_patch_length is not None:
-            # TODO: avoid going back to a list here.
-            patch_lengths = [
-                split_large_numbers(pl, self.max_patch_length)
-                for pl in patch_lengths.tolist()
-            ]
-            max_len = max([len(pl) for pl in patch_lengths])
-            patch_lengths = [rightpad(pl, 0, max_len=max_len) for pl in patch_lengths]
-            patch_lengths = torch.tensor(
-                patch_lengths, dtype=tokens.dtype, device=tokens.device
-            )
-        assert not check_non_zero_after_zero(patch_lengths)
-        # Find the last non-zero column index using argmax on a reversed version of the tensor
-        last_non_zero_col_reversed = (
-            (patch_lengths != 0).flip(dims=[1]).int().argmax(dim=1).min()
-        )
-        # Slice the tensor up to the last non-zero column
-        patch_lengths = patch_lengths[
-            :, : patch_lengths.shape[1] - last_non_zero_col_reversed
-        ]
-        assert (
-            torch.sum(patch_lengths)
-            == tokens.numel() + include_next_token * tokens.shape[0]
-        ), f"{torch.sum(patch_lengths)} != {tokens.numel() + include_next_token * tokens.shape[0]}"
-        if self.log_time:
-            self.log["postprocessing_patch_lengths"] += time.time() - s
-            self.log["tokens"] += patch_lengths.sum().item()
-        return patch_lengths, scores
-
-
-
-def load_entropy_model(entropy_model_checkpoint_dir, state_dict_path, device="cpu"):
-    with open(os.path.join(entropy_model_checkpoint_dir, "params.json")) as fr:
-        reloaded = json.loads(fr.read())
-
-    torch.set_default_dtype(torch.bfloat16)
-    model_params = reloaded["entropy_model"]
-    logger.warning(
-        "Update checkpoint to load attn and sliding window args from checkpoint"
-    )
-    entropy_model_args = LMTransformerArgs(
-        dim=model_params["dim"],
-        n_layers=model_params["n_layers"],
-        n_heads=model_params["n_heads"],
-        max_seqlen=model_params["max_seqlen"],
-        ffn_dim_multiplier=model_params["ffn_dim_multiplier"],
-        vocab_size=model_params["vocab_size"],
-        attn_bias_type="local_block_causal",
-        attn_impl="sdpa", #originally xformers
-        sliding_window=512,
-    )
-    entropy_model = LMTransformer(entropy_model_args)
-
-    entropy_model.load_state_dict(
-        torch.load(state_dict_path, map_location=device)["model"], strict=False
-    )
-    entropy_model.to(device)
-    entropy_model = entropy_model.eval()
-    # no grads for the model:
-    for param in entropy_model.parameters():
-        param.requires_grad = False
-    return entropy_model, entropy_model_args
 
 
 def get_encoder_dim_token_emb(args):
@@ -1409,69 +1202,105 @@ def patch_ids_from_lengths(patch_lengths, seq_len):
 
 
 class LocalModelBase(nn.Module):
-    def __init__(self, args: LocalModelArgs):
+    def __init__(self, config: BLTConfig, component_type: str = "encoder"):
         super().__init__()
 
-        self.dim = args.dim
-        self.dropout = args.dropout
-        self.vocab_size = args.vocab_size
-        self.patch_size = args.patch_size
-        self.dim_patch_emb = args.dim_patch_emb
+                # Use component-specific dimensions
+        if component_type == "encoder":
+            self.dim = config.dim_local_encoder
+            self.n_layers = config.n_layers_local_encoder
+            self.n_heads = config.n_heads_local_encoder
+            self.max_seqlen = config.max_encoder_seq_length or config.max_seqlen
+            self.attn_bias_type = "local_block_causal"
+            self.sliding_window = config.local_attention_window_len
+        elif component_type == "decoder":
+            self.dim = config.dim_local_decoder
+            self.n_layers = config.n_layers_local_decoder
+            self.n_heads = config.n_heads_local_decoder
+            self.max_seqlen = config.max_encoder_seq_length or config.max_seqlen
+            self.attn_bias_type = "local_block_causal"
+            self.sliding_window = config.local_attention_window_len
+        else:
+            raise ValueError(f"Unknown component_type: {component_type}")
 
-        self.attn_impl = args.attn_impl
-        self.sliding_window = args.sliding_window
-        self.use_rope = args.use_rope
-        self.init_std_factor = args.init_std_factor
-        self.cross_attn_encoder = getattr(args, "cross_attn_encoder", None)
-        self.cross_attn_decoder = getattr(args, "cross_attn_decoder", None)
-        self.cross_attn_k = getattr(args, "cross_attn_k", None)
-        self.eos_id = args.eos_id
+        self.dropout = config.dropout
+        self.vocab_size = config.vocab_size + config.pm_size
+        self.patch_size = config.patch_size
+
+        self.attn_impl = config.attn_impl
+        self.use_rope = config.use_rope
+        self.init_std_factor = config.init_std_factor
+        self.cross_attn_encoder = getattr(config, "cross_attn_encoder", None)
+        self.cross_attn_decoder = getattr(config, "cross_attn_decoder", None)
+        self.cross_attn_k = getattr(config, "cross_attn_k", None)
+        self.eos_id = config.eos_id
 
         self.boe_id = BOE_ID
+        
+        # Initialize cross attention layers as None (will be set by subclasses if needed)
+        self.cross_attn_layers = None
+
+        # Create component-specific config for TransformerBlocks by copying config and overriding dimensions
+        component_config = type(config)(**config.to_dict())
+        component_config.dim = self.dim
+        component_config.n_layers = self.n_layers
+        component_config.n_heads = self.n_heads
+        if hasattr(config, 'attn_bias_type'):
+            component_config.attn_bias_type = self.attn_bias_type
+        if hasattr(config, 'max_seqlen'):
+            component_config.max_seqlen = self.max_seqlen
 
         self.layers = nn.ModuleList(
-            [TransformerBlock(args) for _ in range(args.n_layers)]
+            [TransformerBlock(component_config) for _ in range(self.n_layers)]
         )
 
         if not self.use_rope:
-            self.pos_embeddings = nn.Embedding(args.max_length, args.dim)
+            self.pos_embeddings = nn.Embedding(2048, self.dim)  # fallback max_length
         else:
             self.rope = RotaryEmbedding(
-                theta=args.rope_theta,
-                head_dim=args.head_dim or args.dim // args.n_heads,
-                max_seqlen=args.max_seqlen,
-                rope_use_fp32_in_outer_product=args.rope_use_fp32_in_outer_product,
+                theta=config.rope_theta,
+                head_dim=config.head_dim or self.dim // self.n_heads,
+                max_seqlen=self.max_seqlen,
+                rope_use_fp32_in_outer_product=config.rope_use_fp32_in_outer_product,
             )
             self.pos_embeddings = None
 
+        # Set dimension-specific embedding dimensions
+        if component_type == "encoder":
+            self.dim_token_emb = get_encoder_dim_token_emb(config)
+            self.dim_patch_emb = get_encoder_dim_patch_emb(config)
+        elif component_type == "decoder":
+            self.dim_token_emb = get_decoder_dim_token_emb(config)
+            self.dim_patch_emb = config.dim_global
+
         self.token_embedding_projection = (
-            nn.Linear(args.dim_token_emb, args.dim, bias=False)
-            if hasattr(args, "dim_token_emb") and args.dim_token_emb != self.dim
+            nn.Linear(self.dim_token_emb, self.dim, bias=False)
+            if self.dim_token_emb is not None and self.dim_token_emb != self.dim
             else None
         )
 
-        self.patch_embedding_projection = self._create_patch_projection(args)
+        self.patch_embedding_projection = self._create_patch_projection(config)
 
-    def _should_create_patch_projection(self, args: LocalModelArgs):
+    def _should_create_patch_projection(self, config: BLTConfig):
         dimension_mismatch = (
-            getattr(args, "dim_patch_emb") and args.dim_patch_emb != self.dim
+            self.dim_patch_emb is not None and self.dim_patch_emb != self.dim
         )
 
         # Check cross attention conditions
         cross_attn_conditions = (
-            args.cross_attn_encoder and args.cross_attn_init_by_pooling
-        ) or (args.cross_attn_decoder and args.cross_attn_init_by_pooling)
+            config.cross_attn_encoder and config.cross_attn_init_by_pooling
+        ) or (config.cross_attn_decoder and config.cross_attn_init_by_pooling)
 
         return dimension_mismatch or cross_attn_conditions
 
-    def _create_patch_projection(self, args):
-        if not self._should_create_patch_projection(args):
+    def _create_patch_projection(self, config):
+        if not self._should_create_patch_projection(config):
             return None
 
-        output_dim = args.dim_token_emb * (self.cross_attn_k or 1)
+        output_dim = self.dim_token_emb * (self.cross_attn_k or 1)
 
         return nn.Linear(
-            in_features=args.dim_patch_emb,
+            in_features=self.dim_patch_emb,
             out_features=output_dim,
             bias=False,
         )
@@ -1556,22 +1385,22 @@ class LocalModelBase(nn.Module):
 
 
 class LocalEncoder(LocalModelBase):
-    def __init__(self, args: LocalModelArgs):
-        super().__init__(args)
+    def __init__(self, config: BLTConfig):
+        super().__init__(config, component_type="encoder")
 
-        self.apply_transformer = args.use_local_encoder_transformer
-        self.downsampling_by_pooling = args.downsampling_by_pooling
-        self.expects_hash_embeddings = args.encoder_hash_byte_group_size is not None
-        self.cross_attn_encoder = args.cross_attn_encoder
-        self.cross_attn_all_layers_encoder = args.cross_attn_all_layers_encoder
-        self.cross_attn_init_by_pooling = args.cross_attn_init_by_pooling
-        self.cross_attn_nheads = args.cross_attn_nheads
+        self.apply_transformer = config.use_local_encoder_transformer
+        self.downsampling_by_pooling = config.downsampling_by_pooling
+        self.expects_hash_embeddings = config.encoder_hash_byte_group_size is not None
+        self.cross_attn_encoder = config.cross_attn_encoder
+        self.cross_attn_all_layers_encoder = config.cross_attn_all_layers_encoder
+        self.cross_attn_init_by_pooling = config.cross_attn_init_by_pooling
+        self.cross_attn_nheads = config.cross_attn_nheads
 
-        self.tok_embeddings = nn.Embedding(self.vocab_size, args.dim)
+        self.tok_embeddings = nn.Embedding(self.vocab_size, self.dim)
 
         if self.cross_attn_encoder:
             self.cross_attn_layers = torch.nn.ModuleList()
-            layers_to_add = args.n_layers if self.cross_attn_all_layers_encoder else 1
+            layers_to_add = self.n_layers if self.cross_attn_all_layers_encoder else 1
             for _ in range(layers_to_add):
                 self.cross_attn_layers.append(
                     CrossAttention(
@@ -1579,7 +1408,7 @@ class LocalEncoder(LocalModelBase):
                         head_dim=self.dim // self.cross_attn_nheads,
                         n_heads=self.cross_attn_nheads,
                         n_kv_heads=self.cross_attn_nheads,
-                        norm_eps=args.norm_eps,
+                        norm_eps=config.norm_eps,
                     )
                 )
 
@@ -1691,20 +1520,20 @@ class LocalEncoder(LocalModelBase):
 
 
 class LocalDecoder(LocalModelBase):
-    def __init__(self, args: LocalModelArgs):
-        super().__init__(args)
+    def __init__(self, config: BLTConfig):
+        super().__init__(config, component_type="decoder")
 
         # Model configuration flags
-        self.cross_attn_decoder = args.cross_attn_decoder
-        self.cross_attn_all_layers_decoder = args.cross_attn_all_layers_decoder
-        self.cross_attn_init_by_pooling = args.cross_attn_init_by_pooling
-        self.cross_attn_nheads = args.cross_attn_nheads
+        self.cross_attn_decoder = config.cross_attn_decoder
+        self.cross_attn_all_layers_decoder = config.cross_attn_all_layers_decoder
+        self.cross_attn_init_by_pooling = config.cross_attn_init_by_pooling
+        self.cross_attn_nheads = config.cross_attn_nheads
 
-        self.norm = RMSNorm(args.dim, eps=args.norm_eps)
+        self.norm = RMSNorm(self.dim, eps=config.norm_eps)
 
         if self.cross_attn_decoder:
             self.cross_attn_layers = torch.nn.ModuleList()
-            layers_to_add = args.n_layers if self.cross_attn_all_layers_decoder else 1
+            layers_to_add = self.n_layers if self.cross_attn_all_layers_decoder else 1
             for _ in range(layers_to_add):
                 self.cross_attn_layers.append(
                     CrossAttention(
@@ -1712,13 +1541,13 @@ class LocalDecoder(LocalModelBase):
                         head_dim=self.dim // self.cross_attn_nheads,
                         n_heads=self.cross_attn_nheads,
                         n_kv_heads=self.cross_attn_nheads,
-                        norm_eps=args.norm_eps,
+                        norm_eps=config.norm_eps,
                     )
                 )
 
         self.output = nn.Linear(
             self.dim,
-            args.vocab_size,
+            config.vocab_size,
             bias=False,
         )
 
@@ -1912,17 +1741,17 @@ class CrossAttention(nn.Module):
 
 
 class GlobalTransformer(BaseTransformer):
-    def __init__(self, args: BaseTransformerArgs):
-        super().__init__(args)
-        self.dropout = args.dropout
-        self.eos_id = args.eos_id
-        self.dim_token_emb = args.dim_token_emb
+    def __init__(self, config):
+        super().__init__(config)
+        self.dropout = config.dropout
+        # eos_id is already set in BaseTransformer
+        self.dim_token_emb = config.dim_token_emb
 
         self.token_embedding_projection = None
-        if args.dim_token_emb is not None and args.dim_token_emb != self.dim:
+        if config.dim_token_emb is not None and config.dim_token_emb != self.dim:
             self.token_embedding_projection = nn.Linear(
-                args.dim_token_emb,
-                args.dim,
+                config.dim_token_emb,
+                config.dim,
                 bias=False,
             )
 
@@ -1980,25 +1809,25 @@ class EmbeddingType(Enum):
 
 
 def init_embeddings(
-    args,
+    config,
     embedding_type: EmbeddingType,
     local_encoder_dim: int,
     encoder_hash_byte_group_size: list = None,
 ):
     if (
         embedding_type == EmbeddingType.HASH_TOK
-        and args.encoder_hash_byte_group_size is None
+        and config.encoder_hash_byte_group_size is None
     ):
         return None
-    if embedding_type == EmbeddingType.NGRAM and args.encoder_ngram_to_size_str is None:
+    if embedding_type == EmbeddingType.NGRAM and config.encoder_ngram_to_size_str is None:
         return None
 
     embeddings = []
 
     if embedding_type == EmbeddingType.HASH_TOK:
         emb_dim = local_encoder_dim
-        encoder_hash_byte_group_vocab = args.encoder_hash_byte_group_vocab
-        for _ in range(args.encoder_hash_byte_group_nb_functions):
+        encoder_hash_byte_group_vocab = config.encoder_hash_byte_group_vocab
+        for _ in range(config.encoder_hash_byte_group_nb_functions):
             for _ in encoder_hash_byte_group_size:
                 embeddings.append(
                     nn.Embedding(
@@ -2008,7 +1837,7 @@ def init_embeddings(
                 )
 
     elif embedding_type == EmbeddingType.NGRAM:
-        encoder_ngram_to_size = parse_ngram_to_size(args.encoder_ngram_to_size_str)
+        encoder_ngram_to_size = parse_ngram_to_size(config.encoder_ngram_to_size_str)
         emb_dim = local_encoder_dim
         OFFSET = 4  # This should be passed as parameter if it's variable
         for ngram_vocab_size in encoder_ngram_to_size.values():
@@ -2072,9 +1901,9 @@ class ByteLatentTransformer(
     license_name="fair-noncommercial-research-license",
     license_link="https://huggingface.co/facebook/blt/blob/main/LICENSE",
     coders={
-        ByteLatentTransformerArgs: (
-            lambda x: {"args": x.model_dump()},
-            lambda data: ByteLatentTransformerArgs(**data),
+        BLTConfig: (
+            lambda x: {"config": x.to_dict()},
+            lambda data: BLTConfig(**data),
         )
     },
 ):
@@ -2085,145 +1914,66 @@ class ByteLatentTransformer(
     improved performance and inference efficiency.
     """
 
-    def __init__(self, args: ByteLatentTransformerArgs):
+    def __init__(self, config: BLTConfig):
         super().__init__()
 
+        # Store config reference
+        self.config = config
+        
         # General configuration
-        self.weight_tying = args.weight_tying
-        self.patch_size = args.patch_size
-        self.patching_mode = args.patching_mode
+        self.weight_tying = config.weight_tying
+        self.patch_size = config.patch_size
+        self.patching_mode = config.patching_mode
         self.boe_id, self.bos_id, self.pad_id, self.eos_id = (
             BOE_ID,
             BOS_ID,
             PAD_ID,
-            EOS_ID,
+            config.eos_token_id,
         )
-        self.downsampling_by_pooling = args.downsampling_by_pooling
-        self.patching_threshold = args.patching_threshold
-        self.dim = args.dim
-        self.init_base_std = args.init_base_std
-        self.init_std_factor = InitStdFactor(args.init_std_factor)
-        self.max_seqlen = args.max_seqlen
+        self.downsampling_by_pooling = config.downsampling_by_pooling
+        self.patching_threshold = config.patching_threshold
+        self.dim = config.dim
+        self.init_base_std = config.init_base_std
+        self.init_std_factor = config.init_std_factor
+        self.max_seqlen = config.max_seqlen
 
         # Cross attention configuration
-        self.cross_attn_encoder = args.cross_attn_encoder
-        self.cross_attn_decoder = args.cross_attn_decoder
-        self.cross_attn_k = args.cross_attn_k
-        self.cross_attn_window_encoder = args.cross_attn_window_encoder
-        self.cross_attn_window_decoder = args.cross_attn_window_decoder
-        self.cross_attn_use_flex_attention = args.cross_attn_use_flex_attention
+        self.cross_attn_encoder = config.cross_attn_encoder
+        self.cross_attn_decoder = config.cross_attn_decoder
+        self.cross_attn_k = config.cross_attn_k
+        self.cross_attn_window_encoder = config.cross_attn_window_encoder
+        self.cross_attn_window_decoder = config.cross_attn_window_decoder
+        self.cross_attn_use_flex_attention = config.cross_attn_use_flex_attention
 
         # Encoder hash configuration
-        self.encoder_hash_byte_group_size = args.encoder_hash_byte_group_size
-        self.encoder_hash_byte_group_vocab = args.encoder_hash_byte_group_vocab
+        self.encoder_hash_byte_group_size = config.encoder_hash_byte_group_size
+        self.encoder_hash_byte_group_vocab = config.encoder_hash_byte_group_vocab
         self.encoder_hash_byte_group_nb_functions = (
-            args.encoder_hash_byte_group_nb_functions
+            config.encoder_hash_byte_group_nb_functions
         )
 
-        # ByteLatent modules
-        local_encoder_args = LocalModelArgs(
-            # Updated args
-            dim=args.dim_local_encoder,
-            n_layers=args.n_layers_local_encoder,
-            n_heads=args.n_heads_local_encoder,
-            dim_token_emb=get_encoder_dim_token_emb(args),
-            dim_patch_emb=get_encoder_dim_patch_emb(args),
-            cross_attn_encoder=args.cross_attn_encoder,
-            cross_attn_decoder=False,
-            cross_attn_k=args.cross_attn_k if args.cross_attn_encoder else None,
-            cross_attn_init_by_pooling=args.cross_attn_init_by_pooling,
-            # Defaults
-            head_dim=args.head_dim,
-            max_seqlen=args.max_encoder_seq_length,
-            dropout=args.dropout,
-            vocab_size=args.vocab_size + args.pm_size,
-            norm_eps=args.norm_eps,
-            patch_size=args.patch_size,
-            sliding_window=args.local_attention_window_len,
-            use_rope=args.use_rope,
-            rope_theta=args.rope_theta,
-            rope_use_fp32_in_outer_product=args.rope_use_fp32_in_outer_product,
-            init_base_std=args.init_base_std,
-            init_std_factor=args.init_std_factor,
-            n_kv_heads=args.n_kv_heads,
-            attn_impl=args.attn_impl,
-            attn_bias_type="local_block_causal",
-            multiple_of=args.multiple_of,
-            ffn_dim_multiplier=args.ffn_dim_multiplier,
-            patching_mode=args.patching_mode,
-            use_local_encoder_transformer=args.use_local_encoder_transformer,
-            downsampling_by_pooling=args.downsampling_by_pooling,
-            encoder_hash_byte_group_size=args.encoder_hash_byte_group_size,
-            cross_attn_all_layers_encoder=args.cross_attn_all_layers_encoder,
-            cross_attn_all_layers_decoder=args.cross_attn_all_layers_decoder,
-            cross_attn_nheads=args.cross_attn_nheads,
-            eos_id=args.eos_id,
-        )
-        self.local_encoder = LocalEncoder(local_encoder_args)
-        local_decoder_args = LocalModelArgs(
-            dim=args.dim_local_decoder,
-            n_layers=args.n_layers_local_decoder,
-            n_heads=args.n_heads_local_decoder,
-            dim_token_emb=get_decoder_dim_token_emb(args),
-            dim_patch_emb=args.dim_global,
-            cross_attn_encoder=False,
-            cross_attn_decoder=args.cross_attn_decoder,
-            cross_attn_init_by_pooling=False,  # states are already defined
-            cross_attn_k=args.cross_attn_k if args.cross_attn_decoder else None,
-            # Defaults
-            head_dim=args.head_dim,
-            max_seqlen=args.max_encoder_seq_length,
-            dropout=args.dropout,
-            vocab_size=args.vocab_size + args.pm_size,
-            norm_eps=args.norm_eps,
-            patch_size=args.patch_size,
-            sliding_window=args.local_attention_window_len,
-            use_rope=args.use_rope,
-            rope_theta=args.rope_theta,
-            rope_use_fp32_in_outer_product=args.rope_use_fp32_in_outer_product,
-            init_base_std=args.init_base_std,
-            init_std_factor=args.init_std_factor,
-            n_kv_heads=args.n_kv_heads,
-            attn_impl=args.attn_impl,
-            attn_bias_type="local_block_causal",
-            multiple_of=args.multiple_of,
-            ffn_dim_multiplier=args.ffn_dim_multiplier,
-            patching_mode=args.patching_mode,
-            use_local_encoder_transformer=args.use_local_encoder_transformer,
-            downsampling_by_pooling=args.downsampling_by_pooling,
-            encoder_hash_byte_group_size=args.encoder_hash_byte_group_size,
-            cross_attn_all_layers_encoder=args.cross_attn_all_layers_encoder,
-            cross_attn_all_layers_decoder=args.cross_attn_all_layers_decoder,
-            cross_attn_nheads=args.cross_attn_nheads,
-            eos_id=args.eos_id,
-        )
+        # ByteLatent modules - pass the full config directly to local models
+        self.local_encoder = LocalEncoder(config)
 
-        global_args = args.model_copy(
-            deep=True,
-            update=dict(
-                dim=args.dim_global,
-                n_layers=args.n_layers_global,
-                n_heads=args.n_heads_global,
-                n_kv_heads=args.n_kv_heads_global,
-                local_attention_window_len=None,
-                dim_token_emb=get_global_dim_patch_emb(args),
-                dim_patch_emb=None,
-                cross_attn_encoder=False,
-                cross_attn_decoder=False,
-            ),
-        )
+        # Create global-specific config by copying config and overriding dimensions
+        global_config = type(config)(**config.to_dict())
+        global_config.dim = config.dim_global
+        global_config.n_layers = config.n_layers_global
+        global_config.n_heads = config.n_heads_global
+        global_config.n_kv_heads = config.n_kv_heads_global
+        global_config.dim_token_emb = get_global_dim_patch_emb(config)
 
-        self.global_transformer = GlobalTransformer(global_args)
+        self.global_transformer = GlobalTransformer(global_config)
 
-        self.local_decoder = LocalDecoder(local_decoder_args)
+        self.local_decoder = LocalDecoder(config)
         self.encoder_hash_tok_embedding = init_embeddings(
-            args,
+            config,
             EmbeddingType.HASH_TOK,
             local_encoder_dim=self.local_encoder.dim,
             encoder_hash_byte_group_size=self.encoder_hash_byte_group_size,
         )
         self.encoder_ngram_embedding = init_embeddings(
-            args,
+            config,
             EmbeddingType.NGRAM,
             local_encoder_dim=self.local_encoder.dim,
             encoder_hash_byte_group_size=None,
@@ -2231,34 +1981,185 @@ class ByteLatentTransformer(
 
         # Encoder ngram embedding tables
         self.encoder_ngram_embedding = None
-        if args.encoder_enable_byte_ngrams:
+        if config.encoder_enable_byte_ngrams:
             self.encoder_ngram_embedding = nn.ModuleList()
-            assert args.ngram_vocab_sizes is not None
             self.encoder_ngram_to_size = parse_ngram_to_size(
-                args.encoder_ngram_to_size_str
+                config.encoder_ngram_to_size_str
             )
             ngram_emb_dim = self.local_encoder.dim
-            for ngram_vocab_size in self.encoderngram_to_size.values():
+            for ngram_vocab_size in self.encoder_ngram_to_size.values():
                 self.encoder_ngram_embedding.append(
                     nn.Embedding(ngram_vocab_size + OFFSET, ngram_emb_dim)
                 )
 
         # Output layer
-        assert args.vocab_size > 0, "vocab_size must be greater than 0"
+        assert config.vocab_size > 0, "vocab_size must be greater than 0"
 
-        # Patcher module
-        if args.patch_in_forward:
-            self.patcher = Patcher(
-                PatcherArgs(
-                    patch_size=args.patch_size,
-                    patching_mode=args.patching_mode,
-                    patching_threshold=args.patching_threshold,
-                    patching_threshold_add=args.patching_threshold_add,
-                    monotonicity=args.monotonicity,
-                    max_patch_length=args.max_patch_length,
-                    entropy_model_checkpoint_dir=args.entropy_model_checkpoint_dir
+        # Patcher configuration
+        self.patch_in_forward = config.patch_in_forward
+        if config.patch_in_forward:
+            # Store patching parameters
+            self.patching_mode = config.patching_mode
+            self.patching_threshold = config.patching_threshold
+            self.patching_threshold_add = config.patching_threshold_add
+            self.monotonicity = config.monotonicity
+            self.max_patch_length = config.max_patch_length
+            self.patching_batch_size = config.patching_batch_size or 1
+            self.patching_device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #config.patching_device or "cuda"
+            
+            # Initialize entropy model (patcher) if realtime_patching is True
+            if config.realtime_patching and config.entropy_model_checkpoint_dir is not None:
+                # Load entropy model directly
+                entropy_model_checkpoint_dir = config.entropy_model_checkpoint_dir
+                
+                if not os.path.exists(entropy_model_checkpoint_dir):
+                    raise FileNotFoundError(f"Entropy model checkpoint directory not found: {entropy_model_checkpoint_dir}")
+                
+                # Load entropy model parameters
+                params_path = os.path.join(entropy_model_checkpoint_dir, "params.json")
+                if not os.path.exists(params_path):
+                    raise FileNotFoundError(f"params.json not found in: {entropy_model_checkpoint_dir}")
+                
+                with open(params_path) as fr:
+                    reloaded = json.loads(fr.read())
+
+                torch.set_default_dtype(torch.bfloat16)
+                model_params = reloaded["entropy_model"]
+                logger.warning(
+                    "Update checkpoint to load attn and sliding window args from checkpoint"
                 )
+                entropy_model_config = LMTransformerConfig(
+                    dim=model_params["dim"],
+                    n_layers=model_params["n_layers"],
+                    n_heads=model_params["n_heads"],
+                    max_seqlen=model_params["max_seqlen"],
+                    ffn_dim_multiplier=model_params["ffn_dim_multiplier"],
+                    vocab_size=model_params["vocab_size"],
+                    attn_bias_type="local_block_causal",
+                    attn_impl="sdpa",  # originally xformers
+                    sliding_window=512,
+                )
+                self.patcher = LMTransformer(entropy_model_config)
+
+                # Load state dict
+                maybe_consolidated = os.path.join(
+                    entropy_model_checkpoint_dir,
+                    "consolidated/consolidated.pth",
+                )
+                if os.path.exists(maybe_consolidated):
+                    state_path = maybe_consolidated
+                else:
+                    state_path = os.path.join(
+                        entropy_model_checkpoint_dir, "consolidated.pth"
+                    )
+                
+                if not os.path.exists(state_path):
+                    raise FileNotFoundError(f"Model checkpoint not found at: {state_path}")
+
+                self.patcher.load_state_dict(
+                    torch.load(state_path, map_location=self.patching_device)["model"], strict=False
+                )
+                self.patcher.to(self.patching_device)
+                self.patcher = self.patcher.eval()
+                # no grads for the model:
+                for param in self.patcher.parameters():
+                    param.requires_grad = False
+            else:
+                self.patcher = None
+
+
+
+    def patch(
+        self,
+        tokens: torch.Tensor,
+        include_next_token: bool = False,
+        preds: torch.Tensor | None = None,
+        entropies: torch.Tensor | None = None,
+        threshold: float = None,
+    ) -> torch.Tensor:
+        """
+        tokens: 2D tensor of shape [batch_size, seq_len] that needs to be patched
+        Returns patch lengths and optionally scores associated with the tokens (i.e. entropies, logprobs etc.)
+        -> output tensor: [batch_size, max_num_patches]
+            each tensor is processed independently and gets right padded with zeros.
+
+        Patching with the following modes:
+        1. patching_mode = None: static patch size
+        2. patching_mode = "entropy":
+            calculate entropy of each token, allocate patches so that the total
+            number of patches is the same as static patching but choose to begin
+            patches on tokens where the model is most uncertain (highest entropy).
+
+            When threshold is provided, it uses the threshold to decide when to
+            start a new patch.
+        3. patching_mode = "space":
+            use space like tokens to define the patches.
+        4. patching_mode = "bpe":
+            use bpe delim tokens to define the patches.
+
+        To correctly patch the last token, it may be necessary to include the next token in the patch
+        lengths calculations. This is controlled by the include_next_token argument.
+        """
+        bs, seq_len = tokens.shape
+        seq_len_next_tok = seq_len + 1 if include_next_token else seq_len
+        scores = None
+        # STATIC
+        if self.patching_mode == PatchingModeEnum.byte:
+            patch_lengths = torch.ones(
+                (bs, seq_len_next_tok), dtype=tokens.dtype, device=tokens.device
             )
+        elif self.patching_mode == PatchingModeEnum.entropy:
+            if entropies is not None:
+                scores = entropies.to(dtype=torch.float32)
+            elif preds is not None:
+                scores = entropy(preds)
+            else:
+                scores, _ = calculate_entropies(
+                    tokens,
+                    self.patcher,
+                    self.patching_batch_size,
+                    self.patching_device,
+                )
+            patch_start_ids = find_entropy_patch_start_ids(
+                scores,
+                self.patch_size,
+                include_next_token=include_next_token,
+                threshold=threshold if threshold is not None else self.patching_threshold,
+                threshold_add=self.patching_threshold_add,
+                monotonicity=self.monotonicity,
+            )
+            patch_lengths = patch_lengths_from_start_ids(
+                patch_start_ids, seq_len_next_tok
+            )
+        else:
+            raise NotImplementedError(f"self.patching_mode {self.patching_mode}")
+
+        # Apply any processing to patch lengths
+        if self.max_patch_length is not None:
+            # TODO: avoid going back to a list here.
+            patch_lengths = [
+                split_large_numbers(pl, self.max_patch_length)
+                for pl in patch_lengths.tolist()
+            ]
+            max_len = max([len(pl) for pl in patch_lengths])
+            patch_lengths = [rightpad(pl, 0, max_len=max_len) for pl in patch_lengths]
+            patch_lengths = torch.tensor(
+                patch_lengths, dtype=tokens.dtype, device=tokens.device
+            )
+        assert not check_non_zero_after_zero(patch_lengths)
+        # Find the last non-zero column index using argmax on a reversed version of the tensor
+        last_non_zero_col_reversed = (
+            (patch_lengths != 0).flip(dims=[1]).int().argmax(dim=1).min()
+        )
+        # Slice the tensor up to the last non-zero column
+        patch_lengths = patch_lengths[
+            :, : patch_lengths.shape[1] - last_non_zero_col_reversed
+        ]
+        assert (
+            torch.sum(patch_lengths)
+            == tokens.numel() + include_next_token * tokens.shape[0]
+        ), f"{torch.sum(patch_lengths)} != {tokens.numel() + include_next_token * tokens.shape[0]}"
+        return patch_lengths, scores
 
     def push_to_hub(self, *args, **kwargs):
         raise ValueError(
@@ -2294,12 +2195,12 @@ class ByteLatentTransformer(
         # Patching
         if patch_lengths is None:
             assert (
-                getattr(self, "patcher", None) is not None
-            ), "Patcher not defined and no patch_lengths passed."
-            patch_lengths, tok_scores = self.patcher.patch(
+                getattr(self, "patch_in_forward", None) is not None and self.patch_in_forward
+            ), "Patch in forward not enabled and no patch_lengths passed."
+            patch_lengths, tok_scores = self.patch(
                 local_encoder_tokens,
                 include_next_token=True,
-                threshold=self.patcher.threshold,
+                threshold=self.patching_threshold,
             )
         else:
             if nb_boe > 0:
