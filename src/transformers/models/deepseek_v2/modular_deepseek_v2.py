@@ -30,15 +30,14 @@ from transformers.models.llama.modeling_llama import (
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
-    LlamaRotaryEmbedding,
     eager_attention_forward,
-    rotate_half,
 )
 from transformers.utils import (
     logging,
 )
 
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 
@@ -208,47 +207,19 @@ class DeepseekV2Config(LlamaConfig):
 
 
 def apply_rotary_pos_emb(
-    query: torch.Tensor, key: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, unsqueeze_dim: int = 1
-) -> torch.Tensor:
-    """Applies Rotary Position Embedding to the query and key tensors.
+    xq: torch.Tensor,
+    xk: torch.Tensor,
+    freqs_cis: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
+    xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
 
-    Args:
-        query (`torch.Tensor`): The query tensor.
-        key (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
+    # Broadcast to [1, 1, seq_len, dim // 2]
+    freqs_cis = freqs_cis.unsqueeze(1).to(xq_.device)
 
-    batch, heads, seq_length, head_dim = query.shape
-    query = (
-        query.view(batch, heads, seq_length, head_dim // 2, 2)
-        .transpose(4, 3)
-        .reshape(batch, heads, seq_length, head_dim)
-    )
-
-    batch, heads, seq_length, head_dim = key.shape
-    key = (
-        key.view(batch, heads, seq_length, head_dim // 2, 2)
-        .transpose(4, 3)
-        .reshape(batch, heads, seq_length, head_dim)
-    )
-
-    q_embed = (query * cos) + (rotate_half(query) * sin)
-    k_embed = (key * cos) + (rotate_half(key) * sin)
-    return q_embed, k_embed
+    xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3).type_as(xq)
+    xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3).type_as(xk)
+    return xq_out, xk_out
 
 
 class DeepseekV2MoEGate(nn.Module):
@@ -294,12 +265,7 @@ class DeepseekV2MoEGate(nn.Module):
             tmp_scores = scores.masked_fill(~score_mask.bool(), 0.0)  # [n, e]
             topk_weight, topk_idx = torch.topk(tmp_scores, k=self.top_k, dim=-1, sorted=False)
 
-        ### norm gate to sum 1
-        if self.top_k > 1 and self.norm_topk_prob:
-            denominator = topk_weight.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weight = topk_weight / denominator
-        else:
-            topk_weight = topk_weight * self.routed_scaling_factor
+        topk_weight = topk_weight * self.routed_scaling_factor
         ### expert-level computation auxiliary loss
         return topk_idx, topk_weight
 
@@ -382,8 +348,38 @@ class DeepseekV2RMSNorm(LlamaRMSNorm):
     pass
 
 
-class DeepseekV2RotaryEmbedding(LlamaRotaryEmbedding):
-    pass
+class DeepseekV2RotaryEmbedding(nn.Module):
+    def __init__(self, config: DeepseekV2Config, device=None):
+        super().__init__()
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.to(x.device) @ position_ids_expanded).transpose(1, 2)
+            freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # Convert to complex representation
+            freqs_cis = freqs_cis * self.attention_scaling
+
+        return freqs_cis
 
 
 class DeepseekV2Attention(nn.Module):
@@ -474,9 +470,7 @@ class DeepseekV2Attention(nn.Module):
         k_nope, value_states = torch.split(k_nope, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
 
         k_pe = k_pe.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
-
-        cos, sin = position_embeddings
-        q_pe, k_pe = apply_rotary_pos_emb(q_pe, k_pe, cos, sin)
+        q_pe, k_pe = apply_rotary_pos_emb(q_pe, k_pe, position_embeddings.to(q_pe.device))
 
         k_pe = k_pe.expand(*k_nope.shape[:-1], -1)
         query_states = torch.cat((q_nope, q_pe), dim=-1)
@@ -484,7 +478,7 @@ class DeepseekV2Attention(nn.Module):
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            cache_kwargs = {"cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
