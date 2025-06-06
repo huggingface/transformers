@@ -1708,10 +1708,14 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
+                ("xpu", 3): [
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                    "a woman is playing with her dog on the beach",
+                ],
                 ("cuda", 7): [
                     [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
                     "a woman is playing with her dog on the beach",
-                ]
+                ],
             }
         )
         expected_outputs = expectations.get_expectation()
@@ -1729,10 +1733,14 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
+                ("xpu", 3): [
+                    [0, 3, 7, 152, 2515, 11389, 3523, 1],
+                    "san francisco",
+                ],
                 ("cuda", 7): [
                     [0, 3, 7, 152, 2515, 11389, 3523, 1],
                     "san francisco",
-                ]
+                ],
             }
         )
         expected_outputs = expectations.get_expectation()
@@ -1755,10 +1763,14 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
+                ("xpu", 3): [
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                    [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
+                ],
                 ("cuda", 7): [
                     [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
                     [0, 3, 9, 2335, 19, 1556, 28, 160, 1782, 30, 8, 2608, 1],
-                ]
+                ],
             }
         )
         expected_predictions = expectations.get_expectation()
