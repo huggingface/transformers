@@ -157,7 +157,6 @@ from .utils import (
     is_galore_torch_available,
     is_grokadamw_available,
     is_in_notebook,
-    is_ipex_available,
     is_liger_kernel_available,
     is_lomo_available,
     is_peft_available,
@@ -1916,29 +1915,6 @@ class Trainer:
 
         return model
 
-    def ipex_optimize_model(self, model, training=False, dtype=torch.float32):
-        if not is_ipex_available():
-            raise ImportError(
-                "Using IPEX but IPEX is not installed or IPEX's version does not match current PyTorch, please refer"
-                " to https://github.com/intel/intel-extension-for-pytorch."
-            )
-
-        import intel_extension_for_pytorch as ipex
-
-        if not training:
-            model.eval()
-            dtype = torch.bfloat16 if not self.is_in_train and self.args.bf16_full_eval else dtype
-            # conv_bn_folding is disabled as it fails in symbolic tracing, resulting in ipex warnings
-            model = ipex.optimize(model, dtype=dtype, level="O1", conv_bn_folding=False, inplace=not self.is_in_train)
-        else:
-            if not model.training:
-                model.train()
-            model, self.optimizer = ipex.optimize(
-                model, dtype=dtype, optimizer=self.optimizer, inplace=True, level="O1"
-            )
-
-        return model
-
     def compare_trainer_and_checkpoint_args(self, training_args, trainer_state):
         attributes_map = {
             "logging_steps": "logging_steps",
@@ -1968,10 +1944,6 @@ class Trainer:
             logger.warning_once(warning_str)
 
     def _wrap_model(self, model, training=True, dataloader=None):
-        if self.args.use_ipex:
-            dtype = torch.bfloat16 if self.use_cpu_amp else torch.float32
-            model = self.ipex_optimize_model(model, training, dtype=dtype)
-
         if is_sagemaker_mp_enabled():
             # Wrapping the base model twice in a DistributedModel will raise an error.
             if isinstance(self.model_wrapped, smp.model.DistributedModel):
