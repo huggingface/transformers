@@ -26,7 +26,7 @@ from transformers import AutoVideoProcessor
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -165,7 +165,7 @@ class VideoProcessingTestMixin:
             self.assertIsNotNone(video_processor)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_vision
     def test_can_compile_fast_video_processor(self):
         if self.fast_video_processing_class is None:

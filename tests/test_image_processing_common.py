@@ -30,7 +30,7 @@ from transformers.testing_utils import (
     check_json_file_has_correct_format,
     is_flaky,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -562,7 +562,7 @@ class ImageProcessingTestMixin:
             self.skipTest(reason="No validation found for `preprocess` method")
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_vision
     def test_can_compile_fast_image_processor(self):
         if self.fast_image_processing_class is None:

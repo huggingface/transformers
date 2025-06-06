@@ -420,10 +420,6 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.assertIsNotNone(model)
 
     @unittest.skip(reason="TODO: Fix me @joao")
-    def test_generate_with_head_masking(self):
-        pass
-
-    @unittest.skip(reason="TODO: Fix me @joao")
     def test_generate_without_input_ids(self):
         pass
 
