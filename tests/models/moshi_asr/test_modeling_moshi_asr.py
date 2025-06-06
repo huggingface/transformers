@@ -546,7 +546,7 @@ class MoshiAsrForConditionalGenerationIntegrationTests(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     @slow
-    # @require_torch_accelerator
+    @require_torch_accelerator
     def test_generation(self):
         """
         TODO: @eustlb, add reproducer pointer.
@@ -595,7 +595,7 @@ class MoshiAsrForConditionalGenerationIntegrationTests(unittest.TestCase):
             torch.testing.assert_close(out, expected_out)
 
     @slow
-    # @require_torch_accelerator
+    @require_torch_accelerator
     def test_generation_batched(self):
         """
         TODO: @eustlb, add reproducer pointer.
