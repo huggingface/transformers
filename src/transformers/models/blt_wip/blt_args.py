@@ -217,7 +217,7 @@ class LocalDecoderArgs(ByteLatentTransformerArgs):
 class LocalModelArgs(BaseTransformerArgs):
     model_config = ConfigDict()
     # Override defaults
-    attn_impl: str | None = "xformers"
+    attn_impl: str | None = "sdpa" # originally xformers
     attn_bias_type: str | None = "local_block_causal"
 
     # Local encoder specific dimensions
