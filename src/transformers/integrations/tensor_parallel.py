@@ -90,7 +90,7 @@ def initialize_tensor_parallelism(tp_plan, tp_size=None):
     device_map = tp_device
     tp_size = tp_size if tp_size is not None else torch.distributed.get_world_size()
     device_mesh = torch.distributed.init_device_mesh(tp_device.type, (tp_size,))
-    return tp_device, device_map, device_mesh
+    return tp_device, device_map, device_mesh, tp_size
 
 
 def _blocks_to_block_sizes(total_size: int, blocks: Union[int, List[int]]) -> List[int]:

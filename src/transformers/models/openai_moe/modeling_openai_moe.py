@@ -141,7 +141,7 @@ class OpenaiMLP(nn.Module):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = self.router(hidden_states)
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)
-        router_top_value = torch.nn.functional.softmax(router_top_value, dim=1)
+        router_top_value = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
         router_scores = (
             torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value).transpose(0, 1)
         )

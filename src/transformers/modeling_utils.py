@@ -4300,7 +4300,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         # `device_map` pointing to the correct device
         if tp_plan is not None:
             if device_mesh is None and tp_plan is not None:
-                tp_plan, device_map, device_mesh = initialize_tensor_parallelism(tp_plan, tp_size=None)
+                tp_plan, device_map, device_mesh, tp_size = initialize_tensor_parallelism(tp_plan, tp_size=tp_size)
             else:
                 # TODO: make device_mesh support multiple dimensions
                 if device_mesh.ndim > 1:
