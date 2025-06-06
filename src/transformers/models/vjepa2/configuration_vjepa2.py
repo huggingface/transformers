@@ -33,20 +33,78 @@ class VJEPA2PredictorConfig(PretrainedConfig):
 
 
 class VJEPA2Config(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`VJEPA2Model`]. It is used to instantiate an
+    VJEPA2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the VJEPA2
+    [facebook/vjepa2-vitl-fpc64-256](https://huggingface.co/facebook/vjepa2-vitl-fpc64-256) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        model_name (`str`, *optional*, defaults to `"vit_large"`): <fill_docstring>
+        patch_size (`int`, *optional*, defaults to 16): <fill_docstring>
+        crop_size (`int`, *optional*, defaults to 224): <fill_docstring>
+        frames_per_clip (`int`, *optional*, defaults to 16): <fill_docstring>
+        tubelet_size (`int`, *optional*, defaults to 2): <fill_docstring>
+        use_sdpa (`bool`, *optional*, defaults to `False`): <fill_docstring>
+        use_SiLU (`bool`, *optional*, defaults to `False`): <fill_docstring>
+        wide_SiLU (`bool`, *optional*, defaults to `True`): <fill_docstring>
+        uniform_power (`bool`, *optional*, defaults to `False`): <fill_docstring>
+        hidden_size (`int`, *optional*, defaults to 1024): <fill_docstring>
+        in_chans (`int`, *optional*, defaults to 3): <fill_docstring>
+        num_attention_heads (`int`, *optional*, defaults to 12): <fill_docstring>
+        num_hidden_layers (`int`, *optional*, defaults to 12): <fill_docstring>
+        drop_path_rate (`float`, *optional*, defaults to 0.0): <fill_docstring>
+        mlp_ratio (`float`, *optional*, defaults to 4.0): <fill_docstring>
+        is_causal (`bool`, *optional*, defaults to `False`): <fill_docstring>
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06): <fill_docstring>
+        qkv_bias (`bool`, *optional*, defaults to `True`): <fill_docstring>
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0): <fill_docstring>
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0): <fill_docstring>
+        hidden_act (`str`, *optional*, defaults to `"gelu"`): <fill_docstring>
+        initializer_range (`float`, *optional*, defaults to 0.02): <fill_docstring>
+        use_rope (`bool`, *optional*, defaults to `False`): <fill_docstring>
+        pred_hidden_size (`int`, *optional*, defaults to 384): <fill_docstring>
+        pred_num_attention_heads (`int`, *optional*, defaults to 12): <fill_docstring>
+        pred_num_hidden_layers (`int`, *optional*, defaults to 6): <fill_docstring>
+        pred_use_mask_tokens (`bool`, *optional*, defaults to `False`): <fill_docstring>
+        pred_num_mask_tokens (`int`, *optional*, defaults to 2): <fill_docstring>
+        pred_zero_init_mask_tokens (`bool`, *optional*, defaults to `True`): <fill_docstring>
+        pred_mlp_ratio (`float`, *optional*, defaults to 4.0): <fill_docstring>
+        use_predictor_loss (`bool`, *optional*, defaults to `False`): <fill_docstring>
+        predictor_loss_window (`int`, *optional*, defaults to 256): <fill_docstring>
+
+    Example:
+
+    ```python
+    >>> from transformers import VJEPA2Config, VJEPA2Model
+
+    >>> # Initializing a VJEPA2 vjepa2-vitl-fpc64-256 style configuration
+    >>> configuration = VJEPA2Config()
+
+    >>> # Initializing a model (with random weights) from the vjepa2-vitl-fpc64-256  style configuration
+    >>> model = Dinov2Model(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "vjepa_vision_model"
 
     def __init__(
         self,
         model_name="vit_large",
         patch_size=16,
-        crop_size=224,
-        frames_per_clip=16,
+        crop_size=256,
+        frames_per_clip=64,
         tubelet_size=2,
         use_sdpa=False,
         use_SiLU=False,
         wide_SiLU=True,
         uniform_power=False,
-        hidden_size=-1,
+        hidden_size=1024,
         in_chans=3,
         num_attention_heads=12,
         num_hidden_layers=12,
@@ -61,11 +119,11 @@ class VJEPA2Config(PretrainedConfig):
         initializer_range=0.02,
         use_rope=False,
         # predictor params
-        pred_hidden_size=-1,
+        pred_hidden_size=384,
         pred_num_attention_heads=12,
-        pred_num_hidden_layers=6,
+        pred_num_hidden_layers=12,
         pred_use_mask_tokens=False,
-        pred_num_mask_tokens=2,
+        pred_num_mask_tokens=10,
         pred_zero_init_mask_tokens=True,
         pred_mlp_ratio=4.0,
         use_predictor_loss=False,
