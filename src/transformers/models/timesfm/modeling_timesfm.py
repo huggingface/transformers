@@ -20,8 +20,9 @@
 # limitations under the License.
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Callable, Optional, Sequence, Union
+from typing import Callable, Optional, Union
 
 import torch
 import torch.nn as nn

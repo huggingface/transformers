@@ -2,11 +2,11 @@ import argparse
 import importlib.util
 import logging
 import os
-from typing import Dict
 import sys
+from typing import Dict, Tuple
 
-from psycopg2.extras import Json
 from psycopg2.extensions import register_adapter
+from psycopg2.extras import Json
 
 
 register_adapter(dict, Json)
@@ -17,10 +17,13 @@ class ImportModuleException(Exception):
 
 
 class MetricsRecorder:
-    def __init__(self, connection, logger: logging.Logger, branch: str, commit_id: str, commit_msg: str):
+    def __init__(
+        self, connection, logger: logging.Logger, repository: str, branch: str, commit_id: str, commit_msg: str
+    ):
         self.conn = connection
         self.conn.autocommit = True
         self.logger = logger
+        self.repository = repository
         self.branch = branch
         self.commit_id = commit_id
         self.commit_msg = commit_msg
@@ -32,8 +35,8 @@ class MetricsRecorder:
         # gpu_name: str, model_id: str
         with self.conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO benchmarks (branch, commit_id, commit_message, metadata) VALUES (%s, %s, %s, %s) RETURNING benchmark_id",
-                (self.branch, self.commit_id, self.commit_msg, metadata),
+                "INSERT INTO benchmarks (repository, branch, commit_id, commit_message, metadata) VALUES (%s, %s, %s, %s, %s) RETURNING benchmark_id",
+                (self.repository, self.branch, self.commit_id, self.commit_msg, metadata),
             )
             benchmark_id = cur.fetchone()[0]
             logger.debug(f"initialised benchmark #{benchmark_id}")
@@ -82,11 +85,17 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 
-def parse_arguments():
+def parse_arguments() -> Tuple[str, str, str, str]:
     """
     Parse command line arguments for the benchmarking CLI.
     """
     parser = argparse.ArgumentParser(description="CLI for benchmarking the huggingface/transformers.")
+
+    parser.add_argument(
+        "repository",
+        type=str,
+        help="The repository name on which the benchmarking is performed.",
+    )
 
     parser.add_argument(
         "branch",
@@ -108,7 +117,7 @@ def parse_arguments():
 
     args = parser.parse_args()
 
-    return args.branch, args.commit_id, args.commit_msg
+    return args.repository, args.branch, args.commit_id, args.commit_msg
 
 
 def import_from_path(module_name, file_path):
@@ -125,7 +134,7 @@ def import_from_path(module_name, file_path):
 if __name__ == "__main__":
     benchmarks_folder_path = os.path.dirname(os.path.realpath(__file__))
 
-    branch, commit_id, commit_msg = parse_arguments()
+    repository, branch, commit_id, commit_msg = parse_arguments()
 
     for entry in os.scandir(benchmarks_folder_path):
         try:
@@ -136,7 +145,7 @@ if __name__ == "__main__":
             logger.debug(f"loading: {entry.name}")
             module = import_from_path(entry.name.split(".")[0], entry.path)
             logger.info(f"running benchmarks in: {entry.name}")
-            module.run_benchmark(logger, branch, commit_id, commit_msg)
+            module.run_benchmark(logger, repository, branch, commit_id, commit_msg)
         except ImportModuleException as e:
             logger.error(e)
         except Exception as e:
