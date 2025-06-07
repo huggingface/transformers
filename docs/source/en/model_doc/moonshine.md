@@ -24,12 +24,69 @@ rendered properly in your Markdown viewer.
 
 # Moonshine
 
-[Moonshine](https://huggingface.co/papers/2410.15608)
+[Moonshine](https://huggingface.co/papers/2410.15608) is a speech recognition model that is optimized for real-time transcription and voice command. Instead of using traditional absolute position embeddings, Moonshine uses Rotary Position Embedding (RoPE).
 
-
-
+Moonshine is trained on speech segments of various lengths, but without using zero-padding, leading to greater efficiency for the encoder during inference time.
 
 You can find all the Moonshine checkpoints on the [Hub](https://huggingface.co/models?search=moonshine).
+
+> [!TIP]
+> Click on the Moonshine models in the right sidebar for more examples of how to apply Moonshine to different speech recognition tasks.
+
+The example below demonstrates how to generate a transcription based on an audio file with [`Pipeline`] or the [`AutoModel`] class.
+
+
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```py
+# uncomment to install ffmpeg which is needed to decode the audio file
+# !brew install ffmpeg
+
+from transformers import pipeline
+
+asr = pipeline("automatic-speech-recognition", model="UsefulSensors/moonshine-base")
+
+result = asr("path_to_audio_file")
+
+#Prints the transcription from the audio file
+print(result["text"])
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+# uncomment to install rjieba which is needed for the tokenizer
+# !pip install rjieba
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
+
+model = AutoModelForMaskedLM.from_pretrained(
+    "junnyu/roformer_chinese_base", torch_dtype=torch.float16
+)
+tokenizer = AutoTokenizer.from_pretrained("junnyu/roformer_chinese_base")
+
+input_ids = tokenizer("水在零度时会[MASK]", return_tensors="pt").to(model.device)
+outputs = model(**input_ids)
+decoded = tokenizer.batch_decode(outputs.logits.argmax(-1), skip_special_tokens=True)
+print(decoded)
+```
+
+</hfoption>
+<hfoption id="transformers CLI">
+
+```bash
+echo -e "水在零度时会[MASK]" | transformers-cli run --task fill-mask --model junnyu/roformer_chinese_base --device 0
+```
+
+</hfoption>
+</hfoptions>
+
+
+
+
 
 
 The Moonshine model was proposed in [Moonshine: Speech Recognition for Live Transcription and Voice Commands
