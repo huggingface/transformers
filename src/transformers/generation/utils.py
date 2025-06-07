@@ -4416,7 +4416,6 @@ class GenerationMixin(ContinuousMixin):
                     num_possible_tokens = torch.sum( next_token_scores > -float('inf'), dim = -1).item()
                     n_eos_tokens = eos_token_id.shape[0] if eos_token_id is not None else 0
                     next_candidate = max(2,1 + n_eos_tokens)* group_size
-
                     mini_possible_tokens = min(
                         num_possible_tokens,
                         next_candidate
@@ -4425,7 +4424,6 @@ class GenerationMixin(ContinuousMixin):
                         next_token_scores,
                         dim = -1
                     )
-                    
                     next_tokens = torch.multinomial(
                         input = probs,
                         num_samples = int(mini_possible_tokens)
