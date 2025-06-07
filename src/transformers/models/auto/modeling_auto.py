@@ -1529,11 +1529,6 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
     [
         ("sam", "SamModel"),
-    ]
-)
-
-MODEL_FOR_MASK_GENERATION_MAPPING_NAMES = OrderedDict(
-    [
         ("sam_hq", "SamHQModel"),
     ]
 )
