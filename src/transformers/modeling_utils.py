@@ -1387,7 +1387,13 @@ def _get_torch_dtype(
         default_dtype = torch.get_default_dtype()
         config.torch_dtype = default_dtype
         for key in config.sub_configs.keys():
+            print("'Setting default torch_dtype for sub-configs'")
+            print(config.sub_configs.keys())
+            print(f"key: {key}")
+            print(f"Setting default torch_dtype='{default_dtype}' for sub-config '{key}'")
+            print(f"config ==> {config}")
             value = getattr(config, key)
+            print(f"Current value: {value}")
             value.torch_dtype = default_dtype
 
     return config, torch_dtype, dtype_orig
@@ -4623,7 +4629,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
-
         # Find fp32 modules if needed
         keep_in_fp32_regex = None
         # The _keep_in_fp32_modules flag is only used to avoid bf16 -> fp16 casting precision issues. It was introduced

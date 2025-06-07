@@ -206,6 +206,7 @@ class PretrainedConfig(PushToHubMixin):
     def __getattribute__(self, key):
         if key != "attribute_map" and key in super().__getattribute__("attribute_map"):
             key = super().__getattribute__("attribute_map")[key]
+
         return super().__getattribute__(key)
 
     def __init__(self, **kwargs):
@@ -745,7 +746,6 @@ class PretrainedConfig(PushToHubMixin):
         config_dict["attn_implementation"] = kwargs.pop("attn_implementation", None)
 
         config = cls(**config_dict)
-
         if hasattr(config, "pruned_heads"):
             config.pruned_heads = {int(key): value for key, value in config.pruned_heads.items()}
 

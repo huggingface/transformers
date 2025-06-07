@@ -423,6 +423,7 @@ class _BaseAutoModelClass:
 
     @classmethod
     def from_config(cls, config, **kwargs):
+        config, kwargs = _BaseAutoModelClass.root_kwargs(config, kwargs)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping.keys()
@@ -464,6 +465,22 @@ class _BaseAutoModelClass:
     def _prepare_config_for_auto_class(cls, config: PretrainedConfig) -> PretrainedConfig:
         """Additional autoclass-specific config post-loading manipulation. May be overridden in subclasses."""
         return config
+
+    @staticmethod
+    def root_kwargs(config, kwargs):
+        if config.is_composite:
+            kwargs_to_route = kwargs.copy()
+            for key, value in kwargs_to_route.items():
+                if hasattr(config, "text_config") and hasattr(config.text_config, key):
+                    setattr(config.text_config, key, value)
+                    if key in kwargs:
+                        del kwargs[key]
+                if hasattr(config, "vision_config") and hasattr(config.vision_config, key):
+                    setattr(config.vision_config, key, value)
+                    if key in kwargs:
+                        del kwargs[key]
+
+        return config, kwargs
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike[str]], *model_args, **kwargs):
@@ -577,7 +594,7 @@ class _BaseAutoModelClass:
 
         # Set the adapter kwargs
         kwargs["adapter_kwargs"] = adapter_kwargs
-
+        config, kwargs = cls.root_kwargs(config, kwargs)
         if has_remote_code and trust_remote_code:
             model_class = get_class_from_dynamic_module(
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs, **kwargs
@@ -593,6 +610,12 @@ class _BaseAutoModelClass:
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )
+        # if config type have in model_mapping, we can load the model class
+        # from the mapping, otherwise we will try to load the model class
+        # from the config's `architectures` attribute.
+        # otherwise we raise an error.
+        # This is the case for models that are not in the library but have a
+
         elif type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)
             if model_class.config_class == config.sub_configs.get("text_config", None):
