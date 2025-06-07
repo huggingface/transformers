@@ -527,7 +527,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
         lm_logits = self.lm_head(hidden_states)
 
         loss = None
-        if labels is not None:
+        if labels is not None or kwargs.get("shift_labels", None) is not None:
             loss = self.loss_function(
                 lm_logits,
                 labels,

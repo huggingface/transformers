@@ -1234,7 +1234,7 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
-        if labels is not None:
+        if labels is not None or kwargs.get("shift_labels", None) is not None:
             loss = self.loss_function(
                 logits,
                 labels,
@@ -1250,7 +1250,7 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
                 self.num_experts_per_tok,
                 attention_mask,
             )
-            if labels is not None and loss is not None:
+            if loss is not None:
                 loss += self.moe_loss_weight * aux_loss.to(loss.device)  # make sure to reside in the same device
 
         if not return_dict:

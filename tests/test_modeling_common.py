@@ -35,6 +35,7 @@ from transformers import (
     AutoModelForCausalLM,
     AutoModelForSequenceClassification,
     DataCollatorWithFlattening,
+    GenerationMixin,
     PretrainedConfig,
     PreTrainedModel,
     is_torch_available,
@@ -1271,6 +1272,9 @@ class ModelTesterMixin:
         configs_no_init.return_dict = False
 
         for model_class in self.all_model_classes:
+            if issubclass(model_class, GenerationMixin):
+                continue
+
             model = model_class(config=configs_no_init)
             model.to(torch_device)
             model.eval()

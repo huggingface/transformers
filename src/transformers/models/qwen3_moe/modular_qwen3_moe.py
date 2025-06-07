@@ -301,7 +301,7 @@ class Qwen3MoeForCausalLM(MixtralForCausalLM):
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
-        if labels is not None:
+        if labels is not None or kwargs.get("shift_labels", None) is not None:
             loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         aux_loss = None
@@ -312,7 +312,7 @@ class Qwen3MoeForCausalLM(MixtralForCausalLM):
                 self.num_experts_per_tok,
                 attention_mask,
             )
-            if labels is not None:
+            if loss is not None:
                 loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
 
         return MoeCausalLMOutputWithPast(
