@@ -23,203 +23,8 @@ rendered properly in your Markdown viewer.
 
 # GLM-4.1V
 
-The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
+It will be completed after the model is released.
 
-<hfoptions id="usage">
-<hfoption id="Pipeline">
-
-```py
-import torch
-from transformers import pipeline
-pipe = pipeline(
-    task="image-text-to-text",
-    model="THUDM/GLM-4.1V-9B-Thinking",
-    device=0,
-    torch_dtype=torch.bfloat16
-)
-messages = [
-    {
-        "role": "user",
-        "content": [
-            {
-                "type": "image",
-                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
-            },
-            { "type": "text", "text": "Describe this image."},
-        ]
-    }
-]
-pipe(text=messages,max_new_tokens=20, return_full_text=False)
-
-```
-</hfoption>
-
-<hfoption id="AutoModel">
-
-```py
-import torch
-from transformers import Glm4vForConditionalGeneration, AutoProcessor
-
-model = Glm4vForConditionalGeneration.from_pretrained(
-    "THUDM/GLM-4.1V-9B-Thinking",
-    torch_dtype=torch.float16,
-    device_map="auto",
-    attn_implementation="sdpa"
-)
-processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
-messages = [
-    {
-        "role":"user",
-        "content":[
-            {
-                "type":"image",
-                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-            },
-            {
-                "type":"text",
-                "text":"Describe this image."
-            }
-        ]
-    }
-
-]
-
-inputs = processor.apply_chat_template(
-    messages,
-    add_generation_prompt=True,
-    tokenize=True,
-    return_dict=True,
-    return_tensors="pt"
-).to("cuda")
-
-generated_ids = model.generate(**inputs, max_new_tokens=128)
-generated_ids_trimmed = [
-            out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-]
-output_text = processor.batch_decode(
-       generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-)
-print(output_text)
-```
-</hfoption>
-</hfoptions>
-
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-
-The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
-
-```python
-import torch
-from transformers import TorchAoConfig, Glm4vForConditionalGeneration, AutoProcessor
-
-quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
-model = Glm4vForConditionalGeneration.from_pretrained(
-    "THUDM/GLM-4.1V-9B-Thinking",
-    torch_dtype=torch.bfloat16,
-    device_map="auto",
-    quantization_config=quantization_config
-)
-
-```
-### Notes
-
-- Use GLM-4V for video inputs by setting `"type": "video"` as shown below.
-    ```python
-    conversation = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "video", "path": "/path/to/video.mp4"},
-                {"type": "text", "text": "What happened in the video?"},
-            ],
-        }
-    ]
-    
-    inputs = processor.apply_chat_template(
-        conversation,
-        video_fps=1,
-        add_generation_prompt=True,
-        tokenize=True,
-        return_dict=True,
-        return_tensors="pt"
-    ).to(model.device)
-    
-    # Inference: Generation of the output
-    output_ids = model.generate(**inputs, max_new_tokens=128)
-    generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
-    output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-    print(output_text)
-    ```
-- Use GLM-4V for a mixed batch of inputs (images, videos, text). Add labels when handling multiple images or videos for better reference
- as show below.
-    ```python
-    import torch
-    from transformers import Glm4vForConditionalGeneration, AutoProcessor
-    
-    model = Glm4vForConditionalGeneration.from_pretrained(
-        "THUDM/GLM-4.1V-9B-Thinking",
-        torch_dtype=torch.float16,
-        device_map="auto",
-        attn_implementation="sdpa"
-    )
-    processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
-    conversation = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image"}, 
-                {"type": "text", "text": "Hello, how are you?"}
-            ]
-        },
-        {
-            "role": "assistant",
-            "content": "I'm doing well, thank you for asking. How can I assist you today?"
-        },
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Can you describe these images and video?"}, 
-                {"type": "image"}, 
-                {"type": "image"}, 
-                {"type": "video"}, 
-                {"type": "text", "text": "These are from my vacation."}
-            ]
-        },
-        {
-            "role": "assistant",
-            "content": "I'd be happy to describe the images and video for you. Could you please provide more context about your vacation?"
-        },
-        {
-            "role": "user",
-            "content": "It was a trip to the mountains. Can you see the details in the images and video?"
-        }
-    ]
-    
-    # default:
-    prompt_without_id = processor.apply_chat_template(conversation, add_generation_prompt=True)
-    # Excepted output: '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Hello, how are you?<|im_end|>\n<|im_start|>assistant\nI'm doing well, thank you for asking. How can I assist you today?<|im_end|>\n<|im_start|>user\nCan you describe these images and video?<|vision_start|><|image_pad|><|vision_end|><|vision_start|><|image_pad|><|vision_end|><|vision_start|><|video_pad|><|vision_end|>These are from my vacation.<|im_end|>\n<|im_start|>assistant\nI'd be happy to describe the images and video for you. Could you please provide more context about your vacation?<|im_end|>\n<|im_start|>user\nIt was a trip to the mountains. Can you see the details in the images and video?<|im_end|>\n<|im_start|>assistant\n'
-    
-    
-    # add ids
-    prompt_with_id = processor.apply_chat_template(conversation, add_generation_prompt=True, add_vision_id=True)
-    # Excepted output: '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\nPicture 1: <|vision_start|><|image_pad|><|vision_end|>Hello, how are you?<|im_end|>\n<|im_start|>assistant\nI'm doing well, thank you for asking. How can I assist you today?<|im_end|>\n<|im_start|>user\nCan you describe these images and video?Picture 2: <|vision_start|><|image_pad|><|vision_end|>Picture 3: <|vision_start|><|image_pad|><|vision_end|>Video 1: <|vision_start|><|video_pad|><|vision_end|>These are from my vacation.<|im_end|>\n<|im_start|>assistant\nI'd be happy to describe the images and video for you. Could you please provide more context about your vacation?<|im_end|>\n<|im_start|>user\nIt was a trip to the mountains. Can you see the details in the images and video?<|im_end|>\n<|im_start|>assistant\n'
-    ```
-
-- Use the `min_pixels` and `max_pixels` parameters in [`AutoProcessor`] to set the resolution.
-
-    ```python
-    min_pixels = 224*224
-    max_pixels = 2048*2048
-    processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking", min_pixels=min_pixels, max_pixels=max_pixels)
-    ```
-    
-    Higher resolution can require more compute whereas reducing the resolution can save memory as follows:
-    
-    ```python
-    min_pixels = 256*28*28
-    max_pixels = 1024*28*28 
-    processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking", min_pixels=min_pixels, max_pixels=max_pixels)
-    ```
 ## Glm4vConfig
 
 [[autodoc]] Glm4vConfig
@@ -227,6 +32,21 @@ model = Glm4vForConditionalGeneration.from_pretrained(
 ## Glm4vTextConfig
 
 [[autodoc]] Glm4vTextConfig
+
+## Glm4vImageProcessor
+
+[[autodoc]] Glm4vImageProcessor
+    - preprocess
+
+## Glm4vVideoProcessor
+
+[[autodoc]] Glm4vVideoProcessor
+    - preprocess
+
+## Glm4vImageProcessorFast
+
+[[autodoc]] Glm4vImageProcessorFast
+    - preprocess
 
 ## Glm4vProcessor
 
