@@ -24,66 +24,33 @@ rendered properly in your Markdown viewer.
 
 # Moonshine
 
-[Moonshine](https://huggingface.co/papers/2410.15608) is an encoder-decoder speech recognition model optimized for real-time transcription and recognizing voice command. Instead of using traditional absolute position embeddings, Moonshine uses Rotary Position Embedding (RoPE) to handle speech with varying lengths without using padding. This improves efficiency during inference, making it ideal for resource-constrained devices.
+[Moonshine](https://huggingface.co/papers/2410.15608)
 
-You can find all the original Moonshine checkpoints under the [Useful Sensors](https://huggingface.co/UsefulSensors) organization.
 
-> [!TIP]
-> Click on the Moonshine models in the right sidebar for more examples of how to apply Moonshine to different speech recognition tasks.
 
-The example below demonstrates how to transcribe speech into text with [`Pipeline`] or the [`AutoModel`] class.
 
-<hfoptions id="usage">
-<hfoption id="Pipeline">
+You can find all the Moonshine checkpoints on the [Hub](https://huggingface.co/models?search=moonshine).
 
-```py
-import torch
-from transformers import pipeline
 
-pipeline = pipeline(
-    task="automatic-speech-recognition",
-    model="UsefulSensors/moonshine-base",
-    torch_dtype=torch.float16,
-    device=0
-)
-pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
-```
+The Moonshine model was proposed in [Moonshine: Speech Recognition for Live Transcription and Voice Commands
+](https://arxiv.org/abs/2410.15608) by Nat Jeffries, Evan King, Manjunath Kudlur, Guy Nicholson, James Wang, Pete Warden.
 
-</hfoption>
-<hfoption id="AutoModel">
+The abstract from the paper is the following:
 
-```py
-# pip install datasets
-import torch
-from datasets import load_dataset
-from transformers import AutoProcessor, MoonshineForConditionalGeneration
+*This paper introduces Moonshine, a family of speech recognition models optimized for live transcription and voice command processing. Moonshine is based on an encoder-decoder transformer architecture and employs Rotary Position Embedding (RoPE) instead of traditional absolute position embeddings. The model is trained on speech segments of various lengths, but without using zero-padding, leading to greater efficiency for the encoder during inference time. When benchmarked against OpenAI's Whisper tiny-en, Moonshine Tiny demonstrates a 5x reduction in compute requirements for transcribing a 10-second speech segment while incurring no increase in word error rates across standard evaluation datasets. These results highlight Moonshine's potential for real-time and resource-constrained applications.*
 
-processor = AutoProcessor.from_pretrained(
-    "UsefulSensors/moonshine-base",
-)
-model = MoonshineForConditionalGeneration.from_pretrained(
-    "UsefulSensors/moonshine-base",
-    torch_dtype=torch.float16,
-    device_map="auto",
-    attn_implementation="sdpa"
-).to("cuda")
+Tips:
 
-ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", split="validation")
-audio_sample = ds[0]["audio"]
+- Moonshine improves upon Whisper's architecture:
+  1. It uses SwiGLU activation instead of GELU in the decoder layers
+  2. Most importantly, it replaces absolute position embeddings with Rotary Position Embeddings (RoPE). This allows Moonshine to handle audio inputs of any length, unlike Whisper which is restricted to fixed 30-second windows.
 
-input_features = processor(
-    audio_sample["array"],
-    sampling_rate=audio_sample["sampling_rate"],
-    return_tensors="pt"
-)
-input_features = input_features.to("cuda", dtype=torch.float16)
+This model was contributed by [Eustache Le Bihan (eustlb)](https://huggingface.co/eustlb).
+The original code can be found [here](https://github.com/usefulsensors/moonshine).
 
-predicted_ids = model.generate(**input_features, cache_implementation="static")
-transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)
-transcription[0]
-```
-</hfoption>
-</hfoptions>
+## Resources
+
+- [Automatic speech recognition task guide](../tasks/asr)
 
 ## MoonshineConfig
 
