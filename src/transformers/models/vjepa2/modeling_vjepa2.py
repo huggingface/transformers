@@ -18,7 +18,7 @@ from ...modeling_outputs import BaseModelOutput, dataclass
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, auto_docstring, logging
-from .configuration_vjepa2 import VJEPA2Config, VJEPA2PredictorConfig
+from .configuration_vjepa2 import VJEPA2Config
 
 
 logger = logging.get_logger(__name__)
@@ -450,30 +450,6 @@ class VJEPA2ImageProcessor(BaseImageProcessor):
 ## Modules
 
 
-class VJEPA2PatchEmbeddings(nn.Module):
-    """
-    Image to Patch Embedding
-    """
-
-    def __init__(self, config: VJEPA2Config):
-        super().__init__()
-        self.patch_size = config.patch_size
-        self.proj = nn.Conv2d(
-            config.in_chans,
-            config.hidden_size,
-            kernel_size=config.patch_size,
-            stride=config.patch_size,
-        )
-
-    @staticmethod
-    def num_patches(config):
-        return (config.crop_size // config.patch_size) * (config.crop_size // config.patch_size)
-
-    def forward(self, x):
-        x = self.proj(x).flatten(2).transpose(1, 2)
-        return x
-
-
 class VJEPA2PatchEmbeddings3D(nn.Module):
     """
     Image to Patch Embedding
@@ -482,14 +458,16 @@ class VJEPA2PatchEmbeddings3D(nn.Module):
     def __init__(
         self,
         config: VJEPA2Config,
+        hidden_size: int = -1,
     ):
         super().__init__()
         self.patch_size = config.patch_size
         self.tubelet_size = config.tubelet_size
+        self.hidden_size = hidden_size
 
         self.proj = nn.Conv3d(
             in_channels=config.in_chans,
-            out_channels=config.hidden_size,
+            out_channels=hidden_size,
             kernel_size=(config.tubelet_size, config.patch_size, config.patch_size),
             stride=(config.tubelet_size, config.patch_size, config.patch_size),
         )
@@ -512,30 +490,30 @@ class VJEPA2Embeddings(nn.Module):
     Construct mask token, position and patch embeddings.
     """
 
-    def __init__(self, config: VJEPA2Config) -> None:
+    def __init__(self, config: VJEPA2Config, hidden_size: int = -1) -> None:
         super().__init__()
 
         self.config = config
-        self.patch_embeddings = VJEPA2PatchEmbeddings3D(config)
+        self.hidden_size = hidden_size
+        self.patch_embeddings = VJEPA2PatchEmbeddings3D(config, hidden_size=hidden_size)
 
         self.num_patches = self.patch_embeddings.num_patches
         if not self.config.use_rope:
             # position embeddings
             self.position_embeddings = nn.Parameter(
-                torch.zeros(1, self.num_patches(config), config.hidden_size),
+                torch.zeros(1, self.num_patches(config), hidden_size),
                 requires_grad=False,
             )
             self._init_pos_embed(self.position_embeddings.data)  # sincos pos-embed
 
         # self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.patch_size
-        self.config = config
 
     def _init_pos_embed(self, pos_embed):
         grid_size = self.config.crop_size // self.config.patch_size
         grid_depth = self.config.frames_per_clip // self.config.tubelet_size
         sincos = get_3d_sincos_pos_embed(
-            self.config.hidden_size,
+            self.hidden_size,
             grid_size,
             grid_depth,
             cls_token=False,
@@ -628,24 +606,30 @@ def eager_attention_forward(
 
 # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->Dinov2->VJEPA
 class VJEPA2SelfAttention(nn.Module):
-    def __init__(self, config: VJEPA2Config) -> None:
+    def __init__(
+        self,
+        config: VJEPA2Config,
+        hidden_size: int = -1,
+        num_attention_heads: int = 1,
+    ) -> None:
         super().__init__()
         self.config = config
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        self.hidden_size = hidden_size
+        self.num_attention_heads = num_attention_heads
+        if hidden_size % num_attention_heads != 0:
             raise ValueError(
-                f"The hidden size {(config.hidden_size,)} is not a multiple of the number of attention "
-                f"heads {config.num_attention_heads}."
+                f"The hidden size {(hidden_size,)} is not a multiple of the number of attention "
+                f"heads {num_attention_heads}."
             )
 
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.attention_head_size = int(hidden_size / num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.query = nn.Linear(hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.key = nn.Linear(hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = nn.Linear(hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-        self.proj = nn.Linear(config.hidden_size, config.hidden_size)
+        self.proj = nn.Linear(hidden_size, hidden_size)
         self.dropout_prob = config.attention_probs_dropout_prob
         self.dropout = nn.Dropout(self.dropout_prob)
 
@@ -727,24 +711,30 @@ def rotate_queries_or_keys(x, pos):
 
 
 class VJEPA2RopeSelfAttention(nn.Module):
-    def __init__(self, config: VJEPA2Config) -> None:
+    def __init__(
+        self,
+        config: VJEPA2Config,
+        hidden_size: int = -1,
+        num_attention_heads: int = 1,
+    ) -> None:
         super().__init__()
         self.config = config
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        self.hidden_size = hidden_size
+        self.num_attention_heads = num_attention_heads
+        if hidden_size % num_attention_heads != 0:
             raise ValueError(
-                f"The hidden size {(config.hidden_size,)} is not a multiple of the number of attention "
-                f"heads {config.num_attention_heads}."
+                f"The hidden size {(hidden_size,)} is not a multiple of the number of attention "
+                f"heads {num_attention_heads}."
             )
 
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.attention_head_size = int(hidden_size / num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.query = nn.Linear(hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.key = nn.Linear(hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = nn.Linear(hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-        self.proj = nn.Linear(config.hidden_size, config.hidden_size)
+        self.proj = nn.Linear(hidden_size, hidden_size)
         self.dropout_prob = config.attention_probs_dropout_prob
         self.dropout = nn.Dropout(self.dropout_prob)
 
@@ -864,9 +854,11 @@ class VJEPA2RopeSelfAttention(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Dinov2->VJEPA
 class VJEPA2Attention(nn.Module):
-    def __init__(self, config: VJEPA2Config) -> None:
+    def __init__(self, config: VJEPA2Config, **kwargs) -> None:
         super().__init__()
-        self.attention = VJEPA2RopeSelfAttention(config) if config.use_rope else VJEPA2SelfAttention(config)
+        self.attention = (
+            VJEPA2RopeSelfAttention(config, **kwargs) if config.use_rope else VJEPA2SelfAttention(config, **kwargs)
+        )
         self.pruned_heads = set()
 
     def prune_heads(self, heads: Set[int]) -> None:
@@ -941,10 +933,10 @@ class VJEPA2DropPath(nn.Module):
 
 
 class VJEPA2MLP(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(self, config: VJEPA2Config, hidden_size: int = -1, mlp_ratio: float = 4.0) -> None:
         super().__init__()
-        in_features = out_features = config.hidden_size
-        hidden_features = int(config.hidden_size * config.mlp_ratio)
+        in_features = out_features = hidden_size
+        hidden_features = int(hidden_size * mlp_ratio)
         self.fc1 = nn.Linear(in_features, hidden_features, bias=True)
         if isinstance(config.hidden_act, str):
             self.activation = ACT2FN[config.hidden_act]
@@ -960,14 +952,19 @@ class VJEPA2MLP(nn.Module):
 
 
 class VJEPA2SwiGLUFFN(nn.Module):
-    def __init__(self, config) -> None:
+    def __init__(
+        self,
+        config: VJEPA2Config,
+        hidden_size: int = -1,
+        mlp_ratio: float = 4.0,
+    ) -> None:
         super().__init__()
-        in_features = out_features = config.hidden_size
+        in_features = out_features = hidden_size
         if config.wide_SiLU:
-            hidden_features = int(config.hidden_size * config.mlp_ratio)
+            hidden_features = int(hidden_size * mlp_ratio)
             hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
         else:
-            hidden_features = int(config.hidden_size * config.mlp_ratio)
+            hidden_features = int(hidden_size * mlp_ratio)
 
         self.weights_in = nn.Linear(in_features, 2 * hidden_features, bias=True)
         self.weights_out = nn.Linear(hidden_features, out_features, bias=True)
@@ -984,22 +981,33 @@ class VJEPA2Layer(nn.Module):
 
     def __init__(
         self,
-        config: Union[VJEPA2Config, VJEPA2PredictorConfig],
+        config: VJEPA2Config,
         drop_path_rate: float = 0.0,
+        hidden_size: int = -1,
+        num_attention_heads: int = 1,
+        mlp_ratio: float = 4.0,
     ) -> None:
         super().__init__()
+        self.config = config
+        self.hidden_size = hidden_size
+        self.num_attention_heads = num_attention_heads
+        self.mlp_ratio = mlp_ratio
 
-        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = VJEPA2Attention(config)
+        self.norm1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
+        self.attention = VJEPA2Attention(
+            config,
+            hidden_size=hidden_size,
+            num_attention_heads=num_attention_heads,
+        )
 
-        self.drop_path = VJEPA2DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = VJEPA2DropPath(drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
-        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
         if config.use_SiLU:
-            self.mlp = VJEPA2SwiGLUFFN(config)
+            self.mlp = VJEPA2SwiGLUFFN(config, hidden_size=hidden_size, mlp_ratio=mlp_ratio)
         else:
-            self.mlp = VJEPA2MLP(config)
+            self.mlp = VJEPA2MLP(config, hidden_size=hidden_size, mlp_ratio=mlp_ratio)
 
     def forward(
         self,
@@ -1037,15 +1045,30 @@ class VJEPA2Layer(nn.Module):
 
 # Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->Dinov2->VJEPA
 class VJEPA2Encoder(nn.Module):
-    def __init__(self, config: VJEPA2Config) -> None:
+    def __init__(
+        self,
+        config: VJEPA2Config,
+    ) -> None:
         super().__init__()
         self.config = config
-        self.embeddings = VJEPA2Embeddings(config)
+
+        self.embeddings = VJEPA2Embeddings(config, hidden_size=config.hidden_size)
         dpr = [
             (config.drop_path_rate * i / (config.num_hidden_layers - 1) if config.num_hidden_layers > 1 else 0.0)
             for i in range(config.num_hidden_layers)
         ]
-        self.layer = nn.ModuleList([VJEPA2Layer(config, dpr[i]) for i in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList(
+            [
+                VJEPA2Layer(
+                    config,
+                    drop_path_rate=dpr[i],
+                    hidden_size=config.hidden_size,
+                    num_attention_heads=config.num_attention_heads,
+                    mlp_ratio=config.mlp_ratio,
+                )
+                for i in range(config.num_hidden_layers)
+            ]
+        )
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
 
@@ -1127,24 +1150,24 @@ class VJEPA2PredictorEmbeddings(nn.Module):
     Construct mask token, position and patch embeddings.
     """
 
-    def __init__(self, config: VJEPA2PredictorConfig) -> None:
+    def __init__(self, config: VJEPA2Config) -> None:
         super().__init__()
 
         # self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.config = config
-        self.predictor_embeddings = nn.Linear(config.enc_hidden_size, config.hidden_size)
+        self.predictor_embeddings = nn.Linear(config.hidden_size, config.pred_hidden_size)
         if not self.config.use_rope:
             # position embeddings
             self.position_embeddings = nn.Parameter(
-                torch.zeros(1, self.num_patches(config), config.hidden_size),
+                torch.zeros(1, self.num_patches(config), config.pred_hidden_size),
                 requires_grad=False,
             )
             self._init_pos_embed(self.position_embeddings.data)  # sincos pos-embed
         self.num_mask_tokens = 0
-        self.zero_init_mask_tokens = config.zero_init_mask_tokens
-        if config.use_mask_tokens:
-            self.num_mask_tokens = config.num_mask_tokens
-            self.mask_tokens = nn.Parameter(torch.zeros(self.num_mask_tokens, 1, 1, config.hidden_size))
+        self.zero_init_mask_tokens = config.pred_zero_init_mask_tokens
+        if config.pred_use_mask_tokens:
+            self.num_mask_tokens = config.pred_num_mask_tokens
+            self.mask_tokens = nn.Parameter(torch.zeros(self.num_mask_tokens, 1, 1, config.pred_hidden_size))
 
         # self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.patch_size
@@ -1165,7 +1188,7 @@ class VJEPA2PredictorEmbeddings(nn.Module):
         grid_size = self.config.crop_size // self.config.patch_size
         grid_depth = self.config.frames_per_clip // self.config.tubelet_size
         sincos = get_3d_sincos_pos_embed(
-            self.config.hidden_size,
+            self.config.pred_hidden_size,
             grid_size,
             grid_depth,
             cls_token=False,
@@ -1229,17 +1252,31 @@ class VJEPA2PredictorEmbeddings(nn.Module):
 class VJEPA2Predictor(nn.Module):
     def __init__(self, config: VJEPA2Config) -> None:
         super().__init__()
-        config: VJEPA2PredictorConfig = config.get_predictor_config()
         self.config = config
         self.embeddings = VJEPA2PredictorEmbeddings(config)
         dpr = [
-            (config.drop_path_rate * i / (config.num_hidden_layers - 1) if config.num_hidden_layers > 1 else 0.0)
-            for i in range(config.num_hidden_layers)
+            (
+                config.drop_path_rate * i / (config.pred_num_hidden_layers - 1)
+                if config.pred_num_hidden_layers > 1
+                else 0.0
+            )
+            for i in range(config.pred_num_hidden_layers)
         ]
-        self.layer = nn.ModuleList([VJEPA2Layer(config, dpr[i]) for i in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList(
+            [
+                VJEPA2Layer(
+                    config,
+                    drop_path_rate=dpr[i],
+                    hidden_size=config.pred_hidden_size,
+                    num_attention_heads=config.pred_num_attention_heads,
+                    mlp_ratio=config.pred_mlp_ratio,
+                )
+                for i in range(config.pred_num_hidden_layers)
+            ]
+        )
         self.gradient_checkpointing = False
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.proj = nn.Linear(config.hidden_size, config.enc_hidden_size, bias=True)
+        self.layernorm = nn.LayerNorm(config.pred_hidden_size, eps=config.layer_norm_eps)
+        self.proj = nn.Linear(config.pred_hidden_size, config.hidden_size, bias=True)
 
     def sort_tokens(self, hidden_states, position_masks, argsort, head_mask=None):
         position_masks = torch.gather(position_masks, dim=1, index=argsort)
@@ -1487,7 +1524,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
 
     def get_input_embeddings(
         self,
-    ) -> Union[VJEPA2PatchEmbeddings, VJEPA2PatchEmbeddings3D]:
+    ) -> VJEPA2PatchEmbeddings3D:
         return self.encoder.embeddings.patch_embeddings
 
     def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:

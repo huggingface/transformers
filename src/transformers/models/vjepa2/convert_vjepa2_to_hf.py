@@ -132,7 +132,7 @@ def convert_encoder_keys(model_state_dict, og_encoder_state_dict, config):
 
 def convert_predictor_keys(model_state_dict, og_predictor_state_dict, config):
     emb_dim = config.pred_hidden_size
-    if config.get_predictor_config().use_rope:
+    if config.use_rope:
         if "predictor_pos_embed" in og_predictor_state_dict:
             del og_predictor_state_dict["predictor_pos_embed"]
     # update predictor weights

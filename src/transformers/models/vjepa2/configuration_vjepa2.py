@@ -3,35 +3,6 @@
 from ...configuration_utils import PretrainedConfig
 
 
-class VJEPA2PredictorConfig(PretrainedConfig):
-    patch_size: int = 16
-    crop_size: int = 224
-    frames_per_clip: int = 16
-    tubelet_size: int = 2
-    use_sdpa: bool = False
-    use_SiLU: bool = False
-    wide_SiLU: bool = True
-    uniform_power: bool = False
-    hidden_size: int = -1
-    enc_hidden_size: int = -1
-    in_chans: int = 3
-    num_attention_heads: int = 12
-    num_hidden_layers: int = 12
-    drop_path_rate: float = 0.0
-    mlp_ratio: float = 4.0
-    is_causal: bool = False
-    layer_norm_eps: float = 1e-6
-    qkv_bias: bool = True
-    attention_probs_dropout_prob: float = 0.0
-    hidden_dropout_prob: float = 0.0
-    hidden_act: str = "gelu"
-    initializer_range: float = 0.02
-    use_rope: bool = False
-    use_mask_tokens: bool = False
-    num_mask_tokens: int = 2
-    zero_init_mask_tokens: bool = True
-
-
 class VJEPA2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VJEPA2Model`]. It is used to instantiate an
@@ -126,8 +97,6 @@ class VJEPA2Config(PretrainedConfig):
         pred_num_mask_tokens=10,
         pred_zero_init_mask_tokens=True,
         pred_mlp_ratio=4.0,
-        use_predictor_loss=False,
-        predictor_loss_window=256,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -167,38 +136,6 @@ class VJEPA2Config(PretrainedConfig):
         self.pred_num_mask_tokens = pred_num_mask_tokens
         self.pred_zero_init_mask_tokens = pred_zero_init_mask_tokens
         self.pred_mlp_ratio = pred_mlp_ratio
-        self.use_predictor_loss = use_predictor_loss
-        self.predictor_loss_window = predictor_loss_window
-
-    def get_predictor_config(self) -> VJEPA2PredictorConfig:
-        return VJEPA2PredictorConfig(
-            patch_size=self.patch_size,
-            crop_size=self.crop_size,
-            frames_per_clip=self.frames_per_clip,
-            tubelet_size=self.tubelet_size,
-            use_sdpa=self.use_sdpa,
-            use_SiLU=self.use_SiLU,
-            wide_SiLU=self.wide_SiLU,
-            uniform_power=self.uniform_power,
-            hidden_size=self.pred_hidden_size,
-            enc_hidden_size=self.hidden_size,
-            in_chans=self.in_chans,
-            num_attention_heads=self.pred_num_attention_heads,
-            num_hidden_layers=self.pred_num_hidden_layers,
-            drop_path_rate=self.drop_path_rate,
-            mlp_ratio=self.pred_mlp_ratio,
-            is_causal=self.is_causal,
-            layer_norm_eps=self.layer_norm_eps,
-            qkv_bias=self.qkv_bias,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            hidden_act=self.hidden_act,
-            initializer_range=self.initializer_range,
-            use_rope=self.use_rope,
-            use_mask_tokens=self.pred_use_mask_tokens,
-            num_mask_tokens=self.pred_num_mask_tokens,
-            zero_init_mask_tokens=self.pred_zero_init_mask_tokens,
-        )
 
 
 __all__ = ["VJEPA2Config"]
