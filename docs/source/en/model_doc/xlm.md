@@ -30,60 +30,57 @@ You can find all the original XLM checkpoints under the [Facebook AI community](
 > [!TIP]
 > Click on the XLM models in the right sidebar for more examples of how to apply XLM to different cross-lingual tasks like classification, translation, and question answering.
 
-The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to predict the `<mask>` token with [`Pipeline`], [`AutoModel`] and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
 ```python
-from transformers import pipeline
+import torch  
+from transformers import pipeline  
 
-# Initialize the pipeline with a multilingual XLM model
-unmasker = pipeline("fill-mask", model="xlm-mlm-en-2048")
-
-# Example in English
-result = unmasker("Hello, I'm a [MASK] model.")
-print(result)
-
-# Example in French
-result = unmasker("Bonjour, je suis un modèle [MASK].")
-print(result)
+pipeline = pipeline(  
+    task="fill-mask",  
+    model="facebook/xlm-roberta-xl",  
+    torch_dtype=torch.float16,  
+    device=0  
+)  
+pipeline("Bonjour, je suis un modèle <mask>.")
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
 ```python
-from transformers import AutoModelForMaskedLM, AutoTokenizer
-import torch
+import torch  
+from transformers import AutoModelForMaskedLM, AutoTokenizer  
 
-# Load model and tokenizer
-model = AutoModelForMaskedLM.from_pretrained("xlm-mlm-en-2048")
-tokenizer = AutoTokenizer.from_pretrained("xlm-mlm-en-2048")
+tokenizer = AutoTokenizer.from_pretrained(  
+    "FacebookAI/xlm-mlm-en-2048",  
+)  
+model = AutoModelForMaskedLM.from_pretrained(  
+    "FacebookAI/xlm-mlm-en-2048",  
+    torch_dtype=torch.float16,  
+    device_map="auto",  
+)  
+inputs = tokenizer("Hello, I'm a <mask> model.", return_tensors="pt").to("cuda")
 
-# Prepare input
-text = "Hello, I'm a [MASK] model."
-inputs = tokenizer(text, return_tensors="pt")
-
-# Get prediction
 with torch.no_grad():
     outputs = model(**inputs)
     predictions = outputs.logits.argmax(dim=-1)
 
-# Decode prediction
 predicted_token = tokenizer.decode(predictions[0][inputs["input_ids"][0] == tokenizer.mask_token_id])
 print(f"Predicted token: {predicted_token}")
 ```
 
 </hfoption>
+<hfoption id="transformers CLI">
+
+```bash
+echo -e "Plants create <mask> through a process known as photosynthesis." | transformers-cli run --task fill-mask --model FacebookAI/xlm-mlm-en-2048 --device 0
+```
+</hfoption>
 </hfoptions>
-
-## Notes
-
-- Choose the appropriate checkpoint based on your task (CLM for generation, MLM for understanding)
-- For multilingual tasks, use the `lang` parameter to specify the language
-- The model supports input sequences of up to 256 tokens
-- For TLM, the model can leverage context from both languages in parallel data
 
 ## XLMConfig
 
