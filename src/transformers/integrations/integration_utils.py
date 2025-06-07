@@ -763,7 +763,7 @@ class WandbLogModel(str, Enum):
     @classmethod
     def _missing_(cls, value: Any) -> "WandbLogModel":
         if not isinstance(value, str):
-            raise ValueError(f"Expecting to have a string `WANDB_LOG_MODEL` setting, but got {type(value)}")
+            raise TypeError(f"Expecting to have a string `WANDB_LOG_MODEL` setting, but got {type(value)}")
         if value.upper() in ENV_VARS_TRUE_VALUES:
             raise DeprecationWarning(
                 f"Setting `WANDB_LOG_MODEL` as {os.getenv('WANDB_LOG_MODEL')} is deprecated and will be removed in "

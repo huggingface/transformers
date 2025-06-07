@@ -696,7 +696,7 @@ class Trainer:
             os.makedirs(self.args.output_dir, exist_ok=True)
 
         if not callable(self.data_collator) and callable(getattr(self.data_collator, "collate_batch", None)):
-            raise ValueError("The `data_collator` should be a simple callable (function, class with `__call__`).")
+            raise TypeError("The `data_collator` should be a simple callable (function, class with `__call__`).")
 
         if args.max_steps > 0 and args.num_train_epochs > 0:
             logger.info("max_steps is given, it will override any value given in num_train_epochs")
@@ -1340,7 +1340,7 @@ class Trainer:
                 raise ValueError(f"You need to define `optim_target_modules` to use {optimizer_name} optimizers")
 
             if not isinstance(args.optim_target_modules, (list, str)):
-                raise ValueError(
+                raise TypeError(
                     f"`optim_target_modules` must be a list of strings, a regex string, or 'all-linear'. Got: {args.optim_target_modules}"
                 )
 
