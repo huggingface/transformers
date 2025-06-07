@@ -278,6 +278,7 @@ class DiaGenerationMixin(GenerationMixin):
             (real_batch_size, max_seq_len, num_channels),
             fill_value=-1,
             dtype=torch.int,
+            device=device,
         )
 
         max_audio_len = 0
