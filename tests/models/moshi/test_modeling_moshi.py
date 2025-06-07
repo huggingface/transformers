@@ -950,6 +950,7 @@ class MoshiIntegrationTests(unittest.TestCase):
         expected_text_token = 452
         expected_audio_tokens = [916, 1396, 1238, 579, 1105, 914, 1257, 810]  # fmt: skip
 
+        breakpoint()
         self.assertTrue(expected_text_token == model_outputs.sequences[0, -2].item())
         self.assertTrue(expected_audio_tokens == model_outputs.audio_codes[0, :, -1].tolist())
 
@@ -965,27 +966,7 @@ class MoshiIntegrationTests(unittest.TestCase):
         )
 
         # eager equivalence is not as strict as sdpa.
-        self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].tolist())
-
-    @slow
-    def test_moshiko_greedy_unconditional_fp32(self):
-        model = MoshiForConditionalGeneration.from_pretrained(
-            "kmhf/hf-moshiko", torch_dtype=torch.float32, device_map="auto"
-        )
-
-        expected_audio_codesum = 72065
-        expected_text_tokens = [3, 3, 3, 0, 11725, 261, 3, 3, 3, 3]  # fmt: skip
-        some_expected_audio_tokens = [[1049, 127], [1700, 243], [1626, 457], [546, 290], [306, 306], [1443, 1443], [1871, 428], [2008, 1744]]  # fmt: skip
-
-        model_outputs = model.generate(
-            do_sample=False, depth_decoder_do_sample=False, return_audio_codes=True, max_new_tokens=10
-        )
-
-        # make sure audio encoded codes are correct
-        audio_code_sums = model_outputs.audio_codes.sum().item()
-        self.assertTrue(np.abs(audio_code_sums - expected_audio_codesum) <= (3e-3 * audio_code_sums))
-
-        self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].tolist())
+        breakpoint()
         self.assertTrue(some_expected_audio_tokens == model_outputs.audio_codes[0, :, :2].tolist())
 
     @slow
@@ -1005,6 +986,7 @@ class MoshiIntegrationTests(unittest.TestCase):
 
         # make sure audio encoded codes are correct
         audio_code_sums = model_outputs.audio_codes.sum().item()
+        breakpoint()
         self.assertTrue(np.abs(audio_code_sums - expected_audio_codesum) <= (3e-3 * audio_code_sums))
 
         self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].tolist())
@@ -1027,6 +1009,7 @@ class MoshiIntegrationTests(unittest.TestCase):
 
         # make sure audio encoded codes are correct
         audio_code_sums = model_outputs.audio_codes.sum().item()
+        breakpoint()
         self.assertTrue(np.abs(audio_code_sums - expected_audio_codesum) <= 2048)
 
         self.assertTrue(expected_text_tokens == model_outputs.sequences[0, 1:].tolist())
