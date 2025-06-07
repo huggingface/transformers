@@ -1650,7 +1650,7 @@ class TorchAoConfig(QuantizationConfigMixin):
             from torchao.quantization.quant_api import AOBaseConfig
 
             if not isinstance(self.quant_type, AOBaseConfig):
-                raise ValueError(
+                raise TypeError(
                     f"quant_type must be either a string or an AOBaseConfig instance, got {type(self.quant_type)}"
                 )
         else:

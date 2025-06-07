@@ -473,7 +473,7 @@ def to_channel_dimension_format(
             The image with the channel dimension set to `channel_dim`.
     """
     if not isinstance(image, np.ndarray):
-        raise ValueError(f"Input image must be of type np.ndarray, got {type(image)}")
+        raise TypeError(f"Input image must be of type np.ndarray, got {type(image)}")
 
     if input_channel_dim is None:
         input_channel_dim = infer_channel_dimension_format(image)

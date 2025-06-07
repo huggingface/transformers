@@ -3711,7 +3711,7 @@ class GenerationMixin(ContinuousMixin):
         # cache format is standardized, to avoid adding complexity to the codebase.
         elif "gptbigcode" in model_class:
             if not isinstance(past_key_values, (DynamicCache, EncoderDecoderCache)):
-                raise ValueError(
+                raise TypeError(
                     f"Using an unsupported cache format with {model_class}. Currently, it only supports the "
                     "legacy tuple format or `DynamicCache`"
                 )

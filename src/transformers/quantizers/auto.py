@@ -252,7 +252,7 @@ def register_quantization_config(method: str):
             raise ValueError(f"Config '{method}' already registered")
 
         if not issubclass(cls, QuantizationConfigMixin):
-            raise ValueError("Config must extend QuantizationConfigMixin")
+            raise TypeError("Config must extend QuantizationConfigMixin")
 
         AUTO_QUANTIZATION_CONFIG_MAPPING[method] = cls
         return cls
