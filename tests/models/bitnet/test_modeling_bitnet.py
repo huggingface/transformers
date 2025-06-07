@@ -28,10 +28,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
@@ -43,92 +40,15 @@ if is_torch_available():
     )
 
 
-class BitNetModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        vocab_size=99,
-        hidden_size=64,
-        num_hidden_layers=5,
-        num_attention_heads=4,
-        num_key_value_heads=2,
-        intermediate_size=37,
-        hidden_act="gelu",
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        pad_token_id=0,
-        bos_token_id=1,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.seq_length = seq_length
-        self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.scope = scope
-
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
-
-        config = self.get_config()
-
-        return config, input_ids, input_mask
-
-    def get_config(self):
-        return BitNetConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
-            max_position_embeddings=self.max_position_embeddings,
-            initializer_range=self.initializer_range,
-            pad_token_id=self.pad_token_id,
-            bos_token_id=self.bos_token_id,
-        )
-
-    def create_and_check_model(self, config, input_ids, input_mask):
-        model = BitNetModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            input_mask,
-        ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
-        return config, inputs_dict
+class BitNetModelTester(CausalLMModelTester):
+    config_class = BitNetConfig
+    if is_torch_available():
+        base_model_class = BitNetModel
+        causal_lm_class = BitNetForCausalLM
 
 
 @require_torch
-class BitNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class BitNetModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
         (
             BitNetModel,
@@ -145,46 +65,7 @@ class BitNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
-
-    # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
-    def is_pipeline_test_to_skip(
-        self,
-        pipeline_test_case_name,
-        config_class,
-        model_architecture,
-        tokenizer_name,
-        image_processor_name,
-        feature_extractor_name,
-        processor_name,
-    ):
-        return True
-
-    def setUp(self):
-        self.model_tester = BitNetModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BitNetConfig, hidden_size=37)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_torch_fx_output_loss(self):
-        super().test_torch_fx_output_loss()
-
-    # Ignore copy
-    def test_past_key_values_format(self):
-        super().test_past_key_values_format()
+    model_tester_class = BitNetModelTester
 
     @require_flash_attn
     @require_torch_gpu
