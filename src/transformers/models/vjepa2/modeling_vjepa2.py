@@ -1235,12 +1235,8 @@ class VJEPA2PredictorEmbeddings(nn.Module):
         self.zero_init_mask_tokens = config.zero_init_mask_tokens
         if config.use_mask_tokens:
             self.num_mask_tokens = config.num_mask_tokens
-            self.mask_tokens = nn.ParameterList(
-                [
-                    nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-                    for i in range(self.num_mask_tokens)
-                ]
-            )
+            self.mask_tokens = nn.Parameter(torch.zeros(self.num_mask_tokens, 1, 1, config.hidden_size))
+         
 
         # self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.patch_size
@@ -1303,7 +1299,7 @@ class VJEPA2PredictorEmbeddings(nn.Module):
         # target = target.repeat(B, self.num_patches(self.config), 1)
         # Remedy: use the provided target mask to get the max patch num
         max_patch_num = (
-            target_mask[0].max().item() + 1
+            target_mask[0].max() + 1
         )  # one extra to include the last patch
         target = target.repeat(B, max_patch_num, 1)
         target = apply_masks(target, target_mask)
@@ -1344,7 +1340,6 @@ class VJEPA2Predictor(nn.Module):
             [VJEPA2Layer(config, dpr[i]) for i in range(config.num_hidden_layers)]
         )
         self.gradient_checkpointing = False
-        self.argsort: Any = None
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.proj = nn.Linear(config.hidden_size, config.enc_hidden_size, bias=True)
 

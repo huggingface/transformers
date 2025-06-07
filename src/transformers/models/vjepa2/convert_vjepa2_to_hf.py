@@ -10,7 +10,6 @@ from PIL import Image
 from transformers import VJEPA2Config, VJEPA2ImageProcessor, VJEPA2Model
 from transformers.models.vjepa2.modeling_vjepa2 import apply_masks
 
-
 HUB_REPO = "/home/koustuvs/mlp/jepa-oss"
 HUB_SOURCE = "local"
 
@@ -136,6 +135,8 @@ def convert_predictor_keys(model_state_dict, og_predictor_state_dict, config):
         if "predictor_pos_embed" in og_predictor_state_dict:
             del og_predictor_state_dict["predictor_pos_embed"]
     # update predictor weights
+    mask_tokens = {}
+    mask_token_keys_to_delete = []
     for key, val in og_predictor_state_dict.copy().items():
         val = og_predictor_state_dict.pop(key)
         key = key.replace("module.backbone.", "")
@@ -146,9 +147,13 @@ def convert_predictor_keys(model_state_dict, og_predictor_state_dict, config):
         if key == "predictor_pos_embed":
             key = "predictor.embeddings.position_embeddings"
         if "predictor_embed." in key:
-            key = key.replace("predictor_embed.", "predictor.embeddings.predictor_embeddings.")
+            key = key.replace(
+                "predictor_embed.", "predictor.embeddings.predictor_embeddings."
+            )
         if "mask_tokens." in key:
-            key = key.replace("mask_tokens.", "predictor.embeddings.mask_tokens.")
+            mask_tokens[key.split("mask_tokens.")[-1]] = val
+            mask_token_keys_to_delete.append(key)
+            # key = key.replace("mask_tokens.", "predictor.embeddings.mask_tokens.")
         if key.startswith("predictor_norm."):
             key = key.replace("predictor_norm.", "predictor.layernorm.")
         if key.startswith("predictor_proj."):
@@ -172,6 +177,12 @@ def convert_predictor_keys(model_state_dict, og_predictor_state_dict, config):
             og_predictor_state_dict[prefix + "value" + suffix] = v_e
         else:
             og_predictor_state_dict[key] = val
+    mask_tokens = torch.stack(
+        [mask_tokens[f"{i}"] for i in range(len(mask_tokens))], dim=0
+    )
+    for k in mask_token_keys_to_delete:
+        del og_predictor_state_dict[k]
+    og_predictor_state_dict["predictor.embeddings.mask_tokens"] = mask_tokens
     return og_predictor_state_dict
 
 
@@ -189,7 +200,9 @@ def convert_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
     config = get_vjepa2_config(model_name)
 
     # load original model from torch hub
-    original_encoder, original_predictor = torch.hub.load(HUB_REPO, "vjepa2_" + model_name, source=HUB_SOURCE)
+    original_encoder, original_predictor = torch.hub.load(
+        HUB_REPO, "vjepa2_" + model_name, source=HUB_SOURCE
+    )
     original_encoder.eval()
     original_predictor.eval()
 
@@ -226,13 +239,23 @@ def convert_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
         original_encoder_outputs = original_encoder(pixel_values)
         B, N, _ = original_encoder_outputs.shape
         # test full mask
-        context_mask = [torch.arange(N, device=pixel_values.device).unsqueeze(0).repeat((B, 1))]
+        context_mask = [
+            torch.arange(N, device=pixel_values.device).unsqueeze(0).repeat((B, 1))
+        ]
         predictor_mask = context_mask
-        original_predictor_outputs = original_predictor(original_encoder_outputs, context_mask, predictor_mask)
-        outputs = model(pixel_values, context_mask=context_mask, target_mask=predictor_mask)
-        assert torch.allclose(outputs.last_hidden_state, original_encoder_outputs, atol=1e-3)
+        original_predictor_outputs = original_predictor(
+            original_encoder_outputs, context_mask, predictor_mask
+        )
+        outputs = model(
+            pixel_values, context_mask=context_mask, target_mask=predictor_mask
+        )
+        assert torch.allclose(
+            outputs.last_hidden_state, original_encoder_outputs, atol=1e-3
+        )
         predictor_outputs = outputs.predictor_output
-        assert torch.allclose(predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3)
+        assert torch.allclose(
+            predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3
+        )
         # test partial mask
         window_size = 256
         mask = torch.arange(N, device=pixel_values.device).unsqueeze(0)
@@ -243,10 +266,16 @@ def convert_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
             context_mask,
             predictor_mask,
         )
-        outputs = model(pixel_values, context_mask=context_mask, target_mask=predictor_mask)
-        assert torch.allclose(outputs.last_hidden_state, original_encoder_outputs, atol=1e-3)
+        outputs = model(
+            pixel_values, context_mask=context_mask, target_mask=predictor_mask
+        )
+        assert torch.allclose(
+            outputs.last_hidden_state, original_encoder_outputs, atol=1e-3
+        )
         predictor_outputs = outputs.predictor_output
-        assert torch.allclose(predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3)
+        assert torch.allclose(
+            predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3
+        )
 
     print("Looks ok!")
 
@@ -297,4 +326,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_vjepa2_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_vjepa2_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub
+    )
