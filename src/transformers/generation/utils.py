@@ -580,9 +580,10 @@ class GenerationMixin(ContinuousMixin):
         # 2. Generic cache-dependent input preparation
         if past_key_values is not None:
             model_inputs["past_key_values"] = past_key_values
-            inputs_embeds, input_ids = self._cache_dependant_input_preparation(
-                input_ids, inputs_embeds, cache_position
-            )
+            if inputs_embeds is not None or cache_position[-1] >= input_ids.shape[1]:  # Exception 1 or Exception 3
+                input_ids = input_ids[:, -cache_position.shape[0] :]
+            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+                input_ids = input_ids[:, cache_position]
 
         # 3. Prepare base model inputs
         input_ids_key = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
@@ -618,7 +619,7 @@ class GenerationMixin(ContinuousMixin):
         for model_input_name in ["position_ids", "token_type_ids", "decoder_position_ids"]:
             model_input = kwargs.get(model_input_name)
             if model_input is not None:
-                if past_key_values is not None:
+                if past_key_values:
                     current_input_length = (
                         model_inputs["inputs_embeds"].shape[1]
                         if model_inputs.get("inputs_embeds") is not None
