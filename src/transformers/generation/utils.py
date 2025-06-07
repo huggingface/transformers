@@ -2416,7 +2416,7 @@ class GenerationMixin(ContinuousMixin):
 
         if not kwargs_has_attention_mask and requires_attention_mask and accepts_attention_mask:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
-                inputs_tensor, generation_config, model_kwargs
+                inputs_tensor, generation_config._pad_token_tensor, generation_config._eos_token_tensor
             )
         elif kwargs_has_attention_mask:
             # TODO (joao): generalize this check with other types of inputs
