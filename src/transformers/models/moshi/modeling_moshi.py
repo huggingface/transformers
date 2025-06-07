@@ -2336,7 +2336,6 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
                 sequence_length=sequence_length,
                 target_length=past_key_values.get_max_cache_shape(),
                 dtype=self.decoder.lm_head.weight.dtype,
-                device=device,
                 cache_position=cache_position,
                 batch_size=batch_size,
                 config=self.config,
