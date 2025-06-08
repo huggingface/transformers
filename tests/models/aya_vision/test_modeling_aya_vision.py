@@ -341,7 +341,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
     def test_small_model_integration_forward(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = AyaVisionForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
+            self.model_checkpoint, device_map=torch_device, load_in_4bit=True,
         )
         messages = [
             {
@@ -375,7 +375,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
     def test_small_model_integration_generate_text_only(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = AyaVisionForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
+            self.model_checkpoint, device_map=torch_device, load_in_4bit=True,
         )
         messages = [
             {
@@ -410,7 +410,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
     def test_small_model_integration_generate_chat_template(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = AyaVisionForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
+            self.model_checkpoint, device_map=torch_device, load_in_4bit=True,
         )
         messages = [
             {
@@ -438,7 +438,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
     def test_small_model_integration_batched_generate(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = AyaVisionForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
+            self.model_checkpoint, device_map=torch_device, load_in_4bit=True,
         )
         # Prepare inputs
         messages = [
@@ -499,7 +499,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
     def test_small_model_integration_batched_generate_multi_image(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         model = AyaVisionForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
+            self.model_checkpoint, device_map=torch_device, load_in_4bit=True,
         )
         # Prepare inputs
         messages = [
