@@ -44,7 +44,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="summarization",
     model="google/pegasus-xsum",
-    torch_dtype=torch.float16,
+    torch_dtype=torch.bfloat16,
     device=0
 )
 pipeline("Plants are remarkable organisms that produce their own food using a method called photosynthesis. This process involves converting sunlight, carbon dioxide, and water into glucose, which provides energy for growth. Plants play a crucial role in sustaining life on Earth by generating oxygen and serving as the foundation of most ecosystems.")
@@ -62,7 +62,7 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/pegasus-xsum",
-    torch_dtype=torch.float16,
+    torch_dtype=torch.bfloat16,
     device_map="auto",
 )
 
