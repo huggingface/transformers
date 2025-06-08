@@ -362,6 +362,8 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         actual_logits = output.logits[0, -1, :5].cpu()
         expected_logits = torch.tensor([0.4109, 0.1532, 0.8018, 2.1328, 0.5483], dtype=torch.float16)
+
+        breakpoint()
         self.assertTrue(
             torch.allclose(actual_logits, expected_logits, atol=0.1),
             f"Actual logits: {actual_logits}"
@@ -403,6 +405,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
+        breakpoint()
         self.assertEqual(decoded_output, expected_output)
 
     @slow
@@ -431,6 +434,8 @@ class AyaVisionIntegrationTest(unittest.TestCase):
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
         expected_output = "The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,"  # fmt: skip
+
+        breakpoint()
         self.assertEqual(decoded_output, expected_output)
 
     @slow
@@ -477,6 +482,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
+        breakpoint()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -487,6 +493,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         expected_output = 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a'  # fmt: skip
 
+        breakpoint()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -548,6 +555,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
+        breakpoint()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -563,6 +571,8 @@ class AyaVisionIntegrationTest(unittest.TestCase):
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
+
+        breakpoint()
         self.assertEqual(
             decoded_output,
             expected_output,
