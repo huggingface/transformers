@@ -48,6 +48,14 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 [[autodoc]] Bert2DConfig
     - all
 
+## Bert2DTokenizer
+
+[[autodoc]] Bert2DTokenizer
+
+## Bert2DTokenizerFast
+
+[[autodoc]] Bert2DTokenizerFast
+
 ## Bert2DModel
 
 [[autodoc]] Bert2DModel

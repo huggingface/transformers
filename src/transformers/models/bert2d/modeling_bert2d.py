@@ -49,7 +49,6 @@ from .configuration_bert2d import Bert2DConfig
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.bert.modeling_bert.load_tf_weights_in_bert with bert->bert2d
 def load_tf_weights_in_bert2d(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
@@ -116,8 +115,6 @@ def load_tf_weights_in_bert2d(model, config, tf_checkpoint_path):
         elif m_name == "kernel":
             array = np.transpose(array)
         try:
-            print("Pointer:", pointer)
-            print("Array shape:", array.shape)
             if pointer.shape != array.shape:
                 raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
         except ValueError as e:
@@ -128,33 +125,37 @@ def load_tf_weights_in_bert2d(model, config, tf_checkpoint_path):
     return model
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEmbeddings with Bert->Bert2D
 class Bert2DEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        # self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
-        # Additional embeddings
+        # Additional embeddings for Bert2D
         self.whole_word_embeddings = nn.Embedding(config.max_word_position_embeddings, config.hidden_size)
         self.subword_embeddings = nn.Embedding(
             config.max_intermediate_subword_position_embeddings + 2, config.hidden_size
         )
 
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        # self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+
+        # Buffers for default IDs, similar to vanilla BERT's position_ids and token_type_ids
+        # These are used if word_ids or subword_ids are not provided.
+        # Max length for these defaults is config.max_position_embeddings for consistency.
+        # Actual length used will be sliced to seq_length at runtime.
         self.register_buffer(
-            "word_position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+            "default_word_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
+        # Default subword_ids to all zeros.
         self.register_buffer(
-            "token_type_ids", torch.zeros(self.word_position_ids.size(), dtype=torch.long), persistent=False
+            "default_subword_ids", torch.zeros(1, config.max_position_embeddings, dtype=torch.long), persistent=False
+        )
+        # Buffer for token_type_ids (all zeros)
+        self.register_buffer(
+            "token_type_ids_buffer", torch.zeros(1, config.max_position_embeddings, dtype=torch.long), persistent=False
         )
 
     def forward(
@@ -164,7 +165,7 @@ class Bert2DEmbeddings(nn.Module):
         word_ids: Optional[torch.LongTensor] = None,
         subword_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        past_key_values_length: int = 0,
+        past_key_values_length: int = 0,  # This argument is not directly used in Bert2D's 2D embedding logic
     ) -> torch.Tensor:
         r"""
         word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -183,11 +184,55 @@ class Bert2DEmbeddings(nn.Module):
             subwords for that "word"). These are used to compute subword-level relative position embeddings.
             Together, `word_ids` and `subword_ids` create a 2D positional ID system.
         """
+        if input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        seq_length = input_shape[-1]  # Works for 2D (batch, seq) and 3D (batch, num_choices, seq)
+
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
+
+        if token_type_ids is None:
+            # Use the registered buffer for token_type_ids
+            buffered_token_type_ids = self.token_type_ids_buffer[:, :seq_length]
+            if len(input_shape) == 3:  # (batch, num_choices, seq_len)
+                token_type_ids = buffered_token_type_ids.expand(input_shape[0], input_shape[1], seq_length)
+            else:  # (batch, seq_len)
+                token_type_ids = buffered_token_type_ids.expand(input_shape[0], seq_length)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
-        # Additional embeddings
+        if word_ids is None:
+            warnings.warn(
+                "`word_ids` was not provided and will be defaulted to sequential IDs. This behavior is usually "
+                "not desired for Bert2D models and may lead to unexpected results if the model is not explicitly "
+                "expecting this behavior.",
+                UserWarning,
+            )
+            # Use the registered buffer for default_word_ids
+            default_word_ids_slice = self.default_word_ids[:, :seq_length]
+            if len(input_shape) == 3:
+                word_ids = default_word_ids_slice.expand(input_shape[0], input_shape[1], seq_length)
+            else:
+                word_ids = default_word_ids_slice.expand(input_shape[0], seq_length)
+
+        if subword_ids is None:
+            warnings.warn(
+                "`subword_ids` was not provided and will be defaulted to zeros. This behavior is usually "
+                "not desired for Bert2D models and may lead to unexpected results if the model is not explicitly "
+                "expecting this behavior.",
+                UserWarning,
+            )
+            # Use the registered buffer for default_subword_ids (all zeros)
+            default_subword_ids_slice = self.default_subword_ids[:, :seq_length]
+            if len(input_shape) == 3:
+                subword_ids = default_subword_ids_slice.expand(input_shape[0], input_shape[1], seq_length)
+            else:
+                subword_ids = default_subword_ids_slice.expand(input_shape[0], seq_length)
+
         whole_word_embeddings = self.whole_word_embeddings(word_ids)
         subword_embeddings = self.subword_embeddings(subword_ids)
 
@@ -198,7 +243,6 @@ class Bert2DEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Bert2D
 class Bert2DSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -240,13 +284,9 @@ class Bert2DSelfAttention(nn.Module):
     ) -> Tuple[torch.Tensor]:
         mixed_query_layer = self.query(hidden_states)
 
-        # If this is instantiated as a cross-attention module, the keys
-        # and values come from an encoder; the attention mask needs to be
-        # such that the encoder's padding tokens are not attended to.
         is_cross_attention = encoder_hidden_states is not None
 
         if is_cross_attention and past_key_value is not None:
-            # reuse k,v, cross_attentions
             key_layer = past_key_value[0]
             value_layer = past_key_value[1]
             attention_mask = encoder_attention_mask
@@ -266,31 +306,17 @@ class Bert2DSelfAttention(nn.Module):
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
         if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_layer, value_layer)
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in Bert2DModel forward() function)
             attention_scores = attention_scores + attention_mask
 
-        # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        # Mask heads if we want to
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
@@ -307,14 +333,12 @@ class Bert2DSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSdpaSelfAttention with Bert->Bert2D
 class Bert2DSdpaSelfAttention(Bert2DSelfAttention):
     def __init__(self, config, position_embedding_type=None):
         super().__init__(config, position_embedding_type=position_embedding_type)
         self.dropout_prob = config.attention_probs_dropout_prob
         self.require_contiguous_qkv = version.parse(get_torch_version()) < version.parse("2.2.0")
 
-    # Adapted from Bert2DSelfAttention
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -326,7 +350,6 @@ class Bert2DSdpaSelfAttention(Bert2DSelfAttention):
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         if self.position_embedding_type != "absolute" or output_attentions or head_mask is not None:
-            # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once implemented.
             logger.warning_once(
                 "Bert2DSdpaSelfAttention is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
                 "non-absolute `position_embedding_type` or `output_attentions=True` or `head_mask`. Falling back to "
@@ -345,17 +368,11 @@ class Bert2DSdpaSelfAttention(Bert2DSelfAttention):
             )
 
         bsz, tgt_len, _ = hidden_states.size()
-
         query_layer = self.transpose_for_scores(self.query(hidden_states))
-
-        # If this is instantiated as a cross-attention module, the keys and values come from an encoder; the attention
-        # mask needs to be such that the encoder's padding tokens are not attended to.
         is_cross_attention = encoder_hidden_states is not None
-
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
-        attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
+        attention_mask_to_pass = encoder_attention_mask if is_cross_attention else attention_mask
 
-        # Check `seq_length` of `past_key_value` == `len(current_states)` to support prefix tuning
         if is_cross_attention and past_key_value and past_key_value[0].shape[2] == current_states.shape[1]:
             key_layer, value_layer = past_key_value
         else:
@@ -366,50 +383,36 @@ class Bert2DSdpaSelfAttention(Bert2DSelfAttention):
                 value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
 
         if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_layer, value_layer)
 
-        # SDPA with memory-efficient backend is broken in torch==2.1.2 when using non-contiguous inputs and a custom
-        # attn_mask, so we need to call `.contiguous()` here. This was fixed in torch==2.2.0.
-        # Reference: https://github.com/pytorch/pytorch/issues/112577
-        if self.require_contiguous_qkv and query_layer.device.type == "cuda" and attention_mask is not None:
+        if self.require_contiguous_qkv and query_layer.device.type == "cuda" and attention_mask_to_pass is not None:
             query_layer = query_layer.contiguous()
             key_layer = key_layer.contiguous()
             value_layer = value_layer.contiguous()
 
-        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
-        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create
-        # a causal mask in case tgt_len == 1.
         is_causal = (
-            True if self.is_decoder and not is_cross_attention and attention_mask is None and tgt_len > 1 else False
+            True
+            if self.is_decoder and not is_cross_attention and attention_mask_to_pass is None and tgt_len > 1
+            else False
         )
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_layer,
             key_layer,
             value_layer,
-            attn_mask=attention_mask,
+            attn_mask=attention_mask_to_pass,
             dropout_p=self.dropout_prob if self.training else 0.0,
             is_causal=is_causal,
         )
 
         attn_output = attn_output.transpose(1, 2)
         attn_output = attn_output.reshape(bsz, tgt_len, self.all_head_size)
-
         outputs = (attn_output,)
         if self.is_decoder:
             outputs = outputs + (past_key_value,)
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Bert2D
 class Bert2DSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -430,7 +433,6 @@ BERT2D_SELF_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with BERT->BERT2D,Bert->Bert2D
 class Bert2DAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -447,13 +449,11 @@ class Bert2DAttention(nn.Module):
             heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
         )
 
-        # Prune linear layers
         self.self.query = prune_linear_layer(self.self.query, index)
         self.self.key = prune_linear_layer(self.self.key, index)
         self.self.value = prune_linear_layer(self.self.value, index)
         self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
 
-        # Update hyper params and store pruned heads
         self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
@@ -478,11 +478,10 @@ class Bert2DAttention(nn.Module):
             output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[1:]
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Bert2D
 class Bert2DIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -498,7 +497,6 @@ class Bert2DIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->Bert2D
 class Bert2DOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -513,7 +511,6 @@ class Bert2DOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Bert2D
 class Bert2DLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -539,7 +536,6 @@ class Bert2DLayer(nn.Module):
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
             hidden_states,
@@ -550,12 +546,11 @@ class Bert2DLayer(nn.Module):
         )
         attention_output = self_attention_outputs[0]
 
-        # if decoder, the last output is tuple of self-attn cache
         if self.is_decoder:
             outputs = self_attention_outputs[1:-1]
             present_key_value = self_attention_outputs[-1]
         else:
-            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+            outputs = self_attention_outputs[1:]
 
         cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
@@ -565,7 +560,6 @@ class Bert2DLayer(nn.Module):
                     " by setting `config.add_cross_attention=True`"
                 )
 
-            # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
             cross_attention_outputs = self.crossattention(
                 attention_output,
@@ -577,9 +571,7 @@ class Bert2DLayer(nn.Module):
                 output_attentions,
             )
             attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
-
-            # add cross-attn cache to positions 3,4 of present_key_value tuple
+            outputs = outputs + cross_attention_outputs[1:-1]
             cross_attn_present_key_value = cross_attention_outputs[-1]
             present_key_value = present_key_value + cross_attn_present_key_value
 
@@ -588,7 +580,6 @@ class Bert2DLayer(nn.Module):
         )
         outputs = (layer_output,) + outputs
 
-        # if decoder, return the attn key/values as the last output
         if self.is_decoder:
             outputs = outputs + (present_key_value,)
 
@@ -600,7 +591,6 @@ class Bert2DLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Bert2D
 class Bert2DEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -694,7 +684,6 @@ class Bert2DEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->Bert2D
 class Bert2DPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -702,15 +691,12 @@ class Bert2DPooler(nn.Module):
         self.activation = nn.Tanh()
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
         first_token_tensor = hidden_states[:, 0]
         pooled_output = self.dense(first_token_tensor)
         pooled_output = self.activation(pooled_output)
         return pooled_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->Bert2D
 class Bert2DPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -728,19 +714,12 @@ class Bert2DPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->Bert2D
 class Bert2DLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.transform = Bert2DPredictionHeadTransform(config)
-
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
         self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
     def _tie_weights(self):
@@ -752,7 +731,6 @@ class Bert2DLMPredictionHead(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->Bert2D
 class Bert2DOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -763,7 +741,6 @@ class Bert2DOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOnlyNSPHead with Bert->Bert2D
 class Bert2DOnlyNSPHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -774,7 +751,6 @@ class Bert2DOnlyNSPHead(nn.Module):
         return seq_relationship_score
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPreTrainingHeads with Bert->Bert2D
 class Bert2DPreTrainingHeads(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -788,7 +764,6 @@ class Bert2DPreTrainingHeads(nn.Module):
 
 
 @auto_docstring
-# Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel with Bert->Bert2D,bert->bert2d
 class Bert2DPreTrainedModel(PreTrainedModel):
     config_class = Bert2DConfig
     load_tf_weights = load_tf_weights_in_bert2d
@@ -799,8 +774,6 @@ class Bert2DPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -811,12 +784,11 @@ class Bert2DPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, Bert2DLMPredictionHead):
+        elif isinstance(module, Bert2DLMPredictionHead):  # Ensure bias is initialized for this specific head
             module.bias.data.zero_()
 
 
 @dataclass
-# Copied from transformers.models.bert.modeling_bert.BertForPreTrainingOutput with Bert->Bert2D
 class Bert2DForPreTrainingOutput(ModelOutput):
     """
     Output type of [`Bert2DForPreTraining`].
@@ -862,7 +834,6 @@ class Bert2DForPreTrainingOutput(ModelOutput):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 )
-# Copied from transformers.models.bert.modeling_bert.BertModel with Bert->Bert2D
 class Bert2DModel(Bert2DPreTrainedModel):
     _no_split_modules = ["Bert2DEmbeddings", "Bert2DLayer"]
 
@@ -876,10 +847,7 @@ class Bert2DModel(Bert2DPreTrainedModel):
 
         self.embeddings = Bert2DEmbeddings(config)
         self.encoder = Bert2DEncoder(config)
-
         self.pooler = Bert2DPooler(config) if add_pooling_layer else None
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
@@ -889,10 +857,6 @@ class Bert2DModel(Bert2DPreTrainedModel):
         self.embeddings.word_embeddings = value
 
     def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
@@ -915,39 +879,12 @@ class Bert2DModel(Bert2DPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
-        word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)` or `(batch_size, num_choices, sequence_length)` for multiple choice, *optional*):
             Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
             which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
-            For example, in the sentence "Tokenization is useful", if "Tokenization" is split into "Token" and "##ization",
-            both "Token" and "##ization" will have the same `word_id` (e.g., 0), "is" will have `word_id` 1, and "useful"
-            will have `word_id` 2. These are used to compute word-level absolute position embeddings.
-        subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)` or `(batch_size, num_choices, sequence_length)` for multiple choice, *optional*):
             Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
-            within its parent word. The specific assignment scheme depends on the tokenizer's configuration
-            (e.g., `subword_embedding_order`, `max_intermediate_subword_positions_per_word`). For example, with
-            `subword_embedding_order="ending_first"`, the first token of a word typically gets `0`, the last token of the
-            same word gets `1`, and intermediate tokens get other IDs (e.g., `2`, `3`, ...). If a word is composed
-            of a single token, its `subword_id` might be `0` (or `1` if it's a subword itself that starts the sequence of
-            subwords for that "word"). These are used to compute subword-level relative position embeddings.
-            Together, `word_ids` and `subword_ids` create a 2D positional ID system.
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
+            within its parent word. Together with `word_ids`, they create a 2D positional ID system.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -963,36 +900,37 @@ class Bert2DModel(Bert2DPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = input_ids.size()
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
+            input_shape = input_ids.size()
+            device = input_ids.device
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
+            device = inputs_embeds.device
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        batch_size, seq_length = input_shape
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
+        batch_size, seq_length = input_shape[:2]
 
-        # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
 
+        # Default token_type_ids if not provided (similar to vanilla BERT)
         if token_type_ids is None:
-            if hasattr(self.embeddings, "token_type_ids"):
-                buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(batch_size, seq_length)
-                token_type_ids = buffered_token_type_ids_expanded
-            else:
+            if hasattr(self.embeddings, "token_type_ids_buffer"):  # Check for our buffer
+                buffered_token_type_ids = self.embeddings.token_type_ids_buffer[:, : input_shape[-1]]
+                if len(input_shape) == 3:  # (batch, num_choices, seq_len)
+                    token_type_ids = buffered_token_type_ids.expand(input_shape[0], input_shape[1], input_shape[-1])
+                else:  # (batch, seq_len)
+                    token_type_ids = buffered_token_type_ids.expand(input_shape[0], input_shape[-1])
+            else:  # Fallback if buffer isn't there (shouldn't happen with new __init__)
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
+        # word_ids and subword_ids will be defaulted inside Bert2DEmbeddings.forward if None
+
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.is_decoder and encoder_hidden_states is not None:
             encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
@@ -1002,18 +940,13 @@ class Bert2DModel(Bert2DPreTrainedModel):
         else:
             encoder_extended_attention_mask = None
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
-            word_ids=word_ids,
-            subword_ids=subword_ids,
-            token_type_ids=token_type_ids,
+            word_ids=word_ids,  # Can be None, will be handled by Bert2DEmbeddings
+            subword_ids=subword_ids,  # Can be None, will be handled by Bert2DEmbeddings
+            token_type_ids=token_type_ids,  # Now guaranteed to be non-None
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
@@ -1051,17 +984,13 @@ class Bert2DModel(Bert2DPreTrainedModel):
     sentence prediction (classification)` head.
     """
 )
-# Copied from transformers.models.bert.modeling_bert.BertForPreTraining with Bert->Bert2D,bert->bert2d
 class Bert2DForPreTraining(Bert2DPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-
         self.bert2d = Bert2DModel(config)
         self.cls = Bert2DPreTrainingHeads(config)
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
@@ -1091,51 +1020,16 @@ class Bert2DForPreTraining(Bert2DPreTrainedModel):
         word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
             which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
-            For example, in the sentence "Tokenization is useful", if "Tokenization" is split into "Token" and "##ization",
-            both "Token" and "##ization" will have the same `word_id` (e.g., 0), "is" will have `word_id` 1, and "useful"
-            will have `word_id` 2. These are used to compute word-level absolute position embeddings.
         subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
-            within its parent word. The specific assignment scheme depends on the tokenizer's configuration
-            (e.g., `subword_embedding_order`, `max_intermediate_subword_positions_per_word`). For example, with
-            `subword_embedding_order="ending_first"`, the first token of a word typically gets `0`, the last token of the
-            same word gets `1`, and intermediate tokens get other IDs (e.g., `2`, `3`, ...). If a word is composed
-            of a single token, its `subword_id` might be `0` (or `1` if it's a subword itself that starts the sequence of
-            subwords for that "word"). These are used to compute subword-level relative position embeddings.
-            Together, `word_ids` and `subword_ids` create a 2D positional ID system.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked),
-            the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+            within its parent word. Together with `word_ids`, they create a 2D positional ID system.
         next_sentence_label (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the next sequence prediction (classification) loss. Input should be a sequence
-            pair (see `input_ids` docstring) Indices should be in `[0, 1]`:
-
-            - 0 indicates sequence B is a continuation of sequence A,
-            - 1 indicates sequence B is a random sequence.
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
-            Used to hide legacy arguments that have been deprecated.
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, Bert2DForPreTraining
-        >>> import torch
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("bert2d-base-uncased")
-        >>> model = Bert2DForPreTraining.from_pretrained("bert2d-base-uncased")
-
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(**inputs)
-
-        >>> prediction_logits = outputs.prediction_logits
-        >>> seq_relationship_logits = outputs.seq_relationship_logits
-        ```
+            Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair (see `input_ids` docstring)
+            Indices should be in `[0, 1]`:
+            - 0 indicates sequence B is not the continuation of sequence A,
+            - 1 indicates sequence B is the continuation of sequence A.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.bert2d(
             input_ids,
             attention_mask=attention_mask,
@@ -1148,21 +1042,17 @@ class Bert2DForPreTraining(Bert2DPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
         sequence_output, pooled_output = outputs[:2]
         prediction_scores, seq_relationship_score = self.cls(sequence_output, pooled_output)
-
         total_loss = None
         if labels is not None and next_sentence_label is not None:
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             next_sentence_loss = loss_fct(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
             total_loss = masked_lm_loss + next_sentence_loss
-
         if not return_dict:
             output = (prediction_scores, seq_relationship_score) + outputs[2:]
             return ((total_loss,) + output) if total_loss is not None else output
-
         return Bert2DForPreTrainingOutput(
             loss=total_loss,
             prediction_logits=prediction_scores,
@@ -1177,20 +1067,15 @@ class Bert2DForPreTraining(Bert2DPreTrainedModel):
     Bert2D Model with a `language modeling` head on top for CLM fine-tuning.
     """
 )
-# Copied from transformers.models.bert.modeling_bert.BertLMHeadModel with Bert->Bert2D,bert->bert2d
 class Bert2DLMHeadModel(Bert2DPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-
         if not config.is_decoder:
             logger.warning("If you want to use `Bert2DLMHeadModel` as a standalone, add `is_decoder=True.`")
-
         self.bert2d = Bert2DModel(config, add_pooling_layer=False)
         self.cls = Bert2DOnlyMLMHead(config)
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
@@ -1223,45 +1108,13 @@ class Bert2DLMHeadModel(Bert2DPreTrainedModel, GenerationMixin):
         word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
             which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
-            For example, in the sentence "Tokenization is useful", if "Tokenization" is split into "Token" and "##ization",
-            both "Token" and "##ization" will have the same `word_id` (e.g., 0), "is" will have `word_id` 1, and "useful"
-            will have `word_id` 2. These are used to compute word-level absolute position embeddings.
         subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
-            within its parent word. The specific assignment scheme depends on the tokenizer's configuration
-            (e.g., `subword_embedding_order`, `max_intermediate_subword_positions_per_word`). For example, with
-            `subword_embedding_order="ending_first"`, the first token of a word typically gets `0`, the last token of the
-            same word gets `1`, and intermediate tokens get other IDs (e.g., `2`, `3`, ...). If a word is composed
-            of a single token, its `subword_id` might be `0` (or `1` if it's a subword itself that starts the sequence of
-            subwords for that "word"). These are used to compute subword-level relative position embeddings.
-            Together, `word_ids` and `subword_ids` create a 2D positional ID system.
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
-            `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
-            ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
+            within its parent word. Together with `word_ids`, they create a 2D positional ID system.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
             use_cache = False
-
         outputs = self.bert2d(
             input_ids,
             attention_mask=attention_mask,
@@ -1278,22 +1131,17 @@ class Bert2DLMHeadModel(Bert2DPreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
         sequence_output = outputs[0]
         prediction_scores = self.cls(sequence_output)
-
         lm_loss = None
         if labels is not None:
-            # we are doing next-token prediction; shift prediction scores and input ids by one
             shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
             labels = labels[:, 1:].contiguous()
             loss_fct = CrossEntropyLoss()
             lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
             return ((lm_loss,) + output) if lm_loss is not None else output
-
         return CausalLMOutputWithCrossAttentions(
             loss=lm_loss,
             logits=prediction_scores,
@@ -1303,25 +1151,35 @@ class Bert2DLMHeadModel(Bert2DPreTrainedModel, GenerationMixin):
             cross_attentions=outputs.cross_attentions,
         )
 
+    @staticmethod
+    def _reorder_cache(
+        past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
+    ) -> Tuple[Tuple[torch.Tensor]]:
+        reordered_past = ()
+        for layer_past in past_key_values:
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
+        return reordered_past
 
-@auto_docstring
-# Copied from transformers.models.bert.modeling_bert.BertForMaskedLM with Bert->Bert2D,bert->bert2d
+
+@auto_docstring(
+    custom_intro="""
+    Bert2D Model with a `language modeling` head on top for CLM fine-tuning.
+    """
+)
 class Bert2DForMaskedLM(Bert2DPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-
         if config.is_decoder:
             logger.warning(
                 "If you want to use `Bert2DForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )
-
         self.bert2d = Bert2DModel(config, add_pooling_layer=False)
         self.cls = Bert2DOnlyMLMHead(config)
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
@@ -1352,26 +1210,11 @@ class Bert2DForMaskedLM(Bert2DPreTrainedModel):
         word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
             which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
-            For example, in the sentence "Tokenization is useful", if "Tokenization" is split into "Token" and "##ization",
-            both "Token" and "##ization" will have the same `word_id` (e.g., 0), "is" will have `word_id` 1, and "useful"
-            will have `word_id` 2. These are used to compute word-level absolute position embeddings.
         subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
-            within its parent word. The specific assignment scheme depends on the tokenizer's configuration
-            (e.g., `subword_embedding_order`, `max_intermediate_subword_positions_per_word`). For example, with
-            `subword_embedding_order="ending_first"`, the first token of a word typically gets `0`, the last token of the
-            same word gets `1`, and intermediate tokens get other IDs (e.g., `2`, `3`, ...). If a word is composed
-            of a single token, its `subword_id` might be `0` (or `1` if it's a subword itself that starts the sequence of
-            subwords for that "word"). These are used to compute subword-level relative position embeddings.
-            Together, `word_ids` and `subword_ids` create a 2D positional ID system.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+            within its parent word. Together with `word_ids`, they create a 2D positional ID system.
         """
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.bert2d(
             input_ids,
             attention_mask=attention_mask,
@@ -1386,19 +1229,15 @@ class Bert2DForMaskedLM(Bert2DPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
         sequence_output = outputs[0]
         prediction_scores = self.cls(sequence_output)
-
         masked_lm_loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()  # -100 index = padding token
+            loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
-
         return MaskedLMOutput(
             loss=masked_lm_loss,
             logits=prediction_scores,
@@ -1409,25 +1248,17 @@ class Bert2DForMaskedLM(Bert2DPreTrainedModel):
     def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
         effective_batch_size = input_shape[0]
-
-        #  add a dummy token
         if self.config.pad_token_id is None:
             raise ValueError("The PAD token should be defined for generation")
-
         attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
         dummy_token = torch.full(
             (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
         )
         input_ids = torch.cat([input_ids, dummy_token], dim=1)
-
         return {"input_ids": input_ids, "attention_mask": attention_mask}
 
     @classmethod
     def can_generate(cls) -> bool:
-        """
-        Legacy correction: Bert2DForMaskedLM can't call `generate()` from `GenerationMixin`, even though it has a
-        `prepare_inputs_for_generation` method.
-        """
         return False
 
 
@@ -1436,15 +1267,11 @@ class Bert2DForMaskedLM(Bert2DPreTrainedModel):
     Bert2D Model with a `next sentence prediction (classification)` head on top.
     """
 )
-# Copied from transformers.models.bert.modeling_bert.BertForNextSentencePrediction with Bert->Bert2D,bert->bert2d
 class Bert2DForNextSentencePrediction(Bert2DPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-
         self.bert2d = Bert2DModel(config)
         self.cls = Bert2DOnlyNSPHead(config)
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     @auto_docstring
@@ -1467,46 +1294,10 @@ class Bert2DForNextSentencePrediction(Bert2DPreTrainedModel):
         word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
             which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
-            For example, in the sentence "Tokenization is useful", if "Tokenization" is split into "Token" and "##ization",
-            both "Token" and "##ization" will have the same `word_id` (e.g., 0), "is" will have `word_id` 1, and "useful"
-            will have `word_id` 2. These are used to compute word-level absolute position embeddings.
         subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
-            within its parent word. The specific assignment scheme depends on the tokenizer's configuration
-            (e.g., `subword_embedding_order`, `max_intermediate_subword_positions_per_word`). For example, with
-            `subword_embedding_order="ending_first"`, the first token of a word typically gets `0`, the last token of the
-            same word gets `1`, and intermediate tokens get other IDs (e.g., `2`, `3`, ...). If a word is composed
-            of a single token, its `subword_id` might be `0` (or `1` if it's a subword itself that starts the sequence of
-            subwords for that "word"). These are used to compute subword-level relative position embeddings.
-            Together, `word_ids` and `subword_ids` create a 2D positional ID system.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
-            (see `input_ids` docstring). Indices should be in `[0, 1]`:
-
-            - 0 indicates sequence B is a continuation of sequence A,
-            - 1 indicates sequence B is a random sequence.
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, Bert2DForNextSentencePrediction
-        >>> import torch
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("bert2d-base-uncased")
-        >>> model = Bert2DForNextSentencePrediction.from_pretrained("bert2d-base-uncased")
-
-        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-        >>> encoding = tokenizer(prompt, next_sentence, return_tensors="pt")
-
-        >>> outputs = model(**encoding, labels=torch.LongTensor([1]))
-        >>> logits = outputs.logits
-        >>> assert logits[0, 0] < logits[0, 1]  # next sentence was random
-        ```
+            within its parent word. Together with `word_ids`, they create a 2D positional ID system.
         """
-
         if "next_sentence_label" in kwargs:
             warnings.warn(
                 "The `next_sentence_label` argument is deprecated and will be removed in a future version, use"
@@ -1514,9 +1305,7 @@ class Bert2DForNextSentencePrediction(Bert2DPreTrainedModel):
                 FutureWarning,
             )
             labels = kwargs.pop("next_sentence_label")
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.bert2d(
             input_ids,
             attention_mask=attention_mask,
@@ -1529,20 +1318,15 @@ class Bert2DForNextSentencePrediction(Bert2DPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
         pooled_output = outputs[1]
-
         seq_relationship_scores = self.cls(pooled_output)
-
         next_sentence_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             next_sentence_loss = loss_fct(seq_relationship_scores.view(-1, 2), labels.view(-1))
-
         if not return_dict:
             output = (seq_relationship_scores,) + outputs[2:]
             return ((next_sentence_loss,) + output) if next_sentence_loss is not None else output
-
         return NextSentencePredictorOutput(
             loss=next_sentence_loss,
             logits=seq_relationship_scores,
@@ -1557,21 +1341,17 @@ class Bert2DForNextSentencePrediction(Bert2DPreTrainedModel):
     output) e.g. for GLUE tasks.
     """
 )
-# Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification with Bert->Bert2D,bert->bert2d
 class Bert2DForSequenceClassification(Bert2DPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
-
         self.bert2d = Bert2DModel(config)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
         self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     @auto_docstring
@@ -1593,25 +1373,11 @@ class Bert2DForSequenceClassification(Bert2DPreTrainedModel):
         word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
             which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
-            For example, in the sentence "Tokenization is useful", if "Tokenization" is split into "Token" and "##ization",
-            both "Token" and "##ization" will have the same `word_id` (e.g., 0), "is" will have `word_id` 1, and "useful"
-            will have `word_id` 2. These are used to compute word-level absolute position embeddings.
         subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
-            within its parent word. The specific assignment scheme depends on the tokenizer's configuration
-            (e.g., `subword_embedding_order`, `max_intermediate_subword_positions_per_word`). For example, with
-            `subword_embedding_order="ending_first"`, the first token of a word typically gets `0`, the last token of the
-            same word gets `1`, and intermediate tokens get other IDs (e.g., `2`, `3`, ...). If a word is composed
-            of a single token, its `subword_id` might be `0` (or `1` if it's a subword itself that starts the sequence of
-            subwords for that "word"). These are used to compute subword-level relative position embeddings.
-            Together, `word_ids` and `subword_ids` create a 2D positional ID system.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            within its parent word. Together with `word_ids`, they create a 2D positional ID system.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.bert2d(
             input_ids,
             attention_mask=attention_mask,
@@ -1624,12 +1390,9 @@ class Bert2DForSequenceClassification(Bert2DPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
         pooled_output = outputs[1]
-
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
-
         loss = None
         if labels is not None:
             if self.config.problem_type is None:
@@ -1639,7 +1402,6 @@ class Bert2DForSequenceClassification(Bert2DPreTrainedModel):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
-
             if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
                 if self.num_labels == 1:
@@ -1655,7 +1417,6 @@ class Bert2DForSequenceClassification(Bert2DPreTrainedModel):
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
-
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
@@ -1664,20 +1425,21 @@ class Bert2DForSequenceClassification(Bert2DPreTrainedModel):
         )
 
 
-@auto_docstring
-# Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice with Bert->Bert2D,bert->bert2d
+@auto_docstring(
+    custom_intro="""
+    Bert2D Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    output) e.g. for GLUE tasks.
+    """
+)
 class Bert2DForMultipleChoice(Bert2DPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-
         self.bert2d = Bert2DModel(config)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
         self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, 1)
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     @auto_docstring
@@ -1696,25 +1458,12 @@ class Bert2DForMultipleChoice(Bert2DPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], MultipleChoiceModelOutput]:
         r"""
-        word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        word_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
             Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
             which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
-            For example, in the sentence "Tokenization is useful", if "Tokenization" is split into "Token" and "##ization",
-            both "Token" and "##ization" will have the same `word_id` (e.g., 0), "is" will have `word_id` 1, and "useful"
-            will have `word_id` 2. These are used to compute word-level absolute position embeddings.
-        subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        subword_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
             Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
-            within its parent word. The specific assignment scheme depends on the tokenizer's configuration
-            (e.g., `subword_embedding_order`, `max_intermediate_subword_positions_per_word`). For example, with
-            `subword_embedding_order="ending_first"`, the first token of a word typically gets `0`, the last token of the
-            same word gets `1`, and intermediate tokens get other IDs (e.g., `2`, `3`, ...). If a word is composed
-            of a single token, its `subword_id` might be `0` (or `1` if it's a subword itself that starts the sequence of
-            subwords for that "word"). These are used to compute subword-level relative position embeddings.
-            Together, `word_ids` and `subword_ids` create a 2D positional ID system.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
+            within its parent word. Together with `word_ids`, they create a 2D positional ID system.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -1724,13 +1473,11 @@ class Bert2DForMultipleChoice(Bert2DPreTrainedModel):
         token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
         word_ids = word_ids.view(-1, word_ids.size(-1)) if word_ids is not None else None
         subword_ids = subword_ids.view(-1, subword_ids.size(-1)) if subword_ids is not None else None
-
         inputs_embeds = (
             inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
             if inputs_embeds is not None
             else None
         )
-
         outputs = self.bert2d(
             input_ids,
             attention_mask=attention_mask,
@@ -1743,22 +1490,17 @@ class Bert2DForMultipleChoice(Bert2DPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
         pooled_output = outputs[1]
-
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
         reshaped_logits = logits.view(-1, num_choices)
-
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
-
         if not return_dict:
             output = (reshaped_logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
-
         return MultipleChoiceModelOutput(
             loss=loss,
             logits=reshaped_logits,
@@ -1767,21 +1509,22 @@ class Bert2DForMultipleChoice(Bert2DPreTrainedModel):
         )
 
 
-@auto_docstring
-# Copied from transformers.models.bert.modeling_bert.BertForTokenClassification with Bert->Bert2D,bert->bert2d
+@auto_docstring(
+    custom_intro="""
+    Bert2D Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """
+)
 class Bert2DForTokenClassification(Bert2DPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-
         self.bert2d = Bert2DModel(config, add_pooling_layer=False)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
         self.dropout = nn.Dropout(classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     @auto_docstring
@@ -1803,23 +1546,11 @@ class Bert2DForTokenClassification(Bert2DPreTrainedModel):
         word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
             which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
-            For example, in the sentence "Tokenization is useful", if "Tokenization" is split into "Token" and "##ization",
-            both "Token" and "##ization" will have the same `word_id` (e.g., 0), "is" will have `word_id` 1, and "useful"
-            will have `word_id` 2. These are used to compute word-level absolute position embeddings.
         subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
-            within its parent word. The specific assignment scheme depends on the tokenizer's configuration
-            (e.g., `subword_embedding_order`, `max_intermediate_subword_positions_per_word`). For example, with
-            `subword_embedding_order="ending_first"`, the first token of a word typically gets `0`, the last token of the
-            same word gets `1`, and intermediate tokens get other IDs (e.g., `2`, `3`, ...). If a word is composed
-            of a single token, its `subword_id` might be `0` (or `1` if it's a subword itself that starts the sequence of
-            subwords for that "word"). These are used to compute subword-level relative position embeddings.
-            Together, `word_ids` and `subword_ids` create a 2D positional ID system.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+            within its parent word. Together with `word_ids`, they create a 2D positional ID system.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.bert2d(
             input_ids,
             attention_mask=attention_mask,
@@ -1832,21 +1563,16 @@ class Bert2DForTokenClassification(Bert2DPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
         sequence_output = outputs[0]
-
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
-
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
-
         return TokenClassifierOutput(
             loss=loss,
             logits=logits,
@@ -1855,17 +1581,18 @@ class Bert2DForTokenClassification(Bert2DPreTrainedModel):
         )
 
 
-@auto_docstring
-# Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering with Bert->Bert2D,bert->bert2d
+@auto_docstring(
+    custom_intro="""
+    Bert2D Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """
+)
 class Bert2DForQuestionAnswering(Bert2DPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-
         self.bert2d = Bert2DModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     @auto_docstring
@@ -1888,29 +1615,11 @@ class Bert2DForQuestionAnswering(Bert2DPreTrainedModel):
         word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Word IDs for each token in the input sequence. These IDs represent the absolute position of the word to
             which each token belongs. All tokens (subwords) constituting the same word share the same `word_id`.
-            For example, in the sentence "Tokenization is useful", if "Tokenization" is split into "Token" and "##ization",
-            both "Token" and "##ization" will have the same `word_id` (e.g., 0), "is" will have `word_id` 1, and "useful"
-            will have `word_id` 2. These are used to compute word-level absolute position embeddings.
         subword_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Subword IDs for each token in the input sequence. These IDs represent the relative position of a subword
-            within its parent word. The specific assignment scheme depends on the tokenizer's configuration
-            (e.g., `subword_embedding_order`, `max_intermediate_subword_positions_per_word`). For example, with
-            `subword_embedding_order="ending_first"`, the first token of a word typically gets `0`, the last token of the
-            same word gets `1`, and intermediate tokens get other IDs (e.g., `2`, `3`, ...). If a word is composed
-            of a single token, its `subword_id` might be `0` (or `1` if it's a subword itself that starts the sequence of
-            subwords for that "word"). These are used to compute subword-level relative position embeddings.
-            Together, `word_ids` and `subword_ids` create a 2D positional ID system.
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
+            within its parent word. Together with `word_ids`, they create a 2D positional ID system.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.bert2d(
             input_ids,
             attention_mask=attention_mask,
@@ -1923,35 +1632,27 @@ class Bert2DForQuestionAnswering(Bert2DPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
         sequence_output = outputs[0]
-
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
         start_logits = start_logits.squeeze(-1).contiguous()
         end_logits = end_logits.squeeze(-1).contiguous()
-
         total_loss = None
         if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension
             if len(start_positions.size()) > 1:
                 start_positions = start_positions.squeeze(-1)
             if len(end_positions.size()) > 1:
                 end_positions = end_positions.squeeze(-1)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
             start_positions = start_positions.clamp(0, ignored_index)
             end_positions = end_positions.clamp(0, ignored_index)
-
             loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
             start_loss = loss_fct(start_logits, start_positions)
             end_loss = loss_fct(end_logits, end_positions)
             total_loss = (start_loss + end_loss) / 2
-
         if not return_dict:
             output = (start_logits, end_logits) + outputs[2:]
             return ((total_loss,) + output) if total_loss is not None else output
-
         return QuestionAnsweringModelOutput(
             loss=total_loss,
             start_logits=start_logits,

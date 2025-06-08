@@ -78,6 +78,16 @@ class Bert2DConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
+        max_word_position_embeddings (`int`, *optional*, defaults to `512`):
+            The maximum number of word-level positions. This is relevant for models that distinguish
+            between word positions and subword positions within words.
+        max_intermediate_subword_position_embeddings (`int`, *optional*, defaults to `1`):
+            The maximum number of distinct positions for intermediate subwords within a single word.
+            This parameter is used when subword tokenization results in multiple subwords for a single
+            word, and the model needs to assign different positional embeddings to these subwords.
+            For example, if a word is tokenized into three subwords (first, intermediate, last), this
+            parameter controls how many distinct embeddings can be assigned to the "intermediate" subword(s).
+            A value of `1` means all intermediate subwords share the same positional embedding.
 
     Examples:
 
