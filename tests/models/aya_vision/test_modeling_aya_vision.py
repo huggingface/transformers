@@ -348,7 +348,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
     def get_model(cls):
 
         # Use 4-bit on T4
-        load_in_4bit = get_device_properties()[0] == "cuda" and get_device_properties()[1] < 8,
+        load_in_4bit = get_device_properties()[0] == "cuda" and get_device_properties()[1] < 8
 
         if cls.model is None:
             cls.model = AyaVisionForConditionalGeneration.from_pretrained(
