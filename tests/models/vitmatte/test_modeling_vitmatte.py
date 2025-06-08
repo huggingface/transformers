@@ -19,6 +19,7 @@ from huggingface_hub import hf_hub_download
 
 from transformers import VitMatteConfig
 from transformers.testing_utils import (
+    is_torch_greater_or_equal,
     require_timm,
     require_torch,
     slow,
@@ -143,6 +144,7 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_resize_embeddings = False
     test_head_masking = False
     test_torch_exportable = True
+    test_torch_exportable_strictly = not is_torch_greater_or_equal("2.7.0")
 
     def setUp(self):
         self.model_tester = VitMatteModelTester(self)
