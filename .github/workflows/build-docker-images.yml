@@ -3,7 +3,7 @@ name: Build docker images (scheduled)
 on:
   push:
     branches:
-      - run_ci_with_A10_and_torch_2.7.1
+      - run_ci_with_A10_and_torch_2.7.1_xxx
   repository_dispatch:
   workflow_call:
     inputs:

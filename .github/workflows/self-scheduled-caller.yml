@@ -7,7 +7,7 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - run_scheduled_ci*
+      - run_ci_with_A10_and_torch_2.7.1
   workflow_dispatch:
     inputs:
       prev_workflow_run_id:
@@ -25,7 +25,7 @@ on:
 # Used for `push` to easily modiffy the target workflow runs to compare against
 env:
     prev_workflow_run_id: ""
-    other_workflow_run_id: ""
+    other_workflow_run_id: "15514174115"
 
 
 jobs:
