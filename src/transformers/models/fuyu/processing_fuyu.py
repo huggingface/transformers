@@ -30,12 +30,20 @@ from ...processing_utils import (
     _validate_images_text_input_order,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_torch_available, logging, requires_backends
+from ...utils import is_torch_available, is_tf_available, is_flax_available, logging, requires_backends # MODIFIED
 from ...utils.import_utils import requires
 
 
 if is_torch_available():
+    import torch  # ADDED
     from .image_processing_fuyu import FuyuBatchFeature
+
+if is_tf_available():  # ADDED
+    import tensorflow as tf  # ADDED
+
+if is_flax_available():  # ADDED
+    import jax.numpy as jnp  # ADDED
+    import numpy as np # ADDED for JAX conversion
 
 
 logger = logging.get_logger(__name__)
@@ -427,6 +435,8 @@ class FuyuProcessor(ProcessorMixin):
         image_placeholder_id,
         image_newline_id,
         tensor_batch_images,
+        actual_return_tensors=None,
+        max_tokens_to_generate=None,
     ):
         image_present = torch.ones(1, 1, 1)
         model_image_input = self.image_processor.preprocess_with_tokenizer_info(
@@ -438,12 +448,12 @@ class FuyuProcessor(ProcessorMixin):
             image_newline_id=image_newline_id,
             variable_sized=True,
         )
-        # FIXME max_tokens_to_generate is embedded into this processor's call.
+        # Use the passed-in max_tokens_to_generate
         prompt_tokens, prompts_length = _tokenize_prompts_with_image_and_batch(
             tokenizer=self.tokenizer,
             prompts=prompts,
             scale_factors=scale_factors,
-            max_tokens_to_generate=self.max_tokens_to_generate,
+            max_tokens_to_generate=max_tokens_to_generate,
             max_position_embeddings=self.max_position_embeddings,
             add_BOS=True,
             add_beginning_of_answer_token=True,
@@ -464,7 +474,8 @@ class FuyuProcessor(ProcessorMixin):
             num_sub_sequences=self.subsequence_length,
         )
         max_prompt_length = max(x.shape[-1] for x in image_padded_unpacked_tokens)
-        max_seq_len_batch = min(max_prompt_length + self.max_tokens_to_generate, self.max_position_embeddings)
+        # Use the passed-in max_tokens_to_generate
+        max_seq_len_batch = min(max_prompt_length + max_tokens_to_generate, self.max_position_embeddings)
         tokens_to_place = min(max_seq_len_batch, max(0, image_padded_unpacked_tokens[0].shape[0]))
 
         # Use same packing logic for the image patch indices.
@@ -482,6 +493,27 @@ class FuyuProcessor(ProcessorMixin):
             "image_patches": image_patches_tensor,
             "image_patches_indices": image_patch_input_indices,
         }
+
+        # Convert to the target tensor type if not PyTorch
+        if actual_return_tensors and actual_return_tensors != "pt":
+            if actual_return_tensors == "tf":
+                if not is_tf_available():
+                    raise ImportError("TensorFlow is not available. Please install it to use return_tensors='tf'.")
+                batch_encoding["input_ids"] = tf.convert_to_tensor(batch_encoding["input_ids"].numpy())
+                batch_encoding["image_patches"] = tf.convert_to_tensor(batch_encoding["image_patches"].numpy())
+                batch_encoding["image_patches_indices"] = tf.convert_to_tensor(batch_encoding["image_patches_indices"].numpy())
+            elif actual_return_tensors == "jax":
+                if not is_flax_available():
+                    raise ImportError("JAX/Flax is not available. Please install it to use return_tensors='jax'.")
+                batch_encoding["input_ids"] = jnp.asarray(batch_encoding["input_ids"].numpy())
+                batch_encoding["image_patches"] = jnp.asarray(batch_encoding["image_patches"].numpy())
+                batch_encoding["image_patches_indices"] = jnp.asarray(batch_encoding["image_patches_indices"].numpy())
+            elif actual_return_tensors == "np":
+                batch_encoding["input_ids"] = batch_encoding["input_ids"].numpy()
+                batch_encoding["image_patches"] = batch_encoding["image_patches"].numpy()
+                batch_encoding["image_patches_indices"] = batch_encoding["image_patches_indices"].numpy()
+            # No action needed for 'pt' as they are already PyTorch tensors
+
         return batch_encoding
 
     def __call__(
@@ -532,6 +564,11 @@ class FuyuProcessor(ProcessorMixin):
         )
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
 
+        # Extract max_tokens_to_generate from kwargs or use default
+        # Pop from kwargs so it's not passed down to tokenizer/image_processor if it's not a standard arg for them
+        max_tokens_to_generate_user = kwargs.pop("max_tokens_to_generate", None)
+        current_max_tokens_to_generate = max_tokens_to_generate_user if max_tokens_to_generate_user is not None else self.max_tokens_to_generate
+
         if not output_kwargs["text_kwargs"].setdefault("return_attention_mask", True):
             raise ValueError("`return_attention_mask=False` is not supported for this model.")
 
@@ -552,10 +589,31 @@ class FuyuProcessor(ProcessorMixin):
 
         # --- Preprocess images using self.image_processor ---
 
-        # FIXME - We hard code "pt" here because the rest of the processing assumes torch tensors
-        output_kwargs["images_kwargs"]["return_tensors"] = "pt"
+        # Determine the actual tensor type we should be working with for image preprocessing outputs.
+        # The rest of the processing after this initial stage still assumes torch tensors for now.
+        # The `requires_backends(self, ["torch"])` call earlier enforces PyTorch availability.
+        user_requested_return_tensors = output_kwargs["images_kwargs"].get("return_tensors")
+        if user_requested_return_tensors is None:
+            user_requested_return_tensors = kwargs.get("return_tensors")
+
+        actual_return_tensors = user_requested_return_tensors
+        if actual_return_tensors is None:
+            # Default to PyTorch if nothing is specified, aligning with current downstream code.
+            actual_return_tensors = "pt"
+            output_kwargs["images_kwargs"]["return_tensors"] = "pt"
+        elif actual_return_tensors not in ["pt", "tf", "jax", "np"]:
+            logger.warning(
+                f"Unsupported return_tensors type: {actual_return_tensors}. Defaulting to 'pt'. "
+                "Supported types are 'pt', 'tf', 'jax', 'np'."
+            )
+            actual_return_tensors = "pt"
+            output_kwargs["images_kwargs"]["return_tensors"] = "pt"
+        else:
+             output_kwargs["images_kwargs"]["return_tensors"] = actual_return_tensors
+
+
         image_encoding = self.image_processor.preprocess(images, **output_kwargs["images_kwargs"])
-        batch_images = image_encoding["images"]
+        batch_images = image_encoding["images"] # This will be a list of tensors of type actual_return_tensors
         image_unpadded_heights = image_encoding["image_unpadded_heights"]
         image_unpadded_widths = image_encoding["image_unpadded_widths"]
         scale_factors = image_encoding["image_scale_factors"]
@@ -564,22 +622,89 @@ class FuyuProcessor(ProcessorMixin):
 
         # --- Use self.tokenizer to get the ids of special tokens to insert into image ids ---
 
-        tensor_batch_images = torch.stack([img[0] for img in batch_images]).unsqueeze(1)
+        # Prepare tensor_batch_images based on actual_return_tensors,
+        # then convert to PyTorch tensor as downstream code (get_sample_encoding) expects it.
+        # batch_images is a list of [C, H, W] tensors. We stack them to [B, C, H, W]
+        # then unsqueeze to [B, 1, C, H, W] for Fuyu's internal representation.
+
+        if actual_return_tensors == "tf":
+            if not is_tf_available():
+                raise ImportError("TensorFlow is not available. Please install it to use return_tensors='tf'.")
+            # Assuming batch_images is a list of TF tensors
+            stacked_images = tf.stack(batch_images)
+            tensor_batch_images_orig_type = tf.expand_dims(stacked_images, axis=1)
+            # Convert to PyTorch for downstream
+            tensor_batch_images = torch.from_numpy(tensor_batch_images_orig_type.numpy())
+        elif actual_return_tensors == "jax":
+            if not is_flax_available():
+                raise ImportError("JAX/Flax is not available. Please install it to use return_tensors='jax'.")
+            # Assuming batch_images is a list of JAX arrays
+            stacked_images = jnp.stack(batch_images)
+            tensor_batch_images_orig_type = jnp.expand_dims(stacked_images, axis=1)
+            # Convert to PyTorch for downstream
+            tensor_batch_images = torch.from_numpy(np.array(tensor_batch_images_orig_type))
+        elif actual_return_tensors == "np":
+             # Assuming batch_images is a list of NumPy arrays
+            stacked_images = np.stack(batch_images)
+            tensor_batch_images_orig_type = np.expand_dims(stacked_images, axis=1)
+            # Convert to PyTorch for downstream
+            tensor_batch_images = torch.from_numpy(tensor_batch_images_orig_type)
+        else:  # "pt" or default
+            if not is_torch_available():
+                raise ImportError("PyTorch is not available. Please install it to use return_tensors='pt'.")
+            # Assuming batch_images is a list of PyTorch tensors
+            stacked_images = torch.stack(batch_images)
+            tensor_batch_images = stacked_images.unsqueeze(1)
 
         # --- Use self.image_processor again to obtain the full token ids and batch inputs ---
         all_encodings = []
 
-        for prompt, scale_factor, image_unpadded_height, image_unpadded_width, tensor_batch_image in zip(
+        for prompt, sf_item, h_item, w_item, current_tensor_batch_image in zip(
             prompts, scale_factors, image_unpadded_heights, image_unpadded_widths, tensor_batch_images
         ):
+            # Convert scalar values (h_item, w_item, sf_item) to Python native types
+            # based on actual_return_tensors, then to PyTorch tensors for get_sample_encoding.
+            h_scalar, w_scalar, sf_scalar = None, None, None
+            if actual_return_tensors == "tf":
+                h_scalar = h_item.numpy().item() if hasattr(h_item, 'numpy') and h_item.ndim == 0 else float(h_item.numpy()) if hasattr(h_item, 'numpy') else h_item
+                w_scalar = w_item.numpy().item() if hasattr(w_item, 'numpy') and w_item.ndim == 0 else float(w_item.numpy()) if hasattr(w_item, 'numpy') else w_item
+                sf_scalar = sf_item.numpy().item() if hasattr(sf_item, 'numpy') and sf_item.ndim == 0 else float(sf_item.numpy()) if hasattr(sf_item, 'numpy') else sf_item
+            elif actual_return_tensors == "jax":
+                h_scalar = float(np.asarray(h_item)) # JAX array to NumPy scalar to Python float
+                w_scalar = float(np.asarray(w_item))
+                sf_scalar = float(np.asarray(sf_item))
+            elif actual_return_tensors == "np":
+                h_scalar = h_item.item() if isinstance(h_item, np.ndarray) and h_item.ndim == 0 else float(h_item) if isinstance(h_item, np.ndarray) else h_item
+                w_scalar = w_item.item() if isinstance(w_item, np.ndarray) and w_item.ndim == 0 else float(w_item) if isinstance(w_item, np.ndarray) else w_item
+                sf_scalar = sf_item.item() if isinstance(sf_item, np.ndarray) and sf_item.ndim == 0 else float(sf_item) if isinstance(sf_item, np.ndarray) else sf_item
+            elif actual_return_tensors == "pt":
+                h_scalar = h_item.item() if torch.is_tensor(h_item) and h_item.numel() == 1 else h_item
+                w_scalar = w_item.item() if torch.is_tensor(w_item) and w_item.numel() == 1 else w_item
+                sf_scalar = sf_item.item() if torch.is_tensor(sf_item) and sf_item.numel() == 1 else sf_item
+            else: # Should be Python numbers if actual_return_tensors was not a recognized tensor type (e.g. invalid user input handled before)
+                h_scalar, w_scalar, sf_scalar = h_item, w_item, sf_item
+
+            # Ensure Python native types before torch.tensor(), especially if they were 1-element arrays not fully scalarized
+            if hasattr(h_scalar, 'dtype') and hasattr(h_scalar, 'item'): h_scalar = h_scalar.item()
+            if hasattr(w_scalar, 'dtype') and hasattr(w_scalar, 'item'): w_scalar = w_scalar.item()
+            if hasattr(sf_scalar, 'dtype') and hasattr(sf_scalar, 'item'): sf_scalar = sf_scalar.item()
+
+            # Create PyTorch tensors for get_sample_encoding
+            # Heights/widths are typically integer-like, scale factors are float.
+            pt_h = torch.tensor([h_scalar], dtype=torch.long) 
+            pt_w = torch.tensor([w_scalar], dtype=torch.long)
+            pt_sf = torch.tensor([sf_scalar], dtype=torch.float32)
+
             sample_encoding = self.get_sample_encoding(
                 prompts=[prompt],
-                scale_factors=[scale_factor],
-                image_unpadded_heights=torch.tensor([image_unpadded_height]),
-                image_unpadded_widths=torch.tensor([image_unpadded_width]),
+                scale_factors=[pt_sf], # get_sample_encoding expects a list of scale factor tensors
+                image_unpadded_heights=pt_h, # This is a 1-element PT tensor
+                image_unpadded_widths=pt_w,   # This is a 1-element PT tensor
                 image_placeholder_id=self.image_token_id,
                 image_newline_id=self.image_newline_id,
-                tensor_batch_images=tensor_batch_image.unsqueeze(0),
+                tensor_batch_images=current_tensor_batch_image.unsqueeze(0), # current_tensor_batch_image is already PT
+                actual_return_tensors=actual_return_tensors,
+                max_tokens_to_generate=current_max_tokens_to_generate, # ADDED
             )
             all_encodings.append(sample_encoding)
 

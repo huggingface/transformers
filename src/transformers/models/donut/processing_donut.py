@@ -146,6 +146,29 @@ class DonutProcessor(ProcessorMixin):
         self.current_processor = self.image_processor
         self._in_target_context_manager = False
 
+    def post_process_generation_for_docvqa(self, decoded_sequence: str) -> dict:
+        """
+        Performs Donut-specific post-processing for document question answering tasks.
+        Removes the initial task prompt token and extracts the answer from <s_answer> tags.
+        Args:
+            decoded_sequence (`str`):
+                A single decoded string from the model, after basic special token removal (pad, eos).
+        Returns:
+            `dict`: A dictionary containing the extracted answer, e.g., {"answer": "extracted_text"}.
+        """
+        # Remove the first task start token (e.g., <s_docvqa>, <s_rvlcdip>, etc.)
+        # It's assumed that the tokenizer's decode with skip_special_tokens=True handled pad/eos.
+        processed_sequence = re.sub(r"<s_.*?>", "", decoded_sequence, count=1).strip()
+
+        # Extract content within <s_answer>...</s_answer> tags
+        answer_match = re.search(r"<s_answer>(.*)</s_answer>", processed_sequence)
+        
+        extracted_answer = None
+        if answer_match:
+            extracted_answer = answer_match.group(1).strip()
+
+        return {"answer": extracted_answer}
+
     def token2json(self, tokens, is_inner_value=False, added_vocab=None):
         """
         Convert a (generated) token sequence into an ordered JSON format.

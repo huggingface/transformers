@@ -103,12 +103,6 @@ class ImageToTextPipeline(Pipeline):
                 )
             forward_params.update(generate_kwargs)
 
-        if self.assistant_model is not None:
-            forward_params["assistant_model"] = self.assistant_model
-        if self.assistant_tokenizer is not None:
-            forward_params["tokenizer"] = self.tokenizer
-            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
-
         return preprocess_params, forward_params, {}
 
     def __call__(self, inputs: Union[str, List[str], "Image.Image", List["Image.Image"]] = None, **kwargs):
@@ -177,24 +171,23 @@ class ImageToTextPipeline(Pipeline):
                 if self.framework == "pt":
                     model_inputs = model_inputs.to(self.torch_dtype)
 
-            elif model_type != "vision-encoder-decoder":
-                # vision-encoder-decoder does not support conditional generation
+            elif model_type == "vision-encoder-decoder":
+                raise ValueError(f"Model type {model_type} does not support conditional text generation")
+
+            else:
                 model_inputs = self.image_processor(images=image, return_tensors=self.framework)
                 if self.framework == "pt":
                     model_inputs = model_inputs.to(self.torch_dtype)
                 text_inputs = self.tokenizer(prompt, return_tensors=self.framework)
                 model_inputs.update(text_inputs)
 
-            else:
-                raise ValueError(f"Model type {model_type} does not support conditional text generation")
-
         else:
             model_inputs = self.image_processor(images=image, return_tensors=self.framework)
             if self.framework == "pt":
                 model_inputs = model_inputs.to(self.torch_dtype)
 
-        if self.model.config.model_type == "git" and prompt is None:
-            model_inputs["input_ids"] = None
+            if self.model.config.model_type == "git" and prompt is None:
+                model_inputs["input_ids"] = None
 
         return model_inputs
 
@@ -212,12 +205,22 @@ class ImageToTextPipeline(Pipeline):
         if "generation_config" not in generate_kwargs:
             generate_kwargs["generation_config"] = self.generation_config
 
-        # FIXME: We need to pop here due to a difference in how `generation.py` and `generation.tf_utils.py`
-        #  parse inputs. In the Tensorflow version, `generate` raises an error if we don't use `input_ids` whereas
-        #  the PyTorch version matches it with `self.model.main_input_name` or `self.model.encoder.main_input_name`
-        #  in the `_prepare_model_inputs` method.
-        inputs = model_inputs.pop(self.model.main_input_name)
-        model_outputs = self.model.generate(inputs, **model_inputs, **generate_kwargs)
+        if self.framework == "tf":
+            # This conditional handling addresses a difference in input parsing between TensorFlow and PyTorch/Flax generation utilities.
+            # For TensorFlow: `generate` can error if the main input (e.g., `pixel_values`, identified by
+            # `self.model.main_input_name`) isn't passed positionally (or as `input_ids`). Popping it from
+            # `model_inputs` and passing it as the first argument ensures compatibility.
+            # Original FIXME: "We need to pop here due to a difference in how `generation.py` and `generation.tf_utils.py`
+            # parse inputs. In the Tensorflow version, `generate` raises an error if we don't use `input_ids` whereas
+            # the PyTorch version matches it with `self.model.main_input_name` or `self.model.encoder.main_input_name`
+            # in the `_prepare_model_inputs` method."
+            inputs = model_inputs.pop(self.model.main_input_name)
+            model_outputs = self.model.generate(inputs, **model_inputs, **generate_kwargs)
+        else:
+            # For PyTorch and Flax: The respective `generate` methods (e.g., via `_prepare_model_inputs` in PyTorch)
+            # are expected to correctly identify and handle the main input (e.g., `pixel_values`) when passed
+            # as a keyword argument within `model_inputs`.
+            model_outputs = self.model.generate(**model_inputs, **generate_kwargs)
         return model_outputs
 
     def postprocess(self, model_outputs):

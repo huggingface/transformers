@@ -158,7 +158,7 @@ class TextClassificationPipeline(Pipeline):
         inputs = (inputs,)
         result = super().__call__(*inputs, **kwargs)
         # TODO try and retrieve it in a nicer way from _sanitize_parameters.
-        _legacy = "top_k" not in kwargs
+        _legacy = "top_k" not in self._postprocess_params
         if isinstance(inputs[0], str) and _legacy:
             # This pipeline is odd, and return a list when single item is run
             return [result]

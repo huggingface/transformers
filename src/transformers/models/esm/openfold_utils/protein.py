@@ -80,12 +80,14 @@ def from_proteinnet_string(proteinnet_str: str) -> Protein:
     atom_mask = None
     for g in groups:
         if "[PRIMARY]" == g[0]:
-            seq = g[1][0].strip()
-            for i in range(len(seq)):
-                if seq[i] not in residue_constants.restypes:
-                    seq[i] = "X"  # FIXME: strings are immutable
+            seq_str = g[1][0].strip()
+            seq_list = list(seq_str)  # Convert string to list of characters
+            for i in range(len(seq_list)):
+                if seq_list[i] not in residue_constants.restypes:
+                    seq_list[i] = "X"  # Modify the list element
+            # 'seq_list' now contains the modified sequence
             aatype = np.array(
-                [residue_constants.restype_order.get(res_symbol, residue_constants.restype_num) for res_symbol in seq]
+                [residue_constants.restype_order.get(res_symbol, residue_constants.restype_num) for res_symbol in seq_list]
             )
         elif "[TERTIARY]" == g[0]:
             tertiary: List[List[float]] = []

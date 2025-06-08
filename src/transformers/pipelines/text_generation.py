@@ -147,35 +147,19 @@ class TextGenerationPipeline(Pipeline):
         prefix=None,
         handle_long_generation=None,
         stop_sequence=None,
-        truncation=None,
-        max_length=None,
-        continue_final_message=None,
-        **generate_kwargs,
+        truncation=None,          # Explicit preprocess arg
+        max_length=None,          # Explicit preprocess arg for tokenizer max_length
+        continue_final_message=None, # Explicit preprocess arg
+        **generate_kwargs,        # For model.generate()
     ):
+        # Parameters for the preprocess method
         preprocess_params = {}
-
-        add_special_tokens = False
-        if "add_special_tokens" in generate_kwargs:
-            add_special_tokens = preprocess_params["add_special_tokens"] = generate_kwargs.pop("add_special_tokens")
-
-        if "padding" in generate_kwargs:
-            preprocess_params["padding"] = generate_kwargs.pop("padding")
-
         if truncation is not None:
             preprocess_params["truncation"] = truncation
-
-        if max_length is not None:
+        if max_length is not None: # This is the pipeline's max_length for tokenization
             preprocess_params["max_length"] = max_length
-            generate_kwargs["max_length"] = max_length
-
         if prefix is not None:
             preprocess_params["prefix"] = prefix
-        if prefix:
-            prefix_inputs = self.tokenizer(
-                prefix, padding=False, add_special_tokens=add_special_tokens, return_tensors=self.framework
-            )
-            generate_kwargs["prefix_length"] = prefix_inputs["input_ids"].shape[-1]
-
         if handle_long_generation is not None:
             if handle_long_generation not in {"hole"}:
                 raise ValueError(
@@ -183,37 +167,65 @@ class TextGenerationPipeline(Pipeline):
                     " [None, 'hole']"
                 )
             preprocess_params["handle_long_generation"] = handle_long_generation
-
         if continue_final_message is not None:
             preprocess_params["continue_final_message"] = continue_final_message
 
-        preprocess_params.update(generate_kwargs)
-        forward_params = generate_kwargs
+        # Work with a copy of generate_kwargs to safely pop items for preprocess_params
+        _generate_kwargs = generate_kwargs.copy()
 
+        # If the user provided a top-level `max_length` (the `max_length` argument to this function),
+        # and they haven't specified `max_length` or `max_new_tokens` directly in the `generate_kwargs`
+        # dictionary passed to the pipeline, then the top-level `max_length` should also apply to
+        # the model's generation step.
+        if max_length is not None and "max_length" not in generate_kwargs and "max_new_tokens" not in generate_kwargs:
+            _generate_kwargs["max_length"] = max_length
+
+        if "add_special_tokens" in _generate_kwargs:
+            preprocess_params["add_special_tokens"] = _generate_kwargs.pop("add_special_tokens")
+        if "padding" in _generate_kwargs:
+            preprocess_params["padding"] = _generate_kwargs.pop("padding")
+        
+        # `prefix_length` is a generate_kwarg, but needs `add_special_tokens` from preprocess context
+        if prefix and "prefix_length" not in _generate_kwargs:
+            # Determine add_special_tokens for prefix tokenization
+            # Priority: 1. from generate_kwargs (popped into preprocess_params), 2. default (False)
+            prefix_add_special_tokens = preprocess_params.get("add_special_tokens", False)
+            prefix_inputs = self.tokenizer(
+                prefix, padding=False, add_special_tokens=prefix_add_special_tokens, return_tensors=self.framework
+            )
+            _generate_kwargs["prefix_length"] = prefix_inputs["input_ids"].shape[-1]
+
+        # Parameters for the _forward method (model.generate())
+        # These are the remaining kwargs after extracting preprocess-specific ones.
+        forward_params = _generate_kwargs
+
+        # Parameters for the postprocess method
         postprocess_params = {}
-        if return_full_text is not None and return_type is None:
-            if return_text is not None:
-                raise ValueError("`return_text` is mutually exclusive with `return_full_text`")
-            if return_tensors is not None:
-                raise ValueError("`return_full_text` is mutually exclusive with `return_tensors`")
-            return_type = ReturnType.FULL_TEXT if return_full_text else ReturnType.NEW_TEXT
-        if return_tensors is not None and return_type is None:
-            if return_text is not None:
-                raise ValueError("`return_text` is mutually exclusive with `return_tensors`")
-            return_type = ReturnType.TENSORS
+        if return_type is None:
+            if return_full_text is not None:
+                if return_text is not None:
+                    raise ValueError("`return_text` is mutually exclusive with `return_full_text`")
+                if return_tensors is not None:
+                    raise ValueError("`return_full_text` is mutually exclusive with `return_tensors`")
+                return_type = ReturnType.FULL_TEXT if return_full_text else ReturnType.NEW_TEXT
+            elif return_tensors is not None:
+                if return_text is not None:
+                    raise ValueError("`return_tensors` is mutually exclusive with `return_text`")
+                return_type = ReturnType.TENSORS
+            elif return_text is not None:
+                # Assuming return_text=True implies return_new_text if return_full_text is not specified
+                return_type = ReturnType.NEW_TEXT
+            # else: default will be applied in postprocess based on other params or model config
+        
         if return_type is not None:
             postprocess_params["return_type"] = return_type
         if clean_up_tokenization_spaces is not None:
             postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
-        if continue_final_message is not None:
-            postprocess_params["continue_final_message"] = continue_final_message
-
         if stop_sequence is not None:
-            stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)
-            generate_kwargs["eos_token_id"] = stop_sequence_ids
-
-        if self.assistant_model is not None:
-            forward_params["assistant_model"] = self.assistant_model
+            postprocess_params["stop_sequence"] = stop_sequence
+        if continue_final_message is not None:  # Also needed in postprocess for chat formatting
+            postprocess_params["continue_final_message"] = continue_final_message
+            
         if self.assistant_tokenizer is not None:
             forward_params["tokenizer"] = self.tokenizer
             forward_params["assistant_tokenizer"] = self.assistant_tokenizer
@@ -318,7 +330,7 @@ class TextGenerationPipeline(Pipeline):
             "add_special_tokens": add_special_tokens,
             "truncation": truncation,
             "padding": padding,
-            "max_length": max_length,  # TODO: name clash -- this is broken, `max_length` is also a `generate` arg
+            "max_length": max_length,  # TODO: name clash -- `max_length` here is for tokenization. The pipeline's top-level `max_length` argument also influences generation length unless overridden by `max_new_tokens` or a `max_length` in `generate_kwargs`. Be mindful that `max_length` is also a direct `model.generate()` argument.
         }
         tokenizer_kwargs = {key: value for key, value in tokenizer_kwargs.items() if value is not None}
 

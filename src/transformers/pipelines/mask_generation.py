@@ -189,16 +189,22 @@ class MaskGenerationPipeline(ChunkPipeline):
                 inference_context = self.get_inference_context()
                 with inference_context():
                     model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
-                    embeddings = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
+                    # SamModel.get_image_embeddings itself returns a tuple (image_embeddings, intermediate_embeddings)
+                    # for HQ-style models (by checking for `self.vision_encoder.intermediate_hidden_state_output_layer_index`),
+                    # and a single tensor (image_embeddings) for regular SAM models.
+                    embeddings_output = self.model.get_image_embeddings(model_inputs.pop("pixel_values"))
 
-                    # Handle both SAM (single tensor) and SAM-HQ (tuple) outputs
-                    if isinstance(embeddings, tuple):
-                        image_embeddings, intermediate_embeddings = embeddings
+                    if isinstance(embeddings_output, tuple):
+                        image_embeddings, intermediate_embeddings = embeddings_output
                         model_inputs["intermediate_embeddings"] = intermediate_embeddings
                     else:
-                        image_embeddings = embeddings
-                    # TODO: Identifying the model by the type of its returned embeddings is brittle.
-                    #       Consider using a more robust method for distinguishing model types here.
+                        image_embeddings = embeddings_output
+                    # TODO: Identifying the model by the type of its returned embeddings was considered brittle.
+                    #       However, SamModel.get_image_embeddings internally uses a specific attribute
+                    #       (intermediate_hidden_state_output_layer_index on its vision_encoder) to determine if it's an HQ-style model
+                    #       and thus whether to return a tuple or a single tensor. This pipeline's check
+                    #       `isinstance(embeddings_output, tuple)` now implicitly relies on that more robust mechanism within the model.
+                    #       This makes the pipeline's check less brittle than initially assessed.
 
                     model_inputs["image_embeddings"] = image_embeddings
 

@@ -473,19 +473,16 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         return answers
 
     def postprocess_encoder_decoder_single(self, model_outputs, **kwargs):
-        sequence = self.tokenizer.batch_decode(model_outputs["sequences"])[0]
+        # The tokenizer here is actually the DonutProcessor instance.
+        # skip_special_tokens=True will handle pad_token, eos_token, etc.
+        # batch_decode returns a list of strings, even for a single sequence.
+        decoded_sequence = self.tokenizer.batch_decode(model_outputs["sequences"], skip_special_tokens=True)[0]
 
-        # TODO: A lot of this logic is specific to Donut and should probably be handled in the tokenizer
-        # (see https://github.com/huggingface/transformers/pull/18414/files#r961747408 for more context).
-        sequence = sequence.replace(self.tokenizer.eos_token, "").replace(self.tokenizer.pad_token, "")
-        sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
-        ret = {
-            "answer": None,
-        }
-
-        answer = re.search(r"<s_answer>(.*)</s_answer>", sequence)
-        if answer is not None:
-            ret["answer"] = answer.group(1).strip()
+        # TODO: This Donut-specific logic has been moved to DonutProcessor.post_process_generation_for_docvqa.
+        # (see https://github.com/huggingface/transformers/pull/18414/files#r961747408 for original context).
+        # The processor now handles removing the initial task prompt and extracting the answer from <s_answer> tags.
+        ret = self.tokenizer.post_process_generation_for_docvqa(decoded_sequence)
+        
         return ret
 
     def postprocess_extractive_qa(
