@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 [Pegasus](https://huggingface.co/papers/1912.08777) is an encoder-decoder (sequence-to-sequence) transformer model pretrained on unlabeled text to perform abstractive summarization. Pegasus is trained jointly on two self-supervised objective functions: Masked Language Modeling (MLM) and a novel summarization-focused objective called Gap Sentence Generation (GSG). These models excel in low-resource summarization settings, needing only a small fine-tuning dataset to perform well.
 
-You can find all the Pegasus checkpoints under the [search results for Pegasus](https://huggingface.co/models?search=pegasus).
+You can find all the Pegasus checkpoints under the [Google](https://huggingface.co/google?search_models=pegasus) organization.
 
 > [!TIP]
 > Click on the Pegasus models in the right sidebar for more examples of how to apply Pegasus to different language tasks.
@@ -115,7 +115,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ## Notes
 
-- The [AdaFactor] optimizer is recommended for fine-tuning this model.
+- The [`Adafactor`] optimizer is recommended for fine-tuning this model.
 - The model starts generating with `pad_token_id` (embedding of all zeros) as the prefix.
 
 ## PegasusConfig
