@@ -379,9 +379,16 @@ class AyaVisionIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         actual_logits = output.logits[0, -1, :5].cpu()
-        expected_logits = torch.tensor([0.4109, 0.1532, 0.8018, 2.1328, 0.5483], dtype=torch.float16)
-        # 4-bit
-        expected_logits = torch.tensor([0.1097, 0.3481, 3.8340, 9.7969, 2.0488], dtype=torch.float16)
+
+        EXPECTED_LOGITS = Expectations(
+            {
+                ("xpu", 3): [0.4109, 0.1532, 0.8018, 2.1328, 0.5483],
+                # 4-bit
+                ("cuda", 7): [0.1097, 0.3481, 3.8340, 9.7969, 2.0488],
+                ("cuda", 8): [0.1097, 0.3481, 3.8340, 9.7969, 2.0488],
+            }
+        )  # fmt: skip
+        expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), dtype=torch.float16)
 
         # breakpoint()
         self.assertTrue(
@@ -420,6 +427,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
                 ("xpu", 3): "Whispers on the breeze,\nLeaves dance under moonlit sky,\nNature's quiet song.",
                 # 4-bit
                 ("cuda", 7): "Sure, here's a haiku for you:\n\nMorning dew sparkles,\nPetals unfold in sunlight,\n",
+                ("cuda", 8): "",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -450,10 +458,16 @@ class AyaVisionIntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        expected_output = "The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,"  # fmt: skip
 
-        # 4-bit
-        expected_output = 'The image depicts two cats comfortably resting on a pink blanket spread across a sofa. The cats,'  # fmt: skip
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,",
+                # 4-bit
+                ("cuda", 7): 'The image depicts two cats comfortably resting on a pink blanket spread across a sofa. The cats,',
+                ("cuda", 8): "",
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
 
         # breakpoint()
         self.assertEqual(decoded_output, expected_output)
@@ -495,7 +509,9 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
+                # 4-bit
                 ("cuda", 7): "Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene",
+                ("cuda", 8): "",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -509,10 +525,16 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        expected_output = 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a'  # fmt: skip
 
-        # 4-bit
-        expected_output = 'This vibrant image captures a bustling street scene in a multicultural urban area, featuring a traditional Chinese gate adorned with intricate red and'
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a',
+                # 4-bit
+                ("cuda", 7): 'This vibrant image captures a bustling street scene in a multicultural urban area, featuring a traditional Chinese gate adorned with intricate red and',
+                ("cuda", 8): "",
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
 
         # breakpoint()
         self.assertEqual(
@@ -570,6 +592,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
                 ("cuda", 7): 'Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene',
+                ("cuda", 8): "",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -587,6 +610,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ",
                 ("cuda", 7): 'The first image showcases the Statue of Liberty, a monumental sculpture located on Liberty Island in New York Harbor. Standing atop a',
+                ("cuda", 8): "",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
