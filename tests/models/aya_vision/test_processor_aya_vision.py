@@ -31,7 +31,6 @@ if is_vision_available():
     from transformers import GotOcr2ImageProcessor
 
 
-@require_read_token
 @require_vision
 class AyaVisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = AyaVisionProcessor
