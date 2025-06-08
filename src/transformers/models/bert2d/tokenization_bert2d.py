@@ -16,6 +16,8 @@
 
 import math
 from typing import List, Optional, Union, Dict
+import os # For __main__ test
+import shutil # For __main__ test
 
 import torch
 
@@ -44,37 +46,31 @@ def create_word_ids(
     """Creates word ids for given tokens, matching the logic from Bert2DTokenizerFast tests."""
     word_ids: List[int] = []
     current_word_id: int = -1
-    sentence_restart_flag = False # Renamed to avoid conflict with outer scope if any
+    sentence_restart_flag = False 
 
-    # Determine if restart_new_sentence logic should apply
-    # It applies if explicitly requested AND there are at least two SEP tokens (implying multiple sentences)
     actual_restart_new_sentence = restart_new_sentence and tokens.count(seperator_token) >= 2
 
     for token in tokens:
         if token == padding_token:
-            # For PAD tokens, word_id is 0, and current_word_id is reset to 0 for subsequent tokens.
             word_ids.append(0)
             current_word_id = 0 
         elif actual_restart_new_sentence and not sentence_restart_flag and token == seperator_token:
-            # First SEP token in a multi-sentence pair where restart is enabled.
-            # This SEP token itself gets the current_word_id + 1 (or 0 if current is -1).
-            # Then, current_word_id resets to 0 for the next sentence.
-            if current_word_id == -1 : # Should not happen if CLS is present and handled
+            if current_word_id == -1 :
                  current_word_id = 0 
                  word_ids.append(current_word_id)
             else:
-                 current_word_id +=1 # SEP belongs to the current sentence conceptually
+                 current_word_id +=1 
                  word_ids.append(current_word_id)
 
-            current_word_id = 0 # Reset for the new sentence starting after this SEP
+            current_word_id = 0 
             sentence_restart_flag = True
         elif not is_subword(token):
             current_word_id += 1
             word_ids.append(current_word_id)
-        elif current_word_id == -1:  # Subword at the beginning (e.g. after [CLS] or if [CLS] is not token 0)
+        elif current_word_id == -1:  
             current_word_id = 0
             word_ids.append(current_word_id)
-        else:  # Is a subword, and current_word_id is >= 0
+        else: 
             word_ids.append(current_word_id)
     return word_ids
 
@@ -90,7 +86,6 @@ def get_uniform_id(si: int, max_intermediate_subwords: int, num_intermediate_sub
     """Calculates uniform id for the given subword index, si, and max and number of intermediate subwords"""
     if num_intermediate_subwords == 0:
         return 0
-    # Ensure max_intermediate_subwords-1 is not negative if max_intermediate_subwords is 0 (though usually >=1)
     effective_max_pos = max(0, max_intermediate_subwords -1)
     return col_round(si * effective_max_pos / num_intermediate_subwords)
 
@@ -109,14 +104,9 @@ def get_ids_from_subwords(
 
     if current_word_starts_with_subword:
         if num_subwords_in_current_word == 1:
-            return [1]  # A single subword token treated as "last"
-    elif num_subwords_in_current_word == 1: # Single token, not a subword
-        return [0]  # Root
-
-    # For "ending_first" order:
-    # ID 0: Root token (first token of a multi-token word, if not starting with subword)
-    # ID 1: Last token of a multi-token word
-    # ID 2, 3, ...: Intermediate tokens
+            return [1] 
+    elif num_subwords_in_current_word == 1: 
+        return [0] 
 
     if subword_embedding_order == "ending_first":
         subword_ids: List[int] = []
@@ -127,16 +117,15 @@ def get_ids_from_subwords(
 
 
         if has_explicit_root:
-            subword_ids.append(0) # Add root ID
-            # Number of tokens remaining after taking out root and potentially last
+            subword_ids.append(0) 
             num_tokens_for_intermediate_and_last = num_subwords_in_current_word - 1
-        else: # Word starts with a subword, or is a single subword
+        else: 
             num_tokens_for_intermediate_and_last = num_subwords_in_current_word
         
         num_intermediate_tokens = 0
-        if has_explicit_last:
+        if has_explicit_last: 
             num_intermediate_tokens = num_tokens_for_intermediate_and_last - 1
-        else: # No explicit last token (e.g. single root token, or single starting subword already handled)
+        else: 
             num_intermediate_tokens = num_tokens_for_intermediate_and_last
 
 
@@ -147,7 +136,7 @@ def get_ids_from_subwords(
             if num_intermediate_tokens <= max_intermediate_subword_positions_per_word:
                 for si in range(num_intermediate_tokens):
                     subword_ids.append(2 + si)
-            else:  # More intermediate tokens than allowed positions
+            else: 
                 if intermediate_subword_distribution_strategy == "uniform":
                     for si in range(num_intermediate_tokens):
                         subword_ids.append(
@@ -157,12 +146,12 @@ def get_ids_from_subwords(
                     for si in range(max_intermediate_subword_positions_per_word):
                         subword_ids.append(2 + si)
                     for _ in range(num_intermediate_tokens - max_intermediate_subword_positions_per_word):
-                        subword_ids.append(1)  # Leftovers get ID 1 (last type)
+                        subword_ids.append(1) 
                 else:
                     raise ValueError(f"Unsupported intermediate subword distribution strategy: {intermediate_subword_distribution_strategy}")
         
         if has_explicit_last:
-             subword_ids.append(1) # Add last ID
+             subword_ids.append(1)
 
         return subword_ids
     else:
@@ -186,24 +175,19 @@ def create_subword_ids(
     all_subword_ids: List[int] = []
     current_word_segment_tokens: List[str] = []
     
-    # This flag is true if the very first content token (non-special) of the *entire input token list* is a subword.
     first_content_token_is_subword = False
-    found_first_content_token = False
-    for t_idx, token_val in enumerate(tokens):
-        if token_val not in [cls_token, sep_token, pad_token]:
-            first_content_token_is_subword = is_subword(token_val)
-            found_first_content_token = True
-            break
+    if tokens: 
+        for token_val in tokens:
+            if token_val not in [cls_token, sep_token, pad_token]:
+                first_content_token_is_subword = is_subword(token_val)
+                break 
     
-    # This flag tracks if we have processed the subwords of the first content word.
     first_content_word_processed = False
 
-    for token in tokens:
+    for token_idx, token in enumerate(tokens):
         if token in [cls_token, sep_token, pad_token]:
-            # Process any accumulated word tokens before handling special token
             if current_word_segment_tokens:
-                # Determine if this segment is the first *content* word and starts with a subword
-                is_this_segment_the_first_content_word_starting_with_subword = \
+                is_this_segment_the_very_first_content_word_and_starts_with_subword = \
                     first_content_token_is_subword and \
                     not first_content_word_processed and \
                     is_subword(current_word_segment_tokens[0])
@@ -213,39 +197,38 @@ def create_subword_ids(
                     max_intermediate_subword_positions_per_word=max_intermediate_subword_positions_per_word,
                     subword_embedding_order=subword_embedding_order,
                     intermediate_subword_distribution_strategy=intermediate_subword_distribution_strategy,
-                    current_word_starts_with_subword=is_this_segment_the_first_content_word_starting_with_subword,
+                    current_word_starts_with_subword=is_this_segment_the_very_first_content_word_and_starts_with_subword,
                 )
                 all_subword_ids.extend(generated_ids)
-                current_word_segment_tokens = []
-                if not first_content_word_processed: # Mark first content word as processed
-                    first_content_word_processed = True 
-            
-            all_subword_ids.append(0)  # Special tokens get subword_id 0
-        elif not is_subword(token): # Start of a new word (or a single-token word)
-            # Process previous word segment (if any)
-            if current_word_segment_tokens:
-                is_this_segment_the_first_content_word_starting_with_subword = \
-                    first_content_token_is_subword and \
-                    not first_content_word_processed and \
-                    is_subword(current_word_segment_tokens[0])
-
-                generated_ids = get_ids_from_subwords(
-                    num_subwords_in_current_word=len(current_word_segment_tokens),
-                    max_intermediate_subword_positions_per_word=max_intermediate_subword_positions_per_word,
-                    subword_embedding_order=subword_embedding_order,
-                    intermediate_subword_distribution_strategy=intermediate_subword_distribution_strategy,
-                    current_word_starts_with_subword=is_this_segment_the_first_content_word_starting_with_subword,
-                )
-                all_subword_ids.extend(generated_ids)
-                if not first_content_word_processed:
+                
+                if not first_content_word_processed and current_word_segment_tokens: 
                     first_content_word_processed = True
-            current_word_segment_tokens = [token] # Start new word segment
-        else: # Is a subword, continue current word segment
+                current_word_segment_tokens = []
+            
+            all_subword_ids.append(0) 
+        elif not is_subword(token): 
+            if current_word_segment_tokens:
+                is_this_segment_the_very_first_content_word_and_starts_with_subword = \
+                    first_content_token_is_subword and \
+                    not first_content_word_processed and \
+                    is_subword(current_word_segment_tokens[0])
+
+                generated_ids = get_ids_from_subwords(
+                    num_subwords_in_current_word=len(current_word_segment_tokens),
+                    max_intermediate_subword_positions_per_word=max_intermediate_subword_positions_per_word,
+                    subword_embedding_order=subword_embedding_order,
+                    intermediate_subword_distribution_strategy=intermediate_subword_distribution_strategy,
+                    current_word_starts_with_subword=is_this_segment_the_very_first_content_word_and_starts_with_subword,
+                )
+                all_subword_ids.extend(generated_ids)
+                if not first_content_word_processed and current_word_segment_tokens:
+                    first_content_word_processed = True
+            current_word_segment_tokens = [token] 
+        else: 
             current_word_segment_tokens.append(token)
 
-    # Process any remaining word tokens at the end
     if current_word_segment_tokens:
-        is_this_segment_the_first_content_word_starting_with_subword = \
+        is_this_segment_the_very_first_content_word_and_starts_with_subword = \
             first_content_token_is_subword and \
             not first_content_word_processed and \
             is_subword(current_word_segment_tokens[0])
@@ -255,7 +238,7 @@ def create_subword_ids(
             max_intermediate_subword_positions_per_word=max_intermediate_subword_positions_per_word,
             subword_embedding_order=subword_embedding_order,
             intermediate_subword_distribution_strategy=intermediate_subword_distribution_strategy,
-            current_word_starts_with_subword=is_this_segment_the_first_content_word_starting_with_subword,
+            current_word_starts_with_subword=is_this_segment_the_very_first_content_word_and_starts_with_subword,
         )
         all_subword_ids.extend(generated_ids)
 
@@ -331,6 +314,7 @@ class Bert2DTokenizer(BertTokenizer):
         intermediate_subword_distribution_strategy="uniform",
         **kwargs,
     ):
+        
         super().__init__(
             vocab_file=vocab_file,
             do_lower_case=do_lower_case,
@@ -343,13 +327,16 @@ class Bert2DTokenizer(BertTokenizer):
             mask_token=mask_token,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
-            **kwargs,
+            **kwargs, 
         )
+
         self.max_intermediate_subword_positions_per_word = max_intermediate_subword_positions_per_word
-        if subword_embedding_order != "ending_first":
-            logger.warning(f"Bert2DTokenizer slow currently only fully supports 'ending_first' for subword_embedding_order. Received: {subword_embedding_order}")
         self.subword_embedding_order = subword_embedding_order
         self.intermediate_subword_distribution_strategy = intermediate_subword_distribution_strategy
+        
+        if subword_embedding_order != "ending_first":
+            logger.warning(f"Bert2DTokenizer slow currently only fully supports 'ending_first' for subword_embedding_order. Received: {subword_embedding_order}")
+        
 
     def __call__(
         self,
@@ -377,44 +364,49 @@ class Bert2DTokenizer(BertTokenizer):
             text=text,
             text_pair=text_pair,
             add_special_tokens=add_special_tokens,
-            padding=padding, # Crucial: let superclass handle padding for standard keys
+            padding=padding, 
             truncation=truncation,
             max_length=max_length,
             stride=stride,
             is_split_into_words=is_split_into_words,
             pad_to_multiple_of=pad_to_multiple_of,
-            return_tensors=None, # Get lists first, convert to tensor at the end
+            return_tensors=None, 
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
             return_overflowing_tokens=return_overflowing_tokens,
             return_special_tokens_mask=return_special_tokens_mask,
-            return_offsets_mapping=return_offsets_mapping,
-            return_length=return_length,
+            return_offsets_mapping=return_offsets_mapping, 
+            return_length=return_length, 
             verbose=verbose,
             **kwargs,
         )
 
         input_ids_processed = batch_encoding_super["input_ids"]
         
-        # Determine if input was batched
-        if isinstance(text, str) or (is_split_into_words and isinstance(text, list) and text and isinstance(text[0], str)):
-             if text_pair is None:
-                 was_batched = False
-             else: # text is str, text_pair is str or list
-                 if isinstance(text_pair, str) or (is_split_into_words and isinstance(text_pair, list) and text_pair and isinstance(text_pair[0], str)):
-                     was_batched = False
-                 else: # text is str, text_pair is list of str/list
-                     was_batched = True # This case is tricky, superclass might handle it as batch. Assume simple batching.
-        elif isinstance(text, list):
-            was_batched = True
-        else: # Fallback, should be covered by PreTrainedTokenizer logic
-            was_batched = isinstance(input_ids_processed, list) and \
-                          bool(input_ids_processed) and \
-                          isinstance(input_ids_processed[0], list)
+        is_batched = bool(
+            (isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple)))
+            or (
+                isinstance(text, (list, tuple))
+                and text_pair is not None
+                and isinstance(text_pair, (list, tuple))
+                and text
+                and isinstance(text[0], str)
+            )
+        )
+        if not is_batched and isinstance(text, (list, tuple)) and not (text and isinstance(text[0], (list,tuple))):
+             if isinstance(input_ids_processed, list) and \
+                bool(input_ids_processed) and \
+                isinstance(input_ids_processed[0], list):
+                 is_batched = True
+        elif not is_batched and text_pair is not None and isinstance(text_pair, (list, tuple)):
+            if isinstance(input_ids_processed, list) and \
+                bool(input_ids_processed) and \
+                isinstance(input_ids_processed[0], list):
+                is_batched = True
 
 
         list_of_input_ids_for_processing: List[List[int]]
-        if not was_batched:
+        if not is_batched:
             list_of_input_ids_for_processing = [input_ids_processed]
         else:
             list_of_input_ids_for_processing = input_ids_processed
@@ -425,17 +417,11 @@ class Bert2DTokenizer(BertTokenizer):
         for ids_for_one_sequence in list_of_input_ids_for_processing:
             tokens = self.convert_ids_to_tokens(ids_for_one_sequence, skip_special_tokens=False)
             
-            # restart_new_sentence logic for word_ids
-            # BertTokenizer by default creates token_type_ids that distinguish sentences.
-            # We can infer sentence pairs if token_type_ids are present and diverse.
-            # For simplicity here, we assume if text_pair is provided, restart_new_sentence might be relevant.
-            # The fast tokenizer's create_word_ids has a restart_new_sentence param.
-            # Let's assume text_pair implies a new sentence for word_id counting if two SEP tokens are present.
-            should_restart_word_ids = text_pair is not None
+            should_restart_word_ids_heuristic = text_pair is not None
 
             word_ids_for_sequence = create_word_ids(
                 tokens, 
-                restart_new_sentence=should_restart_word_ids, # Heuristic
+                restart_new_sentence=should_restart_word_ids_heuristic, 
                 seperator_token=self.sep_token, 
                 padding_token=self.pad_token
             )
@@ -451,32 +437,17 @@ class Bert2DTokenizer(BertTokenizer):
             all_word_ids.append(word_ids_for_sequence)
             all_subword_ids.append(subword_ids_for_sequence)
         
-        # `batch_encoding_super` contains already padded/truncated `input_ids`.
-        # The `all_word_ids` and `all_subword_ids` are generated based on these.
-        # If padding was applied by superclass, their lengths should match `input_ids`.
-        # If `padding` was `do_not_pad`, lengths might vary.
-        # The explicit padding loop in the previous reasoning might be redundant if tokens
-        # from `convert_ids_to_tokens` already reflect the final padded length.
-        # Let's verify: `convert_ids_to_tokens` on padded IDs will include PAD tokens.
-        # So, `create_word_ids` and `create_subword_ids` will process these PAD tokens.
-        # `create_word_ids` assigns 0 to PAD. `create_subword_ids` assigns 0 to PAD.
-        # This means padding is implicitly handled by the helper functions if they correctly process PAD_TOKEN.
-
-        final_batch_encoding = BatchEncoding()
-        final_batch_encoding.update(batch_encoding_super) # Start with super's results
-
-        if not was_batched:
-            final_batch_encoding["word_ids"] = all_word_ids[0]
-            final_batch_encoding["subword_ids"] = all_subword_ids[0]
+        if not is_batched:
+            batch_encoding_super["word_ids"] = all_word_ids[0]
+            batch_encoding_super["subword_ids"] = all_subword_ids[0]
         else:
-            final_batch_encoding["word_ids"] = all_word_ids
-            final_batch_encoding["subword_ids"] = all_subword_ids
+            batch_encoding_super["word_ids"] = all_word_ids
+            batch_encoding_super["subword_ids"] = all_subword_ids
 
-        # Final tensor conversion if requested
         if return_tensors is not None:
-            final_batch_encoding = final_batch_encoding.convert_to_tensors(tensor_type=return_tensors)
+            batch_encoding_super = batch_encoding_super.convert_to_tensors(tensor_type=return_tensors)
             
-        return final_batch_encoding
+        return batch_encoding_super
 
 
 __all__ = [
@@ -488,3 +459,86 @@ __all__ = [
     "get_uniform_id", 
     "get_ids_from_subwords"
 ]
+
+if __name__ == "__main__":
+    print("Running Bert2DTokenizer self-test...")
+    
+    # Setup a temporary directory and vocab file
+    tmpdirname_main = "./tmp_bert2d_main_test"
+    os.makedirs(tmpdirname_main, exist_ok=True)
+    vocab_tokens_main = [
+        "[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", # 0-4
+        "un", "##want", "##ed",                     # 5-7
+        "runn", "##ing",                            # 8-9
+        "hello", "world"                            # 10-11
+    ]
+    vocab_file_main = os.path.join(tmpdirname_main, VOCAB_FILES_NAMES["vocab_file"])
+    with open(vocab_file_main, "w", encoding="utf-8") as vocab_writer:
+        vocab_writer.write("\n".join(vocab_tokens_main) + "\n")
+    
+    print(f"\nCreated dummy vocab file: {vocab_file_main}")
+
+    try:
+        print("\nInstantiating Bert2DTokenizer...")
+        tokenizer_main = Bert2DTokenizer(vocab_file=vocab_file_main)
+        print("Bert2DTokenizer instantiated successfully.")
+        print(f"Tokenizer model_input_names: {tokenizer_main.model_input_names}")
+        assert "word_ids" in tokenizer_main.model_input_names
+        assert "subword_ids" in tokenizer_main.model_input_names
+        
+        sample_text = "unwanted running"
+        print(f"\nTokenizing sample text: '{sample_text}'")
+        
+        encoded_output = tokenizer_main(sample_text, add_special_tokens=True)
+        
+        print("\nEncoded output (lists):")
+        for key, value in encoded_output.items():
+            print(f"  {key}: {value}")
+            
+        assert "input_ids" in encoded_output, "input_ids missing"
+        assert "word_ids" in encoded_output, "word_ids missing from output"
+        assert "subword_ids" in encoded_output, "subword_ids missing from output"
+        
+        # Expected values for "unwanted running" -> [CLS] un ##want ##ed runn ##ing [SEP]
+        # input_ids: [1, 5, 6, 7, 8, 9, 2]
+        # word_ids:  [0, 1, 1, 1, 2, 2, 3]
+        # subword_ids: [0, 0, 2, 1, 0, 1, 0] (default params)
+
+        expected_input_ids = [1, 5, 6, 7, 8, 9, 2]
+        expected_word_ids  = [0, 1, 1, 1, 2, 2, 3]
+        expected_subword_ids = [0, 0, 2, 1, 0, 1, 0]
+
+        assert encoded_output["input_ids"] == expected_input_ids, f"Mismatch in input_ids. Got {encoded_output['input_ids']}"
+        assert encoded_output["word_ids"] == expected_word_ids, f"Mismatch in word_ids. Got {encoded_output['word_ids']}"
+        assert encoded_output["subword_ids"] == expected_subword_ids, f"Mismatch in subword_ids. Got {encoded_output['subword_ids']}"
+        
+        print("\nList output assertions passed.")
+
+        print("\nTesting with return_tensors='pt'...")
+        encoded_output_pt = tokenizer_main(sample_text, add_special_tokens=True, return_tensors="pt")
+        print("Encoded output (PyTorch Tensors):")
+        for key, value in encoded_output_pt.items():
+            print(f"  {key}: {value} (shape: {value.shape})")
+
+        assert "word_ids" in encoded_output_pt, "word_ids missing from PT output"
+        assert "subword_ids" in encoded_output_pt, "subword_ids missing from PT output"
+        assert isinstance(encoded_output_pt["word_ids"], torch.Tensor), "word_ids is not a Tensor"
+
+        # For single, non-batched inputs, BatchEncoding.convert_to_tensors returns 1D tensors
+        assert torch.equal(encoded_output_pt["input_ids"], torch.tensor(expected_input_ids)), "PT input_ids mismatch"
+        assert torch.equal(encoded_output_pt["word_ids"], torch.tensor(expected_word_ids)), "PT word_ids mismatch"
+        assert torch.equal(encoded_output_pt["subword_ids"], torch.tensor(expected_subword_ids)), "PT subword_ids mismatch"
+        print("PyTorch tensor output assertions passed.")
+
+        print("\nBert2DTokenizer self-test completed successfully!")
+
+    except Exception as e:
+        print(f"\nError during Bert2DTokenizer self-test: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        # Clean up
+        if os.path.exists(tmpdirname_main):
+            shutil.rmtree(tmpdirname_main)
+            print(f"\nCleaned up dummy vocab directory: {tmpdirname_main}")
+
