@@ -388,12 +388,12 @@ class AyaVisionIntegrationTest(unittest.TestCase):
                 ("xpu", 3): [0.4109, 0.1532, 0.8018, 2.1328, 0.5483],
                 # 4-bit
                 ("cuda", 7): [0.1097, 0.3481, 3.8340, 9.7969, 2.0488],
-                ("cuda", 8): [0.1097, 0.3481, 3.8340, 9.7969, 2.0488],
+                ("cuda", 8): [1.6396, 0.6094, 3.1992, 8.5234, 2.1875],
             }
         )  # fmt: skip
         expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), dtype=torch.float16)
 
-        breakpoint()
+        # breakpoint()
         self.assertTrue(
             torch.allclose(actual_logits, expected_logits, atol=0.1),
             f"Actual logits: {actual_logits}"
@@ -430,12 +430,12 @@ class AyaVisionIntegrationTest(unittest.TestCase):
                 ("xpu", 3): "Whispers on the breeze,\nLeaves dance under moonlit sky,\nNature's quiet song.",
                 # 4-bit
                 ("cuda", 7): "Sure, here's a haiku for you:\n\nMorning dew sparkles,\nPetals unfold in sunlight,\n",
-                ("cuda", 8): "",
+                ("cuda", 8): "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
-        breakpoint()
+        # breakpoint()
         self.assertEqual(decoded_output, expected_output)
 
     @slow
@@ -467,12 +467,12 @@ class AyaVisionIntegrationTest(unittest.TestCase):
                 ("xpu", 3): "The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,",
                 # 4-bit
                 ("cuda", 7): 'The image depicts two cats comfortably resting on a pink blanket spread across a sofa. The cats,',
-                ("cuda", 8): "",
+                ("cuda", 8): 'The image depicts a cozy scene of two cats resting on a bright pink blanket. The cats,',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
-        breakpoint()
+        # breakpoint()
         self.assertEqual(decoded_output, expected_output)
 
     @slow
@@ -514,12 +514,12 @@ class AyaVisionIntegrationTest(unittest.TestCase):
                 ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
                 # 4-bit
                 ("cuda", 7): "Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene",
-                ("cuda", 8): "",
+                ("cuda", 8): 'Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
-        breakpoint()
+        # breakpoint()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -534,12 +534,12 @@ class AyaVisionIntegrationTest(unittest.TestCase):
                 ("xpu", 3): 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a',
                 # 4-bit
                 ("cuda", 7): 'This vibrant image captures a bustling street scene in a multicultural urban area, featuring a traditional Chinese gate adorned with intricate red and',
-                ("cuda", 8): "",
+                ("cuda", 8): 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
-        breakpoint()
+        # breakpoint()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -595,12 +595,12 @@ class AyaVisionIntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
                 ("cuda", 7): 'Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene',
-                ("cuda", 8): "",
+                ("cuda", 8): 'Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
-        breakpoint()
+        # breakpoint()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -613,12 +613,12 @@ class AyaVisionIntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ",
                 ("cuda", 7): 'The first image showcases the Statue of Liberty, a monumental sculpture located on Liberty Island in New York Harbor. Standing atop a',
-                ("cuda", 8): "",
+                ("cuda", 8): 'The first image showcases the Statue of Liberty, a colossal neoclassical sculpture on Liberty Island in New York Harbor. Standing at ',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
-        breakpoint()
+        # breakpoint()
         self.assertEqual(
             decoded_output,
             expected_output,
