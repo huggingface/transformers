@@ -1024,27 +1024,6 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     model(**encoded_sequence)
                     model(**batch_encoded_sequence)
 
-    def test_rust_and_python_full_tokenizers(self):
-        if not self.test_rust_tokenizer:
-            self.skipTest(reason="test_rust_tokenizer is set to False")
-
-        if not self.test_slow_tokenizer:
-            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            self.skipTest(reason="test_slow_tokenizer is set to False")
-
-        tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer()
-
-        nodes, xpaths = self.get_nodes_and_xpaths()
-
-        ids = tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=False)
-        rust_ids = rust_tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=False)
-        self.assertListEqual(ids, rust_ids)
-
-        ids = tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=True)
-        rust_ids = rust_tokenizer.encode(nodes, xpaths=xpaths, add_special_tokens=True)
-        self.assertListEqual(ids, rust_ids)
-
     def test_tokenization_python_rust_equals(self):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
