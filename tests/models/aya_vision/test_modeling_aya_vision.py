@@ -391,7 +391,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), dtype=torch.float16)
 
-        # breakpoint()
+        breakpoint()
         self.assertTrue(
             torch.allclose(actual_logits, expected_logits, atol=0.1),
             f"Actual logits: {actual_logits}"
@@ -433,7 +433,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
-        # breakpoint()
+        breakpoint()
         self.assertEqual(decoded_output, expected_output)
 
     @slow
@@ -470,7 +470,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
-        # breakpoint()
+        breakpoint()
         self.assertEqual(decoded_output, expected_output)
 
     @slow
@@ -517,7 +517,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
-        # breakpoint()
+        breakpoint()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -537,7 +537,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
-        # breakpoint()
+        breakpoint()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -598,7 +598,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
-        # breakpoint()
+        breakpoint()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -616,7 +616,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
-        # breakpoint()
+        breakpoint()
         self.assertEqual(
             decoded_output,
             expected_output,
