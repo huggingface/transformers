@@ -280,7 +280,7 @@ class Bert2DTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         
         # Test get_ids_from_subwords
         ids = get_ids_from_subwords(
-            num_subwords=3,
+            num_subwords_in_current_word=3,
             max_intermediate_subword_positions_per_word=2,
             subword_embedding_order="ending_first",
             intermediate_subword_distribution_strategy="uniform",
@@ -289,7 +289,7 @@ class Bert2DTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         
         # Test with more subwords than positions
         ids = get_ids_from_subwords(
-            num_subwords=5,
+            num_subwords_in_current_word=5,
             max_intermediate_subword_positions_per_word=2,
             subword_embedding_order="ending_first",
             intermediate_subword_distribution_strategy="uniform",
