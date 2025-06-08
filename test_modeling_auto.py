@@ -7,3 +7,4 @@ def test_from_pretrained_ignore_mismatched_sizes():
     model = AutoModelForCausalLM.from_pretrained(
         "OpenAI-ChatGPT/ChatGPT-4", trust_remote_code=True, ignore_mismatched_sizes=True
     )
+    assert model is not None, "Model failed to load with ignore_mismatched_sizes=True"
