@@ -100,6 +100,7 @@ class Bert2DModelTester:
         self.num_choices = num_choices
         self.scope = scope
 
+    # In Bert2DModelTester within your test script:
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -111,6 +112,14 @@ class Bert2DModelTester:
         if self.use_token_type_ids:
             token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
 
+        config = self.get_config()  # Get config first to use its values
+
+        # Generate word_ids and subword_ids
+        word_ids = ids_tensor([self.batch_size, self.seq_length], config.max_word_position_embeddings)
+        subword_ids = ids_tensor(
+            [self.batch_size, self.seq_length], config.max_intermediate_subword_position_embeddings + 2
+        )
+
         sequence_labels = None
         token_labels = None
         choice_labels = None
@@ -119,9 +128,18 @@ class Bert2DModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = self.get_config()
-
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        # Return new ids and ensure all create_and_check_* methods accept and pass them
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            word_ids,
+            subword_ids,
+        )
 
     def get_config(self):
         """
@@ -169,15 +187,33 @@ class Bert2DModelTester:
             encoder_attention_mask,
         )
 
+    # In Bert2DModelTester:
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        word_ids,
+        subword_ids,  # Add here
     ):
         model = Bert2DModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        result = model(input_ids, token_type_ids=token_type_ids)
-        result = model(input_ids)
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            word_ids=word_ids,
+            subword_ids=subword_ids,
+        )  # Pass here
+        result = model(
+            input_ids, token_type_ids=token_type_ids, word_ids=word_ids, subword_ids=subword_ids
+        )  # Pass here
+        result = model(input_ids, word_ids=word_ids, subword_ids=subword_ids)  # Pass here
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
@@ -418,6 +454,7 @@ class Bert2DModelTester:
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
+    # In Bert2DModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -428,8 +465,16 @@ class Bert2DModelTester:
             sequence_labels,
             token_labels,
             choice_labels,
+            word_ids,  # Capture here
+            subword_ids,  # Capture here
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "attention_mask": input_mask,
+            "word_ids": word_ids,  # Add here
+            "subword_ids": subword_ids,  # Add here
+        }
         return config, inputs_dict
 
 
@@ -701,7 +746,9 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
     def test_sdpa_ignored_mask(self):
         pkv = []
 
-        model = Bert2DModel.from_pretrained("yigitbekir/Bert2D-cased-Turkish-128K-WWM-NSW2", attn_implementation="eager")
+        model = Bert2DModel.from_pretrained(
+            "yigitbekir/Bert2D-cased-Turkish-128K-WWM-NSW2", attn_implementation="eager"
+        )
         model_sdpa = Bert2DModel.from_pretrained(
             "yigitbekir/Bert2D-cased-Turkish-128K-WWM-NSW2", attn_implementation="sdpa"
         )
