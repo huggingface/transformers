@@ -15,11 +15,14 @@ class DummyQwen2_5Config(PretrainedConfig):
         super().__init__(**kwargs)
         self.use_cache = use_cache
 
+
 class DummyQwen2_5VlVisionConfig(PretrainedConfig):
     model_type = "dummy_qwen2_5_vl_vision"
+
     def __init__(self, output_attentions=False, **kwargs):
         super().__init__(**kwargs)
         self.output_attentions = output_attentions
+
 
 class DummyQwen2_5VlConfig(PretrainedConfig):
     model_type = "dummy_qwen2_5_vl"
@@ -106,4 +109,3 @@ class AutoModelCompositeTest(unittest.TestCase):
 # This block allows the test to be run directly using `python your_test_file.py`
 if __name__ == "__main__":
     unittest.main(argv=["first-arg-is-ignored"], exit=False)
-
