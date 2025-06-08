@@ -1,0 +1,2 @@
+Error occurred: RuntimeError Error(s) in loading state_dict for Linear:
+	size mismatch for weight: copying a param with shape torch.Size([151936, 1024]) from checkpoint, the shape in current model is torch.Size([151936, 4096]).

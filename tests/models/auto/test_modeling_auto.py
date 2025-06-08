@@ -579,3 +579,4 @@ class AutoModelTest(unittest.TestCase):
         # More precisely, it directly inherits from GenerationMixin. This check would fail prior to v4.45 (inheritance
         # patching was added in v4.45)
         self.assertTrue("GenerationMixin" in str(model.__class__.__bases__))
+dModel))dModel))dModel))

@@ -5092,7 +5092,46 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         if device_map is not None and not is_hqq_or_quark:
             expanded_device_map = expand_device_map(device_map, expected_keys)
             caching_allocator_warmup(model_to_load, expanded_device_map, hf_quantizer)
+       
+        # Get all the keys of the state dicts that we have to initialize the model
+        # Get all the keys of the state dicts that we have to initialize the model
+        if sharded_metadata is not None:
+            original_checkpoint_keys = sharded_metadata["all_checkpoint_keys"]
+            state_dict = None  # State dict not directly available with sharded metadata
+        elif state_dict is not None:
+            original_checkpoint_keys = list(state_dict.keys())
+        else:
+            state_dict = load_state_dict(checkpoint_files[0], map_location="meta", weights_only=weights_only)
+            original_checkpoint_keys = list(state_dict.keys())
 
+        # Add checkpoint architecture validation
+        if state_dict is not None and hasattr(model.config, "hidden_size"):
+            for param_name, param in state_dict.items():
+                if param_name.endswith("weight") and param.dim() >= 2:
+                    checkpoint_size = param.shape[1]  # Input dimension
+                    if checkpoint_size != model.config.hidden_size:
+                        if not ignore_mismatched_sizes:
+                            raise ValueError(
+                                f"Incompatible model architecture: checkpoint hidden_size={checkpoint_size}, "
+                                f"model hidden_size={model.config.hidden_size} for {pretrained_model_name_or_path}"
+                            )
+                        else:
+                            logger.warning(
+                                f"Ignoring mismatched architecture: checkpoint hidden_size={checkpoint_size}, "
+                                f"model hidden_size={model.config.hidden_size} for {pretrained_model_name_or_path}. "
+                                "Some weights may not be initialized."
+                            )
+            print(f"Validation passed for {pretrained_model_name_or_path}, checkpoint shapes match or ignored")
+
+        # Check if we are in a special state, i.e. loading from a state dict coming from a different architecture
+        prefix = model.base_model_prefix
+        _prefix = f"{prefix}."
+        has_prefix_module = any(s.startswith(prefix) for s in original_checkpoint_keys) if len(prefix) > 0 else False
+        expects_prefix_module = hasattr(model, prefix) if len(prefix) > 0 else False
+        loading_task_model_from_base_state_dict = not has_prefix_module and expects_prefix_module
+        loading_base_model_from_task_state_dict = has_prefix_module and not expects_prefix_module
+
+# ... (rest of the method remains unchanged)
         # Prepare and compatabilize arguments for serial and parallel shard loading
         args_list = [
             (
