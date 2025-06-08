@@ -16,8 +16,8 @@
 
 import math
 from typing import List, Optional, Union, Dict
-import os # For __main__ test
-import shutil # For __main__ test
+# import os # Only needed for __main__
+# import shutil # Only needed for __main__
 
 import torch
 
@@ -34,6 +34,8 @@ from ..bert.tokenization_bert import BertTokenizer, VOCAB_FILES_NAMES
 
 
 logger = logging.get_logger(__name__)
+# Set logger level to DEBUG for more verbose output if needed during development/testing
+# logger.setLevel(logging.DEBUG) # Comment out for production
 
 # Helper functions ported from Bert2DTokenizerFast
 def is_subword(token: str, subword_prefix="##") -> bool:
@@ -293,6 +295,7 @@ class Bert2DTokenizer(BertTokenizer):
             The strategy for distributing intermediate subword positions. Can be `"uniform"` or `"leftover_as_last"`.
     """
     vocab_files_names = VOCAB_FILES_NAMES
+    # This class attribute should override the one from PreTrainedTokenizer
     model_input_names: List[str] = ["input_ids", "token_type_ids", "attention_mask", "word_ids", "subword_ids"]
 
 
@@ -314,7 +317,18 @@ class Bert2DTokenizer(BertTokenizer):
         intermediate_subword_distribution_strategy="uniform",
         **kwargs,
     ):
+        # Step 1: Store Bert2D specific args from init signature into local variables
+        local_max_intermediate = max_intermediate_subword_positions_per_word
+        local_subword_order = subword_embedding_order
+        local_intermediate_strategy = intermediate_subword_distribution_strategy
+
+        # Step 2: Remove Bert2D specific args from kwargs to prevent passing them to super()
+        kwargs.pop("max_intermediate_subword_positions_per_word", None)
+        kwargs.pop("subword_embedding_order", None)
+        kwargs.pop("intermediate_subword_distribution_strategy", None)
         
+        # Step 3: Call super().__init__(), explicitly passing Bert2DTokenizer.model_input_names
+        # This ensures that PreTrainedTokenizerBase uses our desired model_input_names.
         super().__init__(
             vocab_file=vocab_file,
             do_lower_case=do_lower_case,
@@ -327,16 +341,29 @@ class Bert2DTokenizer(BertTokenizer):
             mask_token=mask_token,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
+            model_input_names=Bert2DTokenizer.model_input_names, # Explicitly pass our list
             **kwargs, 
         )
-
-        self.max_intermediate_subword_positions_per_word = max_intermediate_subword_positions_per_word
-        self.subword_embedding_order = subword_embedding_order
-        self.intermediate_subword_distribution_strategy = intermediate_subword_distribution_strategy
+        
+        # Step 4: Set Bert2D specific attributes on self using the stored local variables
+        self.max_intermediate_subword_positions_per_word = local_max_intermediate
+        self.subword_embedding_order = local_subword_order
+        self.intermediate_subword_distribution_strategy = local_intermediate_strategy
         
         if subword_embedding_order != "ending_first":
             logger.warning(f"Bert2DTokenizer slow currently only fully supports 'ending_first' for subword_embedding_order. Received: {subword_embedding_order}")
         
+        # Step 5: Update init_kwargs if it exists (for serialization/reconstruction by base classes)
+        # This makes sure that when the tokenizer is saved and reloaded, these custom parameters are preserved.
+        if hasattr(self, 'init_kwargs') and isinstance(self.init_kwargs, dict):
+            self.init_kwargs['max_intermediate_subword_positions_per_word'] = self.max_intermediate_subword_positions_per_word
+            self.init_kwargs['subword_embedding_order'] = self.subword_embedding_order
+            self.init_kwargs['intermediate_subword_distribution_strategy'] = self.intermediate_subword_distribution_strategy
+        # else:
+            # This case might occur if the superclass doesn't initialize init_kwargs,
+            # which would be unusual for PreTrainedTokenizer based classes.
+            # logger.warning("self.init_kwargs not found or not a dict during Bert2DTokenizer __init__. Custom params might not be saved.")
+
 
     def __call__(
         self,
@@ -370,7 +397,7 @@ class Bert2DTokenizer(BertTokenizer):
             stride=stride,
             is_split_into_words=is_split_into_words,
             pad_to_multiple_of=pad_to_multiple_of,
-            return_tensors=None, 
+            return_tensors=None, # Get lists first to allow modification
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
             return_overflowing_tokens=return_overflowing_tokens,
@@ -460,85 +487,83 @@ __all__ = [
     "get_ids_from_subwords"
 ]
 
-if __name__ == "__main__":
-    print("Running Bert2DTokenizer self-test...")
+# if __name__ == "__main__":
+#     # This block is commented out as requested for cleaner debugging of imports/tests.
+#     # To re-enable, ensure 'os' and 'shutil' are imported at the top.
+#     print("Running Bert2DTokenizer self-test...")
     
-    # Setup a temporary directory and vocab file
-    tmpdirname_main = "./tmp_bert2d_main_test"
-    os.makedirs(tmpdirname_main, exist_ok=True)
-    vocab_tokens_main = [
-        "[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", # 0-4
-        "un", "##want", "##ed",                     # 5-7
-        "runn", "##ing",                            # 8-9
-        "hello", "world"                            # 10-11
-    ]
-    vocab_file_main = os.path.join(tmpdirname_main, VOCAB_FILES_NAMES["vocab_file"])
-    with open(vocab_file_main, "w", encoding="utf-8") as vocab_writer:
-        vocab_writer.write("\n".join(vocab_tokens_main) + "\n")
+#     tmpdirname_main = "./tmp_bert2d_main_test"
+#     os.makedirs(tmpdirname_main, exist_ok=True)
+#     vocab_tokens_main = [
+#         "[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", 
+#         "un", "##want", "##ed",                    
+#         "runn", "##ing",                           
+#         "hello", "world"                           
+#     ]
+#     vocab_file_main = os.path.join(tmpdirname_main, VOCAB_FILES_NAMES["vocab_file"])
+#     with open(vocab_file_main, "w", encoding="utf-8") as vocab_writer:
+#         vocab_writer.write("\n".join(vocab_tokens_main) + "\n")
     
-    print(f"\nCreated dummy vocab file: {vocab_file_main}")
+#     print(f"\nCreated dummy vocab file: {vocab_file_main}")
 
-    try:
-        print("\nInstantiating Bert2DTokenizer...")
-        tokenizer_main = Bert2DTokenizer(vocab_file=vocab_file_main)
-        print("Bert2DTokenizer instantiated successfully.")
-        print(f"Tokenizer model_input_names: {tokenizer_main.model_input_names}")
-        assert "word_ids" in tokenizer_main.model_input_names
-        assert "subword_ids" in tokenizer_main.model_input_names
+#     try:
+#         print("\nInstantiating Bert2DTokenizer...")
+#         # Set a higher log level for transformers to see our debug messages
+#         # logging.set_verbosity_debug() # or logging.set_verbosity_info()
+#         # Or, specifically for this logger:
+#         # logging.get_logger("transformers.models.bert2d.tokenization_bert2d").setLevel(logging.DEBUG)
         
-        sample_text = "unwanted running"
-        print(f"\nTokenizing sample text: '{sample_text}'")
+#         tokenizer_main = Bert2DTokenizer(vocab_file=vocab_file_main)
+#         print("Bert2DTokenizer instantiated successfully.")
+#         print(f"Tokenizer model_input_names: {tokenizer_main.model_input_names}")
+#         assert "word_ids" in tokenizer_main.model_input_names
+#         assert "subword_ids" in tokenizer_main.model_input_names
         
-        encoded_output = tokenizer_main(sample_text, add_special_tokens=True)
+#         sample_text = "unwanted running"
+#         print(f"\nTokenizing sample text: '{sample_text}'")
         
-        print("\nEncoded output (lists):")
-        for key, value in encoded_output.items():
-            print(f"  {key}: {value}")
+#         encoded_output = tokenizer_main(sample_text, add_special_tokens=True)
+        
+#         print("\nEncoded output (lists):")
+#         for key, value in encoded_output.items():
+#             print(f"  {key}: {value}")
             
-        assert "input_ids" in encoded_output, "input_ids missing"
-        assert "word_ids" in encoded_output, "word_ids missing from output"
-        assert "subword_ids" in encoded_output, "subword_ids missing from output"
+#         assert "input_ids" in encoded_output, "input_ids missing"
+#         assert "word_ids" in encoded_output, "word_ids missing from output"
+#         assert "subword_ids" in encoded_output, "subword_ids missing from output"
         
-        # Expected values for "unwanted running" -> [CLS] un ##want ##ed runn ##ing [SEP]
-        # input_ids: [1, 5, 6, 7, 8, 9, 2]
-        # word_ids:  [0, 1, 1, 1, 2, 2, 3]
-        # subword_ids: [0, 0, 2, 1, 0, 1, 0] (default params)
+#         expected_input_ids = [1, 5, 6, 7, 8, 9, 2]
+#         expected_word_ids  = [0, 1, 1, 1, 2, 2, 3]
+#         expected_subword_ids = [0, 0, 2, 1, 0, 1, 0]
 
-        expected_input_ids = [1, 5, 6, 7, 8, 9, 2]
-        expected_word_ids  = [0, 1, 1, 1, 2, 2, 3]
-        expected_subword_ids = [0, 0, 2, 1, 0, 1, 0]
-
-        assert encoded_output["input_ids"] == expected_input_ids, f"Mismatch in input_ids. Got {encoded_output['input_ids']}"
-        assert encoded_output["word_ids"] == expected_word_ids, f"Mismatch in word_ids. Got {encoded_output['word_ids']}"
-        assert encoded_output["subword_ids"] == expected_subword_ids, f"Mismatch in subword_ids. Got {encoded_output['subword_ids']}"
+#         assert encoded_output["input_ids"] == expected_input_ids, f"Mismatch in input_ids. Got {encoded_output['input_ids']}"
+#         assert encoded_output["word_ids"] == expected_word_ids, f"Mismatch in word_ids. Got {encoded_output['word_ids']}"
+#         assert encoded_output["subword_ids"] == expected_subword_ids, f"Mismatch in subword_ids. Got {encoded_output['subword_ids']}"
         
-        print("\nList output assertions passed.")
+#         print("\nList output assertions passed.")
 
-        print("\nTesting with return_tensors='pt'...")
-        encoded_output_pt = tokenizer_main(sample_text, add_special_tokens=True, return_tensors="pt")
-        print("Encoded output (PyTorch Tensors):")
-        for key, value in encoded_output_pt.items():
-            print(f"  {key}: {value} (shape: {value.shape})")
+#         print("\nTesting with return_tensors='pt'...")
+#         encoded_output_pt = tokenizer_main(sample_text, add_special_tokens=True, return_tensors="pt")
+#         print("Encoded output (PyTorch Tensors):")
+#         for key, value in encoded_output_pt.items():
+#             print(f"  {key}: {value} (shape: {value.shape})")
 
-        assert "word_ids" in encoded_output_pt, "word_ids missing from PT output"
-        assert "subword_ids" in encoded_output_pt, "subword_ids missing from PT output"
-        assert isinstance(encoded_output_pt["word_ids"], torch.Tensor), "word_ids is not a Tensor"
+#         assert "word_ids" in encoded_output_pt, "word_ids missing from PT output"
+#         assert "subword_ids" in encoded_output_pt, "subword_ids missing from PT output"
+#         assert isinstance(encoded_output_pt["word_ids"], torch.Tensor), "word_ids is not a Tensor"
 
-        # For single, non-batched inputs, BatchEncoding.convert_to_tensors returns 1D tensors
-        assert torch.equal(encoded_output_pt["input_ids"], torch.tensor(expected_input_ids)), "PT input_ids mismatch"
-        assert torch.equal(encoded_output_pt["word_ids"], torch.tensor(expected_word_ids)), "PT word_ids mismatch"
-        assert torch.equal(encoded_output_pt["subword_ids"], torch.tensor(expected_subword_ids)), "PT subword_ids mismatch"
-        print("PyTorch tensor output assertions passed.")
+#         assert torch.equal(encoded_output_pt["input_ids"], torch.tensor(expected_input_ids)), "PT input_ids mismatch"
+#         assert torch.equal(encoded_output_pt["word_ids"], torch.tensor(expected_word_ids)), "PT word_ids mismatch"
+#         assert torch.equal(encoded_output_pt["subword_ids"], torch.tensor(expected_subword_ids)), "PT subword_ids mismatch"
+#         print("PyTorch tensor output assertions passed.")
 
-        print("\nBert2DTokenizer self-test completed successfully!")
+#         print("\nBert2DTokenizer self-test completed successfully!")
 
-    except Exception as e:
-        print(f"\nError during Bert2DTokenizer self-test: {e}")
-        import traceback
-        traceback.print_exc()
-    finally:
-        # Clean up
-        if os.path.exists(tmpdirname_main):
-            shutil.rmtree(tmpdirname_main)
-            print(f"\nCleaned up dummy vocab directory: {tmpdirname_main}")
-
+#     except Exception as e:
+#         print(f"\nError during Bert2DTokenizer self-test: {e}")
+#         import traceback
+#         traceback.print_exc()
+#     finally:
+#         if os.path.exists(tmpdirname_main):
+#             shutil.rmtree(tmpdirname_main)
+#             print(f"\nCleaned up dummy vocab directory: {tmpdirname_main}")
