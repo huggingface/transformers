@@ -27,6 +27,7 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    get_device_properties,
     require_deterministic_for_xpu,
     require_read_token,
     require_torch,
@@ -345,9 +346,13 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
     @classmethod
     def get_model(cls):
+
+        # Use 4-bit on T4
+        load_in_4bit = get_device_properties()[0] == "cuda" and get_device_properties()[1] < 8,
+
         if cls.model is None:
             cls.model = AyaVisionForConditionalGeneration.from_pretrained(
-                cls.model_checkpoint, device_map=torch_device, load_in_4bit=True,
+                cls.model_checkpoint, device_map=torch_device, load_in_4bit=load_in_4bit,
             )
         return cls.model
 
