@@ -1271,39 +1271,6 @@ GENERATION_TESTS_TO_SKIP_OR_ADAPT = [
     "test_sample_generate_dict_output",
 ]
 
-PIPELINE_TESTS_TO_SKIP = [
-    "test_pipeline_audio_classification",
-    "test_pipeline_audio_classification_fp16",
-    "test_pipeline_automatic_speech_recognition",
-    "test_pipeline_automatic_speech_recognition_fp16",
-    "test_pipeline_feature_extraction",
-    "test_pipeline_feature_extraction_fp16",
-    "test_pipeline_fill_mask",
-    "test_pipeline_fill_mask_fp16",
-    "test_pipeline_question_answering",
-    "test_pipeline_question_answering_fp16",
-    "test_pipeline_summarization",
-    "test_pipeline_summarization_fp16",
-    "test_pipeline_table_question_answering",
-    "test_pipeline_table_question_answering_fp16",
-    "test_pipeline_text2text_generation",
-    "test_pipeline_text2text_generation_fp16",
-    "test_pipeline_text_classification",
-    "test_pipeline_text_classification_fp16",
-    "test_pipeline_text_generation",
-    "test_pipeline_text_generation_fp16",
-    "test_pipeline_text_to_audio",
-    "test_pipeline_text_to_audio_fp16",
-    "test_pipeline_token_classification",
-    "test_pipeline_token_classification_fp16",
-    "test_pipeline_translation",
-    "test_pipeline_translation_fp16",
-    "test_pipeline_zero_shot",
-    "test_pipeline_zero_shot_fp16",
-    "test_pipeline_zero_shot_audio_classification",
-    "test_pipeline_zero_shot_audio_classification_fp16",
-]
-
 # Dynamically add skipper methods to Bert2DModelTest after its definition
 for test_name in GENERATION_TESTS_TO_SKIP_OR_ADAPT:
     if hasattr(GenerationTesterMixin, test_name):
@@ -1329,16 +1296,3 @@ for test_name in GENERATION_TESTS_TO_SKIP_OR_ADAPT:
             setattr(Bert2DModelTest, test_name, skipper_method)
 
         create_generation_skipper(test_name)
-
-for test_name in PIPELINE_TESTS_TO_SKIP:
-    if hasattr(PipelineTesterMixin, test_name):
-
-        def create_pipeline_skipper(name):
-            def skipper_method(self, *args, **kwargs):
-                self.skipTest(
-                    f"Skipping pipeline test {name} for Bert2D as it requires specific pipeline integration."
-                )
-
-            setattr(Bert2DModelTest, test_name, skipper_method)
-
-        create_pipeline_skipper(test_name)
