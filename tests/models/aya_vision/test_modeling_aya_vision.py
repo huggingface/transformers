@@ -348,11 +348,13 @@ class AyaVisionIntegrationTest(unittest.TestCase):
     def get_model(cls):
         # Use 4-bit on T4
         load_in_4bit = get_device_properties()[0] == "cuda" and get_device_properties()[1] < 8
+        torch_dtype = None if load_in_4bit else torch.float16
 
         if cls.model is None:
             cls.model = AyaVisionForConditionalGeneration.from_pretrained(
                 cls.model_checkpoint,
                 device_map=torch_device,
+                torch_dtype=torch_dtype,
                 load_in_4bit=load_in_4bit,
             )
         return cls.model
