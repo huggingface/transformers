@@ -272,8 +272,9 @@ class Bert2DTokenizerFast(BertTokenizerFast):
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[str] = None,
         return_attention_mask: Optional[bool] = None,
-    ) -> dict:
+        **kwargs) -> dict:
         # This _pad method is called by the superclass's padding logic.
         # It expects 'word_ids' and 'subword_ids' to already be in encoded_inputs
         # if they are to be padded by this method.
@@ -408,7 +409,7 @@ class Bert2DTokenizerFast(BertTokenizerFast):
                                 item_list = padded_super_inputs[key][i]
                                 diff = main_input_padded_len - len(item_list)
                                 if diff > 0:
-                                    if self.padding_side == "right":
+                                    if padding_side == "right":
                                         padded_super_inputs[key][i] = item_list + [padding_value_for_ids] * diff
                                     else:
                                         padded_super_inputs[key][i] = [padding_value_for_ids] * diff + item_list
@@ -416,7 +417,7 @@ class Bert2DTokenizerFast(BertTokenizerFast):
                             item_list = padded_super_inputs[key]
                             diff = main_input_padded_len - len(item_list)
                             if diff > 0:
-                                if self.padding_side == "right":
+                                if padding_side == "right":
                                     padded_super_inputs[key] = item_list + [padding_value_for_ids] * diff
                                 else:
                                     padded_super_inputs[key] = [padding_value_for_ids] * diff + item_list
