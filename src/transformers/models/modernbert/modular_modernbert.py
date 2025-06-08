@@ -25,7 +25,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -1042,7 +1042,9 @@ class ModernBertModel(ModernBertPreTrainedModel):
             attentions=all_self_attentions,
         )
 
-    def _update_attention_mask(self, attention_mask: torch.Tensor, input_shape: Tuple[int], output_attentions: bool) -> torch.Tensor:
+    def _update_attention_mask(
+        self, attention_mask: torch.Tensor, input_shape: Tuple[int], output_attentions: bool
+    ) -> torch.Tensor:
         if output_attentions:
             if self.config._attn_implementation == "sdpa":
                 logger.warning_once(
@@ -1061,9 +1063,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
         if self.config._attn_implementation == "sdpa" and attention_mask.dim() == 2:
             # Expand the attention mask for SDPA.
             # [bsz, seq_len] -> [bsz, 1, seq_len, seq_len]
-            global_attention_mask = _prepare_4d_attention_mask_for_sdpa(
-                attention_mask, self.dtype, tgt_len=input_shape[1]
-            )
+            global_attention_mask = _prepare_4d_attention_mask(attention_mask, self.dtype, tgt_len=input_shape[1])
         else:
             # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
             # ourselves in which case we just need to make it broadcastable to all heads.
