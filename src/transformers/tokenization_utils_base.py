@@ -24,11 +24,11 @@ import os
 import re
 import warnings
 from collections import UserDict
-from collections.abc import Mapping, Sized
+from collections.abc import Mapping, Sequence, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 from packaging import version
@@ -2086,7 +2086,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         chat_template_file = resolved_vocab_files.pop("chat_template_file", None)
         extra_chat_templates = [key for key in resolved_vocab_files if key.startswith("chat_template_")]
         if chat_template_file is not None:
-            with open(chat_template_file) as chat_template_handle:
+            with open(chat_template_file, encoding="utf-8") as chat_template_handle:
                 chat_templates["default"] = chat_template_handle.read()
         for extra_chat_template in extra_chat_templates:
             template_file = resolved_vocab_files.pop(extra_chat_template, None)

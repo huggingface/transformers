@@ -43,22 +43,20 @@ from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLRotaryEmbeddin
 
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...generation import GenerationMixin
+from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import (
     auto_docstring,
     check_torch_load_is_safe,
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
 )
 from ...utils.hub import cached_file
 
 
-if is_flash_attn_2_available():
-    from flash_attn.flash_attn_interface import flash_attn_varlen_func as flash_attn_varlen_func
-    from flash_attn.layers.rotary import apply_rotary_emb
+if is_flash_attn_available():
+    from ...modeling_flash_attention_utils import apply_rotary_emb, flash_attn_varlen_func
 else:
     flash_attn_varlen_func = None
     apply_rotary_emb = None
@@ -699,6 +697,8 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         spatial_merge_size (`int`, *optional*, defaults to 2):
             The size used for merging spatial dimensions.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
 
     Example:
 
@@ -767,6 +767,7 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
         audio_end_token_id=151648,
         initializer_range=0.02,
         spatial_merge_size=2,
+        layer_types=None,
         **kwargs,
     ):
         self.audio_token_index = audio_token_index
@@ -794,7 +795,7 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window
+        self.sliding_window = sliding_window if self.use_sliding_window else None
         self.max_window_layers = max_window_layers
 
         # for backward compatibility
@@ -815,6 +816,16 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
 
         self.initializer_range = initializer_range
         self.spatial_merge_size = spatial_merge_size
+
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention"
+                if self.sliding_window is not None and i >= self.max_window_layers
+                else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types)
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
@@ -1667,7 +1678,7 @@ class Qwen2_5OmniAudioFlashAttention2(Qwen2_5OmniAudioAttention):
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
 
     def forward(
         self,
