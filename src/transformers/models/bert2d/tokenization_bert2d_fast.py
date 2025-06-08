@@ -265,6 +265,87 @@ class Bert2DTokenizerFast(BertTokenizerFast):
 
         return result # type: ignore
 
+    def encode_plus(
+        self,
+        text: Union[TextInput, PreTokenizedInput],
+        text_pair: Optional[Union[TextInput, PreTokenizedInput]] = None,
+        add_special_tokens: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy, None] = None,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        is_split_into_words: bool = False,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        **kwargs,
+    ) -> BatchEncoding:
+        """
+        Tokenize and prepare for the model a sequence or a pair of sequences.
+        
+        This method includes generation of word_ids and subword_ids specific to Bert2D.
+        """
+        # Call parent's encode_plus first to get standard tokenization
+        result = super().encode_plus(
+            text=text,
+            text_pair=text_pair,
+            add_special_tokens=add_special_tokens,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            stride=stride,
+            is_split_into_words=is_split_into_words,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_tensors=None,  # Process as lists first, then convert to tensor if needed
+            return_token_type_ids=return_token_type_ids,
+            return_attention_mask=return_attention_mask,
+            return_overflowing_tokens=return_overflowing_tokens,
+            return_special_tokens_mask=return_special_tokens_mask,
+            return_offsets_mapping=return_offsets_mapping,
+            return_length=return_length,
+            verbose=verbose,
+            **kwargs,
+        )
+
+        # Get tokens for this single sequence
+        tokens = result.tokens()  # For single input, no index needed
+        
+        # Generate word_ids and subword_ids 
+        should_restart_word_ids_heuristic = text_pair is not None
+        
+        word_ids = create_word_ids(
+            tokens,
+            restart_new_sentence=should_restart_word_ids_heuristic,
+            seperator_token=self.sep_token,
+            padding_token=self.pad_token
+        )
+        
+        subword_ids = create_subword_ids(
+            tokens,
+            self.max_intermediate_subword_positions_per_word,
+            self.subword_embedding_order,
+            self.intermediate_subword_distribution_strategy,
+            cls_token=self.cls_token,
+            sep_token=self.sep_token,
+            pad_token=self.pad_token,
+        )
+        
+        # Add custom fields to result
+        result["word_ids"] = word_ids
+        result["subword_ids"] = subword_ids
+        
+        # Convert to tensors if requested
+        if return_tensors is not None:
+            result = result.convert_to_tensors(tensor_type=return_tensors)
+        
+        return result
+
     def _pad(
         self,
         encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
