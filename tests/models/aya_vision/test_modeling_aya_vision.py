@@ -330,19 +330,32 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 @require_read_token
 @require_torch
 class AyaVisionIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        self.model_checkpoint = "CohereForAI/aya-vision-8b"
+    @classmethod
+    def setUpClass(cls):
+        cls.model_checkpoint = "CohereForAI/aya-vision-8b"
+        cls.model = None
+
+    @classmethod
+    def tearDownClass(cls):
+        del cls.model_checkpoint
+        cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
+
+    @classmethod
+    def get_model(cls):
+        if cls.model is None:
+            cls.model = AyaVisionForConditionalGeneration.from_pretrained(
+                cls.model_checkpoint, device_map=torch_device, load_in_4bit=True,
+            )
+        return cls.model
 
     @slow
     @require_torch_accelerator
     def test_small_model_integration_forward(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        model = AyaVisionForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, device_map=torch_device, load_in_4bit=True,
-        )
+        model = self.get_model()
         messages = [
             {
                 "role": "user",
@@ -378,9 +391,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
     @require_deterministic_for_xpu
     def test_small_model_integration_generate_text_only(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        model = AyaVisionForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, device_map=torch_device, load_in_4bit=True,
-        )
+        model = self.get_model()
         messages = [
             {
                 "role": "user",
@@ -415,9 +426,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_small_model_integration_generate_chat_template(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        model = AyaVisionForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, device_map=torch_device, load_in_4bit=True,
-        )
+        model = self.get_model()
         messages = [
             {
                 "role": "user",
@@ -448,9 +457,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_small_model_integration_batched_generate(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        model = AyaVisionForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, device_map=torch_device, load_in_4bit=True,
-        )
+        model = self.get_model()
         # Prepare inputs
         messages = [
             [
@@ -514,9 +521,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
     @require_deterministic_for_xpu
     def test_small_model_integration_batched_generate_multi_image(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        model = AyaVisionForConditionalGeneration.from_pretrained(
-            self.model_checkpoint, device_map=torch_device, load_in_4bit=True,
-        )
+        model = self.get_model()
         # Prepare inputs
         messages = [
             [
