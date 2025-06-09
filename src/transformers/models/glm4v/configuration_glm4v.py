@@ -69,26 +69,26 @@ class Glm4vVisionConfig(PretrainedConfig):
 class Glm4vTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a
-    GLM-4V-0414 model according to the specified arguments, defining the model architecture. Instantiating a
+    GLM-4.1V model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
-    GLM-4V-9B-0414 [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
+    GLM-4.1V-9B-Thinking [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 152064):
+        vocab_size (`int`, *optional*, defaults to 151552):
             Vocabulary size of the Glm4v model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Glm4vModel`]
-        hidden_size (`int`, *optional*, defaults to 8192):
+        hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 29568):
+        intermediate_size (`int`, *optional*, defaults to 13696):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 80):
+        num_hidden_layers (`int`, *optional*, defaults to 40):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 64):
+        num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 8):
+        num_key_value_heads (`int`, *optional*, defaults to 2):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
@@ -108,16 +108,8 @@ class Glm4vTextConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
+        rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        use_sliding_window (`bool`, *optional*, defaults to `False`):
-            Whether to use sliding window attention.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
-        max_window_layers (`int`, *optional*, defaults to 80):
-            The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
-        layer_types (`list`, *optional*):
-            Attention pattern for each layer.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         rope_scaling (`Dict`, *optional*):
@@ -147,10 +139,10 @@ class Glm4vTextConfig(PretrainedConfig):
     ```python
     >>> from transformers import Glm4vTextModel, Glm4vConfig
 
-    >>> # Initializing a GLM-4V-0414 style configuration
+    >>> # Initializing a GLM-4.1V style configuration
     >>> configuration = Glm4vConfig()
 
-    >>> # Initializing a model from the GLM-4V-0414 style configuration
+    >>> # Initializing a model from the GLM-4.1V style configuration
     >>> model = Glm4vTextModel(configuration)
 
     >>> # Accessing the model configuration
@@ -191,10 +183,6 @@ class Glm4vTextConfig(PretrainedConfig):
         use_cache=True,
         tie_word_embeddings=False,
         rope_theta=1000000.0,
-        use_sliding_window=False,
-        sliding_window=4096,
-        max_window_layers=80,
-        layer_types=None,
         attention_dropout=0.0,
         rope_scaling=None,
         image_token_id=None,
@@ -207,9 +195,6 @@ class Glm4vTextConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window if self.use_sliding_window else None
-        self.max_window_layers = max_window_layers
 
         # for backward compatibility
         if num_key_value_heads is None:
@@ -224,14 +209,7 @@ class Glm4vTextConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.rope_scaling = rope_scaling
 
-        self.layer_types = layer_types
-        if self.layer_types is None:
-            self.layer_types = [
-                "sliding_attention"
-                if self.sliding_window is not None and i >= self.max_window_layers
-                else "full_attention"
-                for i in range(self.num_hidden_layers)
-            ]
+        self.layer_types = ["full_attention" for i in range(self.num_hidden_layers)]
         layer_type_validation(self.layer_types)
 
         # Validate the correctness of rotary position embeddings parameters
@@ -253,9 +231,9 @@ class Glm4vTextConfig(PretrainedConfig):
 class Glm4vConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a
-    GLM-4V-0414 model according to the specified arguments, defining the model architecture. Instantiating a
+    GLM-4.1V model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
-    GLM-4V-9B-0414 [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
+    GLM-4.1V-9B-Thinking [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -278,10 +256,10 @@ class Glm4vConfig(PretrainedConfig):
     ```python
     >>> from transformers import Glm4vForConditionalGeneration, Glm4vConfig
 
-    >>> # Initializing a GLM-4V-0414 style configuration
+    >>> # Initializing a GLM-4.1V style configuration
     >>> configuration = Glm4vConfig()
 
-    >>> # Initializing a model from the GLM-4V-9B-0414 style configuration
+    >>> # Initializing a model from the GLM-4.1V style configuration
     >>> model = Glm4vForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration

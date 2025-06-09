@@ -458,8 +458,8 @@ class Glm4vVisionTransformerPretrainedModel(Glm4vPreTrainedModel):
     config_class = Glm4vVisionConfig
     _no_split_modules = ["Glm4vVisionBlock"]
 
-    def __init__(self, config, *inputs, **kwargs) -> None:
-        super().__init__(config, *inputs, **kwargs)
+    def __init__(self, config, **kwargs) -> None:
+        super().__init__(config, **kwargs)
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = config.patch_size
 
@@ -1704,7 +1704,7 @@ class Glm4vForConditionalGeneration(Glm4vPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        # GLM-4V position_ids are prepareed with rope_deltas in forward
+        # GLM-4.1V position_ids are prepareed with rope_deltas in forward
         model_inputs["position_ids"] = None
 
         if cache_position[0] != 0:

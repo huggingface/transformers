@@ -228,7 +228,7 @@ class Glm4vVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
 
-    @unittest.skip("Skip for now, the test needs adjustment fo Glm-4v")
+    @unittest.skip("Skip for now, the test needs adjustment fo GLM-4.1V")
     def test_call_numpy_4_channels(self):
         for video_processing_class in self.video_processor_list:
             # Test that can process videos which have an arbitrary number of channels

@@ -28,7 +28,7 @@ import torch.utils.checkpoint
 from torch.nn import LayerNorm
 
 from transformers.models.glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm
-from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLTextConfig
+from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig
 from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
     Qwen2_5_VisionRotaryEmbedding,
@@ -51,10 +51,11 @@ from transformers.models.qwen2_5_vl.processing_qwen2_5_vl import (
 )
 
 from ...activations import ACT2FN
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_rope_utils import rope_config_validation
 from ...processing_utils import ImagesKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import LossKwargs, is_torchdynamo_compiling
@@ -99,29 +100,29 @@ class Glm4vVisionConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
 
 
-class Glm4vTextConfig(Qwen2_5_VLTextConfig):
+class Glm4vTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a
-    GLM-4V-0414 model according to the specified arguments, defining the model architecture. Instantiating a
+    GLM-4.1V model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
-    GLM-4V-9B-0414 [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
+    GLM-4.1V-9B-Thinking [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 152064):
+        vocab_size (`int`, *optional*, defaults to 151552):
             Vocabulary size of the Glm4v model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Glm4vModel`]
-        hidden_size (`int`, *optional*, defaults to 8192):
+        hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 29568):
+        intermediate_size (`int`, *optional*, defaults to 13696):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 80):
+        num_hidden_layers (`int`, *optional*, defaults to 40):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 64):
+        num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 8):
+        num_key_value_heads (`int`, *optional*, defaults to 2):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
@@ -141,16 +142,8 @@ class Glm4vTextConfig(Qwen2_5_VLTextConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
+        rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        use_sliding_window (`bool`, *optional*, defaults to `False`):
-            Whether to use sliding window attention.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
-        max_window_layers (`int`, *optional*, defaults to 80):
-            The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
-        layer_types (`list`, *optional*):
-            Attention pattern for each layer.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         rope_scaling (`Dict`, *optional*):
@@ -180,10 +173,10 @@ class Glm4vTextConfig(Qwen2_5_VLTextConfig):
     ```python
     >>> from transformers import Glm4vTextModel, Glm4vConfig
 
-    >>> # Initializing a GLM-4V-0414 style configuration
+    >>> # Initializing a GLM-4.1V style configuration
     >>> configuration = Glm4vConfig()
 
-    >>> # Initializing a model from the GLM-4V-0414 style configuration
+    >>> # Initializing a model from the GLM-4.1V style configuration
     >>> model = Glm4vTextModel(configuration)
 
     >>> # Accessing the model configuration
@@ -191,14 +184,94 @@ class Glm4vTextConfig(Qwen2_5_VLTextConfig):
     ```"""
 
     model_type = "glm4v_text"
+    base_config_key = "text_config"
+    keys_to_ignore_at_inference = ["past_key_values"]
+    # Default tensor parallel plan for base model `Glm4v`
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
+
+    def __init__(
+        self,
+        vocab_size=152064,
+        hidden_size=8192,
+        intermediate_size=29568,
+        num_hidden_layers=80,
+        num_attention_heads=64,
+        num_key_value_heads=8,
+        hidden_act="silu",
+        max_position_embeddings=32768,
+        initializer_range=0.02,
+        rms_norm_eps=1e-05,
+        use_cache=True,
+        tie_word_embeddings=False,
+        rope_theta=1000000.0,
+        attention_dropout=0.0,
+        rope_scaling=None,
+        image_token_id=None,
+        video_token_id=None,
+        **kwargs,
+    ):
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.rope_theta = rope_theta
+        self.attention_dropout = attention_dropout
+        self.rope_scaling = rope_scaling
+
+
+        self.layer_types = [
+                "full_attention"
+                for i in range(self.num_hidden_layers)
+        ]
+        layer_type_validation(self.layer_types)
+
+        # Validate the correctness of rotary position embeddings parameters
+        # BC: if there is a 'type' field, move it to 'rope_type'.
+        # and change type from 'mrope' to 'default' because `mrope` does default RoPE calculations
+        # one can set it to "linear"/"dynamic" etc. to have scaled RoPE
+        # TODO: @raushan update config in the hub
+        if self.rope_scaling is not None and "type" in self.rope_scaling:
+            if self.rope_scaling["type"] == "mrope":
+                self.rope_scaling["type"] = "default"
+            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_config_validation(self, ignore_keys={"mrope_section"})
+        self.image_token_id = image_token_id
+        self.video_token_id = video_token_id
+
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
 class Glm4vConfig(Qwen2_5_VLConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vModel`]. It is used to instantiate a
-    GLM-4V-0414 model according to the specified arguments, defining the model architecture. Instantiating a
+    GLM-4.1V model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
-    GLM-4V-9B-0414 [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
+    GLM-4.1V-9B-Thinking [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -221,10 +294,10 @@ class Glm4vConfig(Qwen2_5_VLConfig):
     ```python
     >>> from transformers import Glm4vForConditionalGeneration, Glm4vConfig
 
-    >>> # Initializing a GLM-4V-0414 style configuration
+    >>> # Initializing a GLM-4.1V style configuration
     >>> configuration = Glm4vConfig()
 
-    >>> # Initializing a model from the GLM-4V-9B-0414 style configuration
+    >>> # Initializing a model from the GLM-4.1V style configuration
     >>> model = Glm4vForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
@@ -496,8 +569,8 @@ class Glm4vVisionTransformerPretrainedModel(Glm4vPreTrainedModel):
     config_class = Glm4vVisionConfig
     _no_split_modules = ["Glm4vVisionBlock"]
 
-    def __init__(self, config, *inputs, **kwargs) -> None:
-        super().__init__(config, *inputs, **kwargs)
+    def __init__(self, config , **kwargs) -> None:
+        super().__init__(config, **kwargs)
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = config.patch_size
 
@@ -1242,7 +1315,7 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             **kwargs,
         )
 
-        # GLM-4V position_ids are prepareed with rope_deltas in forward
+        # GLM-4.1V position_ids are prepareed with rope_deltas in forward
         model_inputs["position_ids"] = None
 
         if cache_position[0] != 0:
