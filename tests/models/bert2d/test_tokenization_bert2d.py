@@ -361,10 +361,11 @@ class Bert2DTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_tokenizer_integration(self):
-        # This test ensures that the tokenizer works end-to-end with a realistic example
+        # This test ensures that the tokenizer works end-to-end with a realistic Turkish example
         tokenizer = Bert2DTokenizerFast.from_pretrained("yigitbekir/Bert2D-cased-Turkish-128K-WWM-NSW2")
 
-        text = "UNwant\u00e9d,running"
+        # Use Turkish text appropriate for the Turkish model
+        text = "Dünkü Amy Winehouse konserine gelirken bir anda fenalaştım."
         encoded = tokenizer.encode_plus(
             text,
             add_special_tokens=True,
@@ -372,9 +373,14 @@ class Bert2DTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
         # Decode back and check
-        decoded_tokens = tokenizer.convert_ids_to_tokens(encoded["input_ids"].tolist())
-        self.assertEqual(decoded_tokens, ["[CLS]", "un", "##want", "##ed", ",", "running", "[SEP]"])
+        decoded_tokens = tokenizer.convert_ids_to_tokens(encoded["input_ids"].squeeze().tolist())
 
-        # Check word_ids
-        expected_word_ids = torch.tensor([[0, 1, 1, 1, 2, 3, 4]])
-        self.assertTrue(torch.all(encoded["word_ids"] == expected_word_ids))
+        expected_tokens = ['[CLS]', 'Dünkü', 'Amy', 'Wine', '##house', 'konserine', 'gelirken', 'bir', 'anda', 'fena', '##laştı', '##m', '.', '[SEP]']
+        self.assertEqual(decoded_tokens, expected_tokens)
+
+        expected_word_ids = torch.tensor([ 0,  1,  2,  3,  3,  4,  5,  6,  7,  8,  8,  8,  9, 10])
+        self.assertTrue(torch.equal(encoded["word_ids"], expected_word_ids))
+
+        # Also verify that subword_ids are present and have the correct shape
+        self.assertIn("subword_ids", encoded)
+        self.assertEqual(encoded["subword_ids"].shape, encoded["input_ids"].shape)
