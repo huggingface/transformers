@@ -307,6 +307,9 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
         expected_output = "The image shows two cats lying on a pink blanket. The cat on the left is a tabby"
+
+        breakpoint()
+
         self.assertEqual(decoded_output, expected_output)
 
     def test_qwen2_small_model_integration_forward(self):
@@ -366,6 +369,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
+        breakpoint()
         self.assertEqual(decoded_output, expected_output)
 
     def test_qwen2_small_model_integration_generate_chat_template(self):
@@ -392,6 +396,9 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
         expected_output = "The image shows two cats lying on a pink blanket. The cat on the left is a tabby"
+
+        breakpoint()
+
         self.assertEqual(decoded_output, expected_output)
 
     @require_deterministic_for_xpu
@@ -417,6 +424,9 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         expected_output = "user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature's peace."  # fmt: skip
+
+        breakpoint()
+
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -613,6 +623,9 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
+
+        breakpoint()
+
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -701,6 +714,8 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             }
         )  # fmt: skip
         expected_logits = torch.tensor(expected_logits_all.get_expectation(), dtype=torch.float16)
+
+        breakpoint()
 
         # The original implementation and the transformers implementation do not match exactly, hence the higher tolerance.
         # The difference is likely due to the different implementations of the attention mechanism (different order of operations)
