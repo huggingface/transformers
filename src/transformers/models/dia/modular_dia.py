@@ -557,7 +557,9 @@ class DiaModel(DiaPreTrainedModel):
         # On default we initialize the decoder with bos tokens if nothing has been provided
         if decoder_input_ids is None:
             bsz, seq_len, channels = (encoder_outputs[0].shape[0], 1, self.config.decoder_config.num_channels)
-            decoder_input_ids = torch.full(size=(bsz, seq_len, channels), fill_value=self.config.bos_token_id, device=self.device)
+            decoder_input_ids = torch.full(
+                size=(bsz, seq_len, channels), fill_value=self.config.bos_token_id, device=self.device
+            )
 
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,

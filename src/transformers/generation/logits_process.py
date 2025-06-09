@@ -3030,7 +3030,9 @@ class DiaClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
 
         self.guidance_top_k = guidance_top_k
         if self.guidance_top_k is not None and self.guidance_top_k < 1:
-            raise ValueError(f"`guidance_top_k` has to be a strictly positive integer if given, but is {self.guidance_top_k}")
+            raise ValueError(
+                f"`guidance_top_k` has to be a strictly positive integer if given, but is {self.guidance_top_k}"
+            )
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
