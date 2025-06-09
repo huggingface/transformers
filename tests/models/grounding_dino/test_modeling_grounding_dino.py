@@ -60,7 +60,7 @@ def generate_fake_bounding_boxes(n_boxes):
     """Generate bounding boxes in the format (center_x, center_y, width, height)"""
     # Validate the input
     if not isinstance(n_boxes, int):
-        raise ValueError("n_boxes must be an integer")
+        raise TypeError("n_boxes must be an integer")
     if n_boxes <= 0:
         raise ValueError("n_boxes must be a positive integer")
 
