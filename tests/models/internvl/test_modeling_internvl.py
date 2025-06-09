@@ -369,7 +369,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
-        # breakpoint()
+        breakpoint()
         self.assertEqual(decoded_output, expected_output)
 
     def test_qwen2_small_model_integration_generate_chat_template(self):
@@ -425,7 +425,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         expected_output = "user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature's peace."  # fmt: skip
 
-        # breakpoint()
+        breakpoint()
 
         self.assertEqual(
             decoded_output,
@@ -624,7 +624,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
-        # breakpoint()
+        breakpoint()
 
         self.assertEqual(
             decoded_output,
