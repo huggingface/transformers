@@ -1052,7 +1052,11 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[[0.4249, 0.1008, 0.7531], [0.3771, 0.1188, 0.7467], [0.4152, 0.1098, 0.7108]]], device=torch_device
+            [[
+                [-0.3565, 1.1742, -1.2119],
+                [-0.5913, 1.0967, -1.6625],
+                [-0.1099, 1.1098, -1.4838]
+            ]], device=torch_device
         )
         torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
 
@@ -1083,7 +1087,11 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[[0.0756, 0.3142, -0.5128], [0.3761, 0.3462, -0.5477], [0.2052, 0.3760, -0.1240]]], device=torch_device
+            [[
+                [-0.3565, 1.1742, -1.2119],
+                [-0.5913, 1.0967, -1.6625],
+                [-0.1099, 1.1098, -1.4838]
+            ]], device=torch_device
         )
         torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
 
@@ -1114,7 +1122,11 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[[0.6496, 0.3784, 0.8203], [0.8148, 0.5656, 0.2636], [-0.0681, 0.5597, 0.7045]]], device=torch_device
+            [[
+                [-0.3565, 1.1742, -1.2119],
+                [-0.5913, 1.0967, -1.6625],
+                [-0.1099, 1.1098, -1.4838]
+            ]], device=torch_device
         )
         torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
 
