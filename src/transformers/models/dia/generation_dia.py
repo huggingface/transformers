@@ -266,8 +266,10 @@ class DiaGenerationMixin(GenerationMixin):
         custom_generate: Optional[str] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
-        decoder_input_ids = kwargs.get("decoder_input_ids", None)
-        decoder_input_length = decoder_input_ids.shape[1] if decoder_input_ids is not None else 0
+        # Use decoder mask to calculate padding lens
+        decoder_attention_mask = None
+        if kwargs is not None and "decoder_attention_mask" in kwargs:
+            decoder_attention_mask = kwargs.get("decoder_attention_mask")
 
         # TODO: find a way for generation mode to be forced to greedy / sample
 
@@ -294,28 +296,39 @@ class DiaGenerationMixin(GenerationMixin):
         else:
             output_sequences = output
 
-        # TODO: postprocessing needs to be rewritten as well
+        # TODO: check for correctness
+        # Reshape from 2D (bsz * channels, seq_len) to 3D (bsz, seq_len, channels)
+        bsz, num_channels = output_sequences.shape[0], self.config.decoder_config.num_channels
+        output_sequences = output_sequences.reshape(bsz, -1, num_channels)
+        seq_len = output_sequences.shape[1]
 
-        # 1 for bos token
-        output_sequences = output_sequences[:, 1 + decoder_input_length :]
-        delay_pattern = torch.tensor(self.config.delay_pattern, dtype=torch.long, device=output_sequences.device)
-        max_delay_pattern = delay_pattern.max().item()
+        # Calculate padding sizes based on the attention mask
+        if decoder_attention_mask is not None:
+            padding_lens = decoder_attention_mask.shape[-1] - decoder_attention_mask.sum(dim=-1)
+        else:
+            padding_lens = [0] * bsz
 
-        delay_precomp = self.build_revert_indices(
-            B=output_sequences.shape[0],
-            T=output_sequences.shape[1],
-            C=self.config.decoder_config.num_channels,
-            delay_pattern=delay_pattern,
+        # Revert delay
+        revert_precomp = self.build_revert_indices(
+            B=bsz,
+            T=seq_len,
+            C=num_channels,
+            delay_pattern=self.config.delay_pattern,
+            padding_lens=padding_lens,
         )
+
         output_sequences = self.revert_audio_delay(
-            output_sequences,
+            audio_BxTxC=output_sequences,
             pad_value=self.config.pad_token_id,
-            precomp=delay_precomp,
-            T=output_sequences.shape[1],
-        )
+            precomp=revert_precomp,
+            T=seq_len,
+        )[:, : -max(self.config.delay_pattern), :]
 
-        # see `DiaEosTokenCriteria` why we need to +1
-        output_sequences = output_sequences[:, -max_delay_pattern + 1 :]
+        # Cut out invalid values, e.g. audio bos/eos/pad
+        min_valid_index = 0
+        max_valid_index = 1023
+        invalid_mask = (output_sequences < min_valid_index) | (output_sequences > max_valid_index)
+        output_sequences[invalid_mask] = 0
 
         if return_dict_in_generate:
             output.sequences = output_sequences
@@ -422,7 +435,7 @@ class DiaGenerationMixin(GenerationMixin):
 
     @staticmethod
     def build_revert_indices(
-        B: int, T: int, C: int, delay_pattern: List[int], padding_sizes: List[int]
+        B: int, T: int, C: int, delay_pattern: List[int], padding_lens: List[int]
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Precompute indices for the revert operation using PyTorch.
@@ -436,13 +449,9 @@ class DiaGenerationMixin(GenerationMixin):
         # Use default device unless specified otherwise; assumes inputs might define device later
         device = None  # Or determine dynamically if needed, e.g., from a model parameter
 
-        # TODO: remove this when everything is properly adjusted
-        if padding_sizes is None:
-            padding_sizes = [0] * len(delay_pattern)
-
         # We shift the delays in order to account for left padding (if needed)
         delay_arr = torch.tensor(delay_pattern, dtype=torch.int32, device=device)
-        delay_arr = (delay_arr[None, :] + torch.tensor(padding_sizes, dtype=torch.int32)[:, None])[:, None, :]
+        delay_arr = (delay_arr[None, :] + torch.tensor(padding_lens, dtype=torch.int32)[:, None])[:, None, :]
 
         t_idx_BT1 = torch.broadcast_to(torch.arange(T, device=device).unsqueeze(0), [B, T])
         t_idx_BT1 = t_idx_BT1.unsqueeze(-1)
