@@ -372,7 +372,7 @@ class Bert2DTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
         # Decode back and check
-        decoded_tokens = tokenizer.convert_ids_to_tokens(encoded["input_ids"][0].tolist())
+        decoded_tokens = tokenizer.convert_ids_to_tokens(encoded["input_ids"].tolist())
         self.assertEqual(decoded_tokens, ["[CLS]", "un", "##want", "##ed", ",", "running", "[SEP]"])
 
         # Check word_ids

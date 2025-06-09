@@ -311,35 +311,33 @@ class Bert2DTokenizerFast(BertTokenizerFast):
 
         # Check if we have overflow tokens (multiple sequences in result)
         has_overflow = return_overflowing_tokens and "overflowing_tokens" in result
-        
+
         # Determine if result is batched (could be batched if overflow tokens are present)
         is_batched_output = (
-            isinstance(result["input_ids"], list) and 
-            result["input_ids"] and 
-            isinstance(result["input_ids"][0], list)
+            isinstance(result["input_ids"], list) and result["input_ids"] and isinstance(result["input_ids"][0], list)
         )
-        
+
         # If we have overflow tokens OR the result is already batched
         if has_overflow or is_batched_output:
             # We'll need to process each sequence separately
             batch_size = len(result["input_ids"]) if is_batched_output else 1 + len(result["overflowing_tokens"])
             batch_word_ids = []
             batch_subword_ids = []
-            
+
             for i in range(batch_size):
                 # Get tokens for this sequence
                 tokens = result.tokens(i)
-                
+
                 # Determine if this sequence contains multiple sentences
                 should_restart_word_ids_heuristic = tokens.count(self.sep_token) >= 2
-                
+
                 word_ids = create_word_ids(
                     tokens,
                     restart_new_sentence=should_restart_word_ids_heuristic,
                     seperator_token=self.sep_token,
                     padding_token=self.pad_token,
                 )
-                
+
                 subword_ids = create_subword_ids(
                     tokens,
                     self.max_intermediate_subword_positions_per_word,
@@ -349,27 +347,27 @@ class Bert2DTokenizerFast(BertTokenizerFast):
                     sep_token=self.sep_token,
                     pad_token=self.pad_token,
                 )
-                
+
                 batch_word_ids.append(word_ids)
                 batch_subword_ids.append(subword_ids)
-            
+
             # Add to result
             result["word_ids"] = batch_word_ids
             result["subword_ids"] = batch_subword_ids
         else:
             # Standard case - no overflow, single sequence
             tokens = result.tokens()
-            
+
             # Determine if this sequence contains multiple sentences
             should_restart_word_ids_heuristic = tokens.count(self.sep_token) >= 2
-            
+
             word_ids = create_word_ids(
                 tokens,
                 restart_new_sentence=should_restart_word_ids_heuristic,
                 seperator_token=self.sep_token,
                 padding_token=self.pad_token,
             )
-            
+
             subword_ids = create_subword_ids(
                 tokens,
                 self.max_intermediate_subword_positions_per_word,
@@ -379,7 +377,7 @@ class Bert2DTokenizerFast(BertTokenizerFast):
                 sep_token=self.sep_token,
                 pad_token=self.pad_token,
             )
-            
+
             # Add custom fields to result
             result["word_ids"] = word_ids
             result["subword_ids"] = subword_ids

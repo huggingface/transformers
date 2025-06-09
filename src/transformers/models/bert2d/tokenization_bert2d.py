@@ -21,7 +21,6 @@ from typing import List, Optional, Union
 # import shutil # Only needed for __main__
 from ...tokenization_utils_base import (
     BatchEncoding,
-    EncodedInput,
     PaddingStrategy,
     PreTokenizedInput,
     TensorType,
@@ -375,30 +374,30 @@ class Bert2DTokenizer(BertTokenizer):
         # logger.warning("self.init_kwargs not found or not a dict during Bert2DTokenizer __init__. Custom params might not be saved.")
 
     def __call__(
-            self,
-            text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput], None] = None,
-            text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
-            text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput], None] = None,
-            text_pair_target: Optional[
-                Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
-            ] = None,
-            add_special_tokens: bool = True,
-            padding: Union[bool, str, PaddingStrategy] = False,
-            truncation: Union[bool, str, TruncationStrategy, None] = None,
-            max_length: Optional[int] = None,
-            stride: int = 0,
-            is_split_into_words: bool = False,
-            pad_to_multiple_of: Optional[int] = None,
-            padding_side: Optional[str] = None,
-            return_tensors: Optional[Union[str, TensorType]] = None,
-            return_token_type_ids: Optional[bool] = None,
-            return_attention_mask: Optional[bool] = None,
-            return_overflowing_tokens: bool = False,
-            return_special_tokens_mask: bool = False,
-            return_offsets_mapping: bool = False,
-            return_length: bool = False,
-            verbose: bool = True,
-            **kwargs,
+        self,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput], None] = None,
+        text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput], None] = None,
+        text_pair_target: Optional[
+            Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
+        ] = None,
+        add_special_tokens: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy, None] = None,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        is_split_into_words: bool = False,
+        pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[str] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        **kwargs,
     ) -> BatchEncoding:
         batch_encoding_super = super().__call__(
             text=text,
@@ -539,32 +538,85 @@ class Bert2DTokenizer(BertTokenizer):
             **kwargs,
         )
 
-        # Get tokens from input_ids
-        tokens = self.convert_ids_to_tokens(result["input_ids"], skip_special_tokens=False)
+        # Check if we have overflow tokens (multiple sequences in result)
+        has_overflow = return_overflowing_tokens and "overflowing_tokens" in result
 
-        # Generate word_ids and subword_ids
-        should_restart_word_ids_heuristic = text_pair is not None
-
-        word_ids = create_word_ids(
-            tokens,
-            restart_new_sentence=should_restart_word_ids_heuristic,
-            seperator_token=self.sep_token,
-            padding_token=self.pad_token,
+        # Determine if result is batched (could be batched if overflow tokens are present)
+        is_batched_output = (
+            isinstance(result["input_ids"], list) and result["input_ids"] and isinstance(result["input_ids"][0], list)
         )
 
-        subword_ids = create_subword_ids(
-            tokens,
-            max_intermediate_subword_positions_per_word=self.max_intermediate_subword_positions_per_word,
-            subword_embedding_order=self.subword_embedding_order,
-            intermediate_subword_distribution_strategy=self.intermediate_subword_distribution_strategy,
-            cls_token=self.cls_token,
-            sep_token=self.sep_token,
-            pad_token=self.pad_token,
-        )
+        # If we have overflow tokens OR the result is already batched
+        if has_overflow or is_batched_output:
+            # We'll need to process each sequence separately
+            batch_size = len(result["input_ids"]) if is_batched_output else 1
+            batch_word_ids = []
+            batch_subword_ids = []
 
-        # Add custom fields to result
-        result["word_ids"] = word_ids
-        result["subword_ids"] = subword_ids
+            for i in range(batch_size):
+                # Get tokens for this sequence
+                tokens = self.convert_ids_to_tokens(
+                    result["input_ids"][i] if is_batched_output else result["input_ids"], skip_special_tokens=False
+                )
+
+                # Determine if this sequence contains multiple sentences by counting SEP tokens
+                should_restart_word_ids_heuristic = tokens.count(self.sep_token) >= 2
+
+                word_ids = create_word_ids(
+                    tokens,
+                    restart_new_sentence=should_restart_word_ids_heuristic,
+                    seperator_token=self.sep_token,
+                    padding_token=self.pad_token,
+                )
+
+                subword_ids = create_subword_ids(
+                    tokens,
+                    max_intermediate_subword_positions_per_word=self.max_intermediate_subword_positions_per_word,
+                    subword_embedding_order=self.subword_embedding_order,
+                    intermediate_subword_distribution_strategy=self.intermediate_subword_distribution_strategy,
+                    cls_token=self.cls_token,
+                    sep_token=self.sep_token,
+                    pad_token=self.pad_token,
+                )
+
+                batch_word_ids.append(word_ids)
+                batch_subword_ids.append(subword_ids)
+
+            # Add to result
+            if is_batched_output:
+                result["word_ids"] = batch_word_ids
+                result["subword_ids"] = batch_subword_ids
+            else:
+                # If input was single but we have overflow tokens, result should still be a list
+                result["word_ids"] = batch_word_ids[0]
+                result["subword_ids"] = batch_subword_ids[0]
+        else:
+            # Standard case - no overflow, single sequence
+            tokens = self.convert_ids_to_tokens(result["input_ids"], skip_special_tokens=False)
+
+            # Determine if this sequence contains multiple sentences by counting SEP tokens
+            should_restart_word_ids_heuristic = tokens.count(self.sep_token) >= 2
+
+            word_ids = create_word_ids(
+                tokens,
+                restart_new_sentence=should_restart_word_ids_heuristic,
+                seperator_token=self.sep_token,
+                padding_token=self.pad_token,
+            )
+
+            subword_ids = create_subword_ids(
+                tokens,
+                max_intermediate_subword_positions_per_word=self.max_intermediate_subword_positions_per_word,
+                subword_embedding_order=self.subword_embedding_order,
+                intermediate_subword_distribution_strategy=self.intermediate_subword_distribution_strategy,
+                cls_token=self.cls_token,
+                sep_token=self.sep_token,
+                pad_token=self.pad_token,
+            )
+
+            # Add custom fields to result
+            result["word_ids"] = word_ids
+            result["subword_ids"] = subword_ids
 
         # Convert to tensors if requested
         if return_tensors is not None:
@@ -621,16 +673,8 @@ class Bert2DTokenizer(BertTokenizer):
             **kwargs,
         )
 
-        # Determine if input contains pairs
-        has_pairs = False
-        if batch_text_or_text_pairs:
-            # Check if any item in the batch is a pair (tuple/list with 2 elements)
-            for item in batch_text_or_text_pairs:
-                if isinstance(item, (tuple, list)) and len(item) == 2:
-                    has_pairs = True
-                    break
-
         # Generate word_ids and subword_ids for each item in the batch
+        # Use the actual batch size from result["input_ids"], which includes overflow sequences
         batch_size = len(result["input_ids"])
         batch_word_ids = []
         batch_subword_ids = []
@@ -639,8 +683,8 @@ class Bert2DTokenizer(BertTokenizer):
             # Get tokens for this batch item
             tokens = self.convert_ids_to_tokens(result["input_ids"][i], skip_special_tokens=False)
 
-            # Generate word_ids and subword_ids
-            should_restart_word_ids_heuristic = has_pairs
+            # Determine if this sequence contains multiple sentences by counting SEP tokens
+            should_restart_word_ids_heuristic = tokens.count(self.sep_token) >= 2
 
             word_ids = create_word_ids(
                 tokens,
@@ -682,85 +726,3 @@ __all__ = [
     "get_uniform_id",
     "get_ids_from_subwords",
 ]
-
-# if __name__ == "__main__":
-#     # This block is commented out as requested for cleaner debugging of imports/tests.
-#     # To re-enable, ensure 'os' and 'shutil' are imported at the top.
-#     print("Running Bert2DTokenizer self-test...")
-
-#     tmpdirname_main = "./tmp_bert2d_main_test"
-#     os.makedirs(tmpdirname_main, exist_ok=True)
-#     vocab_tokens_main = [
-#         "[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]",
-#         "un", "##want", "##ed",
-#         "runn", "##ing",
-#         "hello", "world"
-#     ]
-#     vocab_file_main = os.path.join(tmpdirname_main, VOCAB_FILES_NAMES["vocab_file"])
-#     with open(vocab_file_main, "w", encoding="utf-8") as vocab_writer:
-#         vocab_writer.write("\n".join(vocab_tokens_main) + "\n")
-
-#     print(f"\nCreated dummy vocab file: {vocab_file_main}")
-
-#     try:
-#         print("\nInstantiating Bert2DTokenizer...")
-#         # Set a higher log level for transformers to see our debug messages
-#         # logging.set_verbosity_debug() # or logging.set_verbosity_info()
-#         # Or, specifically for this logger:
-#         # logging.get_logger("transformers.models.bert2d.tokenization_bert2d").setLevel(logging.DEBUG)
-
-#         tokenizer_main = Bert2DTokenizer(vocab_file=vocab_file_main)
-#         print("Bert2DTokenizer instantiated successfully.")
-#         print(f"Tokenizer model_input_names: {tokenizer_main.model_input_names}")
-#         assert "word_ids" in tokenizer_main.model_input_names
-#         assert "subword_ids" in tokenizer_main.model_input_names
-
-#         sample_text = "unwanted running"
-#         print(f"\nTokenizing sample text: '{sample_text}'")
-
-#         encoded_output = tokenizer_main(sample_text, add_special_tokens=True)
-
-#         print("\nEncoded output (lists):")
-#         for key, value in encoded_output.items():
-#             print(f"  {key}: {value}")
-
-#         assert "input_ids" in encoded_output, "input_ids missing"
-#         assert "word_ids" in encoded_output, "word_ids missing from output"
-#         assert "subword_ids" in encoded_output, "subword_ids missing from output"
-
-#         expected_input_ids = [1, 5, 6, 7, 8, 9, 2]
-#         expected_word_ids  = [0, 1, 1, 1, 2, 2, 3]
-#         expected_subword_ids = [0, 0, 2, 1, 0, 1, 0]
-
-#         assert encoded_output["input_ids"] == expected_input_ids, f"Mismatch in input_ids. Got {encoded_output['input_ids']}"
-#         assert encoded_output["word_ids"] == expected_word_ids, f"Mismatch in word_ids. Got {encoded_output['word_ids']}"
-#         assert encoded_output["subword_ids"] == expected_subword_ids, f"Mismatch in subword_ids. Got {encoded_output['subword_ids']}"
-
-#         print("\nList output assertions passed.")
-
-#         print("\nTesting with return_tensors='pt'...")
-#         encoded_output_pt = tokenizer_main(sample_text, add_special_tokens=True, return_tensors="pt")
-#         print("Encoded output (PyTorch Tensors):")
-#         for key, value in encoded_output_pt.items():
-#             print(f"  {key}: {value} (shape: {value.shape})")
-
-#         assert "word_ids" in encoded_output_pt, "word_ids missing from PT output"
-#         assert "subword_ids" in encoded_output_pt, "subword_ids missing from PT output"
-#         assert isinstance(encoded_output_pt["word_ids"], torch.Tensor), "word_ids is not a Tensor"
-
-#         assert torch.equal(encoded_output_pt["input_ids"], torch.tensor(expected_input_ids)), "PT input_ids mismatch"
-#         assert torch.equal(encoded_output_pt["word_ids"], torch.tensor(expected_word_ids)), "PT word_ids mismatch"
-#         assert torch.equal(encoded_output_pt["subword_ids"], torch.tensor(expected_subword_ids)), "PT subword_ids mismatch"
-#         print("PyTorch tensor output assertions passed.")
-
-#         print("\nBert2DTokenizer self-test completed successfully!")
-
-#     except Exception as e:
-#         print(f"\nError during Bert2DTokenizer self-test: {e}")
-#         import traceback
-#         traceback.print_exc()
-#     finally:
-#         if os.path.exists(tmpdirname_main):
-#             shutil.rmtree(tmpdirname_main)
-#             print(f"\nCleaned up dummy vocab directory: {tmpdirname_main}")
-
