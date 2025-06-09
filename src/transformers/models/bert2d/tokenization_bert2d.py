@@ -490,10 +490,10 @@ class Bert2DTokenizer(BertTokenizer):
         if return_tensors is not None:
             if return_tensors == "pt":
                 import torch
-                
+
                 # Convert to tensors first using standard method
                 batch_encoding_super = batch_encoding_super.convert_to_tensors(tensor_type=return_tensors)
-                
+
                 # If this is a single input (not batched), ensure all tensors have batch dimension
                 if not is_batched:
                     for key, value in batch_encoding_super.items():
@@ -637,10 +637,10 @@ class Bert2DTokenizer(BertTokenizer):
         if return_tensors is not None:
             if return_tensors == "pt":
                 import torch
-                
+
                 # Convert to tensors first using standard method
                 result = result.convert_to_tensors(tensor_type=return_tensors)
-                
+
                 # For single inputs (not batched or with overflow), ensure all tensors have batch dimension
                 if not is_batched_output and not has_overflow:
                     for key, value in result.items():
@@ -822,10 +822,10 @@ class Bert2DTokenizer(BertTokenizer):
         if return_tensors is not None:
             if return_tensors == "pt":
                 import torch
-                
+
                 # Convert to tensors first using standard method
                 prepared_inputs = prepared_inputs.convert_to_tensors(tensor_type=return_tensors)
-                
+
                 # If prepend_batch_axis is False, we need to ensure all tensors have batch dimension
                 if not prepend_batch_axis:
                     for key, value in prepared_inputs.items():

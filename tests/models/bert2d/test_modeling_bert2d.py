@@ -1053,11 +1053,7 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[
-                [-0.3565, 1.1742, -1.2119],
-                [-0.5913, 1.0967, -1.6625],
-                [-0.1099, 1.1098, -1.4838]
-            ]], device=torch_device
+            [[[-0.3565, 1.1742, -1.2119], [-0.5913, 1.0967, -1.6625], [-0.1099, 1.1098, -1.4838]]], device=torch_device
         )
         torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
 
@@ -1088,11 +1084,7 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[
-                [-0.3565, 1.1742, -1.2119],
-                [-0.5913, 1.0967, -1.6625],
-                [-0.1099, 1.1098, -1.4838]
-            ]], device=torch_device
+            [[[-0.3565, 1.1742, -1.2119], [-0.5913, 1.0967, -1.6625], [-0.1099, 1.1098, -1.4838]]], device=torch_device
         )
         torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
 
@@ -1123,11 +1115,7 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[
-                [-0.3565, 1.1742, -1.2119],
-                [-0.5913, 1.0967, -1.6625],
-                [-0.1099, 1.1098, -1.4838]
-            ]], device=torch_device
+            [[[-0.3565, 1.1742, -1.2119], [-0.5913, 1.0967, -1.6625], [-0.1099, 1.1098, -1.4838]]], device=torch_device
         )
         torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
 
@@ -1228,10 +1216,10 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
         # Find the position of the mask token
         mask_token_id = tokenizer.mask_token_id
         mask_positions = (inputs_dict["input_ids"] == mask_token_id).nonzero(as_tuple=True)
-        
+
         if len(mask_positions[0]) == 0:
             self.fail("No [MASK] token found in the tokenized input!")
-            
+
         mask_position = mask_positions[1][0].item()
 
         with torch.no_grad():
@@ -1243,7 +1231,7 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
                 subword_ids=inputs_dict["subword_ids"],
             ).logits
         eg_predicted_mask_tokens = tokenizer.decode(logits[0, mask_position].topk(5).indices).split()
-        self.assertEqual(eg_predicted_mask_tokens, ['gazetecilik', 'öğretmenlik', 'ticaret', 'belli', 'polislik'])
+        self.assertEqual(eg_predicted_mask_tokens, ["gazetecilik", "öğretmenlik", "ticaret", "belli", "polislik"])
 
         export_args = (
             inputs_dict["input_ids"],
