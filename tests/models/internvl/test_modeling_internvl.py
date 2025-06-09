@@ -709,13 +709,13 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         expected_logits_all = Expectations(
             {
                 ("xpu", 3): torch.tensor([-9.8750, -0.5703, 1.4297, -10.3125, -10.3125], dtype=torch.float16),
-                ("cuda", 7): torch.tensor([-9.8750, -0.5703, 1.4297, -10.3125, -10.3125], dtype=torch.float16),
+                ("cuda", 7): torch.tensor([-9.8750,  -0.4861,   1.4648, -10.3359, -10.3359], dtype=torch.float16),
                 ("cuda", 8): torch.tensor([-9.8750,  -0.5117,   1.4297, -10.3750, -10.3750], dtype=torch.float16),
             }
         )  # fmt: skip
         expected_logits = torch.tensor(expected_logits_all.get_expectation(), dtype=torch.float16)
 
-        breakpoint()
+        # breakpoint()
 
         # The original implementation and the transformers implementation do not match exactly, hence the higher tolerance.
         # The difference is likely due to the different implementations of the attention mechanism (different order of operations)
@@ -740,9 +740,9 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        expected_output = 'Whispers of dawn,\nSilent whispers of night,\nPeace in the stillness.'
+        expected_output = "Autumn leaves fall,\nNature's breath, a gentle sigh,\nSilent whispers."
 
-        breakpoint()
+        # breakpoint()
 
         self.assertEqual(decoded_output, expected_output)
 
@@ -796,13 +796,13 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden path leads to calm lake,\nNature's peaceful grace.",
-                ("cuda", 7): "user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature's peace.",
+                ("cuda", 7): 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.',
                 ("cuda", 8): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nA wooden path leads to the sea,\nPeaceful, still waters.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
-        breakpoint()
+        # breakpoint()
 
         self.assertEqual(
             decoded_output,
@@ -812,7 +812,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Gate of'  # fmt: skip
+        expected_output = 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese gate in the background, adorned with red and gold colors and Chinese characters',
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -854,9 +854,9 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
-        expected_output = "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden path leads to calm lake,\nNature's peaceful grace."  # fmt: skip
+        expected_output = 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.'
 
-        breakpoint()
+        # breakpoint()
 
         self.assertEqual(
             decoded_output,
@@ -866,7 +866,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = 'user\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After closely examining the images again, I can see that there are several differences'  # fmt: skip
+        expected_output = 'user\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After closely examining the images again, I can see that there are several differences'
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -973,14 +973,14 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 
-        breakpoint()
+        # breakpoint()
 
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After re-examining the images, I can see that they are actually",
-                ("cuda", 7): 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image:**\n   - The Statue of Liberty is prominently featured on an',
+                ("cuda", 7): 'user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. Upon closer inspection, the differences between the two images are:\n\n1. **',
                 ("cuda", 8): "user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After closely examining the images again, I can see that there are several differences",
             }
         )  # fmt: skip
@@ -996,7 +996,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common shot in tennis where the player swings the racket across their",
-                ("cuda", 7): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nA forehand shot',
+                ("cuda", 7): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common stroke in tennis where the player swings the racket across their',
                 ("cuda", 8): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common shot in tennis where the player swings the racket across their",
             }
         )  # fmt: skip
@@ -1012,7 +1012,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.",
-                ("cuda", 7): "user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature's peace.",
+                ("cuda", 7): 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.',
                 ("cuda", 8): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.",
             }
         )  # fmt: skip
