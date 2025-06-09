@@ -1293,6 +1293,7 @@ class ModelTesterMixin:
                     "input_values",
                     "inputs_embeds",
                     "pixel_values",
+                    "pixel_values_videos",
                     "token_type_ids",
                     "visual_feats",
                     "visual_pos",

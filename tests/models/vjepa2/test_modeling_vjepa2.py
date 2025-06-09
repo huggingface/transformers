@@ -99,11 +99,11 @@ class VJEPA2ModelTester:
         self.mask_length = num_patches
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor(
+        pixel_values_videos = floats_tensor(
             [
                 self.batch_size,
-                self.num_channels,
                 self.num_frames,
+                self.num_channels,
                 self.image_size,
                 self.image_size,
             ]
@@ -111,7 +111,7 @@ class VJEPA2ModelTester:
 
         config = self.get_config()
 
-        return config, pixel_values
+        return config, pixel_values_videos
 
     def get_config(self):
         return VJEPA2Config(
@@ -132,11 +132,11 @@ class VJEPA2ModelTester:
             pred_num_mask_tokens=self.pred_num_mask_tokens,
         )
 
-    def create_and_check_model(self, config, pixel_values):
+    def create_and_check_model(self, config, pixel_values_videos):
         model = VJEPA2Model(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values)
+        result = model(pixel_values_videos)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
             (self.batch_size, self.seq_length, self.hidden_size),
@@ -146,9 +146,9 @@ class VJEPA2ModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         (
             config,
-            pixel_values,
+            pixel_values_videos,
         ) = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values}
+        inputs_dict = {"pixel_values_videos": pixel_values_videos}
         return config, inputs_dict
 
 
@@ -227,6 +227,14 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model = VJEPA2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    # @unittest.skip(reason="Permuting pixel_values_videos within VJEPA2Embedding breaks this test.")
+    # def test_torch_fx(self):
+    #     pass
+
+    # @unittest.skip(reason="Permuting pixel_values_videos within VJEPA2Embedding breaks this test.")
+    # def test_torch_fx_output_loss(self):
+    #     pass
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():
@@ -261,12 +269,12 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
         video_processor = self.default_video_processor
         image = prepare_img()
         inputs = video_processor(image, return_tensors="pt").to(torch_device)
-        pixel_values = inputs.pixel_values
-        pixel_values = pixel_values.repeat(1, 1, model.config.frames_per_clip, 1, 1)
+        pixel_values_videos = inputs.pixel_values_videos
+        pixel_values_videos = pixel_values_videos.repeat(1, model.config.frames_per_clip, 1, 1, 1)
 
         # forward pass
         with torch.no_grad():
-            outputs = model(pixel_values)
+            outputs = model(pixel_values_videos)
 
         # verify the last hidden states
         expected_shape = torch.Size((1, 8192, 1024))
@@ -289,11 +297,11 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
         video_processor = self.default_video_processor
         video = prepare_random_video()
         inputs = video_processor(video, return_tensors="pt").to(torch_device)
-        pixel_values = inputs.pixel_values
+        pixel_values_videos = inputs.pixel_values_videos
 
         # forward pass
         with torch.no_grad():
-            outputs = model(pixel_values)
+            outputs = model(pixel_values_videos)
 
         # verify the last hidden states
         expected_shape = torch.Size((1, 2048, 1024))

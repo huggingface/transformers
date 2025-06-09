@@ -1,10 +1,13 @@
 ## HF Conversion script
 
 import argparse
+import os
+import tempfile
 from pathlib import Path
 
 import requests
 import torch
+from huggingface_hub import HfApi
 from PIL import Image
 
 from transformers import VJEPA2Config, VJEPA2Model, VJEPA2VideoProcessor
@@ -13,6 +16,22 @@ from transformers.models.vjepa2.modeling_vjepa2 import apply_masks
 
 HUB_REPO = "/home/koustuvs/mlp/jepa-oss"
 HUB_SOURCE = "local"
+
+HUB_MODELS = {
+    "vit_large": "facebook/vjepa2-vitl-fpc64-256",
+    "vit_huge": "facebook/vjepa2-vith-fpc64-256",
+    "vit_giant": "facebook/vjepa2-vitg-fpc64-256",
+    "vit_giant_384": "facebook/vjepa2-vitg-fpc64-384",
+}
+
+S3_MODELS = {
+    "vit_large": "https://dl.fbaipublicfiles.com/vjepa2/vitl.pt",
+    "vit_huge": "https://dl.fbaipublicfiles.com/vjepa2/vith.pt",
+    "vit_giant": "https://dl.fbaipublicfiles.com/vjepa2/vitg.pt",
+    "vit_giant_384": "https://dl.fbaipublicfiles.com/vjepa2/vitg-384.pt",
+}
+
+TOKEN = os.environ.get("HF_TOKEN", None)
 
 
 def get_vjepa2_config(model_name):
@@ -189,8 +208,26 @@ def prepare_img():
     return image
 
 
+def upload_original_ckpts(model_name):
+    hf_repo = HUB_MODELS[model_name]
+    original_ckpt = S3_MODELS[model_name]
+    print(f"Uploading original checkpoint for vjepa2 {model_name} to {hf_repo}/original/")
+    with tempfile.NamedTemporaryFile() as fn:
+        local_path = fn.name
+        torch.hub.download_url_to_file(original_ckpt, local_path)
+        api = HfApi()
+        api.upload_file(
+            repo_id=hf_repo,
+            path_or_fileobj=local_path,
+            path_in_repo="original/model.pth",
+            repo_type="model",
+            token=TOKEN,
+        )
+        print("Uploading complete")
+
+
 @torch.no_grad()
-def convert_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=False):
+def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=False):
     """
     Copy/paste/tweak model's weights to our VJEPA2 structure.
     """
@@ -221,31 +258,31 @@ def convert_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
     crop_size = config.crop_size
     processor = VJEPA2VideoProcessor(crop_size=crop_size)
     pr_out = processor(image, return_tensors="pt")
-    pixel_values = pr_out.pixel_values
+    pixel_values_videos = pr_out.pixel_values_videos
 
     with torch.no_grad():
         # reshape and move to gpu
-        if pixel_values.size(2) == 1:
-            pixel_values = pixel_values.repeat(1, 1, config.frames_per_clip, 1, 1)
-        # pixel_values = pixel_values.permute(0, 2, 1, 3, 4)  # B x C x T x H x W
-        pixel_values = pixel_values.to(device="cuda", dtype=torch.float32)
+        if pixel_values_videos.size(1) == 1:
+            pixel_values_videos = pixel_values_videos.repeat(1, config.frames_per_clip, 1, 1, 1)
+        # pixel_values_videos = pixel_values_videos.permute(0, 2, 1, 3, 4)  # B x C x T x H x W
+        pixel_values_videos = pixel_values_videos.to(device="cuda", dtype=torch.float32)
         original_encoder = original_encoder.to(device="cuda", dtype=torch.float32)
         original_predictor = original_predictor.to(device="cuda", dtype=torch.float32)
         model = model.to(device="cuda", dtype=torch.float32)
         # forward
-        original_encoder_outputs = original_encoder(pixel_values)
+        original_encoder_outputs = original_encoder(pixel_values_videos.permute(0, 2, 1, 3, 4))
         B, N, _ = original_encoder_outputs.shape
         # test full mask
-        context_mask = [torch.arange(N, device=pixel_values.device).unsqueeze(0).repeat((B, 1))]
+        context_mask = [torch.arange(N, device=pixel_values_videos.device).unsqueeze(0).repeat((B, 1))]
         predictor_mask = context_mask
         original_predictor_outputs = original_predictor(original_encoder_outputs, context_mask, predictor_mask)
-        outputs = model(pixel_values, context_mask=context_mask, target_mask=predictor_mask)
+        outputs = model(pixel_values_videos, context_mask=context_mask, target_mask=predictor_mask)
         assert torch.allclose(outputs.last_hidden_state, original_encoder_outputs, atol=1e-3)
         predictor_outputs = outputs.predictor_output
         assert torch.allclose(predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3)
         # test partial mask
         window_size = 256
-        mask = torch.arange(N, device=pixel_values.device).unsqueeze(0)
+        mask = torch.arange(N, device=pixel_values_videos.device).unsqueeze(0)
         context_mask = [mask[:, :window_size].repeat((B, 1))]
         predictor_mask = [mask[:, window_size : window_size * 2].repeat((B, 1))]
         original_predictor_outputs = original_predictor(
@@ -253,7 +290,7 @@ def convert_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
             context_mask,
             predictor_mask,
         )
-        outputs = model(pixel_values, context_mask=context_mask, target_mask=predictor_mask)
+        outputs = model(pixel_values_videos, context_mask=context_mask, target_mask=predictor_mask)
         assert torch.allclose(outputs.last_hidden_state, original_encoder_outputs, atol=1e-3)
         predictor_outputs = outputs.predictor_output
         assert torch.allclose(predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3)
@@ -305,6 +342,9 @@ if __name__ == "__main__":
         action="store_true",
         help="Whether or not to push the converted model to the 🤗 hub.",
     )
+    parser.add_argument("--upload_original", action="store_true", help="upload the original checkpoint")
 
     args = parser.parse_args()
-    convert_vjepa2_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_and_test_vjepa2_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    if args.upload_original:
+        upload_original_ckpts(args.model_name)

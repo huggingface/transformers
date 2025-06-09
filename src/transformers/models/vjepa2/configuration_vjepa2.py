@@ -16,8 +16,8 @@ class VJEPA2Config(PretrainedConfig):
     Args:
         model_name (`str`, *optional*, defaults to `"vit_large"`): <fill_docstring>
         patch_size (`int`, *optional*, defaults to 16): <fill_docstring>
-        crop_size (`int`, *optional*, defaults to 224): <fill_docstring>
-        frames_per_clip (`int`, *optional*, defaults to 16): <fill_docstring>
+        crop_size (`int`, *optional*, defaults to 256): <fill_docstring>
+        frames_per_clip (`int`, *optional*, defaults to 64): <fill_docstring>
         tubelet_size (`int`, *optional*, defaults to 2): <fill_docstring>
         use_sdpa (`bool`, *optional*, defaults to `False`): <fill_docstring>
         use_SiLU (`bool`, *optional*, defaults to `False`): <fill_docstring>
@@ -39,13 +39,11 @@ class VJEPA2Config(PretrainedConfig):
         use_rope (`bool`, *optional*, defaults to `False`): <fill_docstring>
         pred_hidden_size (`int`, *optional*, defaults to 384): <fill_docstring>
         pred_num_attention_heads (`int`, *optional*, defaults to 12): <fill_docstring>
-        pred_num_hidden_layers (`int`, *optional*, defaults to 6): <fill_docstring>
+        pred_num_hidden_layers (`int`, *optional*, defaults to 12): <fill_docstring>
         pred_use_mask_tokens (`bool`, *optional*, defaults to `False`): <fill_docstring>
-        pred_num_mask_tokens (`int`, *optional*, defaults to 2): <fill_docstring>
+        pred_num_mask_tokens (`int`, *optional*, defaults to 10): <fill_docstring>
         pred_zero_init_mask_tokens (`bool`, *optional*, defaults to `True`): <fill_docstring>
         pred_mlp_ratio (`float`, *optional*, defaults to 4.0): <fill_docstring>
-        use_predictor_loss (`bool`, *optional*, defaults to `False`): <fill_docstring>
-        predictor_loss_window (`int`, *optional*, defaults to 256): <fill_docstring>
 
     Example:
 

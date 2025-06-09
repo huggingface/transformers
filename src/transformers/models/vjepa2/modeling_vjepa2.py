@@ -210,21 +210,24 @@ class VJEPA2Embeddings(nn.Module):
 
     def forward(
         self,
-        pixel_values: torch.Tensor,
+        pixel_values_videos: torch.Tensor,
     ) -> torch.Tensor:
-        batch_size, c, t, height, width = pixel_values.shape
+        pixel_values_videos = pixel_values_videos.permute(
+            0, 2, 1, 3, 4
+        )  # Batch x Channels x Temporal frames x Height x Width
+        batch_size, c, t, height, width = pixel_values_videos.shape
         if t < self.config.tubelet_size:
             # For some cases, if the input vision (image/video) consists of num_frames < tubelet_size, then embedding lookup fails. In these cases, we duplicate the frames.
-            pixel_values = pixel_values.repeat(1, 1, self.config.tubelet_size, 1, 1)
+            pixel_values_videos = pixel_values_videos.repeat(1, 1, self.config.tubelet_size, 1, 1)
 
         target_dtype = self.patch_embeddings.proj.weight.dtype
 
-        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+        embeddings = self.patch_embeddings(pixel_values_videos.to(dtype=target_dtype))
 
         # add positional encoding to each token
         # ignore if we are using Rope
         if not self.config.use_rope:
-            embeddings = embeddings + self.interpolate_pos_encoding(pixel_values, self.position_embeddings)
+            embeddings = embeddings + self.interpolate_pos_encoding(pixel_values_videos, self.position_embeddings)
 
         return embeddings
 
@@ -730,7 +733,7 @@ class VJEPA2Encoder(nn.Module):
 
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
+        pixel_values_videos: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -739,7 +742,7 @@ class VJEPA2Encoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        hidden_states = self.embeddings(pixel_values)
+        hidden_states = self.embeddings(pixel_values_videos)
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -1038,7 +1041,7 @@ class VJEPA2Predictor(nn.Module):
 class VJEPA2PreTrainedModel(PreTrainedModel):
     config_class = VJEPA2Config
     base_model_prefix = "vjepa"
-    main_input_name = "pixel_values"
+    main_input_name = "pixel_values_videos"
     supports_gradient_checkpointing = True
     _no_split_modules = ["VJEPA2SwiGLUFFN"]
     _supports_sdpa = True
@@ -1194,7 +1197,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
+        pixel_values_videos: torch.Tensor,
         context_head_mask: Optional[torch.Tensor] = None,
         context_mask: Optional[List[torch.Tensor]] = None,
         target_head_mask: Optional[torch.Tensor] = None,
@@ -1205,8 +1208,10 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, VJEPA2OutputWithMaskedInput]:
         r"""
+        pixel_values_videos (`torch.Tensor` with shape `[batch size x num_frames x num_channels x height x width]`, required)
+            The input video pixels which is processed by VJEPA2VideoProcessor.
         context_head_mask (`torch.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
-            The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard) for the context.
+                The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard) for the context.
         target_head_mask (`torch.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
             The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard) for the target.
         context_mask (`torch.Tensor` with shape `[batch_size, patch_size, 1]`, *optional*):
@@ -1222,15 +1227,15 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
+        if pixel_values_videos is None:
+            raise ValueError("You have to specify pixel_values_videos")
 
         # Prepare head mask if needed
         context_head_mask = _convert_head_mask_to_5d(context_head_mask, self.config.num_hidden_layers)
         target_head_mask = _convert_head_mask_to_5d(target_head_mask, self.config.pred_num_hidden_layers)
 
         encoder_outputs = self.encoder(
-            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
             head_mask=context_head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1239,10 +1244,10 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         sequence_output = encoder_outputs[0]  # hidden_states
 
         if context_mask is None and target_mask is None:
-            B = pixel_values.size(0)
+            B = pixel_values_videos.size(0)
             N = sequence_output.size(1)  # ensure we are using dynamic patch size
-            context_mask = [torch.arange(N, device=pixel_values.device).unsqueeze(0).repeat((B, 1))]
-            target_mask = [torch.arange(N, device=pixel_values.device).unsqueeze(0).repeat((B, 1))]
+            context_mask = [torch.arange(N, device=pixel_values_videos.device).unsqueeze(0).repeat((B, 1))]
+            target_mask = [torch.arange(N, device=pixel_values_videos.device).unsqueeze(0).repeat((B, 1))]
 
         if not skip_predictor:
             predictor_outputs = self.predictor(
@@ -1287,8 +1292,8 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
 
         return encoder_output
 
-    def get_vision_features(self, pixel_values) -> torch.Tensor:
-        encoder_outputs, _ = self.forward(pixel_values)
+    def get_vision_features(self, pixel_values_videos) -> torch.Tensor:
+        encoder_outputs, _ = self.forward(pixel_values_videos)
         return encoder_outputs.last_hidden_state
 
 
