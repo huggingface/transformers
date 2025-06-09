@@ -146,10 +146,8 @@ class Glm4vProcessor(ProcessorMixin):
 
         if videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            timestamps = videos_inputs["timestamps"]
+            timestamps = videos_inputs.pop("timestamps")
             video_grid_thw = videos_inputs["video_grid_thw"]
-
-            videos_inputs = {k: v for k, v in videos_inputs.items() if k not in ["timestamps"]}
         else:
             videos_inputs = {}
             timestamps = []

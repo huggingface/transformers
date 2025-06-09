@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The ZhipuAI Inc. team and HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
 # and OPT implementations in this library. It has been modified from its
@@ -17,10 +17,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""video processor class for Qwen2-VL."""
+"""video processor class for GLM-4.1V."""
 
 import math
 from typing import List, Optional, Union
+from .image_processing_glm4v import smart_resize
 
 import numpy as np
 
@@ -64,39 +65,6 @@ if is_torchvision_available():
         from torchvision.transforms.v2 import functional as F
     else:
         from torchvision.transforms import functional as F
-
-
-def smart_resize(
-    t: int,
-    height: int,
-    width: int,
-    t_factor: int = 2,
-    factor: int = 28,
-    min_pixels: int = 112 * 112,
-    max_pixels: int = 14 * 14 * 4 * 15000,
-):
-    if t < t_factor:
-        raise ValueError(f"t:{t} must be larger than t_factor:{t_factor}")
-    if height < factor or width < factor:
-        raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
-    elif max(height, width) / min(height, width) > 200:
-        raise ValueError(
-            f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
-        )
-    h_bar = round(height / factor) * factor
-    w_bar = round(width / factor) * factor
-    t_bar = round(t / t_factor) * t_factor
-
-    if t_bar * h_bar * w_bar > max_pixels:
-        beta = math.sqrt((t * height * width) / max_pixels)
-        h_bar = math.floor(height / beta / factor) * factor
-        w_bar = math.floor(width / beta / factor) * factor
-    elif t_bar * h_bar * w_bar < min_pixels:
-        beta = math.sqrt(min_pixels / (t * height * width))
-        h_bar = math.ceil(height * beta / factor) * factor
-        w_bar = math.ceil(width * beta / factor) * factor
-
-    return h_bar, w_bar
 
 
 class Glm4vVideoProcessorInitKwargs(VideosKwargs):
@@ -225,10 +193,10 @@ class Glm4vVideoProcessor(BaseVideoProcessor):
             num_frames, height, width = stacked_videos.shape[1], stacked_videos.shape[3], stacked_videos.shape[4]
             if do_resize:
                 resized_height, resized_width = smart_resize(
-                    t=num_frames,
+                    num_frames=num_frames,
                     height=height,
                     width=width,
-                    t_factor=temporal_patch_size,
+                    temporal_factor=temporal_patch_size,
                     factor=patch_size * merge_size,
                 )
                 stacked_videos = F.resize(

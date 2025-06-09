@@ -183,11 +183,11 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
         for shape, stacked_images in grouped_images.items():
             if do_resize:
                 resized_height, resized_width = smart_resize(
-                    height,
-                    width,
+                    num_frames=temporal_patch_size,
+                    height=height,
+                    width=width,
+                    temporal_factor=temporal_patch_size,
                     factor=patch_size * merge_size,
-                    min_pixels=size["shortest_edge"],
-                    max_pixels=size["longest_edge"],
                 )
                 stacked_images = F.resize(
                     stacked_images, size=(resized_height, resized_width), interpolation=interpolation
@@ -351,13 +351,16 @@ class Glm4vImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `int`: Number of image patches per image.
         """
-        size = images_kwargs.get("size", None) or self.size
         patch_size = images_kwargs.get("patch_size", None) or self.patch_size
         merge_size = images_kwargs.get("merge_size", None) or self.merge_size
 
         factor = patch_size * merge_size
         resized_height, resized_width = smart_resize(
-            height, width, factor, min_pixels=size["shortest_edge"], max_pixels=size["longest_edge"]
+            t=self.temporal_patch_size,
+            height=height,
+            width=width,
+            factor=factor,
+            t_factor=self.temporal_patch_size,
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w
