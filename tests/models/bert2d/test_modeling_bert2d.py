@@ -1255,6 +1255,7 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
         self.assertEqual(eg_predicted_mask_tokens, ep_predicted_mask_tokens)
 
 
+"""
 # Define lists of tests to skip
 GENERATION_TESTS_TO_SKIP_OR_ADAPT = [
     "test_beam_sample_generate",
@@ -1306,3 +1307,4 @@ for test_name in GENERATION_TESTS_TO_SKIP_OR_ADAPT:
             setattr(Bert2DModelTest, test_name, skipper_method)
 
         create_generation_skipper(test_name)
+"""
