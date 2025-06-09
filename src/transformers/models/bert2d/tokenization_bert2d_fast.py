@@ -15,9 +15,7 @@
 """Fast Tokenization classes for Bert."""
 
 import math
-from typing import Dict, List, Optional, Union, Any
-
-import torch # type: ignore
+from typing import Dict, List, Optional, Union
 
 from ... import BatchEncoding
 from ...tokenization_utils_base import EncodedInput, PreTokenizedInput, TextInput, TruncationStrategy
@@ -26,6 +24,7 @@ from ..bert import BertTokenizerFast
 
 
 logger = logging.get_logger(__name__)
+
 
 class Bert2DTokenizerFast(BertTokenizerFast):
     r"""
@@ -106,22 +105,21 @@ class Bert2DTokenizerFast(BertTokenizerFast):
             mask_token=mask_token,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
-            model_input_names=self.model_input_names, # Pass our model_input_names
+            model_input_names=self.model_input_names,  # Pass our model_input_names
             **kwargs,
         )
         self.max_intermediate_subword_positions_per_word = max_intermediate_subword_positions_per_word
         self.subword_embedding_order = subword_embedding_order
         self.intermediate_subword_distribution_strategy = intermediate_subword_distribution_strategy
-        
-        # Ensure init_kwargs includes Bert2D specific parameters for correct saving and loading
-        self.init_kwargs['max_intermediate_subword_positions_per_word'] = max_intermediate_subword_positions_per_word
-        self.init_kwargs['subword_embedding_order'] = subword_embedding_order
-        self.init_kwargs['intermediate_subword_distribution_strategy'] = intermediate_subword_distribution_strategy
 
+        # Ensure init_kwargs includes Bert2D specific parameters for correct saving and loading
+        self.init_kwargs["max_intermediate_subword_positions_per_word"] = max_intermediate_subword_positions_per_word
+        self.init_kwargs["subword_embedding_order"] = subword_embedding_order
+        self.init_kwargs["intermediate_subword_distribution_strategy"] = intermediate_subword_distribution_strategy
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput], None] = None,
         text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
         text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput], None] = None,
         text_pair_target: Optional[
@@ -134,6 +132,7 @@ class Bert2DTokenizerFast(BertTokenizerFast):
         stride: int = 0,
         is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -157,7 +156,7 @@ class Bert2DTokenizerFast(BertTokenizerFast):
             stride=stride,
             is_split_into_words=is_split_into_words,
             pad_to_multiple_of=pad_to_multiple_of,
-            return_tensors=None, # Process as lists first, then convert to tensor if needed
+            return_tensors=None,  # Process as lists first, then convert to tensor if needed
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
             return_overflowing_tokens=return_overflowing_tokens,
@@ -170,24 +169,24 @@ class Bert2DTokenizerFast(BertTokenizerFast):
 
         # Determine batch characteristics from the processed 'result'
         # Input_ids can be a list (single example) or list of lists (batch)
-        is_batched_output = isinstance(result["input_ids"], list) and \
-                            result["input_ids"] and \
-                            isinstance(result["input_ids"][0], list)
+        is_batched_output = (
+            isinstance(result["input_ids"], list) and result["input_ids"] and isinstance(result["input_ids"][0], list)
+        )
 
         actual_batch_size: int
-        seq_length: int # This will be the length after padding/truncation by super().__call__
+        seq_length: int  # This will be the length after padding/truncation by super().__call__
 
         if is_batched_output:
             actual_batch_size = len(result["input_ids"])
             seq_length = len(result["input_ids"][0]) if actual_batch_size > 0 else 0
-        else: # Single, non-batched list of ints
+        else:  # Single, non-batched list of ints
             actual_batch_size = 1
             seq_length = len(result["input_ids"])
             # Temporarily wrap single example to use unified loop
             if "input_ids" in result and not isinstance(result["input_ids"][0], list):
-                 for key in result:
-                     if isinstance(result[key], list): # type: ignore
-                         result[key] = [result[key]] # type: ignore
+                for key in result:
+                    if isinstance(result[key], list):  # type: ignore
+                        result[key] = [result[key]]  # type: ignore
 
         # Generate word_ids and subword_ids as lists of lists
         list_of_list_word_ids: List[List[int]] = []
@@ -201,17 +200,18 @@ class Bert2DTokenizerFast(BertTokenizerFast):
             # If the original input to __call__ was a batch, result.tokens(i) is correct.
             # If the original input was single, result.tokens() is correct.
             # The BatchEncoding object itself handles this.
-            current_tokens = result.tokens(i) # type: ignore
+            current_tokens = result.tokens(i)  # type: ignore
 
-            should_restart_word_ids_heuristic = text_pair is not None or \
-                                             (is_batched_output and text_pair is not None and len(text_pair) > i) # type: ignore
+            should_restart_word_ids_heuristic = text_pair is not None or (
+                is_batched_output and text_pair is not None and len(text_pair) > i
+            )  # type: ignore
 
             list_of_list_word_ids.append(
                 create_word_ids(
                     current_tokens,
                     restart_new_sentence=should_restart_word_ids_heuristic,
                     seperator_token=self.sep_token,
-                    padding_token=self.pad_token
+                    padding_token=self.pad_token,
                 )
             )
             list_of_list_subword_ids.append(
@@ -225,8 +225,8 @@ class Bert2DTokenizerFast(BertTokenizerFast):
                     pad_token=self.pad_token,
                 )
             )
-        
-        padding_value_for_ids = 0 # Standard padding for word_ids/subword_ids
+
+        padding_value_for_ids = 0  # Standard padding for word_ids/subword_ids
 
         # Pad word_ids and subword_ids to seq_length if padding was enabled
         if padding_strategy_uses_max_length(padding, max_length):
@@ -237,33 +237,32 @@ class Bert2DTokenizerFast(BertTokenizerFast):
                     if pad_len > 0:
                         if self.padding_side == "right":
                             id_list.extend([padding_value_for_ids] * pad_len)
-                        else: # padding_side == "left"
+                        else:  # padding_side == "left"
                             for _ in range(pad_len):
                                 id_list.insert(0, padding_value_for_ids)
-                    elif pad_len < 0: # Truncate if longer (should ideally not happen if tokens were truncated)
-                        if self.padding_side == "right": # or truncation_side
-                           del id_list[seq_length:]
+                    elif pad_len < 0:  # Truncate if longer (should ideally not happen if tokens were truncated)
+                        if self.padding_side == "right":  # or truncation_side
+                            del id_list[seq_length:]
                         else:
-                           del id_list[:-seq_length]
+                            del id_list[:-seq_length]
 
-
-        if not is_batched_output: # Unwrap back to single list if original was single
+        if not is_batched_output:  # Unwrap back to single list if original was single
             result["word_ids"] = list_of_list_word_ids[0]
             result["subword_ids"] = list_of_list_subword_ids[0]
             # Unwrap other keys if they were wrapped
-            for key in list(result.keys()): # Iterate over a copy of keys
+            for key in list(result.keys()):  # Iterate over a copy of keys
                 if isinstance(result[key], list) and len(result[key]) == 1 and key not in ["word_ids", "subword_ids"]:
                     # Check if it was a list of lists that became a list of one list
                     if isinstance(result[key][0], list):
-                         result[key] = result[key][0] # type: ignore
+                        result[key] = result[key][0]  # type: ignore
         else:
             result["word_ids"] = list_of_list_word_ids
             result["subword_ids"] = list_of_list_subword_ids
 
         if return_tensors is not None:
-            result = result.convert_to_tensors(tensor_type=return_tensors) # type: ignore
+            result = result.convert_to_tensors(tensor_type=return_tensors)  # type: ignore
 
-        return result # type: ignore
+        return result  # type: ignore
 
     def encode_plus(
         self,
@@ -288,8 +287,7 @@ class Bert2DTokenizerFast(BertTokenizerFast):
     ) -> BatchEncoding:
         """
         Tokenize and prepare for the model a sequence or a pair of sequences.
-        
-        This method includes generation of word_ids and subword_ids specific to Bert2D.
+        This method includes the generation of word_ids and subword_ids specific to Bert2D.
         """
         # Call parent's encode_plus first to get standard tokenization
         result = super().encode_plus(
@@ -315,17 +313,17 @@ class Bert2DTokenizerFast(BertTokenizerFast):
 
         # Get tokens for this single sequence
         tokens = result.tokens()  # For single input, no index needed
-        
-        # Generate word_ids and subword_ids 
+
+        # Generate word_ids and subword_ids
         should_restart_word_ids_heuristic = text_pair is not None
-        
+
         word_ids = create_word_ids(
             tokens,
             restart_new_sentence=should_restart_word_ids_heuristic,
             seperator_token=self.sep_token,
-            padding_token=self.pad_token
+            padding_token=self.pad_token,
         )
-        
+
         subword_ids = create_subword_ids(
             tokens,
             self.max_intermediate_subword_positions_per_word,
@@ -335,15 +333,15 @@ class Bert2DTokenizerFast(BertTokenizerFast):
             sep_token=self.sep_token,
             pad_token=self.pad_token,
         )
-        
+
         # Add custom fields to result
         result["word_ids"] = word_ids
         result["subword_ids"] = subword_ids
-        
+
         # Convert to tensors if requested
         if return_tensors is not None:
             result = result.convert_to_tensors(tensor_type=return_tensors)
-        
+
         return result
 
     def batch_encode_plus(
@@ -371,11 +369,10 @@ class Bert2DTokenizerFast(BertTokenizerFast):
         **kwargs,
     ) -> BatchEncoding:
         """
-        Tokenize and prepare for the model a batch of sequences or a batch of pairs of sequences.
-        
-        This method includes generation of word_ids and subword_ids specific to Bert2D.
+        Tokenize and prepare a batch of sequences or a batch of sequence pairs for the model.
+        This method includes the generation of word_ids and subword_ids specific to Bert2D.
         """
-        # Call parent's batch_encode_plus first to get standard tokenization
+        # Call the parent's batch_encode_plus first to get standard tokenization
         result = super().batch_encode_plus(
             batch_text_or_text_pairs,
             add_special_tokens=add_special_tokens,
@@ -413,17 +410,17 @@ class Bert2DTokenizerFast(BertTokenizerFast):
         for i in range(batch_size):
             # Get tokens for this batch item
             tokens = result.tokens(i)
-            
-            # Generate word_ids and subword_ids 
+
+            # Generate word_ids and subword_ids
             should_restart_word_ids_heuristic = has_pairs
-            
+
             word_ids = create_word_ids(
                 tokens,
                 restart_new_sentence=should_restart_word_ids_heuristic,
                 seperator_token=self.sep_token,
-                padding_token=self.pad_token
+                padding_token=self.pad_token,
             )
-            
+
             subword_ids = create_subword_ids(
                 tokens,
                 self.max_intermediate_subword_positions_per_word,
@@ -433,18 +430,18 @@ class Bert2DTokenizerFast(BertTokenizerFast):
                 sep_token=self.sep_token,
                 pad_token=self.pad_token,
             )
-            
+
             batch_word_ids.append(word_ids)
             batch_subword_ids.append(subword_ids)
-        
+
         # Add custom fields to result
         result["word_ids"] = batch_word_ids
         result["subword_ids"] = batch_subword_ids
-        
+
         # Convert to tensors if requested
         if return_tensors is not None:
             result = result.convert_to_tensors(tensor_type=return_tensors)
-        
+
         return result
 
     def _pad(
@@ -456,7 +453,6 @@ class Bert2DTokenizerFast(BertTokenizerFast):
         padding_side: Optional[str] = None,
         return_attention_mask: Optional[bool] = None,
     ) -> dict:
-        
         effective_padding_side = padding_side if padding_side is not None else self.padding_side
 
         # Separate word_ids and subword_ids if they are lists.
@@ -469,15 +465,15 @@ class Bert2DTokenizerFast(BertTokenizerFast):
         subword_ids_list = None
         if "subword_ids" in encoded_inputs and isinstance(encoded_inputs["subword_ids"], list):
             subword_ids_list = encoded_inputs.pop("subword_ids")
-        
+
         # Call the superclass's _pad method to handle standard keys like input_ids, attention_mask, etc.
         # CRITICAL: Pass all relevant arguments, especially `padding_side`.
         padded_standard_inputs = super()._pad(
-            encoded_inputs, # This now only contains standard keys if custom keys were lists and popped
+            encoded_inputs,  # This now only contains standard keys if custom keys were lists and popped
             max_length=max_length,
             padding_strategy=padding_strategy,
             pad_to_multiple_of=pad_to_multiple_of,
-            padding_side=effective_padding_side, # Pass the determined padding_side
+            padding_side=effective_padding_side,  # Pass the determined padding_side
             return_attention_mask=return_attention_mask,
         )
 
@@ -485,7 +481,7 @@ class Bert2DTokenizerFast(BertTokenizerFast):
         # This padding should align with how input_ids were padded by the super()._pad call.
         # This logic is primarily for cases where inputs are not yet tensors (e.g. return_tensors=None).
         if padding_strategy != PaddingStrategy.DO_NOT_PAD and max_length is not None:
-            main_input_name = self.model_input_names[0] # usually "input_ids"
+            main_input_name = self.model_input_names[0]  # usually "input_ids"
             if main_input_name not in padded_standard_inputs:
                 # This case should ideally not happen if _pad is called correctly.
                 # Fallback to adding custom IDs without padding if main input is missing.
@@ -496,7 +492,7 @@ class Bert2DTokenizerFast(BertTokenizerFast):
                 return padded_standard_inputs
 
             padded_len = len(padded_standard_inputs[main_input_name])
-            padding_val = 0 # Standard padding value for these custom IDs
+            padding_val = 0  # Standard padding value for these custom IDs
 
             if word_ids_list is not None:
                 current_len = len(word_ids_list)
@@ -504,16 +500,15 @@ class Bert2DTokenizerFast(BertTokenizerFast):
                 if diff > 0:
                     if effective_padding_side == "right":
                         padded_standard_inputs["word_ids"] = word_ids_list + [padding_val] * diff
-                    else: # left
+                    else:  # left
                         padded_standard_inputs["word_ids"] = [padding_val] * diff + word_ids_list
-                else: # No padding needed or truncation occurred (list might be longer)
-                    padded_standard_inputs["word_ids"] = word_ids_list[:padded_len] # Ensure it's not longer
+                else:  # No padding needed or truncation occurred (list might be longer)
+                    padded_standard_inputs["word_ids"] = word_ids_list[:padded_len]  # Ensure it's not longer
             # If word_ids was not a list (e.g., a tensor passed through), and was not popped,
             # it might still be in `encoded_inputs` (the original dict passed to _pad).
             # If so, and it wasn't popped, ensure it's in the output.
             elif "word_ids" in encoded_inputs:
-                 padded_standard_inputs["word_ids"] = encoded_inputs["word_ids"]
-
+                padded_standard_inputs["word_ids"] = encoded_inputs["word_ids"]
 
             if subword_ids_list is not None:
                 current_len = len(subword_ids_list)
@@ -521,25 +516,24 @@ class Bert2DTokenizerFast(BertTokenizerFast):
                 if diff > 0:
                     if effective_padding_side == "right":
                         padded_standard_inputs["subword_ids"] = subword_ids_list + [padding_val] * diff
-                    else: # left
+                    else:  # left
                         padded_standard_inputs["subword_ids"] = [padding_val] * diff + subword_ids_list
                 else:
                     padded_standard_inputs["subword_ids"] = subword_ids_list[:padded_len]
             elif "subword_ids" in encoded_inputs:
-                 padded_standard_inputs["subword_ids"] = encoded_inputs["subword_ids"]
+                padded_standard_inputs["subword_ids"] = encoded_inputs["subword_ids"]
 
-        else: # No padding was applied to standard inputs, or no max_length specified
+        else:  # No padding was applied to standard inputs, or no max_length specified
             if word_ids_list is not None:
                 padded_standard_inputs["word_ids"] = word_ids_list
-            elif "word_ids" in encoded_inputs: # Ensure it's carried over if not popped
-                 padded_standard_inputs["word_ids"] = encoded_inputs["word_ids"]
-
+            elif "word_ids" in encoded_inputs:  # Ensure it's carried over if not popped
+                padded_standard_inputs["word_ids"] = encoded_inputs["word_ids"]
 
             if subword_ids_list is not None:
                 padded_standard_inputs["subword_ids"] = subword_ids_list
-            elif "subword_ids" in encoded_inputs: # Ensure it's carried over if not popped
-                 padded_standard_inputs["subword_ids"] = encoded_inputs["subword_ids"]
-        
+            elif "subword_ids" in encoded_inputs:  # Ensure it's carried over if not popped
+                padded_standard_inputs["subword_ids"] = encoded_inputs["subword_ids"]
+
         return padded_standard_inputs
 
 
@@ -554,23 +548,23 @@ def create_word_ids(
     """Creates word ids for given tokens, matching the logic from Bert2DTokenizerFast tests."""
     word_ids: List[int] = []
     current_word_id: int = -1
-    sentence_restart_flag = False 
+    sentence_restart_flag = False
 
     actual_restart_new_sentence = restart_new_sentence and tokens.count(seperator_token) >= 2
 
     for token in tokens:
-        if token == padding_token: # Pad tokens get word_id 0
+        if token == padding_token:  # Pad tokens get word_id 0
             word_ids.append(0)
             # current_word_id = 0 # Resetting current_word_id for padding might be complex if padding is not last
         elif actual_restart_new_sentence and not sentence_restart_flag and token == seperator_token:
-            if current_word_id == -1 : # First token is SEP
-                 current_word_id = 0 
-                 word_ids.append(current_word_id)
-            else: # SEP after some content
-                 current_word_id +=1 
-                 word_ids.append(current_word_id)
+            if current_word_id == -1:  # First token is SEP
+                current_word_id = 0
+                word_ids.append(current_word_id)
+            else:  # SEP after some content
+                current_word_id += 1
+                word_ids.append(current_word_id)
 
-            current_word_id = -1 # Reset for the new sentence (will become 0 at first non-subword)
+            current_word_id = -1  # Reset for the new sentence (will become 0 at first non-subword)
             sentence_restart_flag = True
         elif not is_subword(token):
             current_word_id += 1
@@ -578,7 +572,7 @@ def create_word_ids(
         elif current_word_id == -1:  # First token of a sequence (or after reset SEP) is a subword
             current_word_id = 0
             word_ids.append(current_word_id)
-        else: # Subword of an existing word
+        else:  # Subword of an existing word
             word_ids.append(current_word_id)
     return word_ids
 
@@ -593,12 +587,12 @@ def col_round(x: float) -> int:
 
 def get_uniform_id(si: int, max_intermediate_subwords: int, num_intermediate_subwords: int) -> int:
     """Calculates uniform id for the given subword index, si, and max and number of intermediate subwords"""
-    if num_intermediate_subwords == 0: # Avoid division by zero if there are no intermediate subwords
+    if num_intermediate_subwords == 0:  # Avoid division by zero if there are no intermediate subwords
         return 0
     # Effective max position is max_intermediate_subwords - 1 because positions are 0-indexed
     # e.g., if max_intermediate_subwords is 1, effective_max_pos is 0.
     # if max_intermediate_subwords is 2, effective_max_pos is 1 (positions 0, 1).
-    effective_max_pos = max(0, max_intermediate_subwords -1) # Ensure non-negative
+    effective_max_pos = max(0, max_intermediate_subwords - 1)  # Ensure non-negative
     return col_round(si * effective_max_pos / num_intermediate_subwords)
 
 
@@ -615,56 +609,57 @@ def get_ids_from_subwords(
         return []
 
     # Handle cases where the "word" is just one token
-    if current_word_starts_with_subword: # Word like "##ing"
+    if current_word_starts_with_subword:  # Word like "##ing"
         if num_subwords_in_current_word == 1:
-            return [1] # Treat as "last" subword if it's the only token and starts with ##
-    elif num_subwords_in_current_word == 1: # Word like "run"
-        return [0] # Treat as "root" subword
+            return [1]  # Treat as "last" subword if it's the only token and starts with ##
+    elif num_subwords_in_current_word == 1:  # Word like "run"
+        return [0]  # Treat as "root" subword
 
     # For multi-token words
     if subword_embedding_order == "ending_first":
         subword_ids: List[int] = []
-        
-        has_explicit_root = not current_word_starts_with_subword and num_subwords_in_current_word > 0
-        # "Last" subword exists if there's more than one token, 
-        # OR if it's a single token starting with ## (handled above, but for clarity here)
-        has_explicit_last = num_subwords_in_current_word > 1 or \
-                            (current_word_starts_with_subword and num_subwords_in_current_word == 1)
 
+        has_explicit_root = not current_word_starts_with_subword and num_subwords_in_current_word > 0
+        # "Last" subword exists if there's more than one token,
+        # OR if it's a single token starting with ## (handled above, but for clarity here)
+        has_explicit_last = num_subwords_in_current_word > 1 or (
+            current_word_starts_with_subword and num_subwords_in_current_word == 1
+        )
 
         if has_explicit_root:
-            subword_ids.append(0) # Root token (e.g., "run" in "running")
+            subword_ids.append(0)  # Root token (e.g., "run" in "running")
             # Tokens remaining for intermediate and last part
             num_tokens_for_intermediate_and_last = num_subwords_in_current_word - 1
-        else: # Word starts with subword (e.g., "##run" in "##running")
+        else:  # Word starts with subword (e.g., "##run" in "##running")
             # All tokens contribute to intermediate and last part (or just last if only one ##token)
             num_tokens_for_intermediate_and_last = num_subwords_in_current_word
-        
+
         num_intermediate_tokens = 0
-        if has_explicit_last: 
+        if has_explicit_last:
             # If there's a distinct "last" token, subtract it from the count
             num_intermediate_tokens = num_tokens_for_intermediate_and_last - 1
-        else: 
+        else:
             # If no distinct "last" token (e.g. "##word" - only one token, no root),
             # then all (remaining) tokens are considered intermediate.
             # This case should be rare if num_subwords_in_current_word > 1
             num_intermediate_tokens = num_tokens_for_intermediate_and_last
 
         # Ensure non-negative, can happen if num_subwords_in_current_word is 1 and has_explicit_last is true.
-        if num_intermediate_tokens < 0 : num_intermediate_tokens = 0
-
+        if num_intermediate_tokens < 0:
+            num_intermediate_tokens = 0
 
         # Assign IDs to intermediate tokens
         if num_intermediate_tokens > 0:
             if num_intermediate_tokens <= max_intermediate_subword_positions_per_word:
                 # If fewer or equal intermediate tokens than available slots, assign unique IDs
                 for si in range(num_intermediate_tokens):
-                    subword_ids.append(2 + si) # IDs 2, 3, ...
-            else: # More intermediate tokens than available slots
+                    subword_ids.append(2 + si)  # IDs 2, 3, ...
+            else:  # More intermediate tokens than available slots
                 if intermediate_subword_distribution_strategy == "uniform":
                     for si in range(num_intermediate_tokens):
                         subword_ids.append(
-                            2 + get_uniform_id(si, max_intermediate_subword_positions_per_word, num_intermediate_tokens)
+                            2
+                            + get_uniform_id(si, max_intermediate_subword_positions_per_word, num_intermediate_tokens)
                         )
                 elif intermediate_subword_distribution_strategy == "leftover_as_last":
                     # Fill available intermediate slots
@@ -672,12 +667,14 @@ def get_ids_from_subwords(
                         subword_ids.append(2 + si)
                     # Assign remaining intermediate tokens as "last" (ID 1)
                     for _ in range(num_intermediate_tokens - max_intermediate_subword_positions_per_word):
-                        subword_ids.append(1) 
+                        subword_ids.append(1)
                 else:
-                    raise ValueError(f"Unsupported intermediate subword distribution strategy: {intermediate_subword_distribution_strategy}")
-        
+                    raise ValueError(
+                        f"Unsupported intermediate subword distribution strategy: {intermediate_subword_distribution_strategy}"
+                    )
+
         if has_explicit_last:
-             subword_ids.append(1) # Last token (e.g., "##ing" in "running")
+            subword_ids.append(1)  # Last token (e.g., "##ing" in "running")
 
         return subword_ids
     else:
@@ -689,8 +686,8 @@ def create_subword_ids(
     max_intermediate_subword_positions_per_word: int,
     subword_embedding_order: str,
     intermediate_subword_distribution_strategy: str,
-    cls_token="[CLS]", 
-    sep_token="[SEP]", 
+    cls_token="[CLS]",
+    sep_token="[SEP]",
     pad_token="[PAD]",
 ) -> List[int]:
     """Creates subword ids for the given tokens and parameters."""
@@ -700,27 +697,28 @@ def create_subword_ids(
 
     all_subword_ids: List[int] = []
     current_word_segment_tokens: List[str] = []
-    
+
     # Determine if the very first content token (non-special) is a subword.
     # This helps decide if the first word itself starts with a subword prefix.
     first_content_token_is_subword = False
-    if tokens: # Check if tokens list is not empty
+    if tokens:  # Check if tokens list is not empty
         for token_val in tokens:
             if token_val not in [cls_token, sep_token, pad_token]:
                 first_content_token_is_subword = is_subword(token_val)
-                break # Found the first content token
-    
-    first_content_word_processed = False # Flag to track if we've processed the first actual word
+                break  # Found the first content token
+
+    first_content_word_processed = False  # Flag to track if we've processed the first actual word
 
     for token_idx, token in enumerate(tokens):
-        if token in [cls_token, sep_token, pad_token]: # Special tokens
+        if token in [cls_token, sep_token, pad_token]:  # Special tokens
             # If there was an ongoing word segment, process it first
             if current_word_segment_tokens:
                 # Determine if this segment is the very first content word AND it starts with a subword
-                is_this_segment_the_very_first_content_word_and_starts_with_subword = \
-                    first_content_token_is_subword and \
-                    not first_content_word_processed and \
-                    is_subword(current_word_segment_tokens[0])
+                is_this_segment_the_very_first_content_word_and_starts_with_subword = (
+                    first_content_token_is_subword
+                    and not first_content_word_processed
+                    and is_subword(current_word_segment_tokens[0])
+                )
 
                 generated_ids = get_ids_from_subwords(
                     num_subwords_in_current_word=len(current_word_segment_tokens),
@@ -730,19 +728,22 @@ def create_subword_ids(
                     current_word_starts_with_subword=is_this_segment_the_very_first_content_word_and_starts_with_subword,
                 )
                 all_subword_ids.extend(generated_ids)
-                
-                if not first_content_word_processed and current_word_segment_tokens: # Mark first content word as processed
+
+                if (
+                    not first_content_word_processed and current_word_segment_tokens
+                ):  # Mark first content word as processed
                     first_content_word_processed = True
-                current_word_segment_tokens = [] # Reset for next word
-            
-            all_subword_ids.append(0) # Special tokens get subword_id 0
-        elif not is_subword(token): # Token is a root word (doesn't start with ##)
+                current_word_segment_tokens = []  # Reset for next word
+
+            all_subword_ids.append(0)  # Special tokens get subword_id 0
+        elif not is_subword(token):  # Token is a root word (doesn't start with ##)
             # If there was an ongoing word segment (which must have been all subwords), process it
             if current_word_segment_tokens:
-                is_this_segment_the_very_first_content_word_and_starts_with_subword = \
-                    first_content_token_is_subword and \
-                    not first_content_word_processed and \
-                    is_subword(current_word_segment_tokens[0])
+                is_this_segment_the_very_first_content_word_and_starts_with_subword = (
+                    first_content_token_is_subword
+                    and not first_content_word_processed
+                    and is_subword(current_word_segment_tokens[0])
+                )
 
                 generated_ids = get_ids_from_subwords(
                     num_subwords_in_current_word=len(current_word_segment_tokens),
@@ -754,17 +755,18 @@ def create_subword_ids(
                 all_subword_ids.extend(generated_ids)
                 if not first_content_word_processed and current_word_segment_tokens:
                     first_content_word_processed = True
-            current_word_segment_tokens = [token] # Start a new word segment with this root token
-        else: # Token is a subword (starts with ##)
+            current_word_segment_tokens = [token]  # Start a new word segment with this root token
+        else:  # Token is a subword (starts with ##)
             current_word_segment_tokens.append(token)
 
     # After loop, process any remaining word segment
     if current_word_segment_tokens:
-        is_this_segment_the_very_first_content_word_and_starts_with_subword = \
-            first_content_token_is_subword and \
-            not first_content_word_processed and \
-            is_subword(current_word_segment_tokens[0])
-            
+        is_this_segment_the_very_first_content_word_and_starts_with_subword = (
+            first_content_token_is_subword
+            and not first_content_word_processed
+            and is_subword(current_word_segment_tokens[0])
+        )
+
         generated_ids = get_ids_from_subwords(
             num_subwords_in_current_word=len(current_word_segment_tokens),
             max_intermediate_subword_positions_per_word=max_intermediate_subword_positions_per_word,
@@ -776,15 +778,19 @@ def create_subword_ids(
 
     return all_subword_ids
 
-def padding_strategy_uses_max_length(padding_strategy: Union[bool, str, PaddingStrategy], max_length: Optional[int]) -> bool:
+
+def padding_strategy_uses_max_length(
+    padding_strategy: Union[bool, str, PaddingStrategy], max_length: Optional[int]
+) -> bool:
     """Helper to determine if padding will occur up to a max_length."""
     if padding_strategy is False or padding_strategy == PaddingStrategy.DO_NOT_PAD:
         return False
     if padding_strategy is True or padding_strategy == PaddingStrategy.LONGEST:
         # Padding to longest in batch still implies a fixed length for that batch
-        return True 
+        return True
     if padding_strategy == PaddingStrategy.MAX_LENGTH:
         return max_length is not None
     return False
+
 
 __all__ = ["Bert2DTokenizerFast"]
