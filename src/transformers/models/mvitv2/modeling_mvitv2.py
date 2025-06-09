@@ -28,6 +28,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from .configuration_mvitv2 import MViTV2Config
 
+
 # Implementation inpired by both timm and the original MViTv2 code from Facebook.
 
 

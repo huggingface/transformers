@@ -401,6 +401,7 @@ OBJECTS_TO_IGNORE = [
     "MusicgenDecoderConfig",
     "MusicgenForConditionalGeneration",
     "MusicgenMelodyForConditionalGeneration",
+    "MViTV2Config",
     "MvpConfig",
     "MvpTokenizerFast",
     "MT5Tokenizer",

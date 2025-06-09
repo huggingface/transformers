@@ -26,7 +26,7 @@ class MViTV2Config(PretrainedConfig):
     This is the configuration class to store the configuration of [`MViTV2Model`]. It is used to instantiate a
     MViTV2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the MViTV2
-    [KamilaMile/mvitv2-base](https://huggingface.co/KamilaMile/mvitv2-base)
+    [KamilaMila/mvitv2-base](https://huggingface.co/KamilaMila/mvitv2-base)
     architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
