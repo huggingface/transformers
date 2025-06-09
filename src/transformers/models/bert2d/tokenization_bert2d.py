@@ -345,7 +345,6 @@ class Bert2DTokenizer(BertTokenizer):
             mask_token=mask_token,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
-            model_input_names=Bert2DTokenizer.model_input_names,  # Explicitly pass our list
             **kwargs,
         )
 

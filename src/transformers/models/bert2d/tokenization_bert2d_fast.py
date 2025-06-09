@@ -105,7 +105,6 @@ class Bert2DTokenizerFast(BertTokenizerFast):
             mask_token=mask_token,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
-            model_input_names=self.model_input_names,  # Pass our model_input_names
             **kwargs,
         )
         self.max_intermediate_subword_positions_per_word = max_intermediate_subword_positions_per_word
