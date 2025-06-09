@@ -19,7 +19,7 @@ import math
 import os
 import warnings
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -1162,6 +1162,89 @@ class Bert2DLMHeadModel(Bert2DPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
+
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
+        # `input_ids` is the full current sequence.
+        # `model_kwargs` contains various things, including potentially 'word_ids', 'subword_ids' which are the
+        # full accumulated versions from the previous step's _update_model_kwargs_for_generation call.
+
+        # Call super(). This will:
+        # - If past_key_values exist, slice `input_ids` to just the new token(s).
+        # - Potentially slice `attention_mask` and `token_type_ids` if they are present in model_kwargs.
+        # - Populate `model_inputs` with these (potentially sliced) inputs.
+        # - Carry over other kwargs like 'word_ids', 'subword_ids' from `model_kwargs` into `model_inputs`.
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids, past_key_values=past_key_values, attention_mask=attention_mask, **model_kwargs
+        )
+        # Now, model_inputs["input_ids"] is the current token(s) to be processed (e.g., shape [B, 1] or [B, S_new])
+        # model_inputs["word_ids"] (if present) is still the *full* sequence from model_kwargs.
+        # model_inputs["subword_ids"] (if present) is still the *full* sequence from model_kwargs.
+        # model_inputs["token_type_ids"] (if present) is the *sliced* sequence if it was in model_kwargs,
+        # because "token_type_ids" is a standard name that super().prepare_inputs_for_generation knows how to slice.
+
+        if past_key_values is not None:
+            # This is an auto-regressive step. We need to slice our custom IDs.
+            num_new_tokens = model_inputs["input_ids"].shape[-1]  # Length of the currently processed tokens
+
+            if "word_ids" in model_inputs and model_inputs["word_ids"] is not None:
+                # model_inputs["word_ids"] is currently the full sequence from model_kwargs. Slice its end.
+                model_inputs["word_ids"] = model_inputs["word_ids"][:, -num_new_tokens:]
+
+            if "subword_ids" in model_inputs and model_inputs["subword_ids"] is not None:
+                model_inputs["subword_ids"] = model_inputs["subword_ids"][:, -num_new_tokens:]
+        # If first step (past_key_values is None), model_inputs["input_ids"] is the full prompt.
+        # Custom IDs in model_inputs (word_ids, subword_ids), if present, are already the full original versions from model_kwargs,
+        # so no change needed for them here. Standard IDs like token_type_ids are handled by super().
+
+        return model_inputs
+
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs: ModelOutput,
+        model_kwargs: Dict[str, Any],
+        is_encoder_decoder: bool = False,
+        num_new_tokens: int = 1,
+    ) -> Dict[str, Any]:
+        # Call parent method first to update standard kwargs like attention_mask, past_key_values, cache_position
+        # and token_type_ids.
+        model_kwargs = super()._update_model_kwargs_for_generation(
+            outputs, model_kwargs, is_encoder_decoder, num_new_tokens
+        )
+
+        # Determine device and batch_size from a reliable tensor in model_kwargs or outputs
+        # (input_ids in model_kwargs is not yet updated at this stage of the generation loop)
+        # The attention_mask is updated by super(), so it's a good candidate.
+        # Fallback to outputs.logits if attention_mask is not available.
+        reference_tensor = model_kwargs.get("attention_mask", outputs.logits)
+        device = reference_tensor.device
+        batch_size = reference_tensor.shape[0]
+
+        if "word_ids" in model_kwargs and model_kwargs["word_ids"] is not None:
+            current_word_ids = model_kwargs["word_ids"]  # Shape (batch_size, L_old)
+
+            if current_word_ids.shape[-1] > 0:
+                last_word_id_val = current_word_ids[:, -1:]  # Shape (batch_size, 1)
+                # Create new word_ids by incrementing the last one
+                new_word_ids_increment = torch.arange(
+                    1, num_new_tokens + 1, device=device, dtype=torch.long
+                ).unsqueeze(0)  # Shape (1, num_new_tokens)
+                new_word_ids_segment = last_word_id_val + new_word_ids_increment  # Broadcasting
+            else:  # word_ids was empty (e.g. generating from empty prompt and no initial word_ids)
+                new_word_ids_segment = (
+                    torch.arange(0, num_new_tokens, device=device, dtype=torch.long)
+                    .unsqueeze(0)
+                    .expand(batch_size, -1)
+                )  # Starts from 0
+
+            model_kwargs["word_ids"] = torch.cat([current_word_ids, new_word_ids_segment], dim=-1)
+
+        if "subword_ids" in model_kwargs and model_kwargs["subword_ids"] is not None:
+            current_subword_ids = model_kwargs["subword_ids"]  # Shape (batch_size, L_old)
+            # New tokens are considered root words, so their subword_id is 0
+            new_subword_ids_segment = torch.zeros((batch_size, num_new_tokens), dtype=torch.long, device=device)
+            model_kwargs["subword_ids"] = torch.cat([current_subword_ids, new_subword_ids_segment], dim=-1)
+
+        return model_kwargs
 
     @staticmethod
     def _reorder_cache(
