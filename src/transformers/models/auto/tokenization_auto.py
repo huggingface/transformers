@@ -77,9 +77,9 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ),
         ("bartpho", ("BartphoTokenizer", None)),
         ("bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
-        ("bert2d", ("Bert2DTokenizer", "Bert2DTokenizerFast" if is_tokenizers_available() else None)),
         ("bert-generation", ("BertGenerationTokenizer" if is_sentencepiece_available() else None, None)),
         ("bert-japanese", ("BertJapaneseTokenizer", None)),
+        ("bert2d", ("Bert2DTokenizer", "Bert2DTokenizerFast" if is_tokenizers_available() else None)),
         ("bertweet", ("BertweetTokenizer", None)),
         (
             "big_bird",

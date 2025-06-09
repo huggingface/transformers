@@ -177,40 +177,40 @@ class Bert2DEmbeddings(nn.Module):
         pad_token_id = self.config.pad_token_id
         max_allowed_word_id = self.config.max_word_position_embeddings - 1
 
-
         # Reshape for easier iteration if 3D
         is_3d = input_ids_tensor.ndim == 3
         if is_3d:
             batch_size_orig, num_choices_orig, _ = input_shape
             reshaped_input_ids = input_ids_tensor.contiguous().view(-1, seq_length)
         else:
-            batch_size_orig, _ = input_shape # Will be used if reshaped_input_ids is empty
-            num_choices_orig = 1 # Placeholder
+            batch_size_orig, _ = input_shape  # Will be used if reshaped_input_ids is empty
+            num_choices_orig = 1  # Placeholder
             reshaped_input_ids = input_ids_tensor
-        
-        if reshaped_input_ids.shape[0] == 0: # Empty batch
+
+        if reshaped_input_ids.shape[0] == 0:  # Empty batch
             if is_3d:
                 empty_word_ids = torch.empty((batch_size_orig, num_choices_orig, 0), dtype=torch.long, device=device)
-                empty_subword_ids = torch.empty((batch_size_orig, num_choices_orig, 0), dtype=torch.long, device=device)
+                empty_subword_ids = torch.empty(
+                    (batch_size_orig, num_choices_orig, 0), dtype=torch.long, device=device
+                )
             else:
                 empty_word_ids = torch.empty((batch_size_orig, 0), dtype=torch.long, device=device)
                 empty_subword_ids = torch.empty((batch_size_orig, 0), dtype=torch.long, device=device)
             return empty_word_ids, empty_subword_ids
-
 
         batch_generated_word_ids = []
         batch_generated_subword_ids = []
 
         for i in range(reshaped_input_ids.shape[0]):  # Iterate over effective batch
             current_sequence_input_ids = reshaped_input_ids[i]
-            
+
             num_left_pads = 0
             for token_id_val in current_sequence_input_ids:
                 if token_id_val.item() == pad_token_id:
                     num_left_pads += 1
                 else:
                     break  # Stop counting at the first non-pad token
-            
+
             current_word_ids = torch.zeros(seq_length, dtype=torch.long, device=device)
             content_word_id_counter = 0
             for j in range(num_left_pads, seq_length):
@@ -218,7 +218,7 @@ class Bert2DEmbeddings(nn.Module):
                 current_word_ids[j] = clamped_word_id
                 content_word_id_counter += 1
             batch_generated_word_ids.append(current_word_ids)
-            
+
             current_subword_ids = torch.zeros(seq_length, dtype=torch.long, device=device)
             batch_generated_subword_ids.append(current_subword_ids)
 
@@ -228,7 +228,7 @@ class Bert2DEmbeddings(nn.Module):
         if is_3d:
             final_word_ids = final_word_ids.view(batch_size_orig, num_choices_orig, seq_length)
             final_subword_ids = final_subword_ids.view(batch_size_orig, num_choices_orig, seq_length)
-            
+
         return final_word_ids, final_subword_ids
 
     def forward(
@@ -281,35 +281,43 @@ class Bert2DEmbeddings(nn.Module):
 
         if word_ids is None:
             # input_ids (tensor) is passed as input_ids_tensor to the helper
-            generated_word_ids, _ = self._detect_left_padding_and_create_ids(input_ids, input_shape, seq_length, device)
+            generated_word_ids, _ = self._detect_left_padding_and_create_ids(
+                input_ids, input_shape, seq_length, device
+            )
             word_ids = generated_word_ids
             if input_ids is not None and self.config.pad_token_id is not None:
-                 warnings.warn(
+                warnings.warn(
                     "`word_ids` was not provided and has been defaulted based on padding (if detected) or simple sequential IDs. "
                     "This behavior is usually not desired for Bert2D models and may lead to unexpected results if the model "
-                    "is not explicitly expecting this behavior.", UserWarning,
+                    "is not explicitly expecting this behavior.",
+                    UserWarning,
                 )
-            else: # input_ids is None or pad_token_id is None, so simple defaults were used
+            else:  # input_ids is None or pad_token_id is None, so simple defaults were used
                 warnings.warn(
                     "`word_ids` was not provided. Since `input_ids` or `config.pad_token_id` is unavailable for "
                     "padding detection, `word_ids` defaulted to simple sequential IDs. This behavior is usually "
-                    "not desired for Bert2D models.", UserWarning,
+                    "not desired for Bert2D models.",
+                    UserWarning,
                 )
 
         if subword_ids is None:
-            _, generated_subword_ids = self._detect_left_padding_and_create_ids(input_ids, input_shape, seq_length, device)
+            _, generated_subword_ids = self._detect_left_padding_and_create_ids(
+                input_ids, input_shape, seq_length, device
+            )
             subword_ids = generated_subword_ids
             if input_ids is not None and self.config.pad_token_id is not None:
                 warnings.warn(
                     "`subword_ids` was not provided and has been defaulted to all zeros (for padding and content). "
                     "This behavior is usually not desired for Bert2D models and may lead to unexpected results if the model "
-                    "is not explicitly expecting this behavior.", UserWarning,
+                    "is not explicitly expecting this behavior.",
+                    UserWarning,
                 )
-            else: # input_ids is None or pad_token_id is None, so simple defaults were used (all zeros)
-                 warnings.warn(
+            else:  # input_ids is None or pad_token_id is None, so simple defaults were used (all zeros)
+                warnings.warn(
                     "`subword_ids` was not provided. Since `input_ids` or `config.pad_token_id` is unavailable for "
                     "padding detection, `subword_ids` defaulted to all zeros. This behavior is usually "
-                    "not desired for Bert2D models.", UserWarning,
+                    "not desired for Bert2D models.",
+                    UserWarning,
                 )
 
         whole_word_embeddings = self.whole_word_embeddings(word_ids)
@@ -1302,7 +1310,6 @@ class Bert2DLMHeadModel(Bert2DPreTrainedModel, GenerationMixin):
             current_word_ids = model_kwargs["word_ids"]  # Shape (batch_size, L_old)
             max_allowed_word_id = self.config.max_word_position_embeddings - 1
 
-
             if current_word_ids.shape[-1] > 0:
                 last_word_id_val = current_word_ids[:, -1:]  # Shape (batch_size, 1)
                 # Create new word_ids by incrementing the last one
@@ -1316,11 +1323,10 @@ class Bert2DLMHeadModel(Bert2DPreTrainedModel, GenerationMixin):
                     .unsqueeze(0)
                     .expand(batch_size, -1)
                 )  # Starts from 0
-            
+
             # Clamp the new segment
             new_word_ids_segment = torch.clamp(new_word_ids_segment_unclamped, max=max_allowed_word_id)
             model_kwargs["word_ids"] = torch.cat([current_word_ids, new_word_ids_segment], dim=-1)
-
 
         if "subword_ids" in model_kwargs and model_kwargs["subword_ids"] is not None:
             current_subword_ids = model_kwargs["subword_ids"]  # Shape (batch_size, L_old)
