@@ -1544,7 +1544,7 @@ class GenerationMixin(ContinuousMixin):
                 )
 
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
-        """Validates model kwargs for generation. Generate argument typos will also be caught here."""        
+        """Validates model kwargs for generation. Generate argument typos will also be caught here."""
         # Excludes arguments that are handled before calling any model function
         if self.config.is_encoder_decoder:
             for key in ["decoder_input_ids"]:

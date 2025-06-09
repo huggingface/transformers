@@ -222,7 +222,6 @@ class RoFormerSelfAttention(nn.Module):
         sinusoidal_pos=None,
         head_mask=None,
         encoder_hidden_states=None,
-        encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
         cache_position=None,
@@ -251,8 +250,8 @@ class RoFormerSelfAttention(nn.Module):
             key_layer = curr_past_key_value.key_cache[self.layer_idx]
             value_layer = curr_past_key_value.value_cache[self.layer_idx]
         else:
-            key_layer = self.transpose_for_scores(self.k_proj(current_states))
-            value_layer = self.transpose_for_scores(self.v_proj(current_states))
+            key_layer = self.transpose_for_scores(self.key(current_states))
+            value_layer = self.transpose_for_scores(self.value(current_states))
 
             if past_key_value is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
@@ -372,7 +371,6 @@ class RoFormerAttention(nn.Module):
         sinusoidal_pos=None,
         head_mask=None,
         encoder_hidden_states=None,
-        encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
         cache_position=None,
@@ -383,7 +381,6 @@ class RoFormerAttention(nn.Module):
             sinusoidal_pos,
             head_mask,
             encoder_hidden_states,
-            encoder_attention_mask,
             past_key_value,
             output_attentions,
             cache_position,
@@ -453,9 +450,9 @@ class RoFormerLayer(nn.Module):
     ):
         self_attention_outputs = self.attention(
             hidden_states,
-            attention_mask,
-            sinusoidal_pos,
-            head_mask,
+            attention_mask=attention_mask,
+            sinusoidal_pos=sinusoidal_pos,
+            head_mask=head_mask,
             output_attentions=output_attentions,
             past_key_value=past_key_value,
             cache_position=cache_position,
@@ -477,13 +474,12 @@ class RoFormerLayer(nn.Module):
 
             cross_attention_outputs = self.crossattention(
                 attention_output,
-                attention_mask,
-                sinusoidal_pos,
-                head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                past_key_value,
-                output_attentions,
+                attention_mask=encoder_attention_mask,
+                sinusoidal_pos=sinusoidal_pos,
+                head_mask=head_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
                 cache_position=cache_position,
             )
             attention_output = cross_attention_outputs[0]
@@ -562,7 +558,6 @@ class RoFormerEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
-            past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
@@ -573,7 +568,7 @@ class RoFormerEncoder(nn.Module):
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
-                    past_key_value,
+                    past_key_values,
                     output_attentions,
                     cache_position,
                 )
@@ -585,7 +580,7 @@ class RoFormerEncoder(nn.Module):
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
-                    past_key_value,
+                    past_key_values,
                     output_attentions,
                     cache_position,
                 )
@@ -887,8 +882,13 @@ class RoFormerModel(RoFormerPreTrainedModel):
         batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        # past_key_values_length
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_key_values_length = 0
+        if past_key_values is not None:
+            past_key_values_length = (
+                past_key_values[0][0].shape[-2]
+                if not isinstance(past_key_values, Cache)
+                else past_key_values.get_seq_length()
+            )
 
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)

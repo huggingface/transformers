@@ -138,6 +138,11 @@ class BlipTextSelfAttention(nn.Module):
     def get_attention_map(self):
         return self.attention_map
 
+    def transpose_for_scores(self, x):
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        x = x.view(*new_x_shape)
+        return x.permute(0, 2, 1, 3)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -155,6 +160,7 @@ class BlipTextSelfAttention(nn.Module):
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
         is_cross_attention = encoder_hidden_states is not None
+        attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
 
         if past_key_value is not None:
             if isinstance(past_key_value, EncoderDecoderCache):
@@ -173,8 +179,8 @@ class BlipTextSelfAttention(nn.Module):
             key_layer = curr_past_key_value.key_cache[self.layer_idx]
             value_layer = curr_past_key_value.value_cache[self.layer_idx]
         else:
-            key_layer = self.transpose_for_scores(self.k_proj(current_states))
-            value_layer = self.transpose_for_scores(self.v_proj(current_states))
+            key_layer = self.transpose_for_scores(self.key(current_states))
+            value_layer = self.transpose_for_scores(self.value(current_states))
 
             if past_key_value is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
@@ -339,7 +345,7 @@ class BlipTextLayer(GradientCheckpointingLayer):
         self.config = config
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = BlipTextAttention(config)
+        self.attention = BlipTextAttention(config, layer_idx=layer_num)
         self.layer_num = layer_num
         if self.config.is_decoder:
             self.crossattention = BlipTextAttention(
@@ -752,8 +758,13 @@ class BlipTextModel(BlipTextPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds or encoder_embeds")
 
-        # past_key_values_length
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_key_values_length = 0
+        if past_key_values is not None:
+            past_key_values_length = (
+                past_key_values[0][0].shape[-2]
+                if not isinstance(past_key_values, Cache)
+                else past_key_values.get_seq_length()
+            )
 
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length))).to(device)

@@ -174,7 +174,6 @@ class XLMRobertaXLSelfAttention(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
@@ -286,7 +285,6 @@ class XLMRobertaXLSdpaSelfAttention(XLMRobertaXLSelfAttention):
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
@@ -305,7 +303,6 @@ class XLMRobertaXLSdpaSelfAttention(XLMRobertaXLSelfAttention):
                 attention_mask,
                 head_mask,
                 encoder_hidden_states,
-                encoder_attention_mask,
                 past_key_value,
                 output_attentions,
                 cache_position,
@@ -320,7 +317,6 @@ class XLMRobertaXLSdpaSelfAttention(XLMRobertaXLSelfAttention):
         is_cross_attention = encoder_hidden_states is not None
 
         current_states = encoder_hidden_states if is_cross_attention else hidden_states
-        attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
 
         if past_key_value is not None:
             if isinstance(past_key_value, EncoderDecoderCache):
@@ -339,7 +335,7 @@ class XLMRobertaXLSdpaSelfAttention(XLMRobertaXLSelfAttention):
             key_layer = curr_past_key_value.key_cache[self.layer_idx]
             value_layer = curr_past_key_value.value_cache[self.layer_idx]
         else:
-            value_layer = self.transpose_for_scores(self.key(current_states))
+            key_layer = self.transpose_for_scores(self.key(current_states))
             value_layer = self.transpose_for_scores(self.value(current_states))
 
             if past_key_value is not None:
@@ -441,7 +437,6 @@ class XLMRobertaXLAttention(nn.Module):
         attention_mask=None,
         head_mask=None,
         encoder_hidden_states=None,
-        encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
         cache_position=None,
@@ -452,7 +447,6 @@ class XLMRobertaXLAttention(nn.Module):
             attention_mask,
             head_mask,
             encoder_hidden_states,
-            encoder_attention_mask,
             past_key_value,
             output_attentions,
             cache_position,
@@ -520,8 +514,8 @@ class XLMRobertaXLLayer(nn.Module):
     ):
         self_attention_outputs = self.attention(
             hidden_states,
-            attention_mask,
-            head_mask,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
             output_attentions=output_attentions,
             past_key_value=past_key_value,
             cache_position=cache_position,
@@ -543,12 +537,11 @@ class XLMRobertaXLLayer(nn.Module):
 
             cross_attention_outputs = self.crossattention(
                 attention_output,
-                attention_mask,
-                head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                past_key_value,
-                output_attentions,
+                attention_mask=encoder_attention_mask,
+                head_mask=head_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
                 cache_position=cache_position,
             )
             attention_output = cross_attention_outputs[0]
@@ -807,8 +800,13 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
         batch_size, seq_length = input_shape
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        # past_key_values_length
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_key_values_length = 0
+        if past_key_values is not None:
+            past_key_values_length = (
+                past_key_values[0][0].shape[-2]
+                if not isinstance(past_key_values, Cache)
+                else past_key_values.get_seq_length()
+            )
 
         if token_type_ids is None:
             if hasattr(self.embeddings, "token_type_ids"):

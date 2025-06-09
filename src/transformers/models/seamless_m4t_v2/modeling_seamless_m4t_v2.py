@@ -987,19 +987,9 @@ class SeamlessM4Tv2Attention(nn.Module):
                     past_key_value.is_updated[self.layer_idx] = True
 
         query_states = self.q_proj(hidden_states)
-        query_states = query_states.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.reshape(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         query_states = query_states * self.scaling
         attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
-
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_states, value_states)
 
         if attention_mask is not None:
             attention_scores = attention_scores + attention_mask

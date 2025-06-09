@@ -28,7 +28,6 @@ from ..utils import is_sklearn_available
 if is_sklearn_available():
     from sklearn.metrics import roc_curve
 
-from ..cache_utils import Cache
 from ..pytorch_utils import isin_mps_friendly
 from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor, SuppressTokensLogitsProcessor
 
@@ -1176,6 +1175,7 @@ class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
         candidate_ids, candidate_logits = super().get_candidates(input_ids)
         base_model.config.num_hidden_layers = original_num_hidden_layers
         return candidate_ids, candidate_logits
+
 
 def _prepare_attention_mask(model_kwargs: Dict[str, Any], new_length: int, is_encoder_decoder: bool) -> Dict[str, Any]:
     """Expands or crops the model's mask for decoding purposes, to the defined length"""
