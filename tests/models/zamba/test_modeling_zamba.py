@@ -46,6 +46,10 @@ class ZambaModelTester(CausalLMModelTester):
         causal_lm_class = ZambaForCausalLM
         sequence_classification_class = ZambaForSequenceClassification
 
+    def __init__(self, parent, num_hidden_layers=6, attn_layer_period=2, **kwargs):
+        super().__init__(parent=parent, num_hidden_layers=num_hidden_layers, **kwargs)
+        self.attn_layer_period = attn_layer_period
+
 
 @require_torch
 class ZambaModelTest(CausalLMModelTest, unittest.TestCase):
