@@ -108,10 +108,6 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
                     flipped = stacked_images.clone()
                     flipped[:, 0:3] = stacked_images[:, [2, 1, 0], ...]
                     stacked_images = flipped
-            if do_normalize and image_mean is not None and image_std is not None:
-                stacked_images = self.normalize(image=stacked_images, mean=image_mean, std=image_std)
-            if do_convert_rgb:
-                stacked_images = self.convert_to_rgb(stacked_images)
 
             processed_images_grouped[shape] = stacked_images
 
