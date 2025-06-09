@@ -414,6 +414,46 @@ between them. It's straightforward to train your models with one before loading 
 
         self.assertEqual(nested_simplify(outputs), {"score": 0.979, "start": 27, "end": 32, "answer": "Paris"})
 
+    @slow
+    @require_torch
+    def test_align_word_topk_issue_with_bpe(self):
+        # https://github.com/huggingface/transformers/issues/26286
+        qa_pipeline = pipeline("question-answering", model="deepset/tinyroberta-squad2")
+        # Here nothing interesting happens, the issue is not observed
+        question = "When was Rachel born?"
+        context = "Rachel was born in 1990."
+        ideal_answers = [
+            {"score": 0.96, "start": 19, "end": 23, "answer": "1990"},
+            {"score": 0.010, "start": 19, "end": 24, "answer": "1990."},
+            {"score": 0.003, "start": 16, "end": 23, "answer": "in 1990"},
+        ]
+        outputs = qa_pipeline(question=question, context=context, align_to_words=True, top_k=3)
+        self.assertEqual(nested_simplify(outputs), ideal_answers)
+
+        outputs = qa_pipeline(question=question, context=context, align_to_words=False, top_k=3)
+        self.assertEqual(nested_simplify(outputs), ideal_answers)
+
+    @slow
+    @require_torch
+    def test_align_word_topk_issue_with_wpiece(self):
+        # https://github.com/huggingface/transformers/issues/26286
+        qa_pipeline = pipeline(
+            "question-answering", model="google-bert/bert-large-uncased-whole-word-masking-finetuned-squad"
+        )
+        # Here nothing interesting happens, the issue is not observed
+        question = "When was Rachel born?"
+        context = "Rachel was born in 1990."
+        ideal_answers = [
+            {"score": 0.988, "start": 19, "end": 23, "answer": "1990"},
+            {"score": 0.008, "start": 19, "end": 24, "answer": "1990."},
+            {"score": 0.003, "start": 16, "end": 23, "answer": "in 1990"},
+        ]
+        outputs = qa_pipeline(question=question, context=context, align_to_words=True, top_k=3)
+        self.assertEqual(nested_simplify(outputs), ideal_answers)
+
+        outputs = qa_pipeline(question=question, context=context, align_to_words=False, top_k=3)
+        self.assertEqual(nested_simplify(outputs), ideal_answers)
+
 
 @require_torch_or_tf
 class QuestionAnsweringArgumentHandlerTests(unittest.TestCase):
