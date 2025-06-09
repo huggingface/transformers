@@ -78,12 +78,6 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
     ):
         processed_images = []
 
-        if do_normalize is None:
-            do_normalize = self.do_normalize
-        if image_mean is None and hasattr(self, "image_mean"):
-            image_mean = self.image_mean
-        if image_std is None and hasattr(self, "image_std"):
-            image_std = self.image_std
 
         # Group images by shape for more efficient batch processing
         grouped_images, grouped_images_index = group_images_by_shape(images)
