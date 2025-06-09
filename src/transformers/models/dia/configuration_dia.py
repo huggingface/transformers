@@ -283,7 +283,7 @@ class DiaConfig(PretrainedConfig):
             Configuration for the decoder part of the model. If not provided, a default `DiaDecoderConfig` will be used.
         norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the normalization layers.
-        is_encoder_decoder (`bool`, *optional*, default to `True`):
+        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Indicating that this model uses an encoder-decoder architecture.
         pad_token_id (`int`, *optional*, defaults to 1025):
             Padding token id.
