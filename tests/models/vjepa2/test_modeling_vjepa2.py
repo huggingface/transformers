@@ -305,3 +305,61 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
         # verify the last hidden states
         expected_shape = torch.Size((1, 2048, 1024))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+
+    @slow
+    def test_predictor_outputs(self):
+        model = VJEPA2Model.from_pretrained(VJEPA_HF_MODEL).to(torch_device)
+
+        video_processor = self.default_video_processor
+        video = prepare_random_video()
+        inputs = video_processor(video, return_tensors="pt").to(torch_device)
+        pixel_values_videos = inputs.pixel_values_videos
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(pixel_values_videos)
+
+        # verify the last hidden states
+        expected_shape = torch.Size((1, 2048, 1024))
+        self.assertEqual(outputs.predictor_output.last_hidden_state.shape, expected_shape)
+
+    @slow
+    def test_predictor_full_mask(self):
+        model = VJEPA2Model.from_pretrained(VJEPA_HF_MODEL).to(torch_device)
+
+        video_processor = self.default_video_processor
+        video = prepare_random_video()
+        inputs = video_processor(video, return_tensors="pt").to(torch_device)
+        pixel_values_videos = inputs.pixel_values_videos
+
+        # forward pass
+        with torch.no_grad():
+            context_mask = [torch.arange(2048, device=pixel_values_videos.device).unsqueeze(0)]
+            predictor_mask = context_mask
+            outputs = model(pixel_values_videos, context_mask=context_mask, target_mask=predictor_mask)
+
+        # verify the last hidden states
+        expected_shape = torch.Size((1, 2048, 1024))
+        self.assertEqual(outputs.predictor_output.last_hidden_state.shape, expected_shape)
+
+    @slow
+    def test_predictor_partial_mask(self):
+        model = VJEPA2Model.from_pretrained(VJEPA_HF_MODEL).to(torch_device)
+
+        video_processor = self.default_video_processor
+        video = prepare_random_video()
+        inputs = video_processor(video, return_tensors="pt").to(torch_device)
+        pixel_values_videos = inputs.pixel_values_videos
+
+        num_patches = 2048
+        num_masks = 100
+        # forward pass
+        with torch.no_grad():
+            pos_ids = torch.arange(num_patches, device=pixel_values_videos.device)
+            context_mask = [pos_ids[0 : num_patches - num_masks].unsqueeze(0)]
+            predictor_mask = [pos_ids[num_patches - num_masks :].unsqueeze(0)]
+            outputs = model(pixel_values_videos, context_mask=context_mask, target_mask=predictor_mask)
+
+        # verify the last hidden states
+        expected_shape = torch.Size((1, num_masks, 1024))
+        self.assertEqual(outputs.predictor_output.last_hidden_state.shape, expected_shape)
