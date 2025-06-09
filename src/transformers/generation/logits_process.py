@@ -2098,7 +2098,7 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
 
     <Tip warning={true}>
 
-    This logits processor is exclusively compatible with certain models such as
+    This logits processor is exclusively compatible with
     [MusicGen](https://huggingface.co/docs/transformers/main/en/model_doc/musicgen)
 
     </Tip>
@@ -2108,9 +2108,6 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
             The guidance scale for classifier free guidance (CFG). CFG is enabled by setting `guidance_scale > 1`.
             Higher guidance scale encourages the model to generate samples that are more closely linked to the input
             prompt, usually at the expense of poorer quality.
-        guidance_top_k (int, *optional*):
-            The number of highest probability vocabulary tokens to keep for top-k-filtering. However, we do not keep
-            the logits of the combined CFG output, but the conditioned output only.
 
     Examples:
 
@@ -2129,7 +2126,7 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, guidance_scale: float, guidance_top_k: Optional[int] = None):
+    def __init__(self, guidance_scale):
         if guidance_scale > 1:
             self.guidance_scale = guidance_scale
         else:
@@ -2137,10 +2134,6 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
                 "Require guidance scale >1 to use the classifier free guidance processor, got guidance scale "
                 f"{guidance_scale}."
             )
-
-        self.guidance_top_k = guidance_top_k
-        if self.guidance_top_k is not None and self.guidance_top_k < 1:
-            raise ValueError(f"`guidance_top_k` has to be a strictly positive integer if given, but is {self.guidance_top_k}")
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
@@ -2152,20 +2145,9 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
                 f"the conditional inputs, and the second half of batches corresponding to the unconditional inputs. Got "
                 f"batch size {scores.shape[0]} for the logits and {input_ids.shape[0]} for the input ids."
             )
-        # Base CFG
         unguided_bsz = scores.shape[0] // 2
         cond_logits, uncond_logits = scores.split(unguided_bsz, dim=0)
         scores_processed = uncond_logits + (cond_logits - uncond_logits) * self.guidance_scale
-
-        # Optional CFG top k filtering
-        if self.guidance_top_k is not None:
-            # Create top k based on the combined CFG output
-            _, top_k_indices = torch.topk(scores_processed, k=self.guidance_top_k, dim=-1)
-            top_k_mask = torch.ones_like(scores_processed, dtype=torch.bool)
-            top_k_mask = top_k_mask.scatter(dim=-1, index=top_k_indices, value=False)
-            # Only return conditioned logits with top k
-            scores_processed = cond_logits.masked_fill(top_k_mask, -float("inf"))
-
         return scores_processed
 
 
@@ -2994,6 +2976,70 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         return coinflip_prob + coinflip_prob * (1 - coinflip_prob) * (1 - (1 / vocab_size))
 
 
+class DiaClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
+    r"""
+    [`LogitsProcessor`] for classifier free guidance (CFG). Similar to the original
+    `ClassifierFreeGuidanceLogitsProcessor` with some modifications on the overall
+    calculation, e.g. conditioned logits centered, and an additional top k selection
+    option.
+
+    <Tip warning={true}>
+
+    This logits processor is exclusively compatible with
+    [Dia](https://huggingface.co/docs/transformers/main/en/model_doc/dia)
+
+    </Tip>
+
+    Args:
+        guidance_scale (float):
+            The guidance scale for classifier free guidance (CFG). CFG is enabled by setting `guidance_scale > 1`.
+            Higher guidance scale encourages the model to generate samples that are more closely linked to the input
+            prompt, usually at the expense of poorer quality.
+        guidance_top_k (int, *optional*):
+            The number of highest probability vocabulary tokens to keep for top-k-filtering. However, we do not keep
+            the logits of the combined CFG output, but the conditioned output only.
+    """
+
+    def __init__(self, guidance_scale: float, guidance_top_k: Optional[int] = None):
+        if guidance_scale > 1:
+            self.guidance_scale = guidance_scale
+        else:
+            raise ValueError(
+                "Require guidance scale >1 to use the classifier free guidance processor, got guidance scale "
+                f"{guidance_scale}."
+            )
+
+        self.guidance_top_k = guidance_top_k
+        if self.guidance_top_k is not None and self.guidance_top_k < 1:
+            raise ValueError(f"`guidance_top_k` has to be a strictly positive integer if given, but is {self.guidance_top_k}")
+
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        # simple check to make sure we have compatible batch sizes between our
+        # logits scores (cond + uncond) and input ids (cond only)
+        if scores.shape[0] != 2 * input_ids.shape[0]:
+            raise ValueError(
+                f"Logits should have twice the batch size of the input ids, the first half of batches corresponding to "
+                f"the conditional inputs, and the second half of batches corresponding to the unconditional inputs. Got "
+                f"batch size {scores.shape[0]} for the logits and {input_ids.shape[0]} for the input ids."
+            )
+        # Base CFG with center on cond_logits
+        unguided_bsz = scores.shape[0] // 2
+        cond_logits, uncond_logits = scores.split(unguided_bsz, dim=0)
+        scores_processed = cond_logits + (cond_logits - uncond_logits) * self.guidance_scale
+
+        # Optional CFG top k filtering
+        if self.guidance_top_k is not None:
+            # Create top k based on the combined CFG output
+            _, top_k_indices = torch.topk(scores_processed, k=self.guidance_top_k, dim=-1)
+            top_k_mask = torch.ones_like(scores_processed, dtype=torch.bool)
+            top_k_mask = top_k_mask.scatter(dim=-1, index=top_k_indices, value=False)
+            # Only return conditioned logits with top k
+            scores_processed = cond_logits.masked_fill(top_k_mask, -float("inf"))
+
+        return scores_processed
+
+
 class DiaEOSChannelFilterLogitsProcessor(LogitsProcessor):
     r"""Specialized processor that ensures certain properties around EOS sampling:
         1. Only channel 0 can generate EOS
@@ -3096,17 +3142,19 @@ class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
             The delays per channel in the audio codebooks.
         eos_token_id (`int`):
             The id of *end-of-sequence* token.
+        max_generation_len (`int`):
+            The max sequence length that can be generated.
         device (`str`, *optional*, defaults to `"cpu"`):
             The device to allocate the tensors on.
     """
 
-    # TODO: max step condition? ~ similar to force eos at end processor
-    def __init__(self, delay_pattern: List[int], eos_token_id: int, device: str = "cpu"):
+    def __init__(self, delay_pattern: List[int], eos_token_id: int, max_generation_len: int, device: str = "cpu"):
         self.num_channels = len(delay_pattern)
         # Update during first iteration
         self.active_batches = None
         self.delay_pattern = torch.tensor(delay_pattern, device=device, dtype=torch.int)[None, :]
         self.eos_token_id = eos_token_id
+        self.max_generation_len = max_generation_len - max(delay_pattern)
         self.device = device
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
@@ -3120,9 +3168,12 @@ class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
 
         # Check if eos has been generated in any batch
         channel_generated_eos = torch.argmax(scores, dim=-1)[:, 0] == self.eos_token_id
+        # Check if max len has been reached
+        reached_max_len = input_ids.shape[1] == self.max_generation_len
 
         # Update active batches
         self.active_batches |= channel_generated_eos
+        self.active_batches |= reached_max_len
 
         # Find channels that need to force eos
         forced_eos_channels = self.active_batches[:, None] & (self.delay_pattern == 0)

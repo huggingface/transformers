@@ -18,113 +18,15 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import torch
 
 from ...generation.logits_process import (
-    ClassifierFreeGuidanceLogitsProcessor,
+    DiaClassifierFreeGuidanceLogitsProcessor,
     DiaEOSChannelFilterLogitsProcessor,
     DiaEOSDelayPatternLogitsProcessor,
-    LogitsProcessor,
     LogitsProcessorList,
 )
 from ...generation.stopping_criteria import StoppingCriteriaList
 from ...generation.streamers import BaseStreamer
 from ...generation.utils import GenerateOutput, GenerationConfig, GenerationMixin
 from ...modeling_utils import PreTrainedModel
-
-
-# TODO: superceeded, kept to check in later
-class DiaEOSDelayPatternLogitsProcessor2(LogitsProcessor):
-    def __init__(
-        self,
-        delay_pattern: torch.Tensor,
-        eos_value: int,
-        pad_value: int,
-        max_step: int,
-        device: str = "cpu",
-    ):
-        self.delay_pattern = delay_pattern
-        self.max_delay_pattern = delay_pattern.max().item()
-        self.num_channels = delay_pattern.shape[0]
-        self.eos_value = eos_value
-        self.pad_value = pad_value
-        self.max_step = torch.tensor(max_step, device=device)
-        self.eos_countup: Optional[torch.Tensor] = None
-        self.device = device
-
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        """
-        This logits processor is used to apply the delay pattern to the generated tokens when EOS is generated.
-
-        If delay pattern is [0, 2, 3, 4] then:
-
-            s   s+1 s+2 s+3 s+4 s+5 ...
-            |   |   |   |   |   |
-        C0: EOS PAD PAD PAD PAD PAD ...
-        C1: x   x   EOS PAD PAD PAD ...
-        C2: x   x   x   EOS PAD PAD ...
-        C3: x   x   x   x   EOS PAD ...
-
-        The PAD & EOS are forced from step s+1.
-        """
-        # TODO: reshape from (B * C, V) to (B, C, V)
-        # and reshape from (B * C, S) to (B, S, C)
-
-        # EOS Countup
-        # Due to delay pattern, we do not stop generation at the first EOS token.
-        # Instead, we force EOS, PAD at delay pattern steps.
-        batch_size = scores.shape[0]
-        if self.eos_countup is None:
-            self.eos_countup = torch.full((batch_size,), -1, dtype=torch.long, device=self.device)
-
-        step = input_ids.shape[1]
-
-        # EOS countdown and delay pattern application
-        active_mask = self.eos_countup > 0
-
-        if active_mask.any():
-            # Logits for active items: [num_active, C, V]
-            scores_active = scores[active_mask]
-            # Countdown values for active items: [num_active]
-            eos_countup_active = self.eos_countup[active_mask]
-
-            # Expand for comparison with delay_pattern: [num_active, C]
-            eos_countup_active = eos_countup_active.unsqueeze(1).expand(-1, self.num_channels)
-            delay_pattern = self.delay_pattern.unsqueeze(0).expand(scores_active.shape[0], -1)  # [num_active, C]
-
-            # Mask for forcing EOS: [num_active, C]
-            force_eos_mask_BxC = eos_countup_active == delay_pattern
-            # Mask for forcing PAD: [num_active, C]
-            force_pad_mask_BxC = eos_countup_active > delay_pattern
-
-            # Efficiently apply forced EOS and PAD logits
-            vocab_size = scores_active.shape[-1]
-
-            # Create template rows for forced EOS and PAD
-            eos_row = torch.full((vocab_size,), -torch.inf, device=self.device, dtype=scores_active.dtype)
-            eos_row[self.eos_value] = 0.0
-            pad_row = torch.full((vocab_size,), -torch.inf, device=self.device, dtype=scores_active.dtype)
-            pad_row[self.pad_value] = 0.0
-
-            # Clone the active slice to modify it
-            final_modified_slice = scores_active.clone()
-            final_modified_slice[force_eos_mask_BxC] = eos_row
-            final_modified_slice[force_pad_mask_BxC] = pad_row
-
-            # Update the original logits tensor with the modified slice
-            scores[active_mask] = final_modified_slice
-
-        # This is possible because we applied `DiaEOSFilterAndScaleLogitsProcessor`
-        last_generated_tokens = torch.argmax(scores, dim=-1)[:, 0]  # Shape [B_orig]
-        eos_start_mask = last_generated_tokens == self.eos_value
-        eos_start_mask |= step + self.max_delay_pattern >= self.max_step
-        eos_start_mask &= self.eos_countup < 0
-
-        # Make sure that the EOS token is the only candidate for the first token
-        scores[eos_start_mask, 0, :] = -torch.inf
-        scores[eos_start_mask, 0, self.eos_value] = 0.0
-
-        self.eos_countup[eos_start_mask] = 0
-        self.eos_countup[self.eos_countup >= 0] += 1
-
-        return scores
 
 
 class DiaGenerationMixin(GenerationMixin):
@@ -147,9 +49,8 @@ class DiaGenerationMixin(GenerationMixin):
 
         cfg_processor = None
         if generation_config.guidance_scale is not None and generation_config.guidance_scale != 1:
-            # TODO: check if reshaping on logits doesnt destroy anything (pretty sure it doesn't)
             # TODO: check if top k works as intended
-            cfg_processor = ClassifierFreeGuidanceLogitsProcessor(
+            cfg_processor = DiaClassifierFreeGuidanceLogitsProcessor(
                 guidance_scale=generation_config.guidance_scale,
                 guidance_top_k=generation_config.top_k,
             )
@@ -167,6 +68,7 @@ class DiaGenerationMixin(GenerationMixin):
             DiaEOSDelayPatternLogitsProcessor(
                 delay_pattern=self.config.delay_pattern,
                 eos_token_id=generation_config.eos_token_id,
+                max_generation_len=generation_config.max_length,
                 device=device,
             )
         )
@@ -198,7 +100,6 @@ class DiaGenerationMixin(GenerationMixin):
 
         # We allow generation up to max length + max delay pattern
         # (will revert back to max length after generation)
-        # TODO: check where max delay wasn't considered but added afterwards
         generation_config.max_length += max(self.config.delay_pattern)
 
         # Internal flag to indicate CFG that needs to prepare unconditioned input
@@ -224,7 +125,7 @@ class DiaGenerationMixin(GenerationMixin):
             inputs = torch.cat([inputs, unconditioned_inputs], dim=0)
 
             if model_kwargs.get("attention_mask", None) is not None:
-                model_kwargs["attention_mask"] = model_kwargs["attention_mask"].repeat_interleave(2, dim=0)
+                model_kwargs["attention_mask"] = model_kwargs["attention_mask"].repeat(2, 1)
 
         return inputs, input_name, model_kwargs
 
@@ -342,7 +243,11 @@ class DiaGenerationMixin(GenerationMixin):
         if self._uses_cfg:
             for key in ["decoder_input_ids", "decoder_attention_mask", "decoder_position_ids"]:
                 if model_inputs.get(key, None) is not None:
-                    model_inputs[key] = model_inputs[key].repeat_interleave(2, dim=0)
+                    # double first dimension and keep everything else the same
+                    repeat_pattern = tuple([2] + [1] * (model_inputs[key].ndim - 1))
+                    model_inputs[key] = model_inputs[key].repeat(*repeat_pattern)
+
+        # TODO: decoder input 2d? --> reshape here
 
         return model_inputs
 
