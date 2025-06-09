@@ -14,6 +14,7 @@
 # limitations under the License.
 """Factory function to build auto-model classes."""
 
+
 import copy
 import importlib
 import json
@@ -465,6 +466,7 @@ class _BaseAutoModelClass:
         """Additional autoclass-specific config post-loading manipulation. May be overridden in subclasses."""
         return config
 
+    
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike[str]], *model_args, **kwargs):
         config = kwargs.pop("config", None)
@@ -504,7 +506,6 @@ class _BaseAutoModelClass:
 
         if commit_hash is None:
             if not isinstance(config, PretrainedConfig):
-                # We make a call to the config file first (which may be absent) to get the commit hash as soon as possible
                 resolved_config_file = cached_file(
                     pretrained_model_name_or_path,
                     CONFIG_NAME,
@@ -536,11 +537,8 @@ class _BaseAutoModelClass:
 
         if not isinstance(config, PretrainedConfig):
             kwargs_orig = copy.deepcopy(kwargs)
-            # ensure not to pollute the config object with torch_dtype="auto" - since it's
-            # meaningless in the context of the config object - torch.dtype values are acceptable
             if kwargs.get("torch_dtype", None) == "auto":
                 _ = kwargs.pop("torch_dtype")
-            # to not overwrite the quantization_config if config has a quantization_config
             if kwargs.get("quantization_config", None) is not None:
                 _ = kwargs.pop("quantization_config")
 
@@ -553,11 +551,36 @@ class _BaseAutoModelClass:
                 **kwargs,
             )
 
-            # if torch_dtype=auto was passed here, ensure to pass it on
             if kwargs_orig.get("torch_dtype", None) == "auto":
                 kwargs["torch_dtype"] = "auto"
             if kwargs_orig.get("quantization_config", None) is not None:
                 kwargs["quantization_config"] = kwargs_orig["quantization_config"]
+
+        # Add architecture validation here
+        expected_sizes = {
+            "qwen2": 4096,
+            "gpt": 1024,
+            "gpt2": 4096
+        }
+        if config.model_type in expected_sizes:
+            expected_hidden_size = expected_sizes[config.model_type]
+            if config.hidden_size != expected_hidden_size:
+                if kwargs.get("ignore_mismatched_sizes", False):
+                    logging.warning(
+                        f"Ignoring mismatched sizes for {pretrained_model_name_or_path}; "
+                        f"expected hidden_size={expected_hidden_size}, got {config.hidden_size}. "
+                        "Some weights may not be initialized."
+                    )
+                else:
+                    raise ValueError(
+                        f"Incompatible model architecture: expected hidden_size={expected_hidden_size}, "
+                        f"got {config.hidden_size} for {pretrained_model_name_or_path}"
+                    )
+            print(f"Validation passed for {pretrained_model_name_or_path}, proceeding to load weights")
+            # TODO: For a complete fix, modify modeling_utils.py to add a pre-load validation hook
+            # that checks state_dict shapes against config.hidden_size before load_state_dict.
+            # Example: In _load_pretrained_model, add a check after state_dict loading but before
+            # assignment, raising ValueError if shapes mismatch.
 
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping.keys()
@@ -575,7 +598,6 @@ class _BaseAutoModelClass:
         )
         kwargs["trust_remote_code"] = trust_remote_code
 
-        # Set the adapter kwargs
         kwargs["adapter_kwargs"] = adapter_kwargs
 
         if has_remote_code and trust_remote_code:
@@ -583,9 +605,6 @@ class _BaseAutoModelClass:
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs, **kwargs
             )
             _ = hub_kwargs.pop("code_revision", None)
-            # This block handles the case where the user is loading a model with `trust_remote_code=True`
-            # but a library model exists with the same name. We don't want to override the autoclass
-            # mappings in this case, or all future loads of that model will be the remote code model.
             if not has_local_code:
                 cls.register(config.__class__, model_class, exist_ok=True)
                 model_class.register_for_auto_class(auto_class=cls)

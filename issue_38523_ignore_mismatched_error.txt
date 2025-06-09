@@ -1,0 +1,26 @@
+Model loaded successfully: Qwen2ForCausalLM(
+  (model): Qwen2Model(
+    (embed_tokens): Embedding(151936, 4096)
+    (layers): ModuleList(
+      (0-23): 24 x Qwen2DecoderLayer(
+        (self_attn): Qwen2Attention(
+          (q_proj): Linear(in_features=4096, out_features=4096, bias=True)
+          (k_proj): Linear(in_features=4096, out_features=1024, bias=True)
+          (v_proj): Linear(in_features=4096, out_features=1024, bias=True)
+          (o_proj): Linear(in_features=4096, out_features=4096, bias=False)
+        )
+        (mlp): Qwen2MLP(
+          (gate_proj): Linear(in_features=4096, out_features=16384, bias=False)
+          (up_proj): Linear(in_features=4096, out_features=16384, bias=False)
+          (down_proj): Linear(in_features=16384, out_features=4096, bias=False)
+          (act_fn): SiLU()
+        )
+        (input_layernorm): Qwen2RMSNorm((4096,), eps=1e-06)
+        (post_attention_layernorm): Qwen2RMSNorm((4096,), eps=1e-06)
+      )
+    )
+    (norm): Qwen2RMSNorm((4096,), eps=1e-06)
+    (rotary_emb): Qwen2RotaryEmbedding()
+  )
+  (lm_head): Linear(in_features=4096, out_features=151936, bias=False)
+)
