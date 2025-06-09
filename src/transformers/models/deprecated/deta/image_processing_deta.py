@@ -15,7 +15,8 @@
 """Image processor class for Deformable DETR."""
 
 import pathlib
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 

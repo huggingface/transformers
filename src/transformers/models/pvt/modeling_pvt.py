@@ -18,7 +18,8 @@
 
 import collections
 import math
-from typing import Iterable, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
