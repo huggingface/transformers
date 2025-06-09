@@ -2508,13 +2508,12 @@ class GenerationTesterMixin:
         # Past Key Value States -- a few notes here:
         # 1. Its inner sequence length is with respect to the inputs of the latest forward pass, hence the "-1"
         # 2. We ignore models that have unique cache structures (e.g. mamba) or are in need of refatoring to match the
-        #    standard cache format (e.g.gptbigcode )
+        #    standard cache format (e.g.mamba architecture )
         models_without_standard_cache = (
             "bamba",
             "ctrl",
             "fsmt",
             "granitemoehybrid",
-            "gptbigcode",
             "mega",
             "reformer",
             "jamba",
@@ -5154,7 +5153,6 @@ class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
 
     @parameterized.expand([(is_sklearn_available(),), (False,)])
     def test_update_candidate_strategy_no_matches_short(self, sklearn_available):
-        print("test_update_candidate_strategy_no_matches_short")
         self.original_matches = []
         self.candidate_generator.matches = self.original_matches
         self.num_matches = 0

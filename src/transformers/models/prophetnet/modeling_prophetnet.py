@@ -460,7 +460,7 @@ class ProphetNetPositionalEmbeddings(nn.Embedding):
         )
 
         if position_ids is None:
-            if past_key_values is not None:
+            if past_key_values is not None and past_key_values.get_seq_length() != 0:
                 # position_ids is the same for every token when decoding a single step
                 # Without the int() cast, it doesn't work in some cases when exporting to ONNX
                 prev_num_input_ids = past_key_values.get_seq_length()
@@ -1312,12 +1312,6 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         batch_size, sequence_length = inputs_embeds.shape[:2]
 
-        main_stream_pos_embed, position_ids = self.position_embeddings(
-            (batch_size, sequence_length),
-            device=inputs_embeds.device,
-            past_key_values=past_key_values,
-        )
-
         if self.gradient_checkpointing and self.training:
             if use_cache:
                 logger.warning_once(
@@ -1336,6 +1330,12 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+
+        main_stream_pos_embed, position_ids = self.position_embeddings(
+            (batch_size, sequence_length),
+            device=inputs_embeds.device,
+            past_key_values=past_key_values,
+        )
 
         if past_key_values_length != 0:
             main_relative_position_buckets, predict_relative_position_buckets = None, None
