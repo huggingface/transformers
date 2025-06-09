@@ -120,18 +120,18 @@ class ArceeModelTest(CausalLMModelTest, unittest.TestCase):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         config.hidden_act = "relu2"  # Ensure we're using relu2 activation
         model = ArceeModel(config)
-        
+
         # Check that the MLP layers use the correct activation
         for layer in model.layers:
             mlp = layer.mlp
             # Test with a simple input
             x = torch.randn(1, 10, config.hidden_size)
             up_output = mlp.up_proj(x)
-            
+
             # Verify ReLU² activation: x * relu(x)
             expected_activation = up_output * torch.relu(up_output)
             actual_activation = mlp.act_fn(up_output)
-            
+
             self.assertTrue(torch.allclose(expected_activation, actual_activation, atol=1e-5))
             break  # Only test the first layer
 
@@ -140,6 +140,7 @@ class ArceeModelTest(CausalLMModelTest, unittest.TestCase):
 class ArceeIntegrationTest(unittest.TestCase):
     def tearDown(self):
         import gc
+
         gc.collect()
         torch.cuda.empty_cache()
 

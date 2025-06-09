@@ -19,16 +19,12 @@
 # limitations under the License.
 """PyTorch Arcee model."""
 
-import math
-from typing import Optional, Tuple
-
-import torch
 from torch import nn
 
 from transformers.activations import ACT2FN
-from transformers.configuration_utils import PretrainedConfig
-from transformers.utils import auto_docstring, is_torch_available, logging
 from transformers.modeling_rope_utils import rope_config_validation
+from transformers.utils import auto_docstring, logging
+
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -40,7 +36,6 @@ from ..llama.modeling_llama import (
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
-    LlamaRotaryEmbedding,
 )
 
 
@@ -203,7 +198,7 @@ class ArceeConfig(LlamaConfig):
             head_dim=head_dim,
             **kwargs,
         )
-        
+
         # Validate the correctness of rotary position embeddings parameters using Arcee's custom validation
         # BC: if there is a 'type' field, copy it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:
@@ -213,13 +208,13 @@ class ArceeConfig(LlamaConfig):
 
 class ArceeRMSNorm(LlamaRMSNorm):
     """ArceeRMSNorm is identical to LlamaRMSNorm"""
-    pass
 
+    pass
 
 
 class ArceeMLP(nn.Module):
     """Arcee MLP with configurable activation function (typically relu2)"""
-    
+
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -236,12 +231,13 @@ class ArceeMLP(nn.Module):
 
 class ArceeAttention(LlamaAttention):
     """Multi-headed attention for Arcee - identical to Llama attention"""
+
     pass
 
 
 class ArceeDecoderLayer(LlamaDecoderLayer):
     """Arcee decoder layer with custom MLP"""
-    
+
     def __init__(self, config: ArceeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         # Replace the Llama MLP with Arcee MLP to use the correct activation
@@ -253,7 +249,7 @@ class ArceePreTrainedModel(LlamaPreTrainedModel):
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
-    
+
     config_class = ArceeConfig
 
 
@@ -277,7 +273,7 @@ class ArceeModel(LlamaModel):
 
 class ArceeForCausalLM(LlamaForCausalLM):
     """Arcee Model transformer with a language modeling head on top (linear layer with weights tied to the input embeddings)."""
-    
+
     def __init__(self, config):
         # We need to set config_class before calling super().__init__
         self.config_class = ArceeConfig
@@ -292,7 +288,7 @@ class ArceeForSequenceClassification(LlamaForSequenceClassification):
     """
     The Arcee Model transformer with a sequence classification head on top (linear layer).
     """
-    
+
     def __init__(self, config):
         self.config_class = ArceeConfig
         super().__init__(config)
@@ -306,7 +302,7 @@ class ArceeForQuestionAnswering(LlamaForQuestionAnswering):
     """
     The Arcee Model transformer with a span classification head on top for extractive question-answering tasks.
     """
-    
+
     def __init__(self, config):
         self.config_class = ArceeConfig
         super().__init__(config)
@@ -321,7 +317,7 @@ class ArceeForTokenClassification(LlamaForTokenClassification):
     """
     The Arcee Model transformer with a token classification head on top.
     """
-    
+
     def __init__(self, config):
         self.config_class = ArceeConfig
         super().__init__(config)
@@ -334,7 +330,7 @@ __all__ = [
     "ArceeConfig",
     "ArceeForCausalLM",
     "ArceeForQuestionAnswering",
-    "ArceeForSequenceClassification", 
+    "ArceeForSequenceClassification",
     "ArceeForTokenClassification",
     "ArceeModel",
     "ArceePreTrainedModel",
