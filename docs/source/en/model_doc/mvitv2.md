@@ -26,14 +26,14 @@ The MViTv2 model was proposed in [MViTv2: Improved Multiscale Vision Transformer
 
 The abstract from the paper:
 
-In this paper, we study Multiscale Vision Transformers (MViTv2) as a unified architecture for image and video classification, as well as object detection. We present an improved version of MViT that incorporates decomposed relative positional embeddings and residual pooling connections. We instantiate this architecture in five sizes and evaluate it for ImageNet classification, COCO detection and Kinetics video recognition where it outperforms prior work. We further compare MViTv2s' pooling attention to window attention mechanisms where it outperforms the latter in accuracy/compute. Without bells-and-whistles, MViTv2 has state-of-the-art performance in 3 domains: 88.8% accuracy on ImageNet classification, 58.7 boxAP on COCO object detection as well as 86.1% on Kinetics-400 video classification.
+*In this paper, we study Multiscale Vision Transformers (MViTv2) as a unified architecture for image and video classification, as well as object detection. We present an improved version of MViT that incorporates decomposed relative positional embeddings and residual pooling connections. We instantiate this architecture in five sizes and evaluate it for ImageNet classification, COCO detection and Kinetics video recognition where it outperforms prior work. We further compare MViTv2s' pooling attention to window attention mechanisms where it outperforms the latter in accuracy/compute. Without bells-and-whistles, MViTv2 has state-of-the-art performance in 3 domains: 88.8% accuracy on ImageNet classification, 58.7 boxAP on COCO object detection as well as 86.1% on Kinetics-400 video classification.*
 
 This model was contributed by [KamilaMila](https://huggingface.co/KamilaMila).
 The original code can be found [here](https://github.com/facebookresearch/mvit). The Hugging Face implementation is also inspired by the implementation from Timm.
 
 ## Usage tips
 
-There are many pretrained variants. Select your pretrained model based on your needs and resources.
+There are many pretrained variants. Select the right size based on how accurate you want it to be and the compute resources that are availble.
 
 ## Resources
 

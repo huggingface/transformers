@@ -29,24 +29,13 @@ from ...utils import auto_docstring, logging
 from .configuration_mvitv2 import MViTV2Config
 
 
-# Implementation inpired by both timm and the original MViTv2 code from Facebook.
-
-
 logger = logging.get_logger(__name__)
 
-
+# Adapted from https://github.com/huggingface/pytorch-image-models/blob/6a621b5b1cd88d5286067acdbef2057adb3cef27/timm/layers/drop.py#L150
 def drop_path(
     hidden_states: torch.Tensor, drop_rate: float = 0.0, training: bool = False, scale_by_keep: bool = True
 ) -> torch.Tensor:
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
-    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for
-    changing the layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use
-    'survival rate' as the argument.
-
-    """
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
     if drop_rate == 0.0 or not training:
         return hidden_states
     keep_prob = 1 - drop_rate
@@ -59,6 +48,7 @@ def drop_path(
     return hidden_states * random_tensor
 
 
+# Adapted from https://github.com/huggingface/pytorch-image-models/blob/6a621b5b1cd88d5286067acdbef2057adb3cef27/timm/layers/drop.py#L170
 class MViTV2DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
@@ -75,6 +65,7 @@ def product(iterable):
     return reduce(operator.mul, iterable, 1)
 
 
+# Adapted from https://github.com/huggingface/pytorch-image-models/blob/6a621b5b1cd88d5286067acdbef2057adb3cef27/timm/models/mvitv2.py#L148
 def calculate_relative_positional_embeddings(
     attention: torch.Tensor,
     query: torch.Tensor,
@@ -128,7 +119,7 @@ def calculate_relative_positional_embeddings(
 
     return attention
 
-
+# Adapted from https://github.com/huggingface/pytorch-image-models/blob/6a621b5b1cd88d5286067acdbef2057adb3cef27/timm/models/mvitv2.py#L119
 def reshape_pre_pool(
     representations: torch.Tensor, feature_size: tuple[int, int], use_cls_token: bool = True
 ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
@@ -143,6 +134,7 @@ def reshape_pre_pool(
     return representations, cls_token
 
 
+# Adapted from https://github.com/huggingface/pytorch-image-models/blob/6a621b5b1cd88d5286067acdbef2057adb3cef27/timm/models/mvitv2.py#L134
 def reshape_post_pool(
     representations: torch.Tensor, num_heads: int, cls_token: Optional[torch.Tensor] = None
 ) -> tuple[torch.Tensor, tuple[int, int]]:
@@ -191,6 +183,7 @@ class MViTV2Embeddings(nn.Module):
         return embeddings
 
 
+# Adapted from https://github.com/huggingface/pytorch-image-models/blob/6a621b5b1cd88d5286067acdbef2057adb3cef27/timm/models/mvitv2.py#L198
 class MViTV2SelfAttentionPoolingFirst(nn.Module):
     def __init__(
         self,
@@ -275,10 +268,11 @@ class MViTV2SelfAttentionPoolingFirst(nn.Module):
 
         # relative positional embedding
         if self.config.relative_positional_embeddings_type == "spatial":
-            assert feature_size[0] == feature_size[1]
+            if feature_size[0] != feature_size[1]:
+                raise ValueError("Relative positional embeddings can only be used with square feature maps (height must equal width)")
             size = feature_size[0]
-            q_size = size // stride_q[1] if len(stride_q) > 0 else size
-            kv_size = size // stride_kv[1] if len(stride_kv) > 0 else size
+            q_size = size // stride_q[0]
+            kv_size = size // stride_kv[0]
             relative_distance_max_range = 2 * max(q_size, kv_size) - 1
 
             self.relative_positional_embeddings_height = nn.Parameter(
@@ -366,6 +360,7 @@ class MViTV2SelfAttentionPoolingFirst(nn.Module):
         return outputs
 
 
+# Adapted from https://github.com/huggingface/pytorch-image-models/blob/6a621b5b1cd88d5286067acdbef2057adb3cef27/timm/models/mvitv2.py#L368
 class MViTV2SelfAttention(nn.Module):
     def __init__(
         self,
@@ -612,6 +607,7 @@ class MViTV2Output(nn.Module):
         return hidden_states
 
 
+# Adapted from https://github.com/huggingface/pytorch-image-models/blob/6a621b5b1cd88d5286067acdbef2057adb3cef27/timm/models/mvitv2.py#L521
 class MViTV2Block(nn.Module):
     def __init__(
         self,
