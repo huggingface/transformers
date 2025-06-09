@@ -29,6 +29,9 @@ from transformers.utils import cached_property, is_torch_available, is_vision_av
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_video_processing_common import (
+    prepare_video_inputs,
+)
 
 
 if is_torch_available():
@@ -231,6 +234,19 @@ def prepare_img():
     return image
 
 
+def prepare_random_video(image_size=256):
+    videos = prepare_video_inputs(
+        batch_size=1,
+        num_frames=16,
+        num_channels=3,
+        min_resolution=image_size,
+        max_resolution=image_size,
+        equal_resolution=True,
+        return_tensors="torch",
+    )
+    return videos
+
+
 @require_torch
 @require_vision
 class VJEPA2ModelIntegrationTest(unittest.TestCase):
@@ -239,7 +255,7 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
         return AutoVideoProcessor.from_pretrained(VJEPA_HF_MODEL) if is_vision_available() else None
 
     @slow
-    def test_inference_no_head(self):
+    def test_inference_image(self):
         model = VJEPA2Model.from_pretrained(VJEPA_HF_MODEL).to(torch_device)
 
         video_processor = self.default_video_processor
@@ -265,3 +281,20 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
+
+    @slow
+    def test_inference_video(self):
+        model = VJEPA2Model.from_pretrained(VJEPA_HF_MODEL).to(torch_device)
+
+        video_processor = self.default_video_processor
+        video = prepare_random_video()
+        inputs = video_processor(video, return_tensors="pt").to(torch_device)
+        pixel_values = inputs.pixel_values
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(pixel_values)
+
+        # verify the last hidden states
+        expected_shape = torch.Size((1, 2048, 1024))
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
