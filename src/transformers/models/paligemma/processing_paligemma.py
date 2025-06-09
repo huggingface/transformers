@@ -18,21 +18,20 @@ Processor class for PaliGemma.
 
 from typing import List, Optional, Union
 
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, make_flat_list_of_images
 from ...processing_utils import (
     ImagesKwargs,
+    MultiModalData,
     ProcessingKwargs,
     ProcessorMixin,
     TextKwargs,
     Unpack,
     _validate_images_text_input_order,
 )
-from ...tokenization_utils_base import (
-    AddedToken,
-    PreTokenizedInput,
-    TextInput,
-)
+from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import logging
 
 
@@ -56,6 +55,7 @@ class PaliGemmaProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_mm_token_type_ids": False,
         },
         "images_kwargs": {
             "data_format": "channels_first",
@@ -116,7 +116,6 @@ class PaliGemmaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
     image_processor_class = ("SiglipImageProcessor", "SiglipImageProcessorFast")
     tokenizer_class = ("GemmaTokenizer", "GemmaTokenizerFast")
 
@@ -299,6 +298,7 @@ class PaliGemmaProcessor(ProcessorMixin):
         pixel_values = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", None)
         inputs = self.tokenizer(
             input_strings,
             text_pair=suffix,
@@ -310,9 +310,36 @@ class PaliGemmaProcessor(ProcessorMixin):
         return_data = {**inputs, "pixel_values": pixel_values}
 
         if return_token_type_ids:
-            labels = inputs["input_ids"].masked_fill(inputs["token_type_ids"] == 0, -100)
+            labels = np.array(inputs["input_ids"])
+            labels[np.array(inputs["token_type_ids"]) == 0] = -100
             return_data.update({"labels": labels})
+
+        if return_mm_token_type_ids:
+            array_ids = np.array(return_data["input_ids"])
+            mm_token_type_ids = np.zeros_like(return_data["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            return_data["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
         return BatchFeature(data=return_data, tensor_type=return_tensors)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (List[List[str]], *optional*):
+                The input sizes formatted as (height, width) per each image.
+        Returns:
+            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
+            to a list containing the number of placeholder tokens required. If the model doesn't accept
+            a certain modality or no input sizes are provided, the dict value is set to an empty list.
+        """
+        vision_data = {}
+        if image_sizes is not None:
+            num_image_tokens = [self.image_seq_length] * len(image_sizes)
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+        return MultiModalData(**vision_data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
     def batch_decode(self, *args, **kwargs):

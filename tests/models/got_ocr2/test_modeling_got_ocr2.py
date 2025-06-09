@@ -34,6 +34,7 @@ if is_torch_available():
 
     from transformers import (
         GotOcr2ForConditionalGeneration,
+        GotOcr2Model,
     )
 
 
@@ -140,7 +141,14 @@ class GotOcr2VisionText2TextModelTester:
 
 @require_torch
 class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (GotOcr2ForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            GotOcr2Model,
+            GotOcr2ForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {
             "image-to-text": GotOcr2ForConditionalGeneration,

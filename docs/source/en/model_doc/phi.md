@@ -65,10 +65,10 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers CLI">
 
 ```bash
-echo -e "'''def print_prime(n): """ Print all primes between 1 and n"""'''" | transformers-cli run --task text-classification --model microsoft/phi-1.5 --device 0
+echo -e "'''def print_prime(n): """ Print all primes between 1 and n"""'''" | transformers run --task text-classification --model microsoft/phi-1.5 --device 0
 ```
 
 </hfoption>
@@ -102,7 +102,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
     ```py
     import torch
     from transformers import AutoTokenizer, AutoModelForCausalLM
-    
+
     tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
     model = AutoModelForCausalLM.from_pretrained(
         "microsoft/phi-1",
@@ -110,12 +110,12 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
         device_map="auto",
         trust_remote_code=True,
         attn_implementation="sdpa")
-    
+
     input_ids = tokenizer('''def print_prime(n):
        """
        Print all primes between 1 and n
        """''', return_tensors="pt").to("cuda")
-    
+
     output = model.generate(**input_ids, cache_implementation="static")
     print(tokenizer.decode(output[0], skip_special_tokens=True))
     ```

@@ -62,6 +62,11 @@ from transformers.testing_utils import (
     TemporaryHubRepo,
     TestCasePlus,
     backend_device_count,
+    backend_empty_cache,
+    backend_max_memory_allocated,
+    backend_memory_allocated,
+    backend_reset_max_memory_allocated,
+    backend_reset_peak_memory_stats,
     evaluate_side_effect_factory,
     execute_subprocess_async,
     get_gpu_count,
@@ -74,11 +79,9 @@ from transformers.testing_utils import (
     require_deepspeed,
     require_galore_torch,
     require_grokadamw,
-    require_intel_extension_for_pytorch,
     require_liger_kernel,
     require_lomo,
     require_non_hpu,
-    require_non_xpu,
     require_optuna,
     require_peft,
     require_ray,
@@ -245,18 +248,18 @@ def bytes2megabytes(x):
 class TorchTracemalloc:
     def __enter__(self):
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.reset_max_memory_allocated()  # reset the peak gauge to zero
-            self.begin = torch.cuda.memory_allocated()
+        if torch_device in ["cuda", "xpu"]:
+            backend_empty_cache(torch_device)
+            backend_reset_max_memory_allocated(torch_device)  # reset the peak gauge to zero
+            self.begin = backend_memory_allocated(torch_device)
         return self
 
     def __exit__(self, *exc):
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            self.end = torch.cuda.memory_allocated()
-            self.peak = torch.cuda.max_memory_allocated()
+        if torch_device in ["cuda", "xpu"]:
+            backend_empty_cache(torch_device)
+            self.end = backend_memory_allocated(torch_device)
+            self.peak = backend_max_memory_allocated(torch_device)
         self.used = bytes2megabytes(self.end - self.begin)
         self.peaked = bytes2megabytes(self.peak - self.begin)
 
@@ -1246,7 +1249,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
         # will add more specific tests once there are some bugs to fix
 
-    @require_non_xpu
     @require_torch_gpu
     @require_torch_tf32
     def test_tf32(self):
@@ -1322,37 +1324,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         train_output = trainer.train()
         self.assertEqual(train_output.global_step, 10)
 
-    @require_torch_bf16
-    @require_intel_extension_for_pytorch
-    def test_number_of_steps_in_training_with_ipex(self):
-        for mix_bf16 in [True, False]:
-            tmp_dir = self.get_auto_remove_tmp_dir()
-            # Regular training has n_epochs * len(train_dl) steps
-            trainer = get_regression_trainer(
-                learning_rate=0.1, use_ipex=True, bf16=mix_bf16, use_cpu=True, output_dir=tmp_dir
-            )
-            train_output = trainer.train()
-            self.assertEqual(train_output.global_step, self.n_epochs * 64 / trainer.args.train_batch_size)
-
-            # Check passing num_train_epochs works (and a float version too):
-            trainer = get_regression_trainer(
-                learning_rate=0.1,
-                num_train_epochs=1.5,
-                use_ipex=True,
-                bf16=mix_bf16,
-                use_cpu=True,
-                output_dir=tmp_dir,
-            )
-            train_output = trainer.train()
-            self.assertEqual(train_output.global_step, int(1.5 * 64 / trainer.args.train_batch_size))
-
-            # If we pass a max_steps, num_train_epochs is ignored
-            trainer = get_regression_trainer(
-                learning_rate=0.1, max_steps=10, use_ipex=True, bf16=mix_bf16, use_cpu=True, output_dir=tmp_dir
-            )
-            train_output = trainer.train()
-            self.assertEqual(train_output.global_step, 10)
-
     def test_torch_compile_loss_func_compatibility(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -1365,6 +1336,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             per_device_train_batch_size=2,
             torch_compile=True,
             max_steps=1,  # compile happens on the first step
+            report_to="none",
         )
         trainer = Trainer(model=tiny_llama, args=args, train_dataset=train_dataset)  # noqa
         trainer.train()
@@ -1651,7 +1623,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertFalse(is_any_loss_nan_or_inf(log_history_filter))
 
     def test_train_and_eval_dataloaders(self):
-        if torch_device == "cuda":
+        if torch_device in ["cuda", "xpu"]:
             n_gpu = max(1, backend_device_count(torch_device))
         else:
             n_gpu = 1
@@ -1838,7 +1810,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_lomo
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_lomo(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -1861,7 +1833,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertFalse(torch.allclose(param, previous_params[name].to(param.device), rtol=1e-12, atol=1e-12))
 
     @require_lomo
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_adalomo(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2027,7 +1999,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 self.assertFalse(is_regex)
 
     @require_galore_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_galore(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2048,7 +2020,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_galore_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_galore_extra_args(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2070,7 +2042,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_galore_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_galore_layerwise(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2091,7 +2063,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_galore_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_galore_layerwise_with_scheduler(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2113,7 +2085,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_galore_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_galore_adamw_8bit(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2134,7 +2106,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_galore_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_galore_adafactor(self):
         # These are the intervals of the peak memory usage of training such a tiny model
         # if the peak memory goes outside that range, then we know there might be a bug somewhere
@@ -2166,7 +2138,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(lower_bound_pm < galore_peak_memory)
 
     @require_galore_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_galore_adafactor_attention_only(self):
         # These are the intervals of the peak memory usage of training such a tiny model
         # if the peak memory goes outside that range, then we know there might be a bug somewhere
@@ -2197,7 +2169,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(lower_bound_pm < galore_peak_memory)
 
     @require_galore_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_galore_adafactor_all_linear(self):
         # These are the intervals of the peak memory usage of training such a tiny model
         # if the peak memory goes outside that range, then we know there might be a bug somewhere
@@ -2305,7 +2277,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(len(decreasing_lrs) > len(increasing_lrs))
 
     @require_apollo_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_apollo(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2326,7 +2298,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_apollo_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_apollo_extra_args(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2348,7 +2320,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_apollo_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_apollo_layerwise(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2369,7 +2341,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_apollo_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_apollo_layerwise_with_scheduler(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2391,7 +2363,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_apollo_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_apollo_lr_display_without_scheduler(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2416,7 +2388,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(trainer.get_learning_rates(), [learning_rate, learning_rate])
 
     @require_apollo_torch
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_apollo_lr_display_with_scheduler(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -2624,69 +2596,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
-    @require_torch_bf16
-    @require_intel_extension_for_pytorch
-    def test_evaluate_with_ipex(self):
-        for mix_bf16 in [True, False]:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                trainer = get_regression_trainer(
-                    a=1.5,
-                    b=2.5,
-                    use_ipex=True,
-                    compute_metrics=AlmostAccuracy(),
-                    bf16=mix_bf16,
-                    use_cpu=True,
-                    output_dir=tmp_dir,
-                )
-                results = trainer.evaluate()
-
-                x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
-                pred = 1.5 * x + 2.5
-                expected_loss = ((pred - y) ** 2).mean()
-                self.assertAlmostEqual(results["eval_loss"], expected_loss)
-                expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
-                self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
-
-                # With a number of elements not a round multiple of the batch size
-                trainer = get_regression_trainer(
-                    a=1.5,
-                    b=2.5,
-                    use_ipex=True,
-                    eval_len=66,
-                    compute_metrics=AlmostAccuracy(),
-                    bf16=mix_bf16,
-                    use_cpu=True,
-                    output_dir=tmp_dir,
-                )
-                results = trainer.evaluate()
-
-                x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
-                pred = 1.5 * x + 2.5
-                expected_loss = ((pred - y) ** 2).mean()
-                self.assertAlmostEqual(results["eval_loss"], expected_loss)
-                expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
-                self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
-
-                # With logits preprocess
-                trainer = get_regression_trainer(
-                    a=1.5,
-                    b=2.5,
-                    use_ipex=True,
-                    compute_metrics=AlmostAccuracy(),
-                    preprocess_logits_for_metrics=lambda logits, labels: logits + 1,
-                    bf16=mix_bf16,
-                    use_cpu=True,
-                    output_dir=tmp_dir,
-                )
-                results = trainer.evaluate()
-
-                x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
-                pred = 1.5 * x + 2.5
-                expected_loss = ((pred - y) ** 2).mean()
-                self.assertAlmostEqual(results["eval_loss"], expected_loss)
-                expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
-                self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
-
     def test_predict(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(a=1.5, b=2.5, output_dir=tmp_dir)
@@ -2825,57 +2734,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
             self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
             self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
-
-    @require_torch_bf16
-    @require_intel_extension_for_pytorch
-    def test_predict_with_ipex(self):
-        for mix_bf16 in [True, False]:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                trainer = get_regression_trainer(
-                    a=1.5, b=2.5, use_ipex=True, bf16=mix_bf16, use_cpu=True, output_dir=tmp_dir
-                )
-                preds = trainer.predict(trainer.eval_dataset).predictions
-                x = trainer.eval_dataset.x
-                self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
-
-                # With a number of elements not a round multiple of the batch size
-                trainer = get_regression_trainer(
-                    a=1.5, b=2.5, eval_len=66, use_ipex=True, bf16=mix_bf16, use_cpu=True, output_dir=tmp_dir
-                )
-                preds = trainer.predict(trainer.eval_dataset).predictions
-                x = trainer.eval_dataset.x
-                self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
-
-                # With more than one output of the model
-                trainer = get_regression_trainer(
-                    a=1.5, b=2.5, double_output=True, use_ipex=True, bf16=mix_bf16, use_cpu=True, output_dir=tmp_dir
-                )
-                preds = trainer.predict(trainer.eval_dataset).predictions
-                x = trainer.eval_dataset.x
-                self.assertEqual(len(preds), 2)
-                self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
-                self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
-
-                # With more than one output/label of the model
-                trainer = get_regression_trainer(
-                    a=1.5,
-                    b=2.5,
-                    double_output=True,
-                    label_names=["labels", "labels_2"],
-                    use_ipex=True,
-                    bf16=mix_bf16,
-                    use_cpu=True,
-                    output_dir=tmp_dir,
-                )
-                outputs = trainer.predict(trainer.eval_dataset)
-                preds = outputs.predictions
-                labels = outputs.label_ids
-                x = trainer.eval_dataset.x
-                self.assertEqual(len(preds), 2)
-                self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
-                self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
-                self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
-                self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
 
     def test_dynamic_shapes(self):
         eval_dataset = DynamicShapesDataset(batch_size=self.batch_size)
@@ -3220,7 +3078,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # For more than 1 GPUs, since the randomness is introduced in the model and with DataParallel (which is used
         # in this test for more than 2 GPUs), the calls to the torch RNG will happen in a random order (sometimes
         # GPU 0 will call first and sometimes GPU 1).
-        random_torch = not torch.cuda.is_available() or torch.cuda.device_count() <= 1
+        random_torch = not torch.cuda.is_available() or backend_device_count(torch_device) <= 1
 
         if torch.cuda.is_available():
             torch.backends.cudnn.deterministic = True
@@ -3296,6 +3154,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 --learning_rate 2e-5
                 --num_train_epochs 1
                 --output_dir {tmpdir}
+                --report_to none
                 --auto_find_batch_size 0
                 """.split()
             with self.assertRaises(RuntimeError):
@@ -3761,6 +3620,37 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             train_output = trainer.train()
             self.assertEqual(train_output.global_step, int(self.n_epochs))
 
+    @require_torch_multi_accelerator
+    def test_num_batches_in_training_with_gradient_accumulation(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            for num_train_epochs in [1, 2]:
+                for train_len in [123, 120]:
+                    trainer = get_regression_trainer(
+                        train_len=train_len,
+                        per_device_train_batch_size=4,
+                        gradient_accumulation_steps=5,
+                        num_train_epochs=num_train_epochs,
+                        output_dir=tmp_dir,
+                    )
+
+                    total_batch_samples = []
+
+                    def wrap_get_batch_samples(fn):
+                        def wrapped_fn(epoch_iterator, num_batches, device):
+                            self.assertGreater(num_batches, 0)
+                            batch_samples, num_items_in_batch = fn(epoch_iterator, num_batches, device)
+                            self.assertEqual(len(batch_samples), num_batches)
+                            total_batch_samples.append(num_batches)
+                            return batch_samples, num_items_in_batch
+
+                        return wrapped_fn
+
+                    trainer.get_batch_samples = wrap_get_batch_samples(trainer.get_batch_samples)
+
+                    trainer.train()
+
+                    self.assertEqual(len(trainer.get_train_dataloader()) * num_train_epochs, sum(total_batch_samples))
+
     def test_early_stopping_callback(self):
         # early stopping stops training before num_training_epochs
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -3995,7 +3885,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             # perfect world: fp32_init/2 == fp16_eval
             self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
 
-    @require_non_xpu
+    @require_torch_gpu
     @require_torch_non_multi_gpu
     @require_torch_tensorrt_fx
     def test_torchdynamo_full_eval(self):
@@ -4071,7 +3961,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         mod = MyModule()
 
         # 1. without TorchDynamo (eager baseline)
-        a = torch.ones(1024, 1024, device="cuda", requires_grad=True)
+        a = torch.ones(1024, 1024, device=torch_device, requires_grad=True)
         a.grad = None
         trainer = CustomTrainer(model=mod)
         # warmup
@@ -4080,17 +3970,17 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         # resets
         gc.collect()
-        torch.cuda.empty_cache()
-        torch.cuda.reset_peak_memory_stats()
+        backend_empty_cache(torch_device)
+        backend_reset_peak_memory_stats(torch_device)
 
         orig_loss = trainer.training_step(mod, {"x": a})
-        orig_peak_mem = torch.cuda.max_memory_allocated()
+        orig_peak_mem = backend_max_memory_allocated(torch_device)
         torchdynamo.reset()
         del trainer
 
         # 2. TorchDynamo nvfuser
         with tempfile.TemporaryDirectory() as tmp_dir:
-            a = torch.ones(1024, 1024, device="cuda", requires_grad=True)
+            a = torch.ones(1024, 1024, device=torch_device, requires_grad=True)
             a.grad = None
             args = TrainingArguments(output_dir=tmp_dir, torch_compile_backend="nvfuser")
             trainer = CustomTrainer(model=mod, args=args)
@@ -4100,11 +3990,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             # resets
             gc.collect()
-            torch.cuda.empty_cache()
-            torch.cuda.reset_peak_memory_stats()
+            backend_empty_cache(torch_device)
+            backend_reset_peak_memory_stats(torch_device)
 
             loss = trainer.training_step(mod, {"x": a})
-            peak_mem = torch.cuda.max_memory_allocated()
+            peak_mem = backend_max_memory_allocated(torch_device)
             torchdynamo.reset()
             del trainer
 
@@ -4526,7 +4416,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             config = RegressionModelConfig(a=1.5, b=2.5)
             trainer = Trainer(
                 model=RegressionPreTrainedModel(config),
-                args=TrainingArguments(output_dir=tmp_dir),
+                args=TrainingArguments(output_dir=tmp_dir, report_to="none"),
                 processing_class=image_processor,
             )
             trainer.save_model()
@@ -4542,7 +4432,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             config = RegressionModelConfig(a=1.5, b=2.5)
             trainer = Trainer(
                 model=RegressionPreTrainedModel(config),
-                args=TrainingArguments(output_dir=tmp_dir),
+                args=TrainingArguments(output_dir=tmp_dir, report_to="none"),
                 processing_class=feature_extractor,
             )
             trainer.save_model()
@@ -4562,7 +4452,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             config = RegressionModelConfig(a=1.5, b=2.5)
             trainer = Trainer(
                 model=RegressionPreTrainedModel(config),
-                args=TrainingArguments(output_dir=tmp_dir),
+                args=TrainingArguments(output_dir=tmp_dir, report_to="none"),
                 processing_class=processor,
             )
             trainer.save_model()
@@ -4937,6 +4827,8 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
         commits = commit_logs.split("\n\n")[1::2]
         return [commit.strip() for commit in commits]
 
+    # TODO: @ydshieh or @SunMarc
+    @unittest.skip("unknown failure reason, possibly staging hub issue")
     def test_push_to_hub_with_saves_each_epoch(self):
         with TemporaryHubRepo(token=self._token) as tmp_repo:
             with tempfile.TemporaryDirectory() as tmp_dir:

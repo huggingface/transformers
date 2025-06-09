@@ -76,10 +76,10 @@ tokenizer.decode(predictions).split()
 ```
 
 </hfoption>
-<hfoption id="transformers-cli">
+<hfoption id="transformers CLI">
 
 ```bash
-echo -e "San Francisco 49ers cornerback Shawntae Spencer will miss the rest of the <mask> with a torn ligament in his left knee." | transformers-cli run --task fill-mask --model allenai/longformer-base-4096 --device 0
+echo -e "San Francisco 49ers cornerback Shawntae Spencer will miss the rest of the <mask> with a torn ligament in his left knee." | transformers run --task fill-mask --model allenai/longformer-base-4096 --device 0
 ```
 
 </hfoption>
@@ -147,42 +147,42 @@ echo -e "San Francisco 49ers cornerback Shawntae Spencer will miss the rest of t
 
 ## LongformerForMaskedLM
 
-[[autodoc]] LongformerForMaskedLM 
+[[autodoc]] LongformerForMaskedLM
     - forward
 
 ## LongformerForSequenceClassification
 
-[[autodoc]] LongformerForSequenceClassification 
+[[autodoc]] LongformerForSequenceClassification
     - forward
 
 ## LongformerForMultipleChoice
 
-[[autodoc]] LongformerForMultipleChoice 
+[[autodoc]] LongformerForMultipleChoice
     - forward
 
 ## LongformerForTokenClassification
 
-[[autodoc]] LongformerForTokenClassification 
+[[autodoc]] LongformerForTokenClassification
     - forward
 
 ## LongformerForQuestionAnswering
 
-[[autodoc]] LongformerForQuestionAnswering 
+[[autodoc]] LongformerForQuestionAnswering
     - forward
 
 ## TFLongformerModel
 
-[[autodoc]] TFLongformerModel    
+[[autodoc]] TFLongformerModel
     - call
 
 ## TFLongformerForMaskedLM
 
-[[autodoc]] TFLongformerForMaskedLM 
+[[autodoc]] TFLongformerForMaskedLM
     - call
 
 ## TFLongformerForQuestionAnswering
 
-[[autodoc]] TFLongformerForQuestionAnswering 
+[[autodoc]] TFLongformerForQuestionAnswering
     - call
 
 ## TFLongformerForSequenceClassification
@@ -192,10 +192,10 @@ echo -e "San Francisco 49ers cornerback Shawntae Spencer will miss the rest of t
 
 ## TFLongformerForTokenClassification
 
-[[autodoc]] TFLongformerForTokenClassification 
+[[autodoc]] TFLongformerForTokenClassification
     - call
 
 ## TFLongformerForMultipleChoice
 
-[[autodoc]] TFLongformerForMultipleChoice 
+[[autodoc]] TFLongformerForMultipleChoice
     - call

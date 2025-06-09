@@ -18,6 +18,7 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, MSELoss
 
+from .loss_d_fine import DFineForObjectDetectionLoss
 from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, DeformableDetrForSegmentationLoss
 from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
 from .loss_grounding_dino import GroundingDinoForObjectDetectionLoss
@@ -34,6 +35,11 @@ def fixed_cross_entropy(
     reduction = "sum" if num_items_in_batch is not None else "mean"
     loss = nn.functional.cross_entropy(source, target, ignore_index=ignore_index, reduction=reduction)
     if reduction == "sum":
+        if not isinstance(num_items_in_batch, torch.Tensor):
+            num_items_in_batch = torch.tensor(num_items_in_batch, device=loss.device, dtype=loss.dtype)
+        elif num_items_in_batch.device != loss.device:
+            num_items_in_batch = num_items_in_batch.to(loss.device)
+
         loss = loss / num_items_in_batch
     return loss
 
@@ -156,4 +162,6 @@ LOSS_MAPPING = {
     "ConditionalDetrForSegmentation": DeformableDetrForSegmentationLoss,
     "RTDetrForObjectDetection": RTDetrForObjectDetectionLoss,
     "RTDetrV2ForObjectDetection": RTDetrForObjectDetectionLoss,
+    "DFineForObjectDetection": DFineForObjectDetectionLoss,
+    "CsmForConditionalGeneration": ForCausalLMLoss,
 }

@@ -28,6 +28,8 @@ COMMON_ENV_VARIABLES = {
     "TRANSFORMERS_IS_CI": True,
     "PYTEST_TIMEOUT": 120,
     "RUN_PIPELINE_TESTS": False,
+    # will be adjust in `CircleCIJob.to_dict`.
+    "RUN_FLAKY": True,
 }
 # Disable the use of {"s": None} as the output is way too long, causing the navigation on CircleCI impractical
 COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "vvv": None, "rsfE":None}
@@ -126,6 +128,8 @@ class CircleCIJob:
 
     def to_dict(self):
         env = COMMON_ENV_VARIABLES.copy()
+        # Do not run tests decorated by @is_flaky on pull requests
+        env['RUN_FLAKY'] = os.environ.get("CIRCLE_PULL_REQUEST", "") == ""
         env.update(self.additional_env)
 
         job = {
@@ -209,7 +213,7 @@ generate_job = CircleCIJob(
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     # networkx==3.3 (after #36957) cause some issues
     # TODO: remove this once it works directly
-    install_steps=["uv venv && uv pip install . && uv pip install networkx==3.2.1"],
+    install_steps=["uv venv && uv pip install ."],
     marker="generate",
     parallelism=6,
 )
@@ -305,7 +309,7 @@ onnx_job = CircleCIJob(
     docker_image=[{"image":"huggingface/transformers-torch-tf-light"}],
     install_steps=[
         "uv venv",
-        "uv pip install .[torch,tf,testing,sentencepiece,onnxruntime,vision,rjieba]",
+        "uv pip install .[testing,sentencepiece,onnxruntime,vision,rjieba]",
     ],
     pytest_options={"k onnx": None},
     pytest_num_workers=1,
@@ -334,7 +338,7 @@ non_model_job = CircleCIJob(
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     # networkx==3.3 (after #36957) cause some issues
     # TODO: remove this once it works directly
-    install_steps=["uv venv && uv pip install . && uv pip install networkx==3.2.1"],
+    install_steps=["uv venv && uv pip install ."],
     marker="not generate",
     parallelism=6,
 )
@@ -393,7 +397,12 @@ def create_circleci_config(folder=None):
         "parameters": {
             # Only used to accept the parameters from the trigger
             "nightly": {"type": "boolean", "default": False},
-            "tests_to_run": {"type": "string", "default": ''},
+            # Only used to accept the parameters from GitHub Actions trigger
+            "GHA_Actor": {"type": "string", "default": ""},
+            "GHA_Action": {"type": "string", "default": ""},
+            "GHA_Event": {"type": "string", "default": ""},
+            "GHA_Meta": {"type": "string", "default": ""},
+            "tests_to_run": {"type": "string", "default": ""},
             **{j.job_name + "_test_list":{"type":"string", "default":''} for j in jobs},
             **{j.job_name + "_parallelism":{"type":"integer", "default":1} for j in jobs},
         },

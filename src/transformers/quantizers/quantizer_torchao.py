@@ -185,6 +185,14 @@ class TorchAoHfQuantizer(HfQuantizer):
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
         )
+        if self.quantization_config.include_input_output_embeddings:
+            input_emb = model.get_input_embeddings()
+            input_emb_names = [name for name, module in model.named_modules() if id(module) == id(input_emb)]
+            output_emb = model.get_output_embeddings()
+            output_emb_names = [name for name, module in model.named_modules() if id(module) == id(output_emb)]
+            self.modules_to_not_convert = [
+                x for x in self.modules_to_not_convert if x not in input_emb_names + output_emb_names
+            ]
         return
 
     def check_quantized_param(
@@ -206,9 +214,12 @@ class TorchAoHfQuantizer(HfQuantizer):
             # We don't quantize weights that we offload
             return False
         else:
-            # we only quantize the weight of nn.Linear
+            # we only quantize the weight of nn.Linear and nn.Embedding
             module, tensor_name = get_module_from_name(model, param_name)
-            return isinstance(module, torch.nn.Linear) and (tensor_name == "weight")
+            _QUANTIZABLE = [torch.nn.Linear]
+            if self.quantization_config.include_input_output_embeddings:
+                _QUANTIZABLE.append(torch.nn.Embedding)
+            return isinstance(module, tuple(_QUANTIZABLE)) and (tensor_name == "weight")
 
     def create_quantized_param(
         self,
@@ -240,6 +251,33 @@ class TorchAoHfQuantizer(HfQuantizer):
             module._parameters[tensor_name] = torch.nn.Parameter(
                 param_value, requires_grad=param_value.requires_grad
             ).to(device=target_device)
+            # if we are quantizing tied parameters, to avoid tying the quantized weights
+            # the correct order to do it is
+            # 1. load the weight to model
+            # 2. run tie_weights to populate the weights
+            # 3. quantize
+            input_embed = model.get_input_embeddings()
+            if self.quantization_config.untie_embedding_weights and id(module) == id(input_embed):
+                model.tie_weights()
+                setattr(model.config.get_text_config(decoder=True), "tie_word_embeddings", False)
+
+            # handle ModuleFqnToConfig, introduced in torchao 0.12.0+
+            if self.quantization_config._get_ao_version() >= version.Version("0.12.0"):
+                from torchao.quantization import ModuleFqnToConfig
+
+                config = self.quantization_config.get_apply_tensor_subclass()
+                if isinstance(config, ModuleFqnToConfig):
+                    module_fqn, _ = param_name.rsplit(".", 1)
+                    c = None
+                    if module_fqn in config.module_fqn_to_config:
+                        c = config.module_fqn_to_config[module_fqn]
+                    else:
+                        c = config.module_fqn_to_config.get("_default", None)
+                    if c is not None:
+                        # filter_fn: not filtering out any modules
+                        quantize_(module, c, filter_fn=lambda x, fqn: True)
+                    return
+
             quantize_(module, self.quantization_config.get_apply_tensor_subclass())
 
     def _process_model_after_weight_loading(self, model, **kwargs):

@@ -24,12 +24,11 @@ import os
 import re
 import warnings
 from collections import UserDict
-from collections.abc import Mapping, Sized
+from collections.abc import Mapping, Sequence, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass
-from inspect import isfunction
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 from packaging import version
@@ -44,13 +43,10 @@ from .utils import (
     PushToHubMixin,
     TensorType,
     add_end_docstrings,
-    add_model_info_to_auto_map,
-    add_model_info_to_custom_pipelines,
     cached_file,
     copy_func,
     download_url,
     extract_commit_hash,
-    get_json_schema,
     is_flax_available,
     is_jax_tensor,
     is_mlx_available,
@@ -69,7 +65,7 @@ from .utils import (
     requires_backends,
     to_py_obj,
 )
-from .utils.chat_template_utils import _compile_jinja_template, _render_with_assistant_indices
+from .utils.chat_template_utils import render_jinja_template
 from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
 
@@ -297,15 +293,6 @@ class BatchEncoding(UserDict):
 
         if "encodings" in state:
             self._encodings = state["encodings"]
-
-    def keys(self):
-        return self.data.keys()
-
-    def values(self):
-        return self.data.values()
-
-    def items(self):
-        return self.data.items()
 
     # After this point:
     # Extended properties and methods only available for fast (Rust-based) tokenizers
@@ -1210,7 +1197,7 @@ ENCODE_KWARGS_DOCSTRING = r"""
                 Activates and controls padding. Accepts the following values:
 
                 - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
+                  sequence is provided).
                 - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
                   acceptable input length for the model if that argument is not provided.
                 - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
@@ -1555,7 +1542,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Args:
             conversation (Union[List[Dict[str, str]], List[List[Dict[str, str]]]]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
-            tools (`List[Dict]`, *optional*):
+            tools (`List[Union[Dict, Callable]]`, *optional*):
                 A list of tools (callable functions) that will be accessible to the model. If the template does not
                 support function calling, this argument will have no effect. Each tool should be passed as a JSON Schema,
                 giving the name, description and argument types for the tool. See our
@@ -1633,14 +1620,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         chat_template = self.get_chat_template(chat_template, tools)
 
-        if return_assistant_tokens_mask and not re.search(r"\{\%-?\s*generation\s*-?\%\}", chat_template):
-            logger.warning_once(
-                "return_assistant_tokens_mask==True but chat template does not contain `{% generation %}` keyword."
-            )
-
-        # Compilation function uses a cache to avoid recompiling the same template
-        compiled_template = _compile_jinja_template(chat_template)
-
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "messages")
         ):
@@ -1658,87 +1637,24 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if return_assistant_tokens_mask:
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
 
-        # We accept either JSON schemas or functions for tools. If we get functions, we convert them to schemas
-        if tools is not None:
-            tool_schemas = []
-            for tool in tools:
-                if isinstance(tool, dict):
-                    tool_schemas.append(tool)
-                elif isfunction(tool):
-                    tool_schemas.append(get_json_schema(tool))
-                else:
-                    raise ValueError(
-                        "Tools should either be a JSON schema, or a callable function with type hints "
-                        "and a docstring suitable for auto-conversion to a schema."
-                    )
-        else:
-            tool_schemas = None
-
-        if documents is not None:
-            for document in documents:
-                if not isinstance(document, dict):
-                    raise TypeError("Documents should be a list of dicts with 'title' and 'text' keys!")
-
-        rendered = []
-        all_generation_indices = []
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
-        for chat in conversations:
-            if hasattr(chat, "messages"):
-                # Indicates it's a Conversation object
-                chat = chat.messages
-            if return_assistant_tokens_mask:
-                rendered_chat, generation_indices = _render_with_assistant_indices(
-                    compiled_template=compiled_template,
-                    messages=chat,
-                    tools=tool_schemas,
-                    documents=documents,
-                    add_generation_prompt=add_generation_prompt,
-                    **template_kwargs,
-                )
-                all_generation_indices.append(generation_indices)
-            else:
-                rendered_chat = compiled_template.render(
-                    messages=chat,
-                    tools=tool_schemas,
-                    documents=documents,
-                    add_generation_prompt=add_generation_prompt,
-                    **template_kwargs,
-                )
-            if continue_final_message:
-                final_message = chat[-1]["content"]
-                if isinstance(final_message, (list, tuple)):
-                    for content_block in reversed(final_message):
-                        if "text" in content_block:
-                            # Pick the last text block in the message (the first one we hit while iterating in reverse)
-                            final_message = content_block["text"]
-                            break
-                    else:
-                        raise ValueError(
-                            "continue_final_message is set but we could not find any text to continue"
-                            "in the final message!"
-                        )
-                if final_message.strip() not in rendered_chat:
-                    raise ValueError(
-                        "continue_final_message is set but the final message does not appear in the chat after "
-                        "applying the chat template! This can happen if the chat template deletes portions of "
-                        "the final message. Please verify the chat template and final message in your chat to "
-                        "ensure they are compatible."
-                    )
-                final_msg_loc = rendered_chat.rindex(final_message.strip())
-                if rendered_chat[final_msg_loc : final_msg_loc + len(final_message.lstrip())] == final_message:
-                    # The template preserves spacing or the message doesn't have trailing spacing, so things are simple
-                    rendered_chat = rendered_chat[: final_msg_loc + len(final_message.lstrip())]
-                else:
-                    # The message has trailing spacing that was trimmed, so we must be more cautious
-                    rendered_chat = rendered_chat[: final_msg_loc + len(final_message.strip())]
-            rendered.append(rendered_chat)
+        rendered_chat, generation_indices = render_jinja_template(
+            conversations=conversations,
+            tools=tools,
+            documents=documents,
+            chat_template=chat_template,
+            return_assistant_tokens_mask=return_assistant_tokens_mask,
+            continue_final_message=continue_final_message,
+            add_generation_prompt=add_generation_prompt,
+            **template_kwargs,
+        )
 
         if not is_batched:
-            rendered = rendered[0]
+            rendered_chat = rendered_chat[0]
 
         if tokenize:
             out = self(
-                rendered,
+                rendered_chat,
                 padding=padding,
                 truncation=truncation,
                 max_length=max_length,
@@ -1755,7 +1671,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         input_ids = [out["input_ids"]]
                     for i in range(len(input_ids)):
                         current_mask = [0] * len(input_ids[i])
-                        for assistant_start_char, assistant_end_char in all_generation_indices[i]:
+                        for assistant_start_char, assistant_end_char in generation_indices[i]:
                             start_token = out.char_to_token(i, assistant_start_char)
                             end_token = out.char_to_token(i, assistant_end_char - 1)
                             if start_token is None:
@@ -1777,7 +1693,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             else:
                 return out["input_ids"]
         else:
-            return rendered
+            return rendered_chat
 
     def get_chat_template(self, chat_template: Optional[str] = None, tools: Optional[List[Dict]] = None) -> str:
         """
@@ -2170,7 +2086,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         chat_template_file = resolved_vocab_files.pop("chat_template_file", None)
         extra_chat_templates = [key for key in resolved_vocab_files if key.startswith("chat_template_")]
         if chat_template_file is not None:
-            with open(chat_template_file) as chat_template_handle:
+            with open(chat_template_file, encoding="utf-8") as chat_template_handle:
                 chat_templates["default"] = chat_template_handle.read()
         for extra_chat_template in extra_chat_templates:
             template_file = resolved_vocab_files.pop(extra_chat_template, None)
@@ -2189,13 +2105,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 # For backward compatibility with odl format.
                 if isinstance(init_kwargs["auto_map"], (tuple, list)):
                     init_kwargs["auto_map"] = {"AutoTokenizer": init_kwargs["auto_map"]}
-                init_kwargs["auto_map"] = add_model_info_to_auto_map(
-                    init_kwargs["auto_map"], pretrained_model_name_or_path
-                )
-            if "custom_pipelines" in init_kwargs:
-                init_kwargs["custom_pipelines"] = add_model_info_to_custom_pipelines(
-                    init_kwargs["custom_pipelines"], pretrained_model_name_or_path
-                )
 
         if config_tokenizer_class is None:
             # Matt: This entire block is only used to decide if the tokenizer class matches the class in the repo.
@@ -2759,11 +2668,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self, padding=False, truncation=None, max_length=None, pad_to_multiple_of=None, verbose=True, **kwargs
     ):
         """
-        Find the correct padding/truncation strategy with backward compatibility for old arguments (truncation_strategy
-        and pad_to_max_length) and behaviors.
+        Find the correct padding/truncation strategy
         """
-        old_truncation_strategy = kwargs.pop("truncation_strategy", "do_not_truncate")
-        old_pad_to_max_length = kwargs.pop("pad_to_max_length", False)
 
         # Backward compatibility for previous behavior, maybe we should deprecate it:
         # If you only set max_length, it activates truncation for max_length
@@ -2781,21 +2687,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             truncation = "longest_first"
 
         # Get padding strategy
-        if padding is False and old_pad_to_max_length:
-            if verbose:
-                warnings.warn(
-                    "The `pad_to_max_length` argument is deprecated and will be removed in a future version, "
-                    "use `padding=True` or `padding='longest'` to pad to the longest sequence in the batch, or "
-                    "use `padding='max_length'` to pad to a max length. In this case, you can give a specific "
-                    "length with `max_length` (e.g. `max_length=45`) or leave max_length to None to pad to the "
-                    "maximal input size of the model (e.g. 512 for Bert).",
-                    FutureWarning,
-                )
-            if max_length is None:
-                padding_strategy = PaddingStrategy.LONGEST
-            else:
-                padding_strategy = PaddingStrategy.MAX_LENGTH
-        elif padding is not False:
+        if padding is not False:
             if padding is True:
                 if verbose:
                     if max_length is not None and (
@@ -2805,8 +2697,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             "`max_length` is ignored when `padding`=`True` and there is no truncation strategy. "
                             "To pad to max length, use `padding='max_length'`."
                         )
-                    if old_pad_to_max_length is not False:
-                        warnings.warn("Though `pad_to_max_length` = `True`, it is ignored because `padding`=`True`.")
                 padding_strategy = PaddingStrategy.LONGEST  # Default to pad to the longest sequence in the batch
             elif not isinstance(padding, PaddingStrategy):
                 padding_strategy = PaddingStrategy(padding)
@@ -2816,21 +2706,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             padding_strategy = PaddingStrategy.DO_NOT_PAD
 
         # Get truncation strategy
-        if truncation is None and old_truncation_strategy != "do_not_truncate":
-            if verbose:
-                warnings.warn(
-                    "The `truncation_strategy` argument is deprecated and will be removed in a future version, use"
-                    " `truncation=True` to truncate examples to a max length. You can give a specific length with"
-                    " `max_length` (e.g. `max_length=45`) or leave max_length to None to truncate to the maximal input"
-                    " size of the model (e.g. 512 for Bert).  If you have pairs of inputs, you can give a specific"
-                    " truncation strategy selected among `truncation='only_first'` (will only truncate the first"
-                    " sentence in the pairs) `truncation='only_second'` (will only truncate the second sentence in the"
-                    " pairs) or `truncation='longest_first'` (will iteratively remove tokens from the longest sentence"
-                    " in the pairs).",
-                    FutureWarning,
-                )
-            truncation_strategy = TruncationStrategy(old_truncation_strategy)
-        elif truncation is not False and truncation is not None:
+        if truncation is not False and truncation is not None:
             if truncation is True:
                 truncation_strategy = (
                     TruncationStrategy.LONGEST_FIRST
@@ -3146,7 +3022,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 method).
         """
 
-        # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
             padding=padding,
             truncation=truncation,
@@ -4080,11 +3955,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Register this class with a given auto class. This should only be used for custom tokenizers as the ones in the
         library are already mapped with `AutoTokenizer`.
 
-        <Tip warning={true}>
 
-        This API is experimental and may have some slight breaking changes in the next releases.
-
-        </Tip>
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"AutoTokenizer"`):

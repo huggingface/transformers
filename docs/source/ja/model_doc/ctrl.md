@@ -61,7 +61,7 @@ CTRL モデルは、Nitish Shirish Keskar*、Bryan McCann*、Lav R. Varshney、C
 
 ## Resources
 
-- [テキスト分類タスクガイド](../tasks/sequence_classification)
+- [テキスト分類タスクガイド(英語版)](../../en/tasks/sequence_classification)
 - [因果言語モデリング タスク ガイド](../tasks/language_modeling)
 
 ## CTRLConfig

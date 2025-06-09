@@ -44,9 +44,14 @@ SPECIAL_CASES_TO_ALLOW = {
         "expert_layer_offset",
         "expert_layer_period",
     ],
-    "Qwen2Config": ["use_sliding_window"],
+    "Qwen2Config": ["use_sliding_window", "max_window_layers"],
     "Qwen2MoeConfig": ["use_sliding_window"],
-    "Qwen2VLConfig": ["use_sliding_window"],
+    "Qwen2VLTextConfig": ["use_sliding_window", "max_window_layers"],
+    "Qwen2_5_VLTextConfig": ["use_sliding_window", "max_window_layers"],
+    "Qwen2_5OmniTextConfig": ["use_sliding_window", "max_window_layers"],
+    "Qwen2_5OmniTalkerConfig": ["use_sliding_window", "max_window_layers"],
+    "Qwen3Config": ["max_window_layers", "use_sliding_window"],  # now use `layer_types` instead
+    "Qwen3MoeConfig": ["max_window_layers", "use_sliding_window"],
     # `cache_implementation` should be in the default generation config, but we don't yet support per-model
     # generation configs (TODO joao)
     "Gemma2Config": ["tie_word_embeddings", "cache_implementation"],
@@ -183,6 +188,22 @@ SPECIAL_CASES_TO_ALLOW = {
         "giou_loss_coefficient",
         "mask_loss_coefficient",
     ],
+    "DFineConfig": [
+        "eos_coefficient",
+        "focal_loss_alpha",
+        "focal_loss_gamma",
+        "matcher_alpha",
+        "matcher_bbox_cost",
+        "matcher_class_cost",
+        "matcher_gamma",
+        "matcher_giou_cost",
+        "use_focal_loss",
+        "weight_loss_bbox",
+        "weight_loss_giou",
+        "weight_loss_vfl",
+        "weight_loss_fgl",
+        "weight_loss_ddf",
+    ],
     "GroundingDinoConfig": [
         "bbox_cost",
         "bbox_loss_coefficient",
@@ -247,6 +268,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "router_aux_loss_coef",
         "router_jitter_noise",
         "cache_implementation",
+        "attention_chunk_size",
     ],
     "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
 }
@@ -362,8 +384,8 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "rope_theta",
         "partial_rotary_factor",
         "pretraining_tp",
-        "boi_token_index",
-        "eoi_token_index",
+        "boi_token_id",
+        "eoi_token_id",
     ]
     attributes_used_in_generation = ["encoder_no_repeat_ngram_size"]
 
