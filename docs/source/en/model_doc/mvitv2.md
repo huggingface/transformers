@@ -49,7 +49,7 @@ There are many pretrained variants. Select your pretrained model based on your n
 [[autodoc]] MViTV2Model
     - forward
 
-## MViTV2ForVideoClassification
+## MViTV2ForImageClassification
 
-[[autodoc]] MViTV2ForVideoClassification
+[[autodoc]] MViTV2ForImageClassification
     - forward

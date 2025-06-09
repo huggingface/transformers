@@ -55,7 +55,7 @@ class MViTV2Config(PretrainedConfig):
             Whether or not absolute positional embeddings should be used.
         attention_pool_first (`bool`, *optional*, defaults to False):
             If set to True, the model will reduce the feature size first (pooling) before expanding the feature dimension to twice its size (2n).
-            If False, the model will project (expand) the features first before pooling.
+            If False, the model will expand the features first before pooling.
         expand_feature_dimension_in_attention (`bool`, *optional*, defaults to True):
             If set to True, the model will expand the feature dimension in the attention mechanism in the first block of a given stage.
             If False, the model will expand the feature dimension in the feed-forward network in the last block of a given stage.
