@@ -1955,9 +1955,9 @@ class GenerationMixin(ContinuousMixin):
         order to save memory (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
         for `HybridMambaAttentionDynamicCache`).
         """
-        return (
+        return all(
             special_model_name not in self.__class__.__name__.lower()
-            for special_model_name in ["jamba", "zamba", "mamba"]
+            for special_model_name in ["jamba", "zamba", "mamba", "bamba"]
         )
 
     def _prepare_cache_for_generation(
