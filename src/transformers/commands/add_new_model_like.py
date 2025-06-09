@@ -32,7 +32,6 @@ from ..utils import is_flax_available, is_tf_available, is_torch_available, logg
 from . import BaseTransformersCLICommand
 from .add_fast_image_processor import add_fast_image_processor
 
-
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
@@ -1009,10 +1008,11 @@ def insert_tokenizer_in_auto_module(old_model_patterns: ModelPatterns, new_model
     with open(TRANSFORMERS_PATH / "models" / "auto" / "tokenization_auto.py", "r", encoding="utf-8") as f:
         content = f.read()
 
+    pattern_tokenizer = re.compile(r"^\s*TOKENIZER_MAPPING_NAMES\s*=\s*OrderedDict\b")
     lines = content.split("\n")
     idx = 0
     # First we get to the TOKENIZER_MAPPING_NAMES block.
-    while not lines[idx].startswith("    TOKENIZER_MAPPING_NAMES = OrderedDict("):
+    while not pattern_tokenizer.search(lines[idx]):
         idx += 1
     idx += 1
 
@@ -1024,9 +1024,12 @@ def insert_tokenizer_in_auto_module(old_model_patterns: ModelPatterns, new_model
         # Otherwise it takes several lines until we get to a "),"
         else:
             block = []
-            while not lines[idx].startswith("            ),"):
+            # should change to "        )," instead of "            ),"
+            while not lines[idx].startswith("        ),"):
                 block.append(lines[idx])
                 idx += 1
+            # if the lines[idx] does start with "        )," we still need it in our block
+            block.append(lines[idx])
             block = "\n".join(block)
         idx += 1
 
