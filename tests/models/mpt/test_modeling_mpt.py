@@ -448,7 +448,7 @@ class MptIntegrationTests(unittest.TestCase):
         expected_outputs = Expectations({
             ("cuda", None): "Hello, I'm a new user of the forum. I have a question about the \"Solaris",
             ("rocm", (9, 5)): "Hello, I'm a newbie to the forum. I have a question about the \"B\" in",
-        }) # fmt: off
+        })  # fmt: off
         expected_output = expected_outputs.get_expectation()
 
         inputs = tokenizer(input_text, return_tensors="pt").to(torch_device)
@@ -472,7 +472,7 @@ class MptIntegrationTests(unittest.TestCase):
             ("xpu", 3): "Hello and welcome to the first ever episode of the new and improved, and hopefully improved, podcast.\n",
             ("cuda", 7): "Hello and welcome to the first episode of the new podcast, The Frugal Feminist.\n",
             ("cuda", 8): "Hello and welcome to the first day of the new release countdown for the month of May!\nToday",
-        }) # fmt: off
+        })  # fmt: off
         expected_output = expected_outputs.get_expectation()
 
         inputs = tokenizer(input_text, return_tensors="pt").to(torch_device)
@@ -536,7 +536,8 @@ class MptIntegrationTests(unittest.TestCase):
             {
                 ("xpu", 3): torch.Tensor([-0.2090, -0.2061, -0.1465]),
                 ("cuda", 7): torch.Tensor([-0.2520, -0.2178, -0.1953]),
-                ("rocm", (9, 5)): torch.Tensor([-0.3008, -0.1309, -0.1562]), # TODO: This is quite a bit off, check BnB
+                # TODO: This is quite a bit off, check BnB
+                ("rocm", (9, 5)): torch.Tensor([-0.3008, -0.1309, -0.1562]),
             }
         )
         expected_slice = expected_slices.get_expectation().to(torch_device, torch.bfloat16)
