@@ -532,7 +532,7 @@ class Florence2PostProcessor(object):
                 # task specific configs, override the common configs
                 PRASE_TASKS:
                     - TASK_NAME: 'video_dense_caption'
-                      PATTERN: 'r<time_(\d+)><time_(\d+)>([a-zA-Z0-9 ]+)'
+                      PATTERN: r'<time_(\d+)><time_(\d+)>([a-zA-Z0-9 ]+)'
                       SCORE_MODE: 'avg_cat_name_scores'
                       NUM_BINS: 100
                     - TASK_NAME: 'od'
