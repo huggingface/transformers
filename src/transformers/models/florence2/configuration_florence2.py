@@ -13,8 +13,6 @@
 # limitations under the License.
 """FLORENCE2 model configuration"""
 
-import warnings
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -74,7 +72,7 @@ class Florence2VisionConfig(PretrainedConfig):
             The configuration of the image position embedding.
         image_feature_source (`Tuple[str]`, *optional*, defaults to `('spatial_avg_pool', 'temporal_avg_pool')`):
             The source of the image feature.
-        init_std (`float`, *optional*, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     Example:
 
@@ -91,12 +89,11 @@ class Florence2VisionConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "davit"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    model_type = "florence_vision"
 
     def __init__(
         self,
-        in_chans=3,
+        in_channels=3,
         num_classes=1000,
         depths=(1, 1, 9, 1),
         patch_size=(7, 3, 3, 3),
@@ -117,12 +114,12 @@ class Florence2VisionConfig(PretrainedConfig):
         visual_temporal_embedding={"type": "COSINE", "max_temporal_embeddings": 100},
         image_pos_embed={"type": "learned_abs_2d", "max_pos_embeddings": 50},
         image_feature_source=("spatial_avg_pool", "temporal_avg_pool"),
-        init_std=0.02,
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
-        self.in_chans = in_chans
+        self.in_channels = in_channels
         self.num_classes = num_classes
         self.depths = depths
         self.patch_size = patch_size
@@ -143,7 +140,7 @@ class Florence2VisionConfig(PretrainedConfig):
         self.visual_temporal_embedding = visual_temporal_embedding
         self.image_pos_embed = image_pos_embed
         self.image_feature_source = image_feature_source
-        self.init_std = init_std
+        self.initializer_range = initializer_range
 
 
 class Florence2LanguageConfig(PretrainedConfig):
@@ -193,7 +190,7 @@ class Florence2LanguageConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        init_std (`float`, *optional*, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         scale_embedding (`bool`, *optional*, defaults to `False`):
             Scale embeddings by diving by sqrt(d_model).
@@ -249,7 +246,7 @@ class Florence2LanguageConfig(PretrainedConfig):
         dropout=0.1,
         attention_dropout=0.0,
         activation_dropout=0.0,
-        init_std=0.02,
+        initializer_range=0.02,
         scale_embedding=False,
         use_cache=True,
         pad_token_id=1,
@@ -273,7 +270,7 @@ class Florence2LanguageConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
         self.activation_function = activation_function
-        self.init_std = init_std
+        self.initializer_range = initializer_range
         self.encoder_layerdrop = encoder_layerdrop
         self.decoder_layerdrop = decoder_layerdrop
         self.use_cache = use_cache
@@ -289,14 +286,6 @@ class Florence2LanguageConfig(PretrainedConfig):
             forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )
-
-        # ensure backward compatibility for BART CNN models
-        if self.forced_bos_token_id is None and kwargs.get("force_bos_token_to_be_generated", False):
-            self.forced_bos_token_id = self.bos_token_id
-            warnings.warning(
-                f"Please make sure the config includes `forced_bos_token_id={self.bos_token_id}` in future versions. "
-                "The config can simply be saved and uploaded again to be fixed."
-            )
 
 
 class Florence2Config(PretrainedConfig):
@@ -379,20 +368,6 @@ class Florence2Config(PretrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
-
-    @classmethod
-    def from_text_vision_configs(
-        cls, text_config: Florence2LanguageConfig, vision_config: Florence2VisionConfig, **kwargs
-    ):
-        r"""
-        Instantiate a [`Florence2Config`] (or a derived class) from siglip2 text model configuration and siglip2 vision
-        model configuration.
-
-        Returns:
-            [`Florence2Config`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
 
 __all__ = ["Florence2Config", "Florence2LanguageConfig", "Florence2VisionConfig"]
