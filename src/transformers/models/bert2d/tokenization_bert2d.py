@@ -929,10 +929,4 @@ class Bert2DTokenizer(BertTokenizer):
 
 __all__ = [
     "Bert2DTokenizer",
-    "is_subword",
-    "create_word_ids",
-    "create_subword_ids",
-    "col_round",
-    "get_uniform_id",
-    "get_ids_from_subwords",
 ]
