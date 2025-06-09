@@ -1748,7 +1748,7 @@ class TrainingArguments:
                 else:
                     self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
             if self.accelerator_config.split_batches:
-                logger.warning(
+                logger.info(
                     "Using `split_batches=True` in `accelerator_config` will override the `per_device_train_batch_size` "
                     "Batches will be split across all processes equally when using `split_batches=True`."
                 )
