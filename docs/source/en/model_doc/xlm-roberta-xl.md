@@ -30,7 +30,7 @@ You can find all the original XLM-RoBERTa-XL checkpoints under the [AI at Meta](
 > [!TIP]
 > Click on the XLM-RoBERTa-XL models in the right sidebar for more examples of how to apply XLM-RoBERTa-XL to different cross-lingual tasks like classification, translation, and question answering.
 
-The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
+The example below demonstrates how to predict the `<mask>` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -88,7 +88,7 @@ echo -e "Plants create <mask> through a process known as photosynthesis." | tran
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4 and the [facebook/xlm-roberta-xl](https://huggingface.co/facebook/xlm-roberta-xl) checkpoint. This checkpoint replaces grouped GEMM with `torch.nn.Linear` layers for easier quantization.
+The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
 ```py
 import torch
@@ -105,7 +105,7 @@ model = AutoModelForMaskedLM.from_pretrained(
     attn_implementation="sdpa",
     quantization_config=quantization_config
 )
-inputs = tokenizer("Bonjour, je suis un modèle [MASK].", return_tensors="pt").to("cuda")
+inputs = tokenizer("Bonjour, je suis un modèle <mask>.", return_tensors="pt").to("cuda")
 
 with torch.no_grad():
     outputs = model(**inputs)
