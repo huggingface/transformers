@@ -14,36 +14,65 @@ class VJEPA2Config(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        model_name (`str`, *optional*, defaults to `"vit_large"`): <fill_docstring>
-        patch_size (`int`, *optional*, defaults to 16): <fill_docstring>
-        crop_size (`int`, *optional*, defaults to 256): <fill_docstring>
-        frames_per_clip (`int`, *optional*, defaults to 64): <fill_docstring>
-        tubelet_size (`int`, *optional*, defaults to 2): <fill_docstring>
-        use_sdpa (`bool`, *optional*, defaults to `False`): <fill_docstring>
-        use_SiLU (`bool`, *optional*, defaults to `False`): <fill_docstring>
-        wide_SiLU (`bool`, *optional*, defaults to `True`): <fill_docstring>
-        uniform_power (`bool`, *optional*, defaults to `False`): <fill_docstring>
-        hidden_size (`int`, *optional*, defaults to 1024): <fill_docstring>
-        in_chans (`int`, *optional*, defaults to 3): <fill_docstring>
-        num_attention_heads (`int`, *optional*, defaults to 12): <fill_docstring>
-        num_hidden_layers (`int`, *optional*, defaults to 12): <fill_docstring>
-        drop_path_rate (`float`, *optional*, defaults to 0.0): <fill_docstring>
-        mlp_ratio (`float`, *optional*, defaults to 4.0): <fill_docstring>
-        is_causal (`bool`, *optional*, defaults to `False`): <fill_docstring>
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06): <fill_docstring>
-        qkv_bias (`bool`, *optional*, defaults to `True`): <fill_docstring>
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0): <fill_docstring>
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0): <fill_docstring>
-        hidden_act (`str`, *optional*, defaults to `"gelu"`): <fill_docstring>
-        initializer_range (`float`, *optional*, defaults to 0.02): <fill_docstring>
-        use_rope (`bool`, *optional*, defaults to `False`): <fill_docstring>
-        pred_hidden_size (`int`, *optional*, defaults to 384): <fill_docstring>
-        pred_num_attention_heads (`int`, *optional*, defaults to 12): <fill_docstring>
-        pred_num_hidden_layers (`int`, *optional*, defaults to 12): <fill_docstring>
-        pred_use_mask_tokens (`bool`, *optional*, defaults to `False`): <fill_docstring>
-        pred_num_mask_tokens (`int`, *optional*, defaults to 10): <fill_docstring>
-        pred_zero_init_mask_tokens (`bool`, *optional*, defaults to `True`): <fill_docstring>
-        pred_mlp_ratio (`float`, *optional*, defaults to 4.0): <fill_docstring>
+        model_name (`str`, *optional*, defaults to `"vit_large"`):
+            Model name, choices: vit_large, vit_huge, vit_giant, vit_giant_384
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        crop_size (`int`, *optional*, defaults to 256):
+            Input resolution of the model
+        frames_per_clip (`int`, *optional*, defaults to 64):
+            The number of frames the model has been pretrained with. Does not impact inference.
+        tubelet_size (`int`, *optional*, defaults to 2):
+            The number of temporal frames used for a single rastor, check paper for more information.
+        use_SiLU (`bool`, *optional*, defaults to `False`):
+            Use SwiGLUFFN for MLP
+        wide_SiLU (`bool`, *optional*, defaults to `True`):
+            Increases the hidden size for SwiGLUFFN
+        uniform_power (`bool`, *optional*, defaults to `False`):
+            If not using RoPE, setting this flag enables uniform power on grid height, width and depth in 3d positional encodings.
+        hidden_size (`int`, *optional*, defaults to 1024):
+            Dimensionality of the encoder layers
+        in_chans (`int`, *optional*, defaults to 3):
+            The number of input channels
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Encoder
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            The number of hidden layers
+        drop_path_rate (`float`, *optional*, defaults to 0.0):
+            Stochastic depth rate per sample (when applied in the main path of residual layers).
+        mlp_ratio (`float`, *optional*, defaults to 4.0):
+            Ratio of the hidden size of the MLPs used in Encoder relative to the `hidden_size`.
+        is_causal (`bool`, *optional*, defaults to `False`):
+            If set, the attention is applied in a causal pattern, with past tokens cannot attend to the future.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
+        qkv_bias (`bool`, *optional*, defaults to `True`):
+            Whether to add a bias to the queries, keys and values.
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout probability for attentions.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers.
+        hidden_act (`str`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` are supported.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        use_rope (`bool`, *optional*, defaults to `False`):
+            If set, we use RoPE positional encoding instead of learned position encodings
+        pred_hidden_size (`int`, *optional*, defaults to 384):
+            Dimensionality of the predictor layers
+        pred_num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Predictor
+        pred_num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Predictor
+        pred_use_mask_tokens (`bool`, *optional*, defaults to `False`):
+            Use mask tokens in the Predictor
+        pred_num_mask_tokens (`int`, *optional*, defaults to 10):
+            Define the number of mask tokens to use in the Predictor
+        pred_zero_init_mask_tokens (`bool`, *optional*, defaults to `True`):
+            Initialize the mask tokens in the predictor with 0.
+        pred_mlp_ratio (`float`, *optional*, defaults to 4.0):
+            Ratio of the hidden size of the MLPs used in Predictor relative to the `pred_hidden_size`.
 
     Example:
 
@@ -69,7 +98,6 @@ class VJEPA2Config(PretrainedConfig):
         crop_size=256,
         frames_per_clip=64,
         tubelet_size=2,
-        use_sdpa=False,
         use_SiLU=False,
         wide_SiLU=True,
         uniform_power=False,
@@ -108,7 +136,6 @@ class VJEPA2Config(PretrainedConfig):
         self.num_frames = frames_per_clip
         self.tubelet_size = tubelet_size
         self.uniform_power = uniform_power
-        self.use_sdpa = use_sdpa
         self.use_SiLU = use_SiLU
         self.wide_SiLU = wide_SiLU
         self.hidden_size = hidden_size
