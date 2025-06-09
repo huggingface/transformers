@@ -49,7 +49,6 @@ class DiaGenerationMixin(GenerationMixin):
 
         cfg_processor = None
         if generation_config.guidance_scale is not None and generation_config.guidance_scale != 1:
-            # TODO: check if top k works as intended
             cfg_processor = DiaClassifierFreeGuidanceLogitsProcessor(
                 guidance_scale=generation_config.guidance_scale,
                 guidance_top_k=generation_config.top_k,

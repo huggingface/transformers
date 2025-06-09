@@ -34,6 +34,7 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -307,7 +308,7 @@ class DiaMultiChannelEmbedding(nn.Module):
 
 # Copied from transformers.models.phi3.modular_phi3.Phi3MLP with Phi3->Dia
 class DiaMLP(nn.Module):  # Modular GlmMLP
-    def __init__(self, config: DiaEncoderConfig | DiaDecoderConfig):
+    def __init__(self, config: Union[DiaEncoderConfig, DiaDecoderConfig]):
         super().__init__()
 
         self.config = config
@@ -345,48 +346,27 @@ class DiaRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-"""def apply_rotary_pos_emb(
-    tensor: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, unsqueeze_dim: int = 1
-) -> torch.Tensor:
-    first_half, second_half = torch.chunk(tensor.to(torch.float32), 2, dim=-1)
-    first_part = first_half * cos - second_half * sin
-    second_part = second_half * cos + first_half * sin
-    return torch.cat((first_part.to(tensor.dtype), second_part.to(tensor.dtype)), dim=-1)
-"""
-
-class DiaRotaryEmbedding2(nn.Module):
-    def __init__(self, config: Union[DiaEncoderConfig, DiaDecoderConfig], device: Optional[torch.device] = None):
-        super().__init__()
-        self.embedding_dims = config.head_dim
-        self.min_timescale = config.rope_min_timescale
-        self.max_timescale = config.rope_max_timescale
-
-        half_embedding_dim = self.embedding_dims // 2
-        fraction = (2.0 * torch.arange(0, half_embedding_dim)) / self.embedding_dims
-        freqs = (self.min_timescale * (self.max_timescale / self.min_timescale) ** fraction).to(torch.float32)
-        self.register_buffer("freqs", freqs, persistent=False)
-
-    @torch.no_grad()
-    def forward(self, position_ids: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        position_ids_expanded = position_ids[:, :, None, None].float()
-        full_freqs = position_ids_expanded.float() / self.freqs.to(
-            device=position_ids_expanded.device, dtype=position_ids_expanded.dtype
-        )
-        cos, sin = full_freqs.cos(), full_freqs.sin()
-        return cos, sin
-
-
-# TODO: move fully to transformers RoPE, proof of concept
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Dia
 class DiaRotaryEmbedding(nn.Module):
-    def __init__(self, config, device=None):
+    def __init__(self, config: DiaConfig, device=None):
         super().__init__()
-        self.config = config
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
 
-        inv_freq = 1.0 / config.rope_max_timescale ** (torch.arange(0, config.head_dim, 2, dtype=torch.int64).to(dtype=torch.float) / config.head_dim)
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
     @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
         position_ids_expanded = position_ids[:, None, :].float()
@@ -395,8 +375,8 @@ class DiaRotaryEmbedding(nn.Module):
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 

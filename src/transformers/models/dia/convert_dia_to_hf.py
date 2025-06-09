@@ -168,6 +168,7 @@ def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
     model_generation_config.top_p = 0.95
     model_generation_config.temperature = 1.2
     model_generation_config.guidance_scale = 3.0
+    model_generation_config.max_length = 3072  # Decoder max length
 
     model_class.generation_config = model_generation_config
 
