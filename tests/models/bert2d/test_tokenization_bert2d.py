@@ -67,16 +67,6 @@ class Bert2DTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with open(cls.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
-    def get_input_output_texts(self, tokenizer):
-        input_text = "UNwant\u00e9d,running"
-        output_text = "unwanted, running"
-        return input_text, output_text
-
-    def get_clean_sequence(self, tokenizer):
-        input_text, output_text = self.get_input_output_texts(tokenizer)
-        ids = tokenizer.encode(output_text, add_special_tokens=False)
-        return input_text, ids
-
     def test_bert2d_specific_attributes(self):
         tokenizer = Bert2DTokenizerFast.from_pretrained("yigitbekir/Bert2D-cased-Turkish-128K-WWM-NSW2")
 
