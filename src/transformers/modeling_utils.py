@@ -316,20 +316,15 @@ def restore_default_torch_dtype(func):
 
     return _wrapper
 
-
 def get_torch_context_manager_or_global_device():
     """
-    Test if a device context manager is currently in use, or if it is not the case, check if the default device
-    is not "cpu". This is used to infer the correct device to load the model on, in case `device_map` is not provided.
+    Returns the current device context or the default device (cuda if available, else cpu).
+    Used to infer the correct device for model loading when `device_map` is not provided.
     """
     device_in_context = torch.tensor([]).device
-    # `get_default_device` was only introduced in torch>=2.3 - use cpu otherwise to align the behavior
-    default_device = torch.get_default_device() if is_torch_greater_or_equal("2.3") else torch.device("cpu")
-    # This case means no context manager was used -> we still check if the default that was potentially set is not cpu
+    default_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if device_in_context == default_device:
-        if default_device != torch.device("cpu"):
-            return default_device
-        return None
+        return default_device
     return device_in_context
 
 
