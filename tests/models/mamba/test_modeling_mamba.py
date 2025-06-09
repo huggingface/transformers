@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import math
 import unittest
 
 from parameterized import parameterized
@@ -44,10 +45,37 @@ class MambaModelTest(CausalLMModelTest, unittest.TestCase):
         {"feature-extraction": MambaModel, "text-generation": MambaForCausalLM} if is_torch_available() else {}
     )
     model_tester_class = MambaModelTester
+    has_attentions = False
+    common_properties = ["hidden_size", "num_hidden_layers"]
 
     @unittest.skip("The `input_embeds` when fed don't produce the same results.")
     def test_beam_sample_generate(self):
         pass
+
+    def test_initialization(self):
+        # Mamba has strange initialization, so it needs its own test here
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config=config)
+            for name, param in model.named_parameters():
+                if "dt_proj.bias" in name:
+                    dt = torch.exp(
+                        torch.tensor([0, 1]) * (math.log(config.time_step_max) - math.log(config.time_step_min))
+                        + math.log(config.time_step_min)
+                    ).clamp(min=config.time_step_floor)
+                    inv_dt = dt + torch.log(-torch.expm1(-dt))
+                    if param.requires_grad:
+                        self.assertTrue(param.data.max().item() <= inv_dt[1])
+                        self.assertTrue(param.data.min().item() >= inv_dt[0])
+                elif "A_log" in name:
+                    A = torch.arange(1, config.state_size + 1, dtype=torch.float32)[None, :]
+                    A = A.expand(config.intermediate_size, -1).contiguous()
+                    torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
+                elif "D" in name:
+                    if param.requires_grad:
+                        # check if it's a ones like
+                        torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
 
 
 @require_torch
