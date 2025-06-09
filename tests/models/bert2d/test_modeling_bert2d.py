@@ -635,8 +635,9 @@ class Bert2DModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             "fill-mask": Bert2DForMaskedLM,
             "question-answering": Bert2DForQuestionAnswering,
             "text-classification": Bert2DForSequenceClassification,
+            "text-generation": Bert2DLMHeadModel,
             "token-classification": Bert2DForTokenClassification,
-            # Bert2DLMHeadModel can be used for text-generation, but requires specific setup for pipelines
+            "zero-shot": Bert2DForSequenceClassification,
         }
         if is_torch_available()
         else {}
