@@ -245,20 +245,22 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
         video_processor = self.default_video_processor
         image = prepare_img()
         inputs = video_processor(image, return_tensors="pt").to(torch_device)
+        pixel_values = inputs.pixel_values
+        pixel_values = pixel_values.repeat(1, 1, model.config.frames_per_clip, 1, 1)
 
         # forward pass
         with torch.no_grad():
-            outputs = model(**inputs)
+            outputs = model(pixel_values)
 
         # verify the last hidden states
-        expected_shape = torch.Size((1, 256, 1024))
+        expected_shape = torch.Size((1, 8192, 1024))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
             [
-                [0.6764, 2.1508, -0.3414],
-                [0.8276, 0.6633, 0.0603],
-                [0.7360, 1.1685, -0.0091],
+                [0.6824, 2.1494, -0.3479],
+                [0.8301, 0.6597, 0.0575],
+                [0.7389, 1.1650, -0.0138],
             ],
             device=torch_device,
         )
