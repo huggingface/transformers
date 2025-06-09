@@ -135,9 +135,7 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
 
             processed_segmentation_maps.append(segmentation_map)
 
-        kwargs["do_normalize"] = False
         kwargs["do_rescale"] = False
-        kwargs["input_data_format"] = ChannelDimension.FIRST
         processed_segmentation_maps = self._preprocess(images=processed_segmentation_maps, **kwargs)
 
         processed_segmentation_maps = processed_segmentation_maps.squeeze(1)
