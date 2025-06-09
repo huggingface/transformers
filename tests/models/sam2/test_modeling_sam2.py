@@ -19,7 +19,7 @@ import unittest
 
 import requests
 
-from transformers import Sam2Config, Sam2MaskDecoderConfig, Sam2PromptEncoderConfig, Sam2VisionConfig, pipeline
+from transformers import Sam2Config, Sam2ImageEncoderConfig, Sam2MaskDecoderConfig, Sam2PromptEncoderConfig, pipeline
 from transformers.testing_utils import backend_empty_cache, require_torch, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -192,7 +192,7 @@ class Sam2ModelTester:
         return config, pixel_values
 
     def get_config(self):
-        vision_config = Sam2VisionConfig(
+        vision_config = Sam2ImageEncoderConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,

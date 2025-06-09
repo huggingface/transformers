@@ -125,39 +125,6 @@ def fill_holes_in_mask_scores(mask, max_area):
     return mask
 
 
-def get_sdpa_settings():
-    if torch.cuda.is_available():
-        old_gpu = torch.cuda.get_device_properties(0).major < 7
-        # only use Flash Attention on Ampere (8.0) or newer GPUs
-        use_flash_attn = torch.cuda.get_device_properties(0).major >= 8
-        if not use_flash_attn:
-            warnings.warn(
-                "Flash Attention is disabled as it requires a GPU with Ampere (8.0) CUDA capability.",
-                category=UserWarning,
-                stacklevel=2,
-            )
-        # keep math kernel for PyTorch versions before 2.2 (Flash Attention v2 is only
-        # available on PyTorch 2.2+, while Flash Attention v1 cannot handle all cases)
-        pytorch_version = tuple(int(v) for v in torch.__version__.split(".")[:2])
-        if pytorch_version < (2, 2):
-            warnings.warn(
-                f"You are using PyTorch {torch.__version__} without Flash Attention v2 support. "
-                "Consider upgrading to PyTorch 2.2+ for Flash Attention v2 (which could be faster).",
-                category=UserWarning,
-                stacklevel=2,
-            )
-        math_kernel_on = pytorch_version < (2, 2) or not use_flash_attn
-    else:
-        old_gpu = True
-        use_flash_attn = False
-        math_kernel_on = True
-
-    return old_gpu, use_flash_attn, math_kernel_on
-
-
-OLD_GPU, USE_FLASH_ATTN, MATH_KERNEL_ON = get_sdpa_settings()
-
-
 @dataclass
 class Sam2ImageEncoderOutput(ModelOutput):
     """
@@ -837,12 +804,6 @@ class Sam2MaskDecoder(nn.Module):
         )
         self.pred_obj_score_head = Sam2FeedForward(config.hidden_size, config.hidden_size, 1, 3, activation="relu")
 
-        # When outputting a single mask, optionally we can dynamically fall back to the best
-        # multimask output token if the single mask output token gives low stability scores.
-        self.dynamic_multimask_via_stability = config.dynamic_multimask_via_stability
-        self.dynamic_multimask_stability_delta = config.dynamic_multimask_stability_delta
-        self.dynamic_multimask_stability_thresh = config.dynamic_multimask_stability_thresh
-
     def forward(
         self,
         image_embeddings: torch.Tensor,
@@ -923,8 +884,6 @@ class Sam2MaskDecoder(nn.Module):
         if multimask_output:
             masks = masks[:, :, 1:, :, :]
             iou_pred = iou_pred[:, :, 1:]
-        elif self.dynamic_multimask_via_stability and not self.training:
-            masks, iou_pred = self._dynamic_multimask_via_stability(masks, iou_pred)
         else:
             masks = masks[:, :, 0:1, :, :]
             iou_pred = iou_pred[:, :, 0:1]
@@ -941,54 +900,6 @@ class Sam2MaskDecoder(nn.Module):
 
         # Prepare output
         return masks, iou_pred, sam_tokens_out, object_score_logits
-
-    def _get_stability_scores(self, mask_logits):
-        """
-        Compute stability scores of the mask logits based on the IoU between upper and
-        lower thresholds, similar to https://github.com/fairinternal/onevision/pull/568.
-        """
-        mask_logits = mask_logits.flatten(-2)
-        stability_delta = self.dynamic_multimask_stability_delta
-        area_i = torch.sum(mask_logits > stability_delta, dim=-1).float()
-        area_u = torch.sum(mask_logits > -stability_delta, dim=-1).float()
-        stability_scores = torch.where(area_u > 0, area_i / area_u, 1.0)
-        return stability_scores
-
-    def _dynamic_multimask_via_stability(self, all_mask_logits, all_iou_scores):
-        """
-        When outputting a single mask, if the stability score from the current single-mask
-        output (based on output token 0) falls below a threshold, we instead select from
-        multi-mask outputs (based on output token 1~3) the mask with the highest predicted
-        IoU score. This is intended to ensure a valid mask for both clicking and tracking.
-        """
-        # The best mask from multimask output tokens (1~3)
-        multimask_logits = all_mask_logits[:, 1:, :, :]
-        multimask_iou_scores = all_iou_scores[:, 1:]
-        best_scores_inds = torch.argmax(multimask_iou_scores, dim=-1)
-        batch_inds = torch.arange(multimask_iou_scores.size(0), device=all_iou_scores.device)
-        best_multimask_logits = multimask_logits[batch_inds, best_scores_inds]
-        best_multimask_logits = best_multimask_logits.unsqueeze(1)
-        best_multimask_iou_scores = multimask_iou_scores[batch_inds, best_scores_inds]
-        best_multimask_iou_scores = best_multimask_iou_scores.unsqueeze(1)
-
-        # The mask from singlemask output token 0 and its stability score
-        singlemask_logits = all_mask_logits[:, 0:1, :, :]
-        singlemask_iou_scores = all_iou_scores[:, 0:1]
-        stability_scores = self._get_stability_scores(singlemask_logits)
-        is_stable = stability_scores >= self.dynamic_multimask_stability_thresh
-
-        # Dynamically fall back to best multimask output upon low stability scores.
-        mask_logits_out = torch.where(
-            is_stable[..., None, None].expand_as(singlemask_logits),
-            singlemask_logits,
-            best_multimask_logits,
-        )
-        iou_scores_out = torch.where(
-            is_stable.expand_as(singlemask_iou_scores),
-            singlemask_iou_scores,
-            best_multimask_iou_scores,
-        )
-        return mask_logits_out, iou_scores_out
 
 
 class Sam2PositionEmbeddingSine(nn.Module):
@@ -2418,8 +2329,7 @@ class Sam2Model(Sam2PreTrainedModel):
                 if sam_output_tokens.size(2) > 1:
                     sam_output_token = sam_output_tokens[batch_inds, point_batch_inds, best_iou_inds]
             else:
-                low_res_masks, high_res_masks = low_res_multimasks, high_res_multimasks
-
+                low_res_masks, high_res_masks = low_res_multimasks[:, :, 0], high_res_multimasks[:, :, 0]
             # Extract object pointer from the SAM output token (with occlusion handling)
             obj_ptr = self.object_pointer_proj(sam_output_token)
             lambda_is_obj_appearing = is_obj_appearing.float()
@@ -3382,7 +3292,7 @@ class Sam2Model(Sam2PreTrainedModel):
 
     def _use_multimask(self, is_init_cond_frame, point_inputs):
         """Whether to use multimask output in the SAM head."""
-        num_pts = 0 if point_inputs is None else point_inputs["point_labels"].size(1)
+        num_pts = 0 if point_inputs is None else point_inputs["point_labels"].size(2)
         multimask_output = (
             self.multimask_output_in_sam
             and (is_init_cond_frame or self.multimask_output_for_tracking)

@@ -470,9 +470,13 @@ class Sam2Processor(ProcessorMixin):
         elif not isinstance(labels, torch.Tensor):
             labels = torch.tensor(labels, dtype=torch.int32)
         if points.dim() == 2:
-            points = points.unsqueeze(0)  # add batch dimension
+            points = points.unsqueeze(0).unsqueeze(0)  # add batch dimension and object dimension
         if labels.dim() == 1:
-            labels = labels.unsqueeze(0)  # add batch dimension
+            labels = labels.unsqueeze(0).unsqueeze(0)  # add batch dimension and object dimension
+        if points.dim() == 3:
+            points = points.unsqueeze(0)  # add batch dimension or object dimension
+        if labels.dim() == 2:
+            labels = labels.unsqueeze(0)  # add batch dimension or object dimension
 
         # Process box if provided
         if box is not None:
@@ -484,11 +488,11 @@ class Sam2Processor(ProcessorMixin):
                 )
             if not isinstance(box, torch.Tensor):
                 box = torch.tensor(box, dtype=torch.float32, device=points.device)
-            box_coords = box.reshape(1, 2, 2)
+            box_coords = box.reshape(1, 1, 2, 2)
             box_labels = torch.tensor([2, 3], dtype=torch.int32, device=labels.device)
-            box_labels = box_labels.reshape(1, 2)
-            points = torch.cat([box_coords, points], dim=1)
-            labels = torch.cat([box_labels, labels], dim=1)
+            box_labels = box_labels.reshape(1, 1, 2)
+            points = torch.cat([box_coords, points], dim=2)
+            labels = torch.cat([box_labels, labels], dim=2)
 
         # Normalize coordinates
         if normalize_coords:
@@ -507,8 +511,8 @@ class Sam2Processor(ProcessorMixin):
             existing_points = point_inputs_per_frame.get(frame_idx, None)
             if existing_points is not None:
                 # Concatenate with existing points
-                points = torch.cat([existing_points["point_coords"], points], dim=1)
-                labels = torch.cat([existing_points["point_labels"], labels], dim=1)
+                points = torch.cat([existing_points["point_coords"], points], dim=2)
+                labels = torch.cat([existing_points["point_labels"], labels], dim=2)
 
         point_inputs = {
             "point_coords": points,
