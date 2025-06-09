@@ -316,9 +316,6 @@ def restore_default_torch_dtype(func):
 
     return _wrapper
 
-
-import torch
-
 def get_torch_context_manager_or_global_device():
     """
     Returns the current device context or the default device (cuda if available, else cpu).
