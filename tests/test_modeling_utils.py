@@ -14,7 +14,6 @@ def test_get_torch_context_manager_or_global_device():
     device = get_torch_context_manager_or_global_device()
     # Defining the expected device based on CUDA availability
     expected_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # Assert the returned device matches the expected device
     assert device == expected_device, f"Expected device {expected_device}, got {device}"
 
 
