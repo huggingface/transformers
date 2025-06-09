@@ -383,6 +383,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("zamba", "ZambaConfig"),
         ("zamba2", "Zamba2Config"),
         ("zoedepth", "ZoeDepthConfig"),
+        ("fireflies", "FirefliesConfig"),
     ]
 )
 
