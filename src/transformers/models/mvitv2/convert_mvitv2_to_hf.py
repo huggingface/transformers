@@ -1,22 +1,39 @@
+# coding=utf-8
+# Copyright 2025 The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Convert MViTV2 checkpoints from the original repository: https://github.com/facebookresearch/mvit"""
+
 import argparse
-import urllib.request
 import re
-import requests
+import urllib.request
 
 import numpy as np
+import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from huggingface_hub import hf_hub_download
+from transformers import AutoImageProcessor, MViTV2Config, MViTV2ForImageClassification
 from transformers.utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
-from transformers import MViTV2ForImageClassification, MViTV2Config, AutoImageProcessor
+
 
 def get_mvitv2_config(model_name):
     config = MViTV2Config()
     config.num_labels = 1000
     url = "https://raw.githubusercontent.com/pytorch/hub/master/imagenet_classes.txt"
     labels = requests.get(url).text.strip().split("\n")
-    config.id2label = {i: label for i, label in enumerate(labels)}
+    config.id2label = dict(enumerate(labels))
     config.label2id = {label: i for i, label in enumerate(labels)}
     if "tiny" in model_name:
         config.depths = (1, 2, 5, 2)
@@ -28,6 +45,7 @@ def get_mvitv2_config(model_name):
         config.num_heads = 2
         config.expand_feature_dimension_in_attention = False
     return config
+
 
 def rename_key(name):
     if name.startswith("patch_embed"):
@@ -58,7 +76,7 @@ def rename_key(name):
 
     if "norm1" in name:
         name = name.replace("norm1", "layernorm_before")
-    
+
     if "norm2" in name:
         name = name.replace("norm2", "layernorm_after")
 
@@ -82,6 +100,7 @@ def rename_key(name):
 
     return name
 
+
 def convert_state_dict(orig_state_dict, config):
     depths_arr = np.array(config.depths)
     depths_cum = depths_arr.cumsum()
@@ -96,12 +115,12 @@ def convert_state_dict(orig_state_dict, config):
         orig_state_dict[rename_key(key)] = val
     return orig_state_dict
 
+
 def prepare_image():
-    file = hf_hub_download(
-        repo_id="hf-internal-testing/fixtures_nlvr2", filename="image2.jpeg", repo_type="dataset"
-    )
+    file = hf_hub_download(repo_id="hf-internal-testing/fixtures_nlvr2", filename="image2.jpeg", repo_type="dataset")
     image = Image.open(file)
     return image
+
 
 def convert_timesformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_name, push_to_hub):
     config = get_mvitv2_config(model_name)
@@ -118,31 +137,32 @@ def convert_timesformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, mod
     model.eval()
 
     image = prepare_image()
-    processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224", image_mean=IMAGENET_DEFAULT_MEAN, 
-                                                   image_std=IMAGENET_DEFAULT_STD)
-    
+    processor = AutoImageProcessor.from_pretrained(
+        "google/vit-base-patch16-224", image_mean=IMAGENET_DEFAULT_MEAN, image_std=IMAGENET_DEFAULT_STD
+    )
+
     inputs = processor(images=image, return_tensors="pt")
 
     with torch.no_grad():
-        outputs = model(**inputs) 
+        outputs = model(**inputs)
 
     # Logits and predicted class
     logits = outputs.logits
     predicted_class = logits.argmax(-1).item()
 
-    if(model_name == "mvitv2-base"):
+    if model_name == "mvitv2-base":
         expected_class = 273
         expected_shape = torch.Size([1, 1000])
         expected_slice = torch.Tensor([-2.4503e-01, 3.0206e-01, 1.0540e-01])
-    elif(model_name == "mvitv2-small"):
+    elif model_name == "mvitv2-small":
         expected_class = 273
         expected_shape = torch.Size([1, 1000])
         expected_slice = torch.Tensor([2.2804e-01, 3.6781e-01, -4.1515e-01])
-    elif(model_name == "mvitv2-tiny"):
+    elif model_name == "mvitv2-tiny":
         expected_class = 273
         expected_shape = torch.Size([1, 1000])
         expected_slice = torch.Tensor([2.5125e-02, 1.3908e-01, -2.4903e-01])
-    elif(model_name == "mvitv2-large"):
+    elif model_name == "mvitv2-large":
         expected_class = 273
         expected_shape = torch.Size([1, 1000])
         expected_slice = torch.Tensor([8.2464e-02, -3.0645e-01, 1.8997e-02])
@@ -161,6 +181,7 @@ def convert_timesformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, mod
         model.push_to_hub(f"KamilaMila/{model_name}")
         processor.push_to_hub(f"KamilaMila/{model_name}")
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
@@ -168,10 +189,7 @@ if __name__ == "__main__":
         "--checkpoint_url",
         default="https://dl.fbaipublicfiles.com/mvit/mvitv2_models/MViTv2_B_in1k.pyth",
         type=str,
-        help=(
-            "URL of the original PyTorch checkpoint you'd like to convert. Should be a direct"
-            " download link."
-        ),
+        help=("URL of the original PyTorch checkpoint you'd like to convert. Should be a direct download link."),
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
