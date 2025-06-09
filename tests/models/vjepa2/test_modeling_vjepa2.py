@@ -41,7 +41,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoImageProcessor
+    from transformers import AutoVideoProcessor
 
 # VJEPA_HF_MODEL = "facebook/vjepa2-vith-256-fpc64"
 VJEPA_HF_MODEL = "/checkpoint/amaia/video/koustuvs/models/vjepa_v2/hf"
@@ -214,7 +214,7 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="Dinov2 does not support feedforward chunking yet")
+    @unittest.skip(reason="VJEPA2 does not support feedforward chunking yet")
     def test_feed_forward_chunking(self):
         pass
 
@@ -235,30 +235,30 @@ def prepare_img():
 @require_vision
 class VJEPA2ModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained(VJEPA_HF_MODEL) if is_vision_available() else None
+    def default_video_processor(self):
+        return AutoVideoProcessor.from_pretrained(VJEPA_HF_MODEL) if is_vision_available() else None
 
     @slow
     def test_inference_no_head(self):
         model = VJEPA2Model.from_pretrained(VJEPA_HF_MODEL).to(torch_device)
 
-        image_processor = self.default_image_processor
+        video_processor = self.default_video_processor
         image = prepare_img()
-        inputs = image_processor(image, return_tensors="pt").to(torch_device)
+        inputs = video_processor(image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs)
 
         # verify the last hidden states
-        expected_shape = torch.Size((1, 257, 768))
+        expected_shape = torch.Size((1, 256, 1024))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
             [
-                [-2.2005, -0.4495, 1.0964],
-                [-3.3959, -0.8942, -1.0315],
-                [-2.9355, 1.1564, -0.7656],
+                [0.6764, 2.1508, -0.3414],
+                [0.8276, 0.6633, 0.0603],
+                [0.7360, 1.1685, -0.0091],
             ],
             device=torch_device,
         )
