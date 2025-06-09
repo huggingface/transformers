@@ -1212,6 +1212,15 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
         if "token_type_ids" not in inputs_dict:
             inputs_dict["token_type_ids"] = torch.zeros_like(inputs_dict["input_ids"], device=device)
 
+        # Find the position of the mask token
+        mask_token_id = tokenizer.mask_token_id
+        mask_positions = (inputs_dict["input_ids"] == mask_token_id).nonzero(as_tuple=True)
+        
+        if len(mask_positions[0]) == 0:
+            self.fail("No [MASK] token found in the tokenized input!")
+            
+        mask_position = mask_positions[1][0].item()
+
         with torch.no_grad():
             logits = model(
                 input_ids=inputs_dict["input_ids"],
@@ -1220,8 +1229,8 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
                 word_ids=inputs_dict["word_ids"],
                 subword_ids=inputs_dict["subword_ids"],
             ).logits
-        eg_predicted_mask_tokens = tokenizer.decode(logits[0, 6].topk(5).indices).split()
-        self.assertEqual(eg_predicted_mask_tokens, ["carpenter", "waiter", "barber", "mechanic", "salesman"])
+        eg_predicted_mask_tokens = tokenizer.decode(logits[0, mask_position].topk(5).indices).split()
+        self.assertEqual(eg_predicted_mask_tokens, ['gazetecilik', 'öğretmenlik', 'ticaret', 'belli', 'polislik'])
 
         export_args = (
             inputs_dict["input_ids"],
@@ -1241,7 +1250,7 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             result_logits = exported_program.module()(*export_args_non_none).logits
 
-        ep_predicted_mask_tokens = tokenizer.decode(result_logits[0, 6].topk(5).indices).split()
+        ep_predicted_mask_tokens = tokenizer.decode(result_logits[0, mask_position].topk(5).indices).split()
         self.assertEqual(eg_predicted_mask_tokens, ep_predicted_mask_tokens)
 
 
