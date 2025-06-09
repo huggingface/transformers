@@ -292,7 +292,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
     def test_qwen2_small_model_integration_generate(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
@@ -300,7 +300,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         prompt = (
             "<|im_start|>user\n<IMG_CONTEXT>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
         )
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.bfloat16)
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
         with torch.no_grad():
             generate_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
             decoded_output = processor.decode(
@@ -312,7 +312,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
     def test_qwen2_small_model_integration_forward(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
@@ -320,7 +320,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         prompt = (
             "<|im_start|>user\n<IMG_CONTEXT>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
         )
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.bfloat16)
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
 
         # Forward
         with torch.inference_mode():
@@ -329,9 +329,9 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         actual_logits = output.logits[0, -1, :5].cpu()
         expected_logits_all = Expectations(
             {
-                ("xpu", 3): torch.tensor([11.7500, 14.7500, 14.1250, 10.5625, 6.7812], dtype=torch.bfloat16),
-                ("cuda", 7): torch.tensor([11.9375, 14.7500, 14.4375, 10.8125,  7.0938], dtype=torch.bfloat16),
-                ("cuda", 8): torch.tensor([11.8750, 14.8125, 14.3125, 10.8125,  6.9375], dtype=torch.bfloat16),
+                ("xpu", 3): torch.tensor([11.7500, 14.7500, 14.1250, 10.5625, 6.7812], dtype=torch.float16),
+                ("cuda", 7): torch.tensor([11.9375, 14.7500, 14.4375, 10.8125,  7.0938], dtype=torch.float16),
+                ("cuda", 8): torch.tensor([11.8750, 14.8125, 14.3125, 10.8125,  6.9375], dtype=torch.float16),
             }
         )  # fmt: skip
         expected_logits = expected_logits_all.get_expectation()
@@ -347,10 +347,10 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
     def test_qwen2_small_model_integration_generate_text_only(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         prompt = "<|im_start|>user\nWrite a haiku<|im_end|>\n<|im_start|>assistant\n"
-        inputs = processor(text=prompt, return_tensors="pt").to(torch_device, dtype=torch.bfloat16)
+        inputs = processor(text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
         with torch.no_grad():
             generate_ids = model.generate(**inputs, max_new_tokens=200, do_sample=False)
             decoded_output = processor.decode(
@@ -371,7 +371,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
     def test_qwen2_small_model_integration_generate_chat_template(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         messages = [
             {
@@ -385,7 +385,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
 
         inputs = processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
-        ).to(torch_device, dtype=torch.bfloat16)
+        ).to(torch_device, dtype=torch.float16)
         with torch.no_grad():
             generate_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
             decoded_output = processor.decode(
@@ -398,7 +398,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
     def test_qwen2_small_model_integration_batched_generate(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         # Prepare inputs
         prompt = [
@@ -409,7 +409,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
 
         inputs = processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
-            torch_device, dtype=torch.bfloat16
+            torch_device, dtype=torch.float16
         )
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
@@ -442,7 +442,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
     def test_qwen2_small_model_integration_batched_generate_multi_image(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         # Prepare inputs
         prompt = [
@@ -466,7 +466,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         )
 
         inputs = processor(text=prompt, images=[[image1], [image2, image3]], padding=True, return_tensors="pt").to(
-            torch_device, dtype=torch.bfloat16
+            torch_device, dtype=torch.float16
         )
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
@@ -548,7 +548,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
     def test_qwen2_small_model_integration_interleaved_images_videos(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, torch_dtype=torch.bfloat16, device_map=torch_device
+            self.small_model_checkpoint, torch_dtype=torch.float16, device_map=torch_device
         )
         messages = [
             [
@@ -600,7 +600,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             return_tensors="pt",
             padding=True,
             num_frames=8,
-        ).to(torch_device, dtype=torch.bfloat16)
+        ).to(torch_device, dtype=torch.float16)
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 
@@ -657,7 +657,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
     def test_llama_small_model_integration_generate(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
@@ -665,7 +665,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         prompt = (
             "<|im_start|>user\n<IMG_CONTEXT>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
         )
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.bfloat16)
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
         with torch.no_grad():
             generate_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
             decoded_output = processor.decode(
@@ -677,7 +677,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
     def test_llama_small_model_integration_forward(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
@@ -685,7 +685,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         prompt = (
             "<|im_start|>user\n<IMG_CONTEXT>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
         )
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.bfloat16)
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
 
         # Forward
         with torch.inference_mode():
@@ -695,12 +695,12 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
 
         expected_logits_all = Expectations(
             {
-                ("xpu", 3): torch.tensor([-9.8750, -0.5703, 1.4297, -10.3125, -10.3125], dtype=torch.bfloat16),
-                ("cuda", 7): torch.tensor([-9.8750, -0.5703, 1.4297, -10.3125, -10.3125], dtype=torch.bfloat16),
-                ("cuda", 8): torch.tensor([-9.8750,  -0.5117,   1.4297, -10.3750, -10.3750], dtype=torch.bfloat16),
+                ("xpu", 3): torch.tensor([-9.8750, -0.5703, 1.4297, -10.3125, -10.3125], dtype=torch.float16),
+                ("cuda", 7): torch.tensor([-9.8750, -0.5703, 1.4297, -10.3125, -10.3125], dtype=torch.float16),
+                ("cuda", 8): torch.tensor([-9.8750,  -0.5117,   1.4297, -10.3750, -10.3750], dtype=torch.float16),
             }
         )  # fmt: skip
-        expected_logits = torch.tensor(expected_logits_all.get_expectation(), dtype=torch.bfloat16)
+        expected_logits = torch.tensor(expected_logits_all.get_expectation(), dtype=torch.float16)
 
         # The original implementation and the transformers implementation do not match exactly, hence the higher tolerance.
         # The difference is likely due to the different implementations of the attention mechanism (different order of operations)
@@ -716,10 +716,10 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
     def test_llama_small_model_integration_generate_text_only(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         prompt = "<|im_start|>user\nWrite a haiku<|im_end|>\n<|im_start|>assistant\n"
-        inputs = processor(text=prompt, return_tensors="pt").to(torch_device, dtype=torch.bfloat16)
+        inputs = processor(text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
         with torch.no_grad():
             generate_ids = model.generate(**inputs, max_new_tokens=200, do_sample=False)
             decoded_output = processor.decode(
@@ -731,7 +731,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
     def test_llama_small_model_integration_generate_chat_template(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         messages = [
             {
@@ -745,7 +745,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
 
         inputs = processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
-        ).to(torch_device, dtype=torch.bfloat16)
+        ).to(torch_device, dtype=torch.float16)
         with torch.no_grad():
             generate_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
             decoded_output = processor.decode(
@@ -757,7 +757,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
     def test_llama_small_model_integration_batched_generate(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         # Prepare inputs
         prompt = [
@@ -768,7 +768,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
 
         inputs = processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
-            torch_device, dtype=torch.bfloat16
+            torch_device, dtype=torch.float16
         )
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
@@ -801,7 +801,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
     def test_llama_small_model_integration_batched_generate_multi_image(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         # Prepare inputs
         prompt = [
@@ -825,7 +825,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         )
 
         inputs = processor(text=prompt, images=[[image1], [image2, image3]], padding=True, return_tensors="pt").to(
-            torch_device, dtype=torch.bfloat16
+            torch_device, dtype=torch.float16
         )
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
@@ -893,7 +893,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
     def test_llama_small_model_integration_interleaved_images_videos(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, torch_dtype=torch.bfloat16, device_map=torch_device
+            self.small_model_checkpoint, torch_dtype=torch.float16, device_map=torch_device
         )
         messages = [
             [
@@ -945,7 +945,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             return_tensors="pt",
             padding=True,
             num_frames=8,
-        ).to(torch_device, dtype=torch.bfloat16)
+        ).to(torch_device, dtype=torch.float16)
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 
