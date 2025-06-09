@@ -1,19 +1,10 @@
-import numbers
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Callable, Dict, List, Optional, Set, Tuple, Union
 
-import cv2
 import numpy as np
-import PIL
 import torch
-from PIL import Image
 from torch import nn
-from torchvision.transforms import functional as tvf
-
-from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 from ...activations import ACT2FN
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_utils import to_numpy_array
 from ...modeling_outputs import BaseModelOutput, dataclass
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
@@ -26,9 +17,7 @@ logger = logging.get_logger(__name__)
 ### Utility functions
 
 
-def get_3d_sincos_pos_embed(
-    embed_dim, grid_size, grid_depth, cls_token=False, uniform_power=False
-):
+def get_3d_sincos_pos_embed(embed_dim, grid_size, grid_depth, cls_token=False, uniform_power=False):
     """
     grid_size: int of the grid height and width
     grid_depth: int of the grid depth
@@ -69,9 +58,7 @@ def get_2d_sincos_pos_embed(embed_dim, grid_size, cls_token=False):
     """
     grid_h = np.arange(grid_size, dtype=float)
     grid_w = np.arange(grid_size, dtype=float)
-    grid_w, grid_h = np.meshgrid(
-        grid_w, grid_h
-    )  # order of meshgrid is very important for indexing as [h, w]
+    grid_w, grid_h = np.meshgrid(grid_w, grid_h)  # order of meshgrid is very important for indexing as [h, w]
 
     emb_h = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid_h)  # (H*W, D/2)
     emb_w = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid_w)  # (H*W, D/2)
@@ -195,11 +182,7 @@ class VJEPA2Embeddings(nn.Module):
 
         # If pos_embed already corret size, just return
         _, _, T, H, W = x.shape
-        if (
-            H == self.config.img_height
-            and W == self.config.img_width
-            and T == self.config.frames_per_clip
-        ):
+        if H == self.config.img_height and W == self.config.img_width and T == self.config.frames_per_clip:
             return pos_embed
 
         # Convert depth, height, width of input to be measured in patches
@@ -241,9 +224,7 @@ class VJEPA2Embeddings(nn.Module):
         # add positional encoding to each token
         # ignore if we are using Rope
         if not self.config.use_rope:
-            embeddings = embeddings + self.interpolate_pos_encoding(
-                pixel_values, self.position_embeddings
-            )
+            embeddings = embeddings + self.interpolate_pos_encoding(pixel_values, self.position_embeddings)
 
         return embeddings
 
@@ -263,15 +244,11 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
 
     # Normalize the attention scores to probabilities.
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
-        query.dtype
-    )
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
 
     # This is actually dropping out entire tokens to attend to, which might
     # seem a bit unusual, but is taken from the original Transformer paper.
-    attn_weights = nn.functional.dropout(
-        attn_weights, p=dropout, training=module.training
-    )
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
     # Mask heads if we want to
     if attention_mask is not None:
@@ -340,9 +317,7 @@ class VJEPA2SelfAttention(nn.Module):
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[
-                    self.config._attn_implementation
-                ]
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         context_layer, attention_probs = attention_interface(
             self,
@@ -358,9 +333,7 @@ class VJEPA2SelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = self.proj(context_layer.view(new_context_layer_shape))
 
-        outputs = (
-            (context_layer, attention_probs) if output_attentions else (context_layer,)
-        )
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs
 
@@ -514,9 +487,7 @@ class VJEPA2RopeSelfAttention(nn.Module):
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[
-                    self.config._attn_implementation
-                ]
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         context_layer, attention_probs = attention_interface(
             self,
@@ -532,9 +503,7 @@ class VJEPA2RopeSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = self.proj(context_layer.view(new_context_layer_shape))
 
-        outputs = (
-            (context_layer, attention_probs) if output_attentions else (context_layer,)
-        )
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs
 
@@ -544,9 +513,7 @@ class VJEPA2Attention(nn.Module):
     def __init__(self, config: VJEPA2Config, **kwargs) -> None:
         super().__init__()
         self.attention = (
-            VJEPA2RopeSelfAttention(config, **kwargs)
-            if config.use_rope
-            else VJEPA2SelfAttention(config, **kwargs)
+            VJEPA2RopeSelfAttention(config, **kwargs) if config.use_rope else VJEPA2SelfAttention(config, **kwargs)
         )
         self.pruned_heads = set()
 
@@ -566,12 +533,8 @@ class VJEPA2Attention(nn.Module):
         self.attention.value = prune_linear_layer(self.attention.value, index)
 
         # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(
-            heads
-        )
-        self.attention.all_head_size = (
-            self.attention.attention_head_size * self.attention.num_attention_heads
-        )
+        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
+        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
@@ -581,9 +544,7 @@ class VJEPA2Attention(nn.Module):
         output_attentions: bool = False,
         head_mask: Optional[torch.Tensor] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_outputs = self.attention(
-            hidden_states, position_mask, output_attentions, head_mask
-        )
+        self_outputs = self.attention(hidden_states, position_mask, output_attentions, head_mask)
 
         attention_output = self_outputs[0]
 
@@ -592,9 +553,7 @@ class VJEPA2Attention(nn.Module):
 
 
 # Copied from transformers.models.beit.modeling_dinov2.drop_path
-def drop_path(
-    input: torch.Tensor, drop_prob: float = 0.0, training: bool = False
-) -> torch.Tensor:
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -607,12 +566,8 @@ def drop_path(
     if drop_prob == 0.0 or not training:
         return input
     keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (
-        input.ndim - 1
-    )  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(
-        shape, dtype=input.dtype, device=input.device
-    )
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
     random_tensor.floor_()  # binarize
     output = input.div(keep_prob) * random_tensor
     return output
@@ -634,9 +589,7 @@ class VJEPA2DropPath(nn.Module):
 
 
 class VJEPA2MLP(nn.Module):
-    def __init__(
-        self, config: VJEPA2Config, hidden_size: int = -1, mlp_ratio: float = 4.0
-    ) -> None:
+    def __init__(self, config: VJEPA2Config, hidden_size: int = -1, mlp_ratio: float = 4.0) -> None:
         super().__init__()
         in_features = out_features = hidden_size
         hidden_features = int(hidden_size * mlp_ratio)
@@ -703,18 +656,12 @@ class VJEPA2Layer(nn.Module):
             num_attention_heads=num_attention_heads,
         )
 
-        self.drop_path = (
-            VJEPA2DropPath(drop_path_rate)
-            if config.drop_path_rate > 0.0
-            else nn.Identity()
-        )
+        self.drop_path = VJEPA2DropPath(drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.norm2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
         if config.use_SiLU:
-            self.mlp = VJEPA2SwiGLUFFN(
-                config, hidden_size=hidden_size, mlp_ratio=mlp_ratio
-            )
+            self.mlp = VJEPA2SwiGLUFFN(config, hidden_size=hidden_size, mlp_ratio=mlp_ratio)
         else:
             self.mlp = VJEPA2MLP(config, hidden_size=hidden_size, mlp_ratio=mlp_ratio)
 
@@ -726,9 +673,7 @@ class VJEPA2Layer(nn.Module):
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
-            self.norm1(
-                hidden_states
-            ),  # in Dinov2, layernorm is applied before self-attention
+            self.norm1(hidden_states),  # in Dinov2, layernorm is applied before self-attention
             position_mask=position_mask,  # position mask for context/target selection
             head_mask=head_mask,  # head mask is applied at F.scaled_dot_product_attention
             output_attentions=output_attentions,
@@ -736,9 +681,7 @@ class VJEPA2Layer(nn.Module):
         attention_output = self_attention_outputs[0]
 
         # attention_output = self.layer_scale1(attention_output)
-        outputs = self_attention_outputs[
-            1:
-        ]  # add self attentions if we output attention weights
+        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # first residual connection
         hidden_states = self.drop_path(attention_output) + hidden_states
@@ -767,11 +710,7 @@ class VJEPA2Encoder(nn.Module):
 
         self.embeddings = VJEPA2Embeddings(config, hidden_size=config.hidden_size)
         dpr = [
-            (
-                config.drop_path_rate * i / (config.num_hidden_layers - 1)
-                if config.num_hidden_layers > 1
-                else 0.0
-            )
+            (config.drop_path_rate * i / (config.num_hidden_layers - 1) if config.num_hidden_layers > 1 else 0.0)
             for i in range(config.num_hidden_layers)
         ]
         self.layer = nn.ModuleList(
@@ -817,9 +756,7 @@ class VJEPA2Encoder(nn.Module):
                     output_attentions,
                 )
             else:
-                layer_outputs = layer_module(
-                    hidden_states, None, layer_head_mask, output_attentions
-                )
+                layer_outputs = layer_module(hidden_states, None, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -832,11 +769,7 @@ class VJEPA2Encoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, all_hidden_states, all_self_attentions]
-                if v is not None
-            )
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -862,10 +795,7 @@ def apply_masks(x, masks, concat=True) -> torch.Tensor:
 def repeat_interleave_batch(x, B, repeat) -> torch.Tensor:
     N = len(x) // B
     x = torch.cat(
-        [
-            torch.cat([x[i * B : (i + 1) * B] for _ in range(repeat)], dim=0)
-            for i in range(N)
-        ],
+        [torch.cat([x[i * B : (i + 1) * B] for _ in range(repeat)], dim=0) for i in range(N)],
         dim=0,
     )
     return x
@@ -881,9 +811,7 @@ class VJEPA2PredictorEmbeddings(nn.Module):
 
         # self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.config = config
-        self.predictor_embeddings = nn.Linear(
-            config.hidden_size, config.pred_hidden_size
-        )
+        self.predictor_embeddings = nn.Linear(config.hidden_size, config.pred_hidden_size)
         if not self.config.use_rope:
             # position embeddings
             self.position_embeddings = nn.Parameter(
@@ -895,9 +823,7 @@ class VJEPA2PredictorEmbeddings(nn.Module):
         self.zero_init_mask_tokens = config.pred_zero_init_mask_tokens
         if config.pred_use_mask_tokens:
             self.num_mask_tokens = config.pred_num_mask_tokens
-            self.mask_tokens = nn.Parameter(
-                torch.zeros(self.num_mask_tokens, 1, 1, config.pred_hidden_size)
-            )
+            self.mask_tokens = nn.Parameter(torch.zeros(self.num_mask_tokens, 1, 1, config.pred_hidden_size))
 
         # self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.patch_size
@@ -912,9 +838,7 @@ class VJEPA2PredictorEmbeddings(nn.Module):
                 * (config.crop_size // config.patch_size)
             )
         else:
-            return (config.crop_size // config.patch_size) * (
-                config.crop_size // config.patch_size
-            )
+            return (config.crop_size // config.patch_size) * (config.crop_size // config.patch_size)
 
     def _init_pos_embed(self, pos_embed):
         grid_size = self.config.crop_size // self.config.patch_size
@@ -1007,9 +931,7 @@ class VJEPA2Predictor(nn.Module):
             ]
         )
         self.gradient_checkpointing = False
-        self.layernorm = nn.LayerNorm(
-            config.pred_hidden_size, eps=config.layer_norm_eps
-        )
+        self.layernorm = nn.LayerNorm(config.pred_hidden_size, eps=config.layer_norm_eps)
         self.proj = nn.Linear(config.pred_hidden_size, config.hidden_size, bias=True)
 
     def sort_tokens(self, hidden_states, position_masks, argsort, head_mask=None):
@@ -1065,15 +987,11 @@ class VJEPA2Predictor(nn.Module):
         # this is implemented here as in VJEPA training a separate encoder is used for target
         encoder_hidden_states = apply_masks(encoder_hidden_states, context_mask)
         _, N_ctxt, D = encoder_hidden_states.shape
-        hidden_states, position_masks = self.embeddings(
-            encoder_hidden_states, context_mask, target_mask
-        )
+        hidden_states, position_masks = self.embeddings(encoder_hidden_states, context_mask, target_mask)
 
         # Put tokens in sorted order
         argsort = torch.argsort(position_masks, dim=1)  # [B, N]
-        hidden_states, position_masks, head_mask = self.sort_tokens(
-            hidden_states, position_masks, argsort, head_mask
-        )
+        hidden_states, position_masks, head_mask = self.sort_tokens(hidden_states, position_masks, argsort, head_mask)
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -1090,9 +1008,7 @@ class VJEPA2Predictor(nn.Module):
                     output_attentions,
                 )
             else:
-                layer_outputs = layer_module(
-                    hidden_states, position_masks, layer_head_mask, output_attentions
-                )
+                layer_outputs = layer_module(hidden_states, position_masks, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -1110,11 +1026,7 @@ class VJEPA2Predictor(nn.Module):
         hidden_states = self.proj(hidden_states)
 
         if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, all_hidden_states, all_self_attentions]
-                if v is not None
-            )
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -1304,30 +1216,18 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         skip_predictor (bool):
             flag to skip the predictor forward, useful if you just need the encoder outputs
         """
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         # Prepare head mask if needed
-        context_head_mask = _convert_head_mask_to_5d(
-            context_head_mask, self.config.num_hidden_layers
-        )
-        target_head_mask = _convert_head_mask_to_5d(
-            target_head_mask, self.config.pred_num_hidden_layers
-        )
+        context_head_mask = _convert_head_mask_to_5d(context_head_mask, self.config.num_hidden_layers)
+        target_head_mask = _convert_head_mask_to_5d(target_head_mask, self.config.pred_num_hidden_layers)
 
         encoder_outputs = self.encoder(
             pixel_values=pixel_values,
@@ -1341,12 +1241,8 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         if context_mask is None and target_mask is None:
             B = pixel_values.size(0)
             N = sequence_output.size(1)  # ensure we are using dynamic patch size
-            context_mask = [
-                torch.arange(N, device=pixel_values.device).unsqueeze(0).repeat((B, 1))
-            ]
-            target_mask = [
-                torch.arange(N, device=pixel_values.device).unsqueeze(0).repeat((B, 1))
-            ]
+            context_mask = [torch.arange(N, device=pixel_values.device).unsqueeze(0).repeat((B, 1))]
+            target_mask = [torch.arange(N, device=pixel_values.device).unsqueeze(0).repeat((B, 1))]
 
         if not skip_predictor:
             predictor_outputs = self.predictor(

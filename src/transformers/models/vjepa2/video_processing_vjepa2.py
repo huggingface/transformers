@@ -1,5 +1,6 @@
 """Fast Video processor class for VJEPA2."""
 
+from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -13,7 +14,6 @@ from ...video_processing_utils import (
     BaseVideoProcessor,
 )
 
-from ...image_processing_utils import BatchFeature
 
 if is_vision_available():
     from ...image_utils import PILImageResampling
@@ -44,9 +44,7 @@ class VJEPA2VideoProcessor(BaseVideoProcessor):
         pixel_values_videos = out.pop("pixel_values_videos")
         pixel_values = pixel_values_videos.permute(0, 2, 1, 3, 4)  # B x C x T x H x W
         return_tensors = out.get("return_tensors", None)
-        return BatchFeature(
-            data={"pixel_values": pixel_values}, tensor_type=return_tensors
-        )
+        return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
 
 
 __all__ = ["VJEPA2VideoProcessor"]
