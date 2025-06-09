@@ -42,7 +42,9 @@ class VJEPA2VideoProcessor(BaseVideoProcessor):
     def _preprocess(self, **kwargs) -> BatchFeature:
         out = super()._preprocess(**kwargs)
         pixel_values_videos = out.pop("pixel_values_videos")
-        pixel_values = pixel_values_videos.permute(0, 2, 1, 3, 4)  # B x C x T x H x W
+        pixel_values = pixel_values_videos.permute(
+            0, 2, 1, 3, 4
+        )  # Batch x Channels x Temporal frames x Height x Width
         return_tensors = out.get("return_tensors", None)
         return BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
 
