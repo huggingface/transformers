@@ -78,7 +78,7 @@ class Bert2DTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return input_text, ids
 
     def test_bert2d_specific_attributes(self):
-        tokenizer = Bert2DTokenizerFast.from_pretrained(self.from_pretrained_id)
+        tokenizer = Bert2DTokenizerFast.from_pretrained("yigitbekir/Bert2D-cased-Turkish-128K-WWM-NSW2")
 
         # Check default values
         self.assertEqual(tokenizer.max_intermediate_subword_positions_per_word, 1)
@@ -92,7 +92,7 @@ class Bert2DTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_custom_parameters(self):
         # Test with custom parameters
         tokenizer = Bert2DTokenizerFast.from_pretrained(
-            self.from_pretrained_id,
+            "yigitbekir/Bert2D-cased-Turkish-128K-WWM-NSW2",
             max_intermediate_subword_positions_per_word=3,
             subword_embedding_order="ending_first",
             intermediate_subword_distribution_strategy="leftover_as_last",
