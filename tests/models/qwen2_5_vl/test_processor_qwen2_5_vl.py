@@ -44,7 +44,10 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
         processor = Qwen2_5_VLProcessor.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct", patch_size=4, max_pixels=56 * 56, min_pixels=28 * 28
+            "Qwen/Qwen2-VL-7B-Instruct",
+            patch_size=4,
+            max_pixels=56 * 56,
+            min_pixels=28 * 28,
         )
         processor.save_pretrained(cls.tmpdirname)
         cls.image_token = processor.image_token
@@ -71,7 +74,9 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         video_processor = self.get_video_processor()
 
         processor = Qwen2_5_VLProcessor(
-            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
+            tokenizer=tokenizer,
+            image_processor=image_processor,
+            video_processor=video_processor,
         )
         processor.save_pretrained(self.tmpdirname)
         processor = Qwen2_5_VLProcessor.from_pretrained(self.tmpdirname, use_fast=False)
@@ -87,7 +92,9 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         video_processor = self.get_video_processor()
 
         processor = Qwen2_5_VLProcessor(
-            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
+            tokenizer=tokenizer,
+            image_processor=image_processor,
+            video_processor=video_processor,
         )
 
         image_input = self.prepare_image_inputs()
@@ -104,7 +111,9 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         video_processor = self.get_video_processor()
 
         processor = Qwen2_5_VLProcessor(
-            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
+            tokenizer=tokenizer,
+            image_processor=image_processor,
+            video_processor=video_processor,
         )
 
         input_str = "lower newer"
@@ -130,7 +139,9 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         video_processor = self.get_video_processor()
 
         processor = Qwen2_5_VLProcessor(
-            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
+            tokenizer=tokenizer,
+            image_processor=image_processor,
+            video_processor=video_processor,
         )
 
         input_str = "lower newer"
@@ -174,13 +185,18 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Test that tokenizing with template and directly with `self.tokenizer` gives same output
         formatted_prompt_tokenized = processor.apply_chat_template(
-            batch_messages, add_generation_prompt=True, tokenize=True, return_tensors=return_tensors
+            batch_messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_tensors=return_tensors,
         )
         add_special_tokens = True
         if processor.tokenizer.bos_token is not None and formatted_prompt[0].startswith(processor.tokenizer.bos_token):
             add_special_tokens = False
         tok_output = processor.tokenizer(
-            formatted_prompt, return_tensors=return_tensors, add_special_tokens=add_special_tokens
+            formatted_prompt,
+            return_tensors=return_tensors,
+            add_special_tokens=add_special_tokens,
         )
         expected_output = tok_output.input_ids
         self.assertListEqual(expected_output.tolist(), formatted_prompt_tokenized.tolist())
@@ -211,7 +227,10 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Test that with modality URLs and `return_dict=True`, we get modality inputs in the dict
         for idx, url in enumerate(input_data[:batch_size]):
-            batch_messages[idx][0]["content"] = [batch_messages[idx][0]["content"][0], {"type": modality, "url": url}]
+            batch_messages[idx][0]["content"] = [
+                batch_messages[idx][0]["content"][0],
+                {"type": modality, "url": url},
+            ]
 
         out_dict = processor.apply_chat_template(
             batch_messages,
@@ -342,7 +361,12 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
-        inputs = processor(text=input_str, images=image_input, max_pixels=56 * 56 * 4, return_tensors="pt")
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            max_pixels=56 * 56 * 4,
+            return_tensors="pt",
+        )
         self.assertEqual(inputs[self.images_input_name].shape[0], 612)
         inputs = processor(text=input_str, images=image_input, return_tensors="pt")
         self.assertEqual(inputs[self.images_input_name].shape[0], 100)
@@ -364,7 +388,9 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.skipTest("Processor doesn't accept videos at input")
 
         video_file_path = hf_hub_download(
-            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
+            repo_id="raushan-testing-hf/videos-test",
+            filename="sample_demo_1.mp4",
+            repo_type="dataset",
         )
         messages = [
             [
@@ -392,7 +418,10 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         "role": "user",
                         "content": [
                             {"type": "video"},  # no need to use path, video is loaded already by this moment
-                            {"type": "text", "text": "Dummy prompt for preprocess testing"},
+                            {
+                                "type": "text",
+                                "text": "Dummy prompt for preprocess testing",
+                            },
                         ],
                     },
                 ]
@@ -413,3 +442,37 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         formatted_text = processor.batch_decode(out_dict_with_video["input_ids"], skip_special_tokens=True)[0]
         self.assertTrue("Dummy prompt for preprocess testing" in formatted_text)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 21960)
+
+    @require_torch
+    def test_qwen2_tokenizer_empty_string_regression(self):
+        """
+        Tests that Qwen2Tokenizer returns a torch.long tensor with correct shape
+        for an empty string input, serving as a regression test for issue #38417.
+        """
+        model_id = "Qwen/Qwen2-0.5B"
+
+        try:
+            tokenizer = Qwen2Tokenizer.from_pretrained(model_id, trust_remote_code=True)
+        except OSError as e:
+            self.skipTest(f"Could not load tokenizer {model_id} for testing. Error: {e}")
+            return
+
+        text_inputs = tokenizer([""], return_tensors="pt")
+
+        self.assertIn("input_ids", text_inputs, "Key 'input_ids' not found in tokenizer output.")
+        input_ids_tensor = text_inputs["input_ids"]
+        self.assertIsNotNone(input_ids_tensor, "input_ids tensor is None.")
+
+        expected_shape = torch.Size([1, 0])
+        self.assertEqual(
+            input_ids_tensor.shape,
+            expected_shape,
+            f"Expected shape {expected_shape}, but got {input_ids_tensor.shape}.",
+        )
+
+        expected_dtype = torch.long
+        self.assertEqual(
+            input_ids_tensor.dtype,
+            expected_dtype,
+            f"Expected dtype {expected_dtype}, but got {input_ids_tensor.dtype}.",
+        )
