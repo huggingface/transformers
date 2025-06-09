@@ -299,7 +299,7 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         """
         model = ColQwen2ForRetrieval.from_pretrained(
             self.model_name,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=torch.float16,
             load_in_8bit=True,
         ).eval()
 
@@ -327,13 +327,15 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         # Check if the maximum scores per row are in the diagonal of the matrix score
         self.assertTrue((scores.argmax(axis=1) == torch.arange(len(ds), device=scores.device)).all())
 
+
+
         # Further validation: fine-grained check, with a hardcoded score from the original Hf implementation.
         expectations = Expectations(
             {
                 ("cuda", 7): [
-                    [15.5000, 8.1250, 14.9375],
-                    [9.0625, 17.1250, 10.6875],
-                    [15.9375, 12.1875, 20.2500],
+                    [15.0938, 8.3203, 15.0391],
+                    [9.6328, 16.9062, 10.5312],
+                    [15.6562, 12.2656, 20.2969],
                 ],
                 ("cuda", 8): [
                     [15.1250, 8.6875, 15.0625],
