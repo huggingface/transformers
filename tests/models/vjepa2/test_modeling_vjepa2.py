@@ -124,7 +124,6 @@ class VJEPA2ModelTester:
             num_hidden_layers=self.num_hidden_layers,
             use_rope=True,
             mlp_ratio=self.mlp_ratio,
-            use_sdpa=self.attn_implementation == "sdpa",
             pred_hidden_size=self.pred_hidden_size,
             pred_num_attention_heads=self.pred_num_attention_heads,
             pred_num_hidden_layers=self.pred_num_hidden_layers,
