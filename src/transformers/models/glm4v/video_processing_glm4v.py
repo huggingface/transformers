@@ -21,7 +21,6 @@
 
 import math
 from typing import List, Optional, Union
-from .image_processing_glm4v import smart_resize
 
 import numpy as np
 
@@ -44,6 +43,7 @@ from ...utils import (
     is_torchvision_v2_available,
     is_vision_available,
 )
+from .image_processing_glm4v import smart_resize
 
 
 if is_torch_available():
