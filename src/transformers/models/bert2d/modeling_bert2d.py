@@ -143,7 +143,7 @@ class Bert2DEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-        # Buffers for default IDs, similar to vanilla BERT\'s position_ids and token_type_ids
+        # Buffers for default IDs, similar to vanilla BERT's position_ids and token_type_ids
         # These are used if word_ids or subword_ids are not provided.
         # Max length for these defaults is config.max_position_embeddings for consistency.
         # Actual length used will be sliced to seq_length at runtime.
@@ -175,6 +175,8 @@ class Bert2DEmbeddings(nn.Module):
             return generated_word_ids, generated_subword_ids
 
         pad_token_id = self.config.pad_token_id
+        max_allowed_word_id = self.config.max_word_position_embeddings - 1
+
 
         # Reshape for easier iteration if 3D
         is_3d = input_ids_tensor.ndim == 3
@@ -212,7 +214,8 @@ class Bert2DEmbeddings(nn.Module):
             current_word_ids = torch.zeros(seq_length, dtype=torch.long, device=device)
             content_word_id_counter = 0
             for j in range(num_left_pads, seq_length):
-                current_word_ids[j] = content_word_id_counter
+                clamped_word_id = min(content_word_id_counter, max_allowed_word_id)
+                current_word_ids[j] = clamped_word_id
                 content_word_id_counter += 1
             batch_generated_word_ids.append(current_word_ids)
             
@@ -235,7 +238,7 @@ class Bert2DEmbeddings(nn.Module):
         word_ids: Optional[torch.LongTensor] = None,
         subword_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        past_key_values_length: int = 0,  # This argument is not directly used in Bert2D\'s 2D embedding logic
+        past_key_values_length: int = 0,  # This argument is not directly used in Bert2D's 2D embedding logic
     ) -> torch.Tensor:
         r"""
         word_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1297,6 +1300,8 @@ class Bert2DLMHeadModel(Bert2DPreTrainedModel, GenerationMixin):
 
         if "word_ids" in model_kwargs and model_kwargs["word_ids"] is not None:
             current_word_ids = model_kwargs["word_ids"]  # Shape (batch_size, L_old)
+            max_allowed_word_id = self.config.max_word_position_embeddings - 1
+
 
             if current_word_ids.shape[-1] > 0:
                 last_word_id_val = current_word_ids[:, -1:]  # Shape (batch_size, 1)
@@ -1304,15 +1309,18 @@ class Bert2DLMHeadModel(Bert2DPreTrainedModel, GenerationMixin):
                 new_word_ids_increment = torch.arange(
                     1, num_new_tokens + 1, device=device, dtype=torch.long
                 ).unsqueeze(0)  # Shape (1, num_new_tokens)
-                new_word_ids_segment = last_word_id_val + new_word_ids_increment  # Broadcasting
+                new_word_ids_segment_unclamped = last_word_id_val + new_word_ids_increment  # Broadcasting
             else:  # word_ids was empty (e.g. generating from empty prompt and no initial word_ids)
-                new_word_ids_segment = (
+                new_word_ids_segment_unclamped = (
                     torch.arange(0, num_new_tokens, device=device, dtype=torch.long)
                     .unsqueeze(0)
                     .expand(batch_size, -1)
                 )  # Starts from 0
-
+            
+            # Clamp the new segment
+            new_word_ids_segment = torch.clamp(new_word_ids_segment_unclamped, max=max_allowed_word_id)
             model_kwargs["word_ids"] = torch.cat([current_word_ids, new_word_ids_segment], dim=-1)
+
 
         if "subword_ids" in model_kwargs and model_kwargs["subword_ids"] is not None:
             current_subword_ids = model_kwargs["subword_ids"]  # Shape (batch_size, L_old)
