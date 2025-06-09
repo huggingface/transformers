@@ -187,7 +187,7 @@ from torch import nn
 from transformers import Trainer
 
 class CustomTrainer(Trainer):
-    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None, num_items_in_batch=None):
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         labels = inputs.pop("labels")
         # forward pass
         outputs = model(**inputs)
@@ -197,8 +197,6 @@ class CustomTrainer(Trainer):
         loss = loss_fct(logits.view(-1, self.model.config.num_labels), labels.view(-1))
         return (loss, outputs) if return_outputs else loss
 ```
-[!NOTE]
-> As of Transformers version 4.48, if you override [`~Trainer.compute_loss`], you should include the `num_items_in_batch` parameter in the method signature to ensure compatibility with batch size calculations and avoid potential errors.
 
 ### Callbacks
 
