@@ -327,8 +327,6 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         # Check if the maximum scores per row are in the diagonal of the matrix score
         self.assertTrue((scores.argmax(axis=1) == torch.arange(len(ds), device=scores.device)).all())
 
-
-
         # Further validation: fine-grained check, with a hardcoded score from the original Hf implementation.
         expectations = Expectations(
             {
@@ -339,8 +337,8 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
                 ],
                 ("cuda", 8): [
                     [15.0703, 8.7422, 15.0312],
-                     [9.5078, 16.8906, 10.6250],
-                     [15.6484, 12.3984, 20.4688],
+                    [9.5078, 16.8906, 10.6250],
+                    [15.6484, 12.3984, 20.4688],
                 ],
             }
         )

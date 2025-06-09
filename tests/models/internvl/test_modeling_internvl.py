@@ -306,9 +306,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        expected_output = 'The image shows two cats lying on a pink surface, which appears to be a bed or couch.'
-
-        # breakpoint()
+        expected_output = "The image shows two cats lying on a pink surface, which appears to be a bed or couch."
 
         self.assertEqual(decoded_output, expected_output)
 
@@ -395,7 +393,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        expected_output = 'The image shows two cats lying on a pink surface, which appears to be a bed or couch.'
+        expected_output = "The image shows two cats lying on a pink surface, which appears to be a bed or couch."
 
         # breakpoint()
 
@@ -648,7 +646,9 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
 
         # Check third output
         decoded_output = processor.decode(output[2], skip_special_tokens=True)
-        expected_output = "user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature's peace."
+        expected_output = (
+            "user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature's peace."
+        )
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -819,7 +819,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese gate in the background, adorned with red and gold colors and Chinese characters'
+        expected_output = "user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese gate in the background, adorned with red and gold colors and Chinese characters"
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -861,7 +861,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
-        expected_output = 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.'
+        expected_output = "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors."
 
         # breakpoint()
 
@@ -873,7 +873,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = 'user\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After closely examining the images again, I can see that there are several differences'
+        expected_output = "user\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After closely examining the images again, I can see that there are several differences"
         self.assertEqual(
             decoded_output,
             expected_output,
