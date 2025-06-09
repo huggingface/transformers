@@ -341,7 +341,7 @@ class RobertaSdpaSelfAttention(RobertaSelfAttention):
             key_layer = curr_past_key_value.key_cache[self.layer_idx]
             value_layer = curr_past_key_value.value_cache[self.layer_idx]
         else:
-            value_layer = self.transpose_for_scores(self.key(current_states))
+            key_layer = self.transpose_for_scores(self.key(current_states))
             value_layer = self.transpose_for_scores(self.value(current_states))
 
             if past_key_value is not None:
