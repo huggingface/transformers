@@ -2976,6 +2976,25 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         return coinflip_prob + coinflip_prob * (1 - coinflip_prob) * (1 - (1 / vocab_size))
 
 
+class DiaFlattenLogitsProcessor(LogitsProcessor):
+    r"""
+    [`LogitsProcessor`] to flatten logits to a 2D shape. For example, this can
+    happen in audio models which operate on (bsz, seq_len, channels) instead
+    of the usual (bsz, seq_len) shape.
+
+    <Tip warning={true}>
+
+    This logits processor is exclusively compatible with
+    [Dia](https://huggingface.co/docs/transformers/main/en/model_doc/dia)
+
+    </Tip>
+    """
+
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        return scores.view(-1, scores.shape[-1])
+
+
 class DiaClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] for classifier free guidance (CFG). Similar to the original

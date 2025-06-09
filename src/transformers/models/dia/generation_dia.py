@@ -21,6 +21,7 @@ from ...generation.logits_process import (
     DiaClassifierFreeGuidanceLogitsProcessor,
     DiaEOSChannelFilterLogitsProcessor,
     DiaEOSDelayPatternLogitsProcessor,
+    DiaFlattenLogitsProcessor,
     LogitsProcessorList,
 )
 from ...generation.stopping_criteria import StoppingCriteriaList
@@ -84,9 +85,10 @@ class DiaGenerationMixin(GenerationMixin):
             negative_prompt_attention_mask=negative_prompt_attention_mask,
         )
 
-        # We need to guarantee CFG to be at the first position
+        # We need to guarantee CFG to be at the first position (after flattening)
         if cfg_processor is not None:
             merged_processors.insert(0, cfg_processor)
+        merged_processors.insert(0, DiaFlattenLogitsProcessor())
 
         return merged_processors
 
