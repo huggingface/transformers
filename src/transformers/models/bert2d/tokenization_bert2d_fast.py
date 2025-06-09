@@ -131,7 +131,7 @@ class Bert2DTokenizerFast(BertTokenizerFast):
         stride: int = 0,
         is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
+        padding_side: Optional[str] = None,  # Keep this for explicit passing
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -183,7 +183,7 @@ class Bert2DTokenizerFast(BertTokenizerFast):
             seq_length = len(result["input_ids"])
             # Temporarily wrap single example to use unified loop
             if "input_ids" in result and not isinstance(result["input_ids"][0], list):
-                for key in result:
+                for key in result:  # type: ignore
                     if isinstance(result[key], list):  # type: ignore
                         result[key] = [result[key]]  # type: ignore
 
@@ -226,6 +226,8 @@ class Bert2DTokenizerFast(BertTokenizerFast):
 
         padding_value_for_ids = 0  # Standard padding for word_ids/subword_ids
 
+        effective_padding_side = padding_side if padding_side is not None else self.padding_side
+
         # Pad word_ids and subword_ids to seq_length if padding was enabled
         if padding_strategy_uses_max_length(padding, max_length):
             for i in range(actual_batch_size):
@@ -233,13 +235,13 @@ class Bert2DTokenizerFast(BertTokenizerFast):
                     current_len = len(id_list)
                     pad_len = seq_length - current_len
                     if pad_len > 0:
-                        if self.padding_side == "right":
+                        if effective_padding_side == "right":
                             id_list.extend([padding_value_for_ids] * pad_len)
                         else:  # padding_side == "left"
                             for _ in range(pad_len):
                                 id_list.insert(0, padding_value_for_ids)
                     elif pad_len < 0:  # Truncate if longer (should ideally not happen if tokens were truncated)
-                        if self.padding_side == "right":  # or truncation_side
+                        if effective_padding_side == "right":  # or truncation_side
                             del id_list[seq_length:]
                         else:
                             del id_list[:-seq_length]
@@ -649,6 +651,94 @@ class Bert2DTokenizerFast(BertTokenizerFast):
                 padded_standard_inputs["subword_ids"] = encoded_inputs["subword_ids"]
 
         return padded_standard_inputs
+
+    def apply_chat_template(
+        self,
+        conversation,
+        chat_template=None,
+        tools=None,
+        documents=None,
+        add_generation_prompt=False,
+        tokenize=True,
+        padding=False,
+        truncation=None,
+        max_length=None,
+        return_tensors=None,
+        return_dict=False,
+        return_assistant_tokens_mask=False,
+        tokenizer_kwargs=None,
+        **kwargs,
+    ):
+        """
+        Override apply_chat_template to fix tensor dimension issues when
+        return_tensors="pt" is used with single conversations and return_assistant_tokens_mask=True.
+        """
+        # Check if we need to apply the fix
+        needs_tensor_fix = (
+            return_tensors == "pt"
+            and return_assistant_tokens_mask
+            and return_dict
+            and tokenize
+            and not isinstance(conversation[0], list)
+            if conversation
+            else False  # Single conversation, not batched
+        )
+
+        if needs_tensor_fix:
+            # For single conversations with tensor output, temporarily disable tensor conversion
+            # and handle it manually after the call
+            result = super().apply_chat_template(
+                conversation=conversation,
+                chat_template=chat_template,
+                tools=tools,
+                documents=documents,
+                add_generation_prompt=add_generation_prompt,
+                tokenize=tokenize,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                return_tensors=None,  # Disable tensor conversion temporarily
+                return_dict=return_dict,
+                return_assistant_tokens_mask=return_assistant_tokens_mask,
+                tokenizer_kwargs=tokenizer_kwargs,
+                **kwargs,
+            )
+
+            # Now manually convert to tensors ensuring proper dimensions
+            if return_tensors == "pt":
+                import torch
+
+                # Convert each field to tensors with proper dimensions
+                for key, value in result.items():
+                    if isinstance(value, list):
+                        # Convert list to tensor and ensure it has a batch dimension
+                        tensor = torch.tensor(value)
+                        # Ensure we have at least 1D (for sequences) and add batch dimension if needed
+                        if tensor.dim() == 0:
+                            tensor = tensor.unsqueeze(0)
+                        if tensor.dim() == 1:
+                            tensor = tensor.unsqueeze(0)  # Add batch dimension
+                        result[key] = tensor
+
+            return result
+        else:
+            # For all other cases, use the parent implementation
+            return super().apply_chat_template(
+                conversation=conversation,
+                chat_template=chat_template,
+                tools=tools,
+                documents=documents,
+                add_generation_prompt=add_generation_prompt,
+                tokenize=tokenize,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                return_tensors=return_tensors,
+                return_dict=return_dict,
+                return_assistant_tokens_mask=return_assistant_tokens_mask,
+                tokenizer_kwargs=tokenizer_kwargs,
+                **kwargs,
+            )
 
 
 def is_subword(token: str, subword_prefix="##") -> bool:
