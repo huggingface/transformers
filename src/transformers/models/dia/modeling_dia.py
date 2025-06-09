@@ -892,7 +892,6 @@ class DiaModel(DiaPreTrainedModel):
             raise ValueError(
                 "You should either provide text ids or the cached text encodings. Neither has been found."
             )
-        # TODO: raise value error on decoder inputs == None
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -936,10 +935,12 @@ class DiaModel(DiaPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        if debug:
-            if decoder_input_ids is None:
-                # (2*bsz, 1, channel)
-                decoder_input_ids = torch.full((encoder_outputs[0].shape[0], 1, 9), 1026, device=self.device)
+        # On default we initialize the decoder with bos tokens if nothing has been provided
+        if decoder_input_ids is None:
+            bsz, seq_len, channels = (encoder_outputs[0].shape[0], 1, self.config.decoder_config.num_channels)
+            decoder_input_ids = torch.full(
+                size=(bsz, seq_len, channels), fill_value=self.config.bos_token_id, device=self.device
+            )
 
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
