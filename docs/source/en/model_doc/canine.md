@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 # CANINE
 
-[CANINE](https://huggingface.co/papers/2103.06874) is a tokenization-free Transformer — it skips the usual step of splitting text into subwords or wordpieces and instead processes text character by character. That means it works directly with raw Unicode, making it especially useful for languages with complex or inconsistent tokenization rules, or even noisy inputs like typos. Since working with characters means handling longer sequences, CANINE uses a smart trick: it compresses the input early on (called downsampling) so the Transformer doesn’t have to process every character individually. This keeps things fast and efficient.
+[CANINE](https://huggingface.co/papers/2103.06874) is a tokenization-free Transformer, It skips the usual step of splitting text into subwords or wordpieces and processes text character by character. That means it works directly with raw Unicode, making it especially useful for languages with complex or inconsistent tokenization rules and even noisy inputs like typos. Since working with characters means handling longer sequences, CANINE uses a smart trick. It compresses the input early on (called downsampling) so the transformer doesn’t have to process every character individually. This keeps things fast and efficient.
 
 You can find all the original CANINE checkpoints under the [Google](https://huggingface.co/google?search_models=canine) organisation.
 
