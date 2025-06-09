@@ -53,26 +53,26 @@ def create_word_ids(
     actual_restart_new_sentence = restart_new_sentence and tokens.count(seperator_token) >= 2
 
     for token in tokens:
-        if token == padding_token:
+        if token == padding_token:  # Pad tokens get word_id 0
             word_ids.append(0)
-            current_word_id = 0
+            # current_word_id = 0 # Resetting current_word_id for padding might be complex if padding is not last
         elif actual_restart_new_sentence and not sentence_restart_flag and token == seperator_token:
-            if current_word_id == -1:
+            if current_word_id == -1:  # First token is SEP
                 current_word_id = 0
                 word_ids.append(current_word_id)
-            else:
+            else:  # SEP after some content
                 current_word_id += 1
                 word_ids.append(current_word_id)
 
-            current_word_id = 0
+            current_word_id = -1  # Reset for the new sentence (will become 0 at first non-subword)
             sentence_restart_flag = True
         elif not is_subword(token):
             current_word_id += 1
             word_ids.append(current_word_id)
-        elif current_word_id == -1:
+        elif current_word_id == -1:  # First token of a sequence (or after reset SEP) is a subword
             current_word_id = 0
             word_ids.append(current_word_id)
-        else:
+        else:  # Subword of an existing word
             word_ids.append(current_word_id)
     return word_ids
 
