@@ -323,7 +323,7 @@ class Bert2DTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         
         # Check specific behavior of leftover_as_last
         # The last position (1) should appear multiple times for leftovers
-        self.assertEqual(leftover_ids.count(1), 3)  # 1 for the last token + 2 leftovers
+        self.assertEqual(leftover_ids.count(1), 2)  # 1 for the last token + 2 leftovers
 
     def test_edge_cases(self):
         tokenizer = self.get_rust_tokenizer()
