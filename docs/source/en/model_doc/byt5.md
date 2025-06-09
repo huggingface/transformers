@@ -112,28 +112,28 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 - It is recommended to use the tokenizer for batched inference and training.
 - The example below shows how to use the model without a tokenizer.
 
-```python
-import torch
-from transformers import AutoModelForSeq2SeqLM
+    ```python
+    import torch
+    from transformers import AutoModelForSeq2SeqLM
+    
+    model = AutoModelForSeq2SeqLM.from_pretrained("google/byt5-small")
+    
+    num_special_tokens = 3
+    
+    input_ids = torch.tensor([list("Life is like a box of chocolates.".encode("utf-8"))]) + num_special_tokens
+    labels = torch.tensor([list("La vie est comme une boîte de chocolat.".encode("utf-8"))]) + num_special_tokens
+    loss = model(input_ids, labels=labels).loss
+    loss.item()
+    ```
 
-model = AutoModelForSeq2SeqLM.from_pretrained("google/byt5-small")
+- ByT5 uses the top byte values (258, 257, etc.) for masking instead of sentinel tokens like `{extra_id_0}`.
 
-num_special_tokens = 3
-
-input_ids = torch.tensor([list("Life is like a box of chocolates.".encode("utf-8"))]) + num_special_tokens
-labels = torch.tensor([list("La vie est comme une boîte de chocolat.".encode("utf-8"))]) + num_special_tokens
-loss = model(input_ids, labels=labels).loss
-loss.item()
-```
-
-- Masking is also unique: instead of sentinel tokens like `{extra_id_0}`, ByT5 uses the top byte values (e.g. 258, 257...) for masking.
-
-```python
-# Example: character-level denoising with mask tokens
-input_ids = tokenizer("The dog chases a ball in the park.").input_ids
-masked_input = torch.tensor([input_ids[:8] + [258] + input_ids[14:21] + [257] + input_ids[28:]])
-output = model.generate(masked_input, max_length=100)
-```
+    ```python
+    # Example: character-level denoising with mask tokens
+    input_ids = tokenizer("The dog chases a ball in the park.").input_ids
+    masked_input = torch.tensor([input_ids[:8] + [258] + input_ids[14:21] + [257] + input_ids[28:]])
+    output = model.generate(masked_input, max_length=100)
+    ```
 
 ## ByT5Tokenizer
 
