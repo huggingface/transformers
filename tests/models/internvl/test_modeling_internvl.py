@@ -715,7 +715,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_logits = torch.tensor(expected_logits_all.get_expectation(), dtype=torch.float16)
 
-        # breakpoint()
+        breakpoint()
 
         # The original implementation and the transformers implementation do not match exactly, hence the higher tolerance.
         # The difference is likely due to the different implementations of the attention mechanism (different order of operations)
@@ -741,6 +741,9 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
         expected_output = 'Whispers of dawn,\nSilent whispers of night,\nPeace in the stillness.'
+
+        breakpoint()
+
         self.assertEqual(decoded_output, expected_output)
 
     def test_llama_small_model_integration_generate_chat_template(self):
@@ -798,6 +801,9 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
+
+        breakpoint()
+
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -849,6 +855,9 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
         expected_output = "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden path leads to calm lake,\nNature's peaceful grace."  # fmt: skip
+
+        breakpoint()
+
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -963,6 +972,8 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         ).to(torch_device, dtype=torch.float16)
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
+
+        breakpoint()
 
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
