@@ -450,15 +450,16 @@ class DiaSelfAttention(nn.Module):
     def __init__(self, config: Union[DiaEncoderConfig, DiaDecoderConfig], layer_idx: int, is_causal: bool = False):
         super().__init__()
         self.config = config
+        self.layer_idx = layer_idx
+        self.hidden_size = config.hidden_size
         self.num_heads = self.config.num_attention_heads
         self.num_key_value_heads = self.config.num_key_value_heads or self.num_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.hidden_size = config.hidden_size
         self.head_dim = getattr(config, "head_dim", config.hidden_size // self.num_heads)
-        self.attention_dropout = 0.0
-        self.layer_idx = layer_idx
         self.scaling = 1
+        self.attention_dropout = 0.0
         self.is_causal = is_causal
+
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -514,15 +515,17 @@ class DiaCrossAttention(nn.Module):
     def __init__(self, config: DiaDecoderConfig, layer_idx: int):
         super().__init__()
         self.config = config
+        self.layer_idx = layer_idx
+        self.hidden_size = config.hidden_size
+        self.cross_hidden_size = config.cross_hidden_size
         self.num_heads = self.config.cross_num_attention_heads
         self.num_key_value_heads = self.config.cross_num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.hidden_size = config.hidden_size
-        self.cross_hidden_size = config.cross_hidden_size
         self.head_dim = config.cross_head_dim
-        self.layer_idx = layer_idx
         self.scaling = 1
+        self.attention_dropout = 0.0
         self.is_causal = False
+
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.cross_hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.cross_hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -597,7 +600,6 @@ class DiaEncoderLayer(GradientCheckpointingLayer):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         residual = hidden_states
         normed_states = self.pre_sa_norm(hidden_states)
-
         # TODO: are kwargs possible with correct gradient passing
         hidden_states, self_attn_weights = self.self_attention(
             normed_states,
@@ -702,15 +704,14 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
-        residual = hidden_states
-        normed_states = self.pre_sa_norm(hidden_states)
-
         self_attn_cache = (
             past_key_values.self_attention_cache
             if isinstance(past_key_values, EncoderDecoderCache)
             else past_key_values
         )
 
+        residual = hidden_states
+        normed_states = self.pre_sa_norm(hidden_states)
         # TODO: are kwargs possible with correct gradient passing
         hidden_states, self_attn_weights = self.self_attention(
             normed_states,

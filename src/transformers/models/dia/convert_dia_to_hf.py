@@ -62,6 +62,19 @@ rename_mapping = {
 }
 
 
+def get_generation_config(config):
+    model_generation_config = GenerationConfig.from_model_config(config)
+    model_generation_config._from_model_config = False
+    model_generation_config.do_sample = True
+    model_generation_config.top_k = 45
+    model_generation_config.top_p = 0.95
+    model_generation_config.temperature = 1.2
+    model_generation_config.guidance_scale = 3.0
+    model_generation_config.max_length = 3072  # Decoder max length
+
+    return model_generation_config
+
+
 def reshape_or_transpose(tensor, target_tensor, key):
     """Try reshaping or transposing tensor to match the shape of target_tensor."""
     numel = tensor.numel()
@@ -95,24 +108,26 @@ def reshape_or_transpose(tensor, target_tensor, key):
     return reshaped, "flattened_reshape"
 
 
-def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
+def convert_dia_model_to_hf(checkpoint_path, verbose=False):
     """
-    Converts a Dia model in OpenAI format to Hugging Face format.
+    Converts a Dia model in Nari Labs format to Hugging Face format.
     Args:
         checkpoint_path (`str`):
             Path to the downloaded checkpoints.
-        pytorch_dump_folder_path (`str`):
-            Path to the output PyTorch model.
+        verbose (`bool`, *optional*)
+            Whether to print information during conversion.
     """
     # Download from HF Hub if checkpoint_path is None
     checkpoint_path = snapshot_download(repo_id=checkpoint_path, allow_patterns="*.safetensors")
     print(f"Downloaded checkpoint from Hugging Face Hub: {checkpoint_path}")
 
+    # Initialize base model with default config == 1.6B model
     with torch.device("meta"):
-        model_class = DiaForConditionalGeneration(config=DiaConfig())
+        hf_model = DiaForConditionalGeneration(config=DiaConfig())
+    hf_model_dict = hf_model.state_dict()
+    hf_model_keys = hf_model_dict.keys()
 
-    model_dict = model_class.state_dict()
-    model_class_keys = model_dict.keys()
+    # Iterate through dir to catch all respective files - prefers safetensors but allows pt
     files = os.listdir(checkpoint_path)
     for file in files:
         if file.endswith(".safetensors"):
@@ -120,10 +135,12 @@ def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
         elif file.endswith(".pt"):
             load_function = torch.load
     checkpoint_path = os.path.join(checkpoint_path, files[0])
-    state_dict = load_function(checkpoint_path, "cpu")
+    nari_state_dict = load_function(checkpoint_path, "cpu")
+
+    # Conversion starts here
     converted_state_dict = {}
     embeddings = {}
-    for key, tensor in state_dict.items():
+    for key, tensor in nari_state_dict.items():
         # add prefix
         key = "model." + key
 
@@ -144,35 +161,29 @@ def convert_dia_model_to_hf(checkpoint_path, pytorch_dump_folder_path):
             if "logits_dense" in key:
                 key = re.sub("decoder.logits_dense", "logits_dense", key).removeprefix("model.")
 
-            if key in model_class_keys:
-                target_shape = model_dict[key].shape
+            if key in hf_model_keys:
+                target_shape = hf_model_dict[key].shape
                 try:
                     new_tensor, method = reshape_or_transpose(tensor, target_shape, key)
-                    print(f"{key}: {method} from {tensor.shape} to {target_shape}")
                     tensor = new_tensor
+                    if verbose:
+                        print(f"{key}: {method} from {tensor.shape} to {target_shape}")
                 except Exception as e:
                     print(f"WARNING: Could not reshape {key}: {e}")
 
         converted_state_dict[key] = tensor
 
+    # Combining the embeddings as last step
     embeddings = {k: torch.cat(v, dim=0) for k, v in embeddings.items()}
     converted_state_dict.update(embeddings)
-    print(f"Saved converted checkpoint to {pytorch_dump_folder_path}")
-    model_class.load_state_dict(converted_state_dict, assign=True)
 
-    # Generation config
-    model_generation_config = GenerationConfig.from_model_config(DiaConfig())
-    model_generation_config._from_model_config = False
-    model_generation_config.do_sample = True
-    model_generation_config.top_k = 45
-    model_generation_config.top_p = 0.95
-    model_generation_config.temperature = 1.2
-    model_generation_config.guidance_scale = 3.0
-    model_generation_config.max_length = 3072  # Decoder max length
+    # Load converted weights into HF model
+    hf_model.load_state_dict(converted_state_dict, assign=True)
 
-    model_class.generation_config = model_generation_config
+    # Overwrite generation config
+    hf_model.generation_config = get_generation_config(DiaConfig())
 
-    return model_class
+    return hf_model
 
 
 if __name__ == "__main__":
@@ -190,10 +201,15 @@ if __name__ == "__main__":
         default=True,
         help="Whether or not the preprocessor (tokenizer + feature extractor) should be converted along with the model.",
     )
+    parser.add_argument(
+        "--verbose",
+        type=bool,
+        default=True,
+        help="Whether or not to log information during conversion.",
+    )
     args = parser.parse_args()
 
-    model = convert_dia_model_to_hf(args.checkpoint_path, args.pytorch_dump_folder_path)
-
+    model = convert_dia_model_to_hf(args.checkpoint_path, args.verbose)
     if args.convert_preprocessor:
         try:
             if not _is_package_available("tiktoken"):
@@ -203,7 +219,9 @@ if __name__ == "__main__":
         except Exception as e:
             print(e)
         else:
+            # TODO: :)
             processor = DiaProcessor(DacFeatureExtractor(), DiaTokenizer())
             processor.save_pretrained(args.pytorch_dump_folder_path)
 
     model.save_pretrained(args.pytorch_dump_folder_path)
+    print(f"Saved converted checkpoint to {args.pytorch_dump_folder_path}")

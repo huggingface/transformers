@@ -246,8 +246,6 @@ class DiaGenerationMixin(GenerationMixin):
                     repeat_pattern = tuple([2] + [1] * (model_inputs[key].ndim - 1))
                     model_inputs[key] = model_inputs[key].repeat(*repeat_pattern)
 
-        # TODO: decoder input 2d? --> reshape here
-
         return model_inputs
 
     def generate(
