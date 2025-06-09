@@ -900,6 +900,18 @@ class Bert2DModel(Bert2DPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            # FIX STARTS HERE: Add a batch dimension to 1D inputs
+            if input_ids.dim() == 1:
+                input_ids = input_ids.unsqueeze(0)
+                if attention_mask is not None and attention_mask.dim() == 1:
+                    attention_mask = attention_mask.unsqueeze(0)
+                if token_type_ids is not None and token_type_ids.dim() == 1:
+                    token_type_ids = token_type_ids.unsqueeze(0)
+                if word_ids is not None and word_ids.dim() == 1:
+                    word_ids = word_ids.unsqueeze(0)
+                if subword_ids is not None and subword_ids.dim() == 1:
+                    subword_ids = subword_ids.unsqueeze(0)
+            # FIX ENDS HERE
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
             device = input_ids.device
