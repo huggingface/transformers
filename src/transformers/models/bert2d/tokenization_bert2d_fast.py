@@ -201,9 +201,8 @@ class Bert2DTokenizerFast(BertTokenizerFast):
             # The BatchEncoding object itself handles this.
             current_tokens = result.tokens(i)  # type: ignore
 
-            should_restart_word_ids_heuristic = text_pair is not None or (
-                is_batched_output and text_pair is not None and len(text_pair) > i
-            )  # type: ignore
+            # Determine if this sequence contains multiple sentences by checking for SEP tokens
+            should_restart_word_ids_heuristic = current_tokens.count(self.sep_token) >= 2
 
             list_of_list_word_ids.append(
                 create_word_ids(
@@ -310,32 +309,80 @@ class Bert2DTokenizerFast(BertTokenizerFast):
             **kwargs,
         )
 
-        # Get tokens for this single sequence
-        tokens = result.tokens()  # For single input, no index needed
-
-        # Generate word_ids and subword_ids
-        should_restart_word_ids_heuristic = text_pair is not None
-
-        word_ids = create_word_ids(
-            tokens,
-            restart_new_sentence=should_restart_word_ids_heuristic,
-            seperator_token=self.sep_token,
-            padding_token=self.pad_token,
+        # Check if we have overflow tokens (multiple sequences in result)
+        has_overflow = return_overflowing_tokens and "overflowing_tokens" in result
+        
+        # Determine if result is batched (could be batched if overflow tokens are present)
+        is_batched_output = (
+            isinstance(result["input_ids"], list) and 
+            result["input_ids"] and 
+            isinstance(result["input_ids"][0], list)
         )
-
-        subword_ids = create_subword_ids(
-            tokens,
-            self.max_intermediate_subword_positions_per_word,
-            self.subword_embedding_order,
-            self.intermediate_subword_distribution_strategy,
-            cls_token=self.cls_token,
-            sep_token=self.sep_token,
-            pad_token=self.pad_token,
-        )
-
-        # Add custom fields to result
-        result["word_ids"] = word_ids
-        result["subword_ids"] = subword_ids
+        
+        # If we have overflow tokens OR the result is already batched
+        if has_overflow or is_batched_output:
+            # We'll need to process each sequence separately
+            batch_size = len(result["input_ids"]) if is_batched_output else 1 + len(result["overflowing_tokens"])
+            batch_word_ids = []
+            batch_subword_ids = []
+            
+            for i in range(batch_size):
+                # Get tokens for this sequence
+                tokens = result.tokens(i)
+                
+                # Determine if this sequence contains multiple sentences
+                should_restart_word_ids_heuristic = tokens.count(self.sep_token) >= 2
+                
+                word_ids = create_word_ids(
+                    tokens,
+                    restart_new_sentence=should_restart_word_ids_heuristic,
+                    seperator_token=self.sep_token,
+                    padding_token=self.pad_token,
+                )
+                
+                subword_ids = create_subword_ids(
+                    tokens,
+                    self.max_intermediate_subword_positions_per_word,
+                    self.subword_embedding_order,
+                    self.intermediate_subword_distribution_strategy,
+                    cls_token=self.cls_token,
+                    sep_token=self.sep_token,
+                    pad_token=self.pad_token,
+                )
+                
+                batch_word_ids.append(word_ids)
+                batch_subword_ids.append(subword_ids)
+            
+            # Add to result
+            result["word_ids"] = batch_word_ids
+            result["subword_ids"] = batch_subword_ids
+        else:
+            # Standard case - no overflow, single sequence
+            tokens = result.tokens()
+            
+            # Determine if this sequence contains multiple sentences
+            should_restart_word_ids_heuristic = tokens.count(self.sep_token) >= 2
+            
+            word_ids = create_word_ids(
+                tokens,
+                restart_new_sentence=should_restart_word_ids_heuristic,
+                seperator_token=self.sep_token,
+                padding_token=self.pad_token,
+            )
+            
+            subword_ids = create_subword_ids(
+                tokens,
+                self.max_intermediate_subword_positions_per_word,
+                self.subword_embedding_order,
+                self.intermediate_subword_distribution_strategy,
+                cls_token=self.cls_token,
+                sep_token=self.sep_token,
+                pad_token=self.pad_token,
+            )
+            
+            # Add custom fields to result
+            result["word_ids"] = word_ids
+            result["subword_ids"] = subword_ids
 
         # Convert to tensors if requested
         if return_tensors is not None:
@@ -392,16 +439,8 @@ class Bert2DTokenizerFast(BertTokenizerFast):
             **kwargs,
         )
 
-        # Determine if input contains pairs
-        has_pairs = False
-        if batch_text_or_text_pairs:
-            # Check if any item in the batch is a pair (tuple/list with 2 elements)
-            for item in batch_text_or_text_pairs:
-                if isinstance(item, (tuple, list)) and len(item) == 2:
-                    has_pairs = True
-                    break
-
         # Generate word_ids and subword_ids for each item in the batch
+        # Use the actual batch size from result["input_ids"], which includes overflow sequences
         batch_size = len(result["input_ids"])
         batch_word_ids = []
         batch_subword_ids = []
@@ -410,8 +449,8 @@ class Bert2DTokenizerFast(BertTokenizerFast):
             # Get tokens for this batch item
             tokens = result.tokens(i)
 
-            # Generate word_ids and subword_ids
-            should_restart_word_ids_heuristic = has_pairs
+            # Determine if this sequence contains multiple sentences
+            should_restart_word_ids_heuristic = tokens.count(self.sep_token) >= 2
 
             word_ids = create_word_ids(
                 tokens,
@@ -652,7 +691,7 @@ def get_ids_from_subwords(
             if num_intermediate_tokens <= max_intermediate_subword_positions_per_word:
                 # If fewer or equal intermediate tokens than available slots, assign unique IDs
                 for si in range(num_intermediate_tokens):
-                    subword_ids.append(2 + si)  # IDs 2, 3, ...
+                    subword_ids.append(2 + si)  # IDs 2, 3, ..., (2+max_intermediate_subword_positions_per_word-1)
             else:  # More intermediate tokens than available slots
                 if intermediate_subword_distribution_strategy == "uniform":
                     for si in range(num_intermediate_tokens):
