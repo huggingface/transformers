@@ -243,11 +243,7 @@ class Glm4vTextConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.rope_scaling = rope_scaling
 
-
-        self.layer_types = [
-                "full_attention"
-                for i in range(self.num_hidden_layers)
-        ]
+        self.layer_types = ["full_attention" for i in range(self.num_hidden_layers)]
         layer_type_validation(self.layer_types)
 
         # Validate the correctness of rotary position embeddings parameters
@@ -569,7 +565,7 @@ class Glm4vVisionTransformerPretrainedModel(Glm4vPreTrainedModel):
     config_class = Glm4vVisionConfig
     _no_split_modules = ["Glm4vVisionBlock"]
 
-    def __init__(self, config , **kwargs) -> None:
+    def __init__(self, config, **kwargs) -> None:
         super().__init__(config, **kwargs)
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = config.patch_size
