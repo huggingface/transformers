@@ -637,7 +637,6 @@ class CacheExportIntegrationTest(unittest.TestCase):
         attention_mask = inputs.attention_mask
         input_ids = inputs.input_ids
 
-
         past_key_values = DynamicCache()
         ep = torch.export.export(
             model,
@@ -669,7 +668,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
             ),
         )
 
-        shapes = torch.export.ShapesCollection() 
+        shapes = torch.export.ShapesCollection()
         dyn = torch.export.Dim("seq")
 
         for ix in range(len(past_key_values.key_cache)):
@@ -715,7 +714,6 @@ class CacheExportIntegrationTest(unittest.TestCase):
 
         for v1, v2 in zip(past_key_values.value_cache, past_key_values.value_cache):
             self.assertTrue(torch.allclose(v1, v2))
-
 
     @slow
     @require_read_token
