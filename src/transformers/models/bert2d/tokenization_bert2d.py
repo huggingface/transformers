@@ -794,6 +794,94 @@ class Bert2DTokenizer(BertTokenizer):
 
         return prepared_inputs
 
+    def apply_chat_template(
+        self,
+        conversation,
+        chat_template=None,
+        tools=None,
+        documents=None,
+        add_generation_prompt=False,
+        tokenize=True,
+        padding=False,
+        truncation=None,
+        max_length=None,
+        return_tensors=None,
+        return_dict=False,
+        return_assistant_tokens_mask=False,
+        tokenizer_kwargs=None,
+        **kwargs,
+    ):
+        """
+        Override apply_chat_template to fix tensor dimension issues when
+        return_tensors="pt" is used with single conversations and return_assistant_tokens_mask=True.
+        """
+        # Check if we need to apply the fix
+        needs_tensor_fix = (
+            return_tensors == "pt"
+            and return_assistant_tokens_mask
+            and return_dict
+            and tokenize
+            and not isinstance(conversation[0], list)
+            if conversation
+            else False  # Single conversation, not batched
+        )
+
+        if needs_tensor_fix:
+            # For single conversations with tensor output, temporarily disable tensor conversion
+            # and handle it manually after the call
+            result = super().apply_chat_template(
+                conversation=conversation,
+                chat_template=chat_template,
+                tools=tools,
+                documents=documents,
+                add_generation_prompt=add_generation_prompt,
+                tokenize=tokenize,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                return_tensors=None,  # Disable tensor conversion temporarily
+                return_dict=return_dict,
+                return_assistant_tokens_mask=return_assistant_tokens_mask,
+                tokenizer_kwargs=tokenizer_kwargs,
+                **kwargs,
+            )
+
+            # Now manually convert to tensors ensuring proper dimensions
+            if return_tensors == "pt":
+                import torch
+
+                # Convert each field to tensors with proper dimensions
+                for key, value in result.items():
+                    if isinstance(value, list):
+                        # Convert list to tensor and ensure it has a batch dimension
+                        tensor = torch.tensor(value)
+                        # Ensure we have at least 1D (for sequences) and add batch dimension if needed
+                        if tensor.dim() == 0:
+                            tensor = tensor.unsqueeze(0)
+                        if tensor.dim() == 1:
+                            tensor = tensor.unsqueeze(0)  # Add batch dimension
+                        result[key] = tensor
+
+            return result
+        else:
+            # For all other cases, use the parent implementation
+            return super().apply_chat_template(
+                conversation=conversation,
+                chat_template=chat_template,
+                tools=tools,
+                documents=documents,
+                add_generation_prompt=add_generation_prompt,
+                tokenize=tokenize,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                return_tensors=return_tensors,
+                return_dict=return_dict,
+                return_assistant_tokens_mask=return_assistant_tokens_mask,
+                tokenizer_kwargs=tokenizer_kwargs,
+                **kwargs,
+            )
+
 
 __all__ = [
     "Bert2DTokenizer",
