@@ -393,7 +393,7 @@ class Bert2DTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
         self.assertEqual(decoded_tokens, expected_tokens)
 
-        expected_word_ids = torch.tensor([0, 1, 2, 3, 3, 4, 5, 6, 7, 8, 8, 8, 9, 10])
+        expected_word_ids = torch.tensor([[0, 1, 2, 3, 3, 4, 5, 6, 7, 8, 8, 8, 9, 10]])
         self.assertTrue(torch.equal(encoded["word_ids"], expected_word_ids))
 
         # Also verify that subword_ids are present and have the correct shape
