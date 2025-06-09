@@ -55,8 +55,6 @@ class EoMTConfig(PretrainedConfig):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether or not a learnable bias should be added to the queries, keys and values.
         layerscale_value (`float`, *optional*, defaults to 1.0):
             Initial value for the LayerScale parameter.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
@@ -65,8 +63,6 @@ class EoMTConfig(PretrainedConfig):
             Number of upsampling blocks used in the decoder or segmentation head.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             Dropout probability applied after attention projection.
-        projection_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability applied after linear projections.
         use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
             Whether to use the SwiGLU feedforward neural network.
         num_blocks (`int`, *optional*, defaults to 4):
@@ -120,12 +116,10 @@ class EoMTConfig(PretrainedConfig):
         image_size=640,
         patch_size=16,
         num_channels=3,
-        qkv_bias=True,
         layerscale_value=1.0,
         drop_path_rate=0.0,
         num_upscale_blocks=2,
         attention_dropout=0.0,
-        projection_dropout=0.0,
         use_swiglu_ffn=False,
         num_blocks=4,
         no_object_weight: float = 0.1,
@@ -152,14 +146,12 @@ class EoMTConfig(PretrainedConfig):
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
-        self.qkv_bias = qkv_bias
         self.layerscale_value = layerscale_value
         self.drop_path_rate = drop_path_rate
         self.num_queries = num_queries
         self.num_register_tokens = num_register_tokens
         self.num_upscale_blocks = num_upscale_blocks
         self.attention_dropout = attention_dropout
-        self.projection_dropout = projection_dropout
         self.use_swiglu_ffn = use_swiglu_ffn
         self.num_blocks = num_blocks
         self.no_object_weight = no_object_weight

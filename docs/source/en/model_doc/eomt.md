@@ -96,7 +96,6 @@ plt.imshow(preds[0])
 plt.axis("off")
 plt.title("Semantic Segmentation")
 plt.show()
-
 ```
 
 ### Instance Segmentation
