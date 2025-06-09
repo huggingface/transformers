@@ -1206,7 +1206,7 @@ class Bert2DModelIntegrationTest(unittest.TestCase):
             self.skipTest(f"Model or Tokenizer {bert2d_model_name} not found online.")
 
         inputs_dict = self._get_bert2d_inputs(
-            tokenizer, "the man worked as a [MASK].", device=device, max_length=max_length
+            tokenizer, "Adamın mesleği [MASK] midir acaba?", device=device, max_length=max_length
         )
 
         if "token_type_ids" not in inputs_dict:

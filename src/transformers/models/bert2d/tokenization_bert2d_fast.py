@@ -259,8 +259,23 @@ class Bert2DTokenizerFast(BertTokenizerFast):
             result["word_ids"] = list_of_list_word_ids
             result["subword_ids"] = list_of_list_subword_ids
 
+        # Custom tensor conversion to ensure proper dimensions for pipeline compatibility
         if return_tensors is not None:
-            result = result.convert_to_tensors(tensor_type=return_tensors)  # type: ignore
+            if return_tensors == "pt":
+                import torch
+                
+                # Convert to tensors first using standard method
+                result = result.convert_to_tensors(tensor_type=return_tensors)
+                
+                # If this is a single input (not batched), ensure all tensors have batch dimension
+                if not is_batched_output:
+                    for key, value in result.items():
+                        if isinstance(value, torch.Tensor) and value.ndim == 1:
+                            # Add batch dimension to make it 2D [1, seq_len] instead of [seq_len]
+                            result[key] = value.unsqueeze(0)
+            else:
+                # For other tensor types (tf, np, etc.), use standard conversion
+                result = result.convert_to_tensors(tensor_type=return_tensors)
 
         return result  # type: ignore
 
@@ -384,9 +399,23 @@ class Bert2DTokenizerFast(BertTokenizerFast):
             result["word_ids"] = word_ids
             result["subword_ids"] = subword_ids
 
-        # Convert to tensors if requested
+        # Custom tensor conversion to ensure proper dimensions for pipeline compatibility
         if return_tensors is not None:
-            result = result.convert_to_tensors(tensor_type=return_tensors)
+            if return_tensors == "pt":
+                import torch
+                
+                # Convert to tensors first using standard method
+                result = result.convert_to_tensors(tensor_type=return_tensors)
+                
+                # For single inputs (not batched or with overflow), ensure all tensors have batch dimension
+                if not is_batched_output and not has_overflow:
+                    for key, value in result.items():
+                        if isinstance(value, torch.Tensor) and value.ndim == 1:
+                            # Add batch dimension to make it 2D [1, seq_len] instead of [seq_len]
+                            result[key] = value.unsqueeze(0)
+            else:
+                # For other tensor types, use standard conversion
+                result = result.convert_to_tensors(tensor_type=return_tensors)
 
         return result
 
@@ -476,7 +505,8 @@ class Bert2DTokenizerFast(BertTokenizerFast):
         result["word_ids"] = batch_word_ids
         result["subword_ids"] = batch_subword_ids
 
-        # Convert to tensors if requested
+        # Convert to tensors if requested - for batched inputs we don't need special handling
+        # as they're already in the right format (list of lists)
         if return_tensors is not None:
             result = result.convert_to_tensors(tensor_type=return_tensors)
 
@@ -554,9 +584,23 @@ class Bert2DTokenizerFast(BertTokenizerFast):
             pad_token=self.pad_token,
         )
 
-        # Convert to tensors if requested
+        # Custom tensor conversion to ensure proper dimensions for pipeline compatibility
         if return_tensors is not None:
-            prepared_inputs = prepared_inputs.convert_to_tensors(tensor_type=return_tensors)
+            if return_tensors == "pt":
+                import torch
+                
+                # Convert to tensors first using standard method
+                prepared_inputs = prepared_inputs.convert_to_tensors(tensor_type=return_tensors)
+                
+                # If prepend_batch_axis is False, we need to ensure all tensors have batch dimension
+                if not prepend_batch_axis:
+                    for key, value in prepared_inputs.items():
+                        if isinstance(value, torch.Tensor) and value.ndim == 1:
+                            # Add batch dimension to make it 2D [1, seq_len] instead of [seq_len]
+                            prepared_inputs[key] = value.unsqueeze(0)
+            else:
+                # For other tensor types, use standard conversion
+                prepared_inputs = prepared_inputs.convert_to_tensors(tensor_type=return_tensors)
 
         return prepared_inputs
 
