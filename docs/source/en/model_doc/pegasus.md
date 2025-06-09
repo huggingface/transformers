@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 [Pegasus](https://huggingface.co/papers/1912.08777) is an encoder-decoder (sequence-to-sequence) transformer model pretrained on unlabeled text to perform abstractive summarization. Pegasus is trained jointly on two self-supervised objective functions: Masked Language Modeling (MLM) and a novel summarization-focused objective called Gap Sentence Generation (GSG). These models excel in low-resource summarization settings, needing only a small fine-tuning dataset to perform well.
 
-You can find all the Pegasus checkpoints under the [Google](https://huggingface.co/google?search_models=pegasus) organization.
+You can find all the original Pegasus checkpoints under the [Google](https://huggingface.co/google?search_models=pegasus) organization.
 
 > [!TIP]
 > Click on the Pegasus models in the right sidebar for more examples of how to apply Pegasus to different language tasks.
@@ -47,7 +47,9 @@ pipeline = pipeline(
     torch_dtype=torch.float16,
     device=0
 )
-pipeline("Plants are remarkable organisms that produce their own food using a method called photosynthesis. This process involves converting sunlight, carbon dioxide, and water into glucose, which provides energy for growth. Plants play a crucial role in sustaining life on Earth by generating oxygen and serving as the foundation of most ecosystems.")
+pipeline("""Plants are remarkable organisms that produce their own food using a method called photosynthesis.
+This process involves converting sunlight, carbon dioxide, and water into glucose, which provides energy for growth.
+Plants play a crucial role in sustaining life on Earth by generating oxygen and serving as the foundation of most ecosystems.""")
 ```
 
 </hfoption>
@@ -66,7 +68,9 @@ model = AutoModelForSeq2SeqLM.from_pretrained(
     device_map="auto",
 )
 
-input_text = "Plants are remarkable organisms that produce their own food using a method called photosynthesis. This process involves converting sunlight, carbon dioxide, and water into glucose, which provides energy for growth. Plants play a crucial role in sustaining life on Earth by generating oxygen and serving as the foundation of most ecosystems."
+input_text = """Plants are remarkable organisms that produce their own food using a method called photosynthesis.
+This process involves converting sunlight, carbon dioxide, and water into glucose, which provides energy for growth.
+Plants play a crucial role in sustaining life on Earth by generating oxygen and serving as the foundation of most ecosystems."""
 input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 
 output = model.generate(**input_ids)
@@ -106,7 +110,9 @@ model = AutoModelForSeq2SeqLM.from_pretrained(
 tokenizer = AutoTokenizer.from_pretrained(
     "google/pegasus-xsum"
 )
-input_text = "Plants are remarkable organisms that produce their own food using a method called photosynthesis. This process involves converting sunlight, carbon dioxide, and water into glucose, which provides energy for growth. Plants play a crucial role in sustaining life on Earth by generating oxygen and serving as the foundation of most ecosystems."
+input_text = """Plants are remarkable organisms that produce their own food using a method called photosynthesis.
+This process involves converting sunlight, carbon dioxide, and water into glucose, which provides energy for growth.
+Plants play a crucial role in sustaining life on Earth by generating oxygen and serving as the foundation of most ecosystems."""
 input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 
 output = model.generate(**input_ids)
