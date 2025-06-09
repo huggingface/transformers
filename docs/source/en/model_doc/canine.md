@@ -87,11 +87,7 @@ echo -e "Plant create energy through a process known as photosynthesis." | trans
     inputs = ["Life is like a box of chocolates.", "You never know what you gonna get."]
     encoding = tokenizer(inputs, padding="longest", truncation=True, return_tensors="pt")
     ```
-- The model supports sequences up to 2048 characters by default.
-- Classification can be done by placing a linear layer on top of the final hidden state of the special [CLS] token
-  (which has a predefined Unicode code point). For token classification tasks however, the downsampled sequence of
-  tokens needs to be upsampled again to match the length of the original character sequence (which is 2048). The
-  details for this can be found in the paper.
+- CANINE is primarily designed to be fine-tuned on a downstream task. The pretrained model can be used for either masked language modeling or next sentence prediction.
 
 ## CanineConfig
 
