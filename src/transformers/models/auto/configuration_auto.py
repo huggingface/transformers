@@ -49,6 +49,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("bart", "BartConfig"),
         ("beit", "BeitConfig"),
         ("bert", "BertConfig"),
+        ("bert2d", "Bert2DConfig"),
         ("bert-generation", "BertGenerationConfig"),
         ("bert2d", "Bert2DConfig"),
         ("big_bird", "BigBirdConfig"),
