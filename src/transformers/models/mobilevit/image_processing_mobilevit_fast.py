@@ -114,8 +114,7 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         # Stack all processed images if return_tensors is specified
-        if return_tensors is not None:
-            processed_images = torch.stack(processed_images, dim=0)
+        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return processed_images
 
