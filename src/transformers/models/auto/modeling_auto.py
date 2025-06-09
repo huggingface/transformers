@@ -768,6 +768,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("mobilenet_v2", "MobileNetV2ForImageClassification"),
         ("mobilevit", "MobileViTForImageClassification"),
         ("mobilevitv2", "MobileViTV2ForImageClassification"),
+        ("mvitv2", "MViTV2ForImageClassification"),
         ("nat", "NatForImageClassification"),
         (
             "perceiver",
