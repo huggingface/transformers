@@ -815,15 +815,5 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
         )
 
-    # Ignore copy
-    def _reorder_cache(self, past_key_values, beam_idx):
-        for layer in self.layers:
-            if hasattr(layer.temporal_block, "key_states"):
-                k_state = layer.temporal_block.key_states
-                v_state = layer.temporal_block.value_states
-                k_state = k_state.index_select(0, beam_idx.to(k_state.device))
-                v_state = v_state.index_select(0, beam_idx.to(v_state.device))
-        return None
-
 
 __all__ = ["RecurrentGemmaForCausalLM", "RecurrentGemmaModel", "RecurrentGemmaPreTrainedModel"]
