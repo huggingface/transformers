@@ -40,38 +40,50 @@ The example below demonstrates how to transcribe speech into text with [`Pipelin
 <hfoption id="Pipeline">
 
 ```py
-# uncomment to install ffmpeg which is needed to decode the audio file
-# !brew install ffmpeg
-
+import torch
 from transformers import pipeline
 
-asr = pipeline("automatic-speech-recognition", model="UsefulSensors/moonshine-base")
-
-result = asr("path_to_audio_file")
-
-#Prints the transcription from the audio file
-print(result["text"])
+pipeline = pipeline(
+    task="automatic-speech-recognition",
+    model="UsefulSensors/moonshine-base",
+    torch_dtype=torch.float16,
+    device=0
+)
+pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
 ```py
-# uncomment to install librosa which is used for audio and music anlaysis. It is used to preprocess the data.
-# !pip install librosa
+# pip install datasets
 import torch
-from transformers import AutoProcessor, AutoModelForSpeechSeq2Seq
+from datasets import load_dataset
+from transformers import AutoProcessor, MoonshineForConditionalGeneration
 
-processor = AutoProcessor.from_pretrained("UsefulSensors/moonshine-tiny")
-model = AutoModelForSpeechSeq2Seq.from_pretrained("UsefulSensors/moonshine-tiny")
+processor = AutoProcessor.from_pretrained(
+    "UsefulSensors/moonshine-base",
+)
+model = MoonshineForConditionalGeneration.from_pretrained(
+    "UsefulSensors/moonshine-base",
+    torch_dtype=torch.float16,
+    device_map="auto",
+    attn_implementation="sdpa"
+).to("cuda")
 
-audio_array, sr = librosa.load("pathToFile", sr=16000)
-inputs = processor(audio_array, return_tensors="pt", sampling_rate=16000)
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", split="validation")
+audio_sample = ds[0]["audio"]
 
-generated_ids = model.generate(**inputs, max_new_tokens=256)
-transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+input_features = processor(
+    audio_sample["array"],
+    sampling_rate=audio_sample["sampling_rate"],
+    return_tensors="pt"
+)
+input_features = input_features.to("cuda", dtype=torch.float16)
 
-print(f"Transcription: '{transcription}'")
+predicted_ids = model.generate(**input_features, cache_implementation="static")
+transcription = processor.batch_decode(predicted_ids, skip_special_tokens=True)
+transcription[0]
 ```
 </hfoption>
 </hfoptions>
@@ -81,7 +93,7 @@ print(f"Transcription: '{transcription}'")
   1. It uses SwiGLU activation instead of GELU in the decoder layers
   2. Most importantly, it replaces absolute position embeddings with Rotary Position Embeddings (RoPE). This allows Moonshine to handle audio inputs of any length, unlike Whisper which is restricted to fixed 30-second windows.
 
-- A guide for automatic speech recognition can be found [here](../tasks/asr)
+-- A guide for automatic speech recognition can be found [here](../tasks/asr)
 
 ## MoonshineConfig
 
