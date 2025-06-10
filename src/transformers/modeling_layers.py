@@ -45,4 +45,4 @@ class GradientCheckpointingLayer(nn.Module):
     def __call__(self, *args, **kwargs):
         if self.gradient_checkpointing and self.training:
             return self._gradient_checkpointing_func(partial(super().__call__, **kwargs), *args)
-        return super().__call__(**kwargs)
+        return super().__call__(*args, **kwargs)
