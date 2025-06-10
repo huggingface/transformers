@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from functools import partial
-from typing import Callable, Optional, Tuple, Union, Dict, Any
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -36,8 +36,8 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import (
     add_code_sample_docstrings,
-    add_start_docstrings,
     add_end_docstrings,
+    add_start_docstrings,
     add_start_docstrings_to_model_forward,
     can_return_tuple,
     is_torch_flex_attn_available,
@@ -247,7 +247,7 @@ class T5GemmaConfig(PretrainedConfig):
             encoder = T5GemmaModuleConfig()
         else:
             assert isinstance(encoder, T5GemmaModuleConfig), f"{type(encoder)} is not supported."
-        
+
         # Decoder.
         if isinstance(decoder, dict):
             # From preset configuration
