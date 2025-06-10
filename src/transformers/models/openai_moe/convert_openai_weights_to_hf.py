@@ -43,7 +43,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # special key, wqkv needs to be split afterwards
     r"block.(\d+).attn.qkv":        r"layers.\1.self_attn.qkv_proj",
     r"block.(\d+).attn.out":        r"layers.\1.self_attn.o_proj",
-    r"block.(\d+).attn.sdpa.sinks":      r"layers.\1.self_attn.sinks",
+    r"block.(\d+).attn.sinks":      r"layers.\1.self_attn.sinks",
     r"block.(\d+).attn.norm.scale":       r"layers.\1.input_layernorm.weight",
 
     r"block.(\d+).mlp.mlp1_weight": r"layers.\1.mlp.experts.gate_up_proj",
@@ -309,12 +309,12 @@ def main():
         help="Whether the model is an instruct model",
     )
     args = parser.parse_args()
-    # write_model(
-    #     model_path=args.output_dir,
-    #     input_base_path=args.input_dir,
-    #     safe_serialization=args.safe_serialization,
-    #     instruct=args.instruct,
-    # )
+    write_model(
+        model_path=args.output_dir,
+        input_base_path=args.input_dir,
+        safe_serialization=args.safe_serialization,
+        instruct=args.instruct,
+    )
 
     write_tokenizer(
         tokenizer_path="o200k_base",
