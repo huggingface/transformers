@@ -45,7 +45,6 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoTokenizer,
         Cache,
-        ClvpForCausalLM,
         DynamicCache,
         Gemma2Config,
         GenerationConfig,

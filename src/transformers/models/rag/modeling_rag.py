@@ -21,7 +21,7 @@ from typing import Callable, List, Optional, Tuple, Union
 import torch
 from torch import nn
 
-from ...cache_utils import Cache
+from ...cache_utils import Cache, EncoderDecoderCache
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationConfig, GenerationMixin, LogitsProcessorList, StoppingCriteriaList
 from ...modeling_outputs import ModelOutput
@@ -1199,6 +1199,8 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
                 tuple(_reorder_stacked(past_state, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
 
+        if isinstance(past_key_values, EncoderDecoderCache):
+            reordered_past = EncoderDecoderCache.from_legacy_cache(reordered_past)
         return reordered_past
 
     def marginalize(self, seq_logits, doc_scores, n_docs=None):
