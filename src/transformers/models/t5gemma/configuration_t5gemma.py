@@ -19,7 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 
@@ -191,17 +191,17 @@ class T5GemmaConfig(PretrainedConfig):
     ```python
     >>> from transformers import Gemma2Config, T5GemmaConfig, T5GemmaModel
     >>> base_config = Gemma2Config.from_pretrained("google/gemma2-2b")
-    >>> t5gemma_config = T5GemmaConfig(encoder_config=base_config, decoder_config=base_config)
+    >>> t5gemma_config = T5GemmaConfig(encoder=base_config, decoder=base_config)
     >>> model = T5GemmaModel(t5gemma_config)
     ```
     Configuration objects inherit from [PretrainedConfig] and can be used to control the model outputs. Read the
     documentation from [PretrainedConfig] for more information.
     Args:
-        encoder_config (`Union[T5GemmaModuleConfig, dict]`, optional):
+        encoder (`Union[T5GemmaModuleConfig, dict]`, optional, *optional*):
             Configuration for the encoder.
-        decoder_config (`Union[T5GemmaModuleConfig, dict]`, optional):
+        decoder (`Union[T5GemmaModuleConfig, dict]`, optional, *optional*):
             Configuration for the decoder.
-        is_encoder_decoder (bool, optional, defaults to True):
+        is_encoder_decoder (bool, optional, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
         dropout_rate (`float`, *optional*, defaults to 0.0):
             The ratio for all dropout layers (following T5).
@@ -209,7 +209,9 @@ class T5GemmaConfig(PretrainedConfig):
             The dropout ratio for classifier (following T5).
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for attention.
-        kwargs (additional keyword arguments, optional):
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether tie input and output embeddings.
+        kwargs (additional keyword arguments, optional, *optional*):
             Will be passed to the PretrainedConfig base class.
     """
 
@@ -250,8 +252,8 @@ class T5GemmaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        encoder_config: Optional[T5GemmaModuleConfig] = None,
-        decoder_config: Optional[T5GemmaModuleConfig] = None,
+        encoder: Optional[T5GemmaModuleConfig | Dict[Any, Any]] = None,
+        decoder: Optional[T5GemmaModuleConfig | Dict[Any, Any]] = None,
         is_encoder_decoder: bool = True,
         dropout_rate: float = 0.0,
         classifier_dropout_rate: float = 0.0,
@@ -259,42 +261,51 @@ class T5GemmaConfig(PretrainedConfig):
         tie_word_embeddings: bool = True,
         **kwargs,
     ):
-        encoder = kwargs.pop("encoder", None)
-        decoder = kwargs.pop("decoder", None)
-        if encoder is not None and decoder is not None:
-            # From pretrained models
-            self.encoder = T5GemmaModuleConfig(**encoder)
-            self.decoder = T5GemmaModuleConfig(**decoder)
+        # Encoder.
+        if isinstance(encoder, dict):
+            # From preset configuration
+            encoder = T5GemmaModuleConfig(**encoder)
+        elif encoder is None:
+            # From scratch
+            encoder = T5GemmaModuleConfig()
         else:
-            # From configuration directly
-            if encoder_config is None:
-                encoder_config = T5GemmaModuleConfig()
+            assert isinstance(encoder, T5GemmaModuleConfig), f"{type(encoder)} is not supported."
 
-            if decoder_config is None:
-                decoder_config = encoder_config
+        # Decoder.
+        if isinstance(decoder, dict):
+            # From preset configuration
+            decoder = T5GemmaModuleConfig(**decoder)
+        elif decoder is None:
+            # From scratch
+            decoder = encoder
+        else:
+            assert isinstance(decoder, T5GemmaModuleConfig), f"{type(decoder)} is not supported."
 
-            # Decouple encoder and decoder config in any case
-            encoder_config = T5GemmaModuleConfig(**encoder_config.to_dict())
-            decoder_config = T5GemmaModuleConfig(**decoder_config.to_dict())
+        # Decouple encoder and decoder config in any case
+        encoder = T5GemmaModuleConfig(**encoder.to_dict())
+        decoder = T5GemmaModuleConfig(**decoder.to_dict())
 
-            encoder_config.is_decoder = False
-            encoder_config.dropout_rate = dropout_rate
-            encoder_config.attention_dropout = attention_dropout
-            self.encoder = encoder_config
+        encoder.is_decoder = False
+        encoder.dropout_rate = dropout_rate
+        encoder.attention_dropout = attention_dropout
+        self.encoder = encoder
 
-            decoder_config.is_decoder = True
-            decoder_config.use_cache = True
-            decoder_config.dropout_rate = dropout_rate
-            decoder_config.attention_dropout = attention_dropout
-            decoder_config.cross_attention_hidden_size = encoder_config.hidden_size
-            self.decoder = decoder_config
+        decoder.is_decoder = True
+        decoder.use_cache = True
+        decoder.dropout_rate = dropout_rate
+        decoder.attention_dropout = attention_dropout
+        decoder.cross_attention_hidden_size = encoder.hidden_size
+        self.decoder = decoder
+
+        for special_token_key in ["bos_token_id", "pad_token_id", "eos_token_id"]:
+            if special_token_key not in kwargs:
+                kwargs[special_token_key] = getattr(decoder, special_token_key)
 
         super().__init__(**kwargs)
 
         self.is_encoder_decoder = is_encoder_decoder
-        self.use_cache = kwargs.get("use_cache", self.decoder.use_cache)
-        self.initializer_range = kwargs.get("initializer_range", self.decoder.initializer_range)
-        self.pad_token_id = kwargs.get("pad_token_id", self.decoder.pad_token_id)
+        self.use_cache = kwargs.get("use_cache", decoder.use_cache)
+        self.initializer_range = kwargs.get("initializer_range", decoder.initializer_range)
         self.dropout_rate = dropout_rate
         self.attention_dropout = attention_dropout
         self.classifier_dropout_rate = classifier_dropout_rate
