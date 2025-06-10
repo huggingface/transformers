@@ -115,6 +115,7 @@ if TYPE_CHECKING:
     from .fsmt import *
     from .funnel import *
     from .fuyu import *
+    from .fireflies import *
     from .gemma import *
     from .gemma2 import *
     from .gemma3 import *

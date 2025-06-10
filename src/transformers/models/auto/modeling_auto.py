@@ -125,6 +125,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("fsmt", "FSMTModel"),
         ("funnel", ("FunnelModel", "FunnelBaseModel")),
         ("fuyu", "FuyuModel"),
+        ("fireflies", "FirefliesModel"),
         ("gemma", "GemmaModel"),
         ("gemma2", "Gemma2Model"),
         ("gemma3", "Gemma3Model"),
