@@ -116,7 +116,7 @@ This process involves converting sunlight, carbon dioxide, and water into glucos
 Plants play a crucial role in sustaining life on Earth by generating oxygen and serving as the foundation of most ecosystems."""
 input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 
-output = model.generate(**input_ids)
+output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
