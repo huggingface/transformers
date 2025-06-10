@@ -360,11 +360,11 @@ class RemBertAttention(nn.Module):
     ) -> Tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
-            attention_mask,
-            head_mask,
-            encoder_hidden_states,
-            past_key_value,
-            output_attentions,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
             cache_position=cache_position,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
