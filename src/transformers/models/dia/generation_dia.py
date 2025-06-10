@@ -13,9 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
+import warnings
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
+import torch.distributed as dist
 
 from ...generation.logits_process import (
     DiaClassifierFreeGuidanceLogitsProcessor,
@@ -26,8 +29,14 @@ from ...generation.logits_process import (
 )
 from ...generation.stopping_criteria import StoppingCriteriaList
 from ...generation.streamers import BaseStreamer
-from ...generation.utils import GenerateOutput, GenerationConfig, GenerationMixin
+from ...generation.utils import GenerateOutput, GenerationConfig, GenerationMixin, GenerationMode
+from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_utils import PreTrainedModel
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 class DiaGenerationMixin(GenerationMixin):
@@ -194,7 +203,7 @@ class DiaGenerationMixin(GenerationMixin):
             # Second condition in case no audio has been given
             if prompt is not None and not (prompt == decoder_start_token_id).any():
                 prompt = prompt.to(dtype=torch.int)
-                prefill[i, padding_size + 1 : prompt.shape[0] + 1, :] = prompt
+                prefill[i, padding_size + 1 : padding_size + 1 + prompt.shape[0], :] = prompt
                 max_audio_len = max(max_audio_len, prompt.shape[0])
 
         delay_precomp = self.build_delay_indices(
@@ -250,6 +259,204 @@ class DiaGenerationMixin(GenerationMixin):
 
         return model_inputs
 
+    def _main_generate_loop(
+        self,
+        inputs: Optional[torch.Tensor] = None,
+        generation_config: Optional[GenerationConfig] = None,
+        logits_processor: Optional[LogitsProcessorList] = None,
+        stopping_criteria: Optional[StoppingCriteriaList] = None,
+        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
+        synced_gpus: Optional[bool] = None,
+        assistant_model: Optional["PreTrainedModel"] = None,
+        streamer: Optional["BaseStreamer"] = None,
+        negative_prompt_ids: Optional[torch.Tensor] = None,
+        negative_prompt_attention_mask: Optional[torch.Tensor] = None,
+        use_model_defaults: Optional[bool] = None,
+        custom_generate: Optional[str] = None,
+        **kwargs,
+    ):
+        # ******************* taken from main generate function up to calling the different methods *******************
+        # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
+        tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
+        assistant_tokenizer = kwargs.pop("assistant_tokenizer", None)  # only used for assisted generation
+
+        generation_config, model_kwargs = self._prepare_generation_config(
+            generation_config, use_model_defaults, **kwargs
+        )
+        self._validate_model_kwargs(model_kwargs.copy())
+        self._validate_assistant(assistant_model, tokenizer, assistant_tokenizer)
+
+        # 2. Set generation parameters if not already defined
+        if synced_gpus is None:
+            synced_gpus = (is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)) and dist.get_world_size() > 1
+
+        logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
+        stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
+
+        accepts_attention_mask = "attention_mask" in set(inspect.signature(self.forward).parameters.keys())
+        requires_attention_mask = "encoder_outputs" not in model_kwargs
+        kwargs_has_attention_mask = model_kwargs.get("attention_mask", None) is not None
+
+        # 3. Define model inputs
+        inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(
+            inputs, generation_config.bos_token_id, model_kwargs
+        )
+        batch_size = inputs_tensor.shape[0]
+
+        device = inputs_tensor.device
+        self._prepare_special_tokens(generation_config, kwargs_has_attention_mask, device=device)
+
+        # decoder-only models must use left-padding for batched generation.
+        if not self.config.is_encoder_decoder:
+            # If `input_ids` was given, check if the last id in any sequence is `pad_token_id`
+            # Note: If using, `inputs_embeds` this check does not work, because we want to be more hands-off.
+            if (
+                generation_config._pad_token_tensor is not None
+                and batch_size > 1
+                and len(inputs_tensor.shape) == 2
+                and torch.sum(inputs_tensor[:, -1] == generation_config._pad_token_tensor) > 0
+            ):
+                logger.warning(
+                    "A decoder-only architecture is being used, but right-padding was detected! For correct "
+                    "generation results, please set `padding_side='left'` when initializing the tokenizer."
+                )
+
+        # 4. Define other model kwargs
+        # decoder-only models with inputs_embeds forwarding must use caching (otherwise we can't detect whether we are
+        # generating the first new token or not, and we only want to use the embeddings for the first new token)
+        if not self.config.is_encoder_decoder and model_input_name == "inputs_embeds":
+            generation_config.use_cache = True
+
+        if not kwargs_has_attention_mask and requires_attention_mask and accepts_attention_mask:
+            model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
+                inputs_tensor, generation_config, model_kwargs
+            )
+        elif kwargs_has_attention_mask:
+            # TODO (joao): generalize this check with other types of inputs
+            if model_input_name == "input_ids" and len(model_kwargs["attention_mask"].shape) > 2:
+                raise ValueError("`attention_mask` passed to `generate` must be 2D.")
+
+        if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
+            # if model is encoder decoder encoder_outputs are created and added to `model_kwargs`
+            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(
+                inputs_tensor, model_kwargs, model_input_name, generation_config
+            )
+
+        # 5. Prepare `input_ids` which will be used for auto-regressive generation
+        if self.config.is_encoder_decoder:
+            input_ids, model_kwargs = self._prepare_decoder_input_ids_for_generation(
+                batch_size=batch_size,
+                model_input_name=model_input_name,
+                model_kwargs=model_kwargs,
+                decoder_start_token_id=generation_config._decoder_start_token_tensor,
+                device=inputs_tensor.device,
+            )
+        else:
+            input_ids = inputs_tensor if model_input_name == "input_ids" else model_kwargs.pop("input_ids")
+
+        if generation_config.token_healing:
+            input_ids = self.heal_tokens(input_ids, tokenizer)
+
+        if streamer is not None:
+            streamer.put(input_ids.cpu())
+
+        # 6. Prepare `max_length` depending on other stopping criteria.
+        input_ids_length = input_ids.shape[1]
+        has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
+        has_default_min_length = kwargs.get("min_length") is None and generation_config.min_length is not None
+        generation_config = self._prepare_generated_length(
+            generation_config=generation_config,
+            has_default_max_length=has_default_max_length,
+            has_default_min_length=has_default_min_length,
+            model_input_name=model_input_name,
+            inputs_tensor=inputs_tensor,
+            input_ids_length=input_ids_length,
+        )
+
+        # If the model supports `logits_to_keep` in forward(), set it to 1 to avoid computing the whole
+        # logit matrix. This can save a lot of memory during the first forward pass. Note that assisted decoding
+        # dynamically overrides this value as it can need more than the last token logits
+        if self._supports_logits_to_keep() and "logits_to_keep" not in model_kwargs:
+            model_kwargs["logits_to_keep"] = 1
+
+        self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
+
+        # 7. Prepare the cache.
+        # - `model_kwargs` may be updated in place with a cache as defined by the parameters in `generation_config`.
+        # - different models have a different cache name expected by the model (default = "past_key_values")
+        # - `max_length`, prepared above, is used to determine the maximum cache length
+        max_cache_length = generation_config.max_length - 1
+        if (
+            inputs_tensor.shape[1] != input_ids_length
+            and model_input_name == "inputs_embeds"
+            and not self.config.is_encoder_decoder
+        ):
+            max_cache_length += inputs_tensor.shape[1]
+        self._prepare_cache_for_generation(
+            generation_config, model_kwargs, assistant_model, batch_size, max_cache_length, device
+        )
+
+        # 8. determine generation mode
+        generation_mode = generation_config.get_generation_mode(assistant_model)
+
+        if streamer is not None and (generation_config.num_beams > 1):
+            raise ValueError(
+                "`streamer` cannot be used with beam search (yet!). Make sure that `num_beams` is set to 1."
+            )
+
+        if self.device.type != input_ids.device.type:
+            warnings.warn(
+                "You are calling .generate() with the `input_ids` being on a device type different"
+                f" than your model's device. `input_ids` is on {input_ids.device.type}, whereas the model"
+                f" is on {self.device.type}. You may experience unexpected behaviors or slower generation."
+                " Please make sure that you have put `input_ids` to the"
+                f" correct device by calling for example input_ids = input_ids.to('{self.device.type}') before"
+                " running `.generate()`.",
+                UserWarning,
+            )
+
+        # 9. prepare logits processors and stopping criteria
+        prepared_logits_processor = self._get_logits_processor(
+            generation_config=generation_config,
+            input_ids_seq_length=input_ids_length,
+            encoder_input_ids=inputs_tensor,
+            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+            logits_processor=logits_processor,
+            device=inputs_tensor.device,
+            model_kwargs=model_kwargs,
+            negative_prompt_ids=negative_prompt_ids,
+            negative_prompt_attention_mask=negative_prompt_attention_mask,
+        )
+        prepared_stopping_criteria = self._get_stopping_criteria(
+            generation_config=generation_config, stopping_criteria=stopping_criteria, tokenizer=tokenizer, **kwargs
+        )
+
+        # Set model_kwargs `use_cache` so we can use it later in forward runs
+        model_kwargs["use_cache"] = generation_config.use_cache
+        # ******************* taken from main generate function up to calling the different methods *******************
+
+        # 10. go into different generation modes
+        if generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
+            # 11. expand input_ids with `num_return_sequences` additional sequences per batch
+            if generation_config.num_return_sequences > 1:
+                raise ValueError("`num_return_sequences>1` is incompatible with Dia.")
+
+            # 12. run sample (it degenerates to greedy search when `generation_config.do_sample=False`)
+            return self._sample(
+                input_ids,
+                logits_processor=prepared_logits_processor,
+                stopping_criteria=prepared_stopping_criteria,
+                generation_config=generation_config,
+                synced_gpus=synced_gpus,
+                streamer=streamer,
+                **model_kwargs,
+            )
+        else:
+            raise ValueError(
+                "Got incompatible mode for generation, should be one of greedy or sampling. "
+                "Ensure that beam search is de-activated by setting `num_beams=1` and `num_beam_groups=1`."
+            )
+
     def generate(
         self,
         inputs: Optional[torch.Tensor] = None,
@@ -266,14 +473,12 @@ class DiaGenerationMixin(GenerationMixin):
         custom_generate: Optional[str] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
-        # Use decoder mask to calculate padding lens
-        decoder_attention_mask = None
-        if kwargs is not None and "decoder_attention_mask" in kwargs:
-            decoder_attention_mask = kwargs.get("decoder_attention_mask")
+        # Get total input len to parse the output after generation
+        decoder_input_len = 1  # +1 for BOS
+        if kwargs is not None and "decoder_input_ids" in kwargs:
+            decoder_input_len = kwargs["decoder_input_ids"].shape[1] + 1
 
-        # TODO: find a way for generation mode to be forced to greedy / sample
-
-        output = super().generate(
+        output = self._main_generate_loop(
             inputs=inputs,
             generation_config=generation_config,
             logits_processor=logits_processor,
@@ -302,19 +507,12 @@ class DiaGenerationMixin(GenerationMixin):
         output_sequences = output_sequences.reshape(bsz, -1, num_channels)
         seq_len = output_sequences.shape[1]
 
-        # Calculate padding sizes based on the attention mask
-        if decoder_attention_mask is not None:
-            padding_lens = decoder_attention_mask.shape[-1] - decoder_attention_mask.sum(dim=-1)
-        else:
-            padding_lens = [0] * bsz
-
         # Revert delay
         revert_precomp = self.build_revert_indices(
             B=bsz,
             T=seq_len,
             C=num_channels,
             delay_pattern=self.config.delay_pattern,
-            padding_lens=padding_lens,
         )
 
         output_sequences = self.revert_audio_delay(
@@ -325,10 +523,14 @@ class DiaGenerationMixin(GenerationMixin):
         )[:, : -max(self.config.delay_pattern), :]
 
         # Cut out invalid values, e.g. audio bos/eos/pad
+        # (note that Dia has their special tokens >= eos)
         min_valid_index = 0
-        max_valid_index = 1023
+        max_valid_index = self.config.eos_token_id - 1
         invalid_mask = (output_sequences < min_valid_index) | (output_sequences > max_valid_index)
         output_sequences[invalid_mask] = 0
+
+        # Cut non generated tokens out
+        output_sequences = output_sequences[:, :decoder_input_len]
 
         if return_dict_in_generate:
             output.sequences = output_sequences
@@ -434,9 +636,7 @@ class DiaGenerationMixin(GenerationMixin):
         return result_BxTxC
 
     @staticmethod
-    def build_revert_indices(
-        B: int, T: int, C: int, delay_pattern: List[int], padding_lens: List[int]
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    def build_revert_indices(B: int, T: int, C: int, delay_pattern: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Precompute indices for the revert operation using PyTorch.
 
@@ -449,15 +649,13 @@ class DiaGenerationMixin(GenerationMixin):
         # Use default device unless specified otherwise; assumes inputs might define device later
         device = None  # Or determine dynamically if needed, e.g., from a model parameter
 
-        # We shift the delays in order to account for left padding (if needed)
         delay_arr = torch.tensor(delay_pattern, dtype=torch.int32, device=device)
-        delay_arr = (delay_arr[None, :] + torch.tensor(padding_lens, dtype=torch.int32)[:, None])[:, None, :]
 
         t_idx_BT1 = torch.broadcast_to(torch.arange(T, device=device).unsqueeze(0), [B, T])
         t_idx_BT1 = t_idx_BT1.unsqueeze(-1)
 
         t_idx_BxTxC = torch.minimum(
-            t_idx_BT1 + delay_arr,
+            t_idx_BT1 + delay_arr.view(1, 1, C),
             torch.tensor(T - 1, device=device),
         )
         b_idx_BxTxC = torch.broadcast_to(torch.arange(B, device=device).view(B, 1, 1), [B, T, C])

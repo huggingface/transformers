@@ -85,9 +85,7 @@ def apply_audio_delay(
     return result_BxTxC
 
 
-def build_revert_indices(
-    B: int, T: int, C: int, delay_pattern: List[int], padding_sizes: List[int]
-) -> Tuple[torch.Tensor, torch.Tensor]:
+def build_revert_indices(B: int, T: int, C: int, delay_pattern: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Precompute indices for the revert operation using PyTorch.
 
@@ -100,15 +98,13 @@ def build_revert_indices(
     # Use default device unless specified otherwise; assumes inputs might define device later
     device = None  # Or determine dynamically if needed, e.g., from a model parameter
 
-    # We shift the delays in order to account for left padding (if needed)
     delay_arr = torch.tensor(delay_pattern, dtype=torch.int32, device=device)
-    delay_arr = (delay_arr[None, :] + torch.tensor(padding_sizes, dtype=torch.int32)[:, None])[:, None, :]
 
     t_idx_BT1 = torch.broadcast_to(torch.arange(T, device=device).unsqueeze(0), [B, T])
     t_idx_BT1 = t_idx_BT1.unsqueeze(-1)
 
     t_idx_BxTxC = torch.minimum(
-        t_idx_BT1 + delay_arr,
+        t_idx_BT1 + delay_arr.view(1, 1, C),
         torch.tensor(T - 1, device=device),
     )
     b_idx_BxTxC = torch.broadcast_to(torch.arange(B, device=device).view(B, 1, 1), [B, T, C])
@@ -209,7 +205,7 @@ def prefill_audios(
         prompt = audios[i]
         if prompt is not None:
             prompt = prompt.to(dtype=torch.int)
-            prefill[i, padding_size + 1 : prompt.shape[0] + 1, :] = prompt
+            prefill[i, padding_size + 1 : padding_size + 1 + prompt.shape[0], :] = prompt
 
     delay_precomp = build_delay_indices(
         B=bsz,
@@ -278,7 +274,6 @@ def revert_delay(
     delayed_batch: torch.Tensor,
     shape: Tuple[int, int, int],
     delay_pattern: List[int],
-    audio_padding_sizes: List[int],
     pad_id: int,
 ):
     bsz, seq_len, channels = shape
@@ -288,7 +283,6 @@ def revert_delay(
         T=seq_len,
         C=channels,
         delay_pattern=delay_pattern,
-        padding_sizes=audio_padding_sizes,
     )
     codebook = revert_audio_delay(
         audio_BxTxC=delayed_batch,
@@ -305,7 +299,7 @@ def revert_delay(
     return codebook
 
 
-audios = [torch.arange(2 * 9).view(2, 9), None]
+audios = [torch.arange(2 * 9).view(2, 9), torch.arange(4 * 9).view(4, 9)]
 delay_pattern = [0, 8, 9, 10, 11, 12, 13, 14, 15]
 audio_bos_id = 1026
 audio_pad_id = 1025
@@ -327,7 +321,7 @@ prediction_2 = processor.forward(predictions)
 
 # revert
 codebooks = revert_delay(
-    delayed_batch, (bsz, seq_len, channels), delay_pattern, audio_padding_sizes, pad_id=audio_pad_id
+    delayed_batch, (bsz, seq_len, channels), delay_pattern, pad_id=audio_pad_id
 )
 
 print(codebooks)
