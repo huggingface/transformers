@@ -34,7 +34,7 @@ import warnings
 from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Optional, Union, Iterator, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Optional, Tuple, Union
 
 
 # Integrations must be imported before ML frameworks:
@@ -3714,7 +3714,10 @@ class Trainer:
         return ctx_manager
 
     def training_step(
-        self, model: nn.Module, inputs: dict[str, Union[torch.Tensor, Any]], num_items_in_batch: Optional[torch.Tensor] = None
+        self,
+        model: nn.Module,
+        inputs: dict[str, Union[torch.Tensor, Any]],
+        num_items_in_batch: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
@@ -3795,25 +3798,31 @@ class Trainer:
 
             return loss.detach()
 
-    def compute_loss(self, model: nn.Module, inputs: dict[str, Union[torch.Tensor, Any]], return_outputs: bool = False, num_items_in_batch: Optional[torch.Tensor] = None):
+    def compute_loss(
+        self,
+        model: nn.Module,
+        inputs: dict[str, Union[torch.Tensor, Any]],
+        return_outputs: bool = False,
+        num_items_in_batch: Optional[torch.Tensor] = None,
+    ):
         """
         How the loss is computed by Trainer. By default, all models return the loss in the first element.
-        
+
         Args:
-            model (`nn.Module`): 
+            model (`nn.Module`):
                 The model to compute the loss for.
-            inputs (`Dict[str, Union[torch.Tensor, Any]]`): 
+            inputs (`Dict[str, Union[torch.Tensor, Any]]`):
                 The input data for the model.
-            return_outputs (`bool`, *optional*, defaults to `False`): 
+            return_outputs (`bool`, *optional*, defaults to `False`):
                 Whether to return the model outputs along with the loss.
-            num_items_in_batch (Optional[torch.Tensor], *optional*): 
-                The number of items in the batch. If num_items_in_batch is not passed, 
+            num_items_in_batch (Optional[torch.Tensor], *optional*):
+                The number of items in the batch. If num_items_in_batch is not passed,
 
         Returns:
             The loss of the model along with its output if return_outputs was set to True
-            
+
         Subclass and override for custom behavior. If you are not using `num_items_in_batch` when computing your loss,
-        make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculationg might be slightly inacurate when performing gradient accumulation. 
+        make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculationg might be slightly inacurate when performing gradient accumulation.
         """
         if (self.label_smoother is not None or self.compute_loss_func is not None) and "labels" in inputs:
             labels = inputs.pop("labels")
@@ -5271,7 +5280,9 @@ class Trainer:
                     self.model.hf_quantizer.quantization_config.bnb_4bit_quant_storage, override=True
                 )
 
-    def get_batch_samples(self, epoch_iterator: Iterator, num_batches: int, device: torch.device) -> Tuple[list, Optional[torch.Tensor]]:
+    def get_batch_samples(
+        self, epoch_iterator: Iterator, num_batches: int, device: torch.device
+    ) -> Tuple[list, Optional[torch.Tensor]]:
         """
         Collects a specified number of batches from the epoch iterator and optionally counts the number of items in the batches to properly scale the loss.
         """
