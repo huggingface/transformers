@@ -49,7 +49,7 @@ class T5GemmaModuleConfig(PretrainedConfig):
                 `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
                 `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
                 converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-                by meanpooling all the original heads within that group. For more details checkout [this
+                by meanpooling all the original heads within that group. For more details, check out [this
                 paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
                 `num_attention_heads`.
             head_dim (`int`, *optional*, defaults to 256):
@@ -324,6 +324,11 @@ class T5GemmaConfig(PretrainedConfig):
             setattr(self.encoder, key, value)
             setattr(self.decoder, key, value)
         super().__setattr__(key, value)
+
+    def get_text_config(self, decoder=False) -> "PretrainedConfig":
+        # Always return self, regardless of the decoder option.
+        del decoder
+        return self
 
 
 __all__ = ["T5GemmaConfig", "T5GemmaModuleConfig"]
