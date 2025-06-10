@@ -4,9 +4,9 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, dataclass
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...modeling_layers import GradientCheckpointingLayer
 from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_vjepa2 import VJEPA2Config
 
@@ -65,7 +65,6 @@ class VJEPA2Embeddings(nn.Module):
         self.patch_size = config.patch_size
 
     def forward(self, pixel_values_videos: torch.Tensor) -> torch.Tensor:
-
         # Swap `frames` and `channels` dims, the result is:
         # (batch_size, channels, num_frames, height, width)
         pixel_values_videos = pixel_values_videos.permute(0, 2, 1, 3, 4)
