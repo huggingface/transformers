@@ -130,10 +130,7 @@ def _convert_model(
 
     for k, v in list(state_dict.items()):
         if "audio_encoder" not in k:
-            if unwanted_prefix in k and unwanted_prefix is not None:
-                new_k = k[len(unwanted_prefix) :]
-            else:
-                new_k = k
+            new_k = k if unwanted_prefix is None else k[len(unwanted_prefix) :]
             for old_layer_name, new_layer_name in convert_list:
                 if old_layer_name in new_k:
                     new_k = new_k.replace(old_layer_name, new_layer_name)
@@ -186,7 +183,7 @@ def _convert_model(
         raise ValueError(f"extra keys found: {extra_keys}")
     if len(missing_keys) != 0:
         raise ValueError(f"missing keys: {missing_keys}")
-    hf_model.load_state_dict(state_dict, strict=False)
+    hf_model.load_state_dict(state_dict, strict=True)
     n_params = param_count(hf_model)
 
     logger.info(f"model loaded: {round(n_params / 1e6, 1)}M params")
