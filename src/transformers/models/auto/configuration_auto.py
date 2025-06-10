@@ -23,10 +23,7 @@ from collections.abc import Callable, Iterator, KeysView, ValuesView
 from typing import Any, TypeVar, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import (
-    get_class_from_dynamic_module,
-    resolve_trust_remote_code,
-)
+from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import CONFIG_NAME, logging
 
 
@@ -1175,19 +1172,12 @@ class AutoConfig:
             else:
                 upstream_repo = None
             trust_remote_code = resolve_trust_remote_code(
-                trust_remote_code,
-                pretrained_model_name_or_path,
-                has_local_code,
-                has_remote_code,
-                upstream_repo,
+                trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
             )
 
         if has_remote_code and trust_remote_code:
             config_class = get_class_from_dynamic_module(
-                class_ref,
-                pretrained_model_name_or_path,
-                code_revision=code_revision,
-                **kwargs,
+                class_ref, pretrained_model_name_or_path, code_revision=code_revision, **kwargs
             )
             config_class.register_for_auto_class()
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)

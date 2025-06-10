@@ -45,10 +45,7 @@ AUTODOC_FILES = [
 
 PLACEHOLDER_TO_AUTO_MODULE = {
     "image_processor_class": ("image_processing_auto", "IMAGE_PROCESSOR_MAPPING_NAMES"),
-    "feature_extractor_class": (
-        "feature_extraction_auto",
-        "FEATURE_EXTRACTOR_MAPPING_NAMES",
-    ),
+    "feature_extractor_class": ("feature_extraction_auto", "FEATURE_EXTRACTOR_MAPPING_NAMES"),
     "processor_class": ("processing_auto", "PROCESSOR_MAPPING_NAMES"),
     "config_class": ("configuration_auto", "CONFIG_MAPPING_NAMES"),
 }
@@ -1055,14 +1052,7 @@ def _get_parameter_info(param_name, documented_params, source_args_dict, param_t
         is_documented = False
     optional_string = r", *optional*" if optional else ""
 
-    return (
-        param_type,
-        optional_string,
-        shape_string,
-        additional_info,
-        description,
-        is_documented,
-    )
+    return param_type, optional_string, shape_string, additional_info, description, is_documented
 
 
 def _process_regular_parameters(sig, func, class_name, documented_params, indent_level, undocumented_parameters):
@@ -1098,14 +1088,9 @@ def _process_regular_parameters(sig, func, class_name, documented_params, indent
         if param.default != inspect._empty and param.default is not None:
             param_default = f", defaults to `{str(param.default)}`"
 
-        (
-            param_type,
-            optional_string,
-            shape_string,
-            additional_info,
-            description,
-            is_documented,
-        ) = _get_parameter_info(param_name, documented_params, source_args_dict, param_type, optional)
+        param_type, optional_string, shape_string, additional_info, description, is_documented = _get_parameter_info(
+            param_name, documented_params, source_args_dict, param_type, optional
+        )
 
         if is_documented:
             if param_name == "config":
@@ -1132,7 +1117,7 @@ def _process_regular_parameters(sig, func, class_name, documented_params, indent
                 "type": param_type if param_type else "<fill_type>",
                 "optional": optional,
                 "shape": shape_string,
-                "description": (description if description else "\n    <fill_description>"),
+                "description": description if description else "\n    <fill_description>",
                 "default": param_default,
             }
             undocumented_parameters.append(
@@ -1160,13 +1145,7 @@ def find_sig_line(lines, line_end):
 
 
 def _process_kwargs_parameters(
-    sig,
-    func,
-    parent_class,
-    model_name_lowercase,
-    documented_kwargs,
-    indent_level,
-    undocumented_parameters,
+    sig, func, parent_class, model_name_lowercase, documented_kwargs, indent_level, undocumented_parameters
 ):
     """
     Process **kwargs parameters if needed.
@@ -1232,19 +1211,8 @@ def _process_kwargs_parameters(
                     param_default = str(getattr(parent_class, param_name, ""))
                     param_default = f", defaults to `{param_default}`" if param_default != "" else ""
 
-                (
-                    param_type,
-                    optional_string,
-                    shape_string,
-                    additional_info,
-                    description,
-                    is_documented,
-                ) = _get_parameter_info(
-                    param_name,
-                    documented_kwargs,
-                    source_args_dict,
-                    param_type,
-                    optional,
+                param_type, optional_string, shape_string, additional_info, description, is_documented = (
+                    _get_parameter_info(param_name, documented_kwargs, source_args_dict, param_type, optional)
                 )
 
                 if is_documented:
@@ -1274,13 +1242,7 @@ def _process_kwargs_parameters(
 
 
 def _process_parameters_section(
-    func_documentation,
-    sig,
-    func,
-    class_name,
-    model_name_lowercase,
-    parent_class,
-    indent_level,
+    func_documentation, sig, func, class_name, model_name_lowercase, parent_class, indent_level
 ):
     """
     Process the parameters section of the docstring.
@@ -1314,13 +1276,7 @@ def _process_parameters_section(
 
     # Process **kwargs parameters if needed
     kwargs_docstring = _process_kwargs_parameters(
-        sig,
-        func,
-        parent_class,
-        model_name_lowercase,
-        documented_kwargs,
-        indent_level,
-        undocumented_parameters,
+        sig, func, parent_class, model_name_lowercase, documented_kwargs, indent_level, undocumented_parameters
     )
     docstring += kwargs_docstring
 
@@ -1367,14 +1323,7 @@ def _process_returns_section(func_documentation, sig, config_class, indent_level
 
 
 def _process_example_section(
-    func_documentation,
-    func,
-    parent_class,
-    class_name,
-    model_name_lowercase,
-    config_class,
-    checkpoint,
-    indent_level,
+    func_documentation, func, parent_class, class_name, model_name_lowercase, config_class, checkpoint, indent_level
 ):
     """
     Process the example section of the docstring.
@@ -1484,21 +1433,12 @@ def auto_method_docstring(func, parent_class=None, custom_intro=None, custom_arg
         docstring = set_min_indent(custom_intro, indent_level + 4)
     else:
         docstring = add_intro_docstring(
-            func,
-            class_name=class_name,
-            parent_class=parent_class,
-            indent_level=indent_level,
+            func, class_name=class_name, parent_class=parent_class, indent_level=indent_level
         )
 
     # Process Parameters section
     docstring += _process_parameters_section(
-        func_documentation,
-        sig,
-        func,
-        class_name,
-        model_name_lowercase,
-        parent_class,
-        indent_level,
+        func_documentation, sig, func, class_name, model_name_lowercase, parent_class, indent_level
     )
 
     # Process Returns section
@@ -1621,18 +1561,10 @@ def auto_docstring(obj=None, *, custom_intro=None, custom_args=None, checkpoint=
     def auto_docstring_decorator(obj):
         if len(obj.__qualname__.split(".")) > 1:
             return auto_method_docstring(
-                obj,
-                custom_args=custom_args,
-                custom_intro=custom_intro,
-                checkpoint=checkpoint,
+                obj, custom_args=custom_args, custom_intro=custom_intro, checkpoint=checkpoint
             )
         else:
-            return auto_class_docstring(
-                obj,
-                custom_args=custom_args,
-                custom_intro=custom_intro,
-                checkpoint=checkpoint,
-            )
+            return auto_class_docstring(obj, custom_args=custom_args, custom_intro=custom_intro, checkpoint=checkpoint)
 
     if obj:
         return auto_docstring_decorator(obj)

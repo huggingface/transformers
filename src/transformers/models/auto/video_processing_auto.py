@@ -23,17 +23,8 @@ from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 
 # Build the list of all video processors
 from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import (
-    get_class_from_dynamic_module,
-    resolve_trust_remote_code,
-)
-from ...utils import (
-    CONFIG_NAME,
-    VIDEO_PROCESSOR_NAME,
-    cached_file,
-    is_torchvision_available,
-    logging,
-)
+from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
+from ...utils import CONFIG_NAME, VIDEO_PROCESSOR_NAME, cached_file, is_torchvision_available, logging
 from ...utils.import_utils import requires
 from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
@@ -329,9 +320,7 @@ class AutoVideoProcessor:
         if video_processor_class is None and video_processor_auto_map is None:
             if not isinstance(config, PretrainedConfig):
                 config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path,
-                    trust_remote_code=trust_remote_code,
-                    **kwargs,
+                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                 )
             # It could be in `config.video_processor_type``
             video_processor_class = getattr(config, "video_processor_type", None)
@@ -344,10 +333,7 @@ class AutoVideoProcessor:
         has_remote_code = video_processor_auto_map is not None
         has_local_code = video_processor_class is not None or type(config) in VIDEO_PROCESSOR_MAPPING
         trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code,
-            pretrained_model_name_or_path,
-            has_local_code,
-            has_remote_code,
+            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
         )
 
         if has_remote_code and trust_remote_code:
