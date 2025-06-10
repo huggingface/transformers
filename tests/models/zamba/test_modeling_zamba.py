@@ -98,6 +98,14 @@ class ZambaModelTest(CausalLMModelTest, unittest.TestCase):
     def test_initialization(self):
         pass
 
+    @unittest.skip("Does not output attentions for all layers")
+    def test_attention_outputs(self):
+        pass
+
+    @unittest.skip("Zamba does not support weight tying")
+    def test_tied_weights_keys(self):
+        pass
+
 
 @require_torch
 class ZambaModelIntegrationTest(unittest.TestCase):
