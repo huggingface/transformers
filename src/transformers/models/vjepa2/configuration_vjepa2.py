@@ -22,8 +22,6 @@ class VJEPA2Config(PretrainedConfig):
             The number of frames the model has been pretrained with. Does not impact inference.
         tubelet_size (`int`, *optional*, defaults to 2):
             The number of temporal frames used for a single rastor, check paper for more information.
-        use_SiLU (`bool`, *optional*, defaults to `False`):
-            Use SwiGLUFFN for MLP
         wide_SiLU (`bool`, *optional*, defaults to `True`):
             Increases the hidden size for SwiGLUFFN
         hidden_size (`int`, *optional*, defaults to 1024):
@@ -87,7 +85,6 @@ class VJEPA2Config(PretrainedConfig):
         crop_size=256,
         frames_per_clip=64,
         tubelet_size=2,
-        use_SiLU=False,
         wide_SiLU=True,
         hidden_size=1024,
         in_chans=3,
@@ -116,7 +113,6 @@ class VJEPA2Config(PretrainedConfig):
         self.frames_per_clip = frames_per_clip
         self.patch_size = patch_size
         self.tubelet_size = tubelet_size
-        self.use_SiLU = use_SiLU
         self.wide_SiLU = wide_SiLU
         self.hidden_size = hidden_size
         self.in_chans = in_chans

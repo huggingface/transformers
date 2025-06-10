@@ -203,7 +203,8 @@ class VJEPA2RopeAttention(nn.Module):
         device = x.device
         token_size = x.size(1)
 
-        # Note: when masks is none, we use a 1d id instead of Bxnum_attention_heads mask, as 1d vector is broadcasted to the correct shapes.
+        # Note: when masks is none, we use a 1d id instead of Bxnum_attention_heads mask,
+        # as 1d vector is broadcasted to the correct shapes.
         if masks is not None:
             ids = masks.unsqueeze(1).repeat(1, self.num_attention_heads, 1)
         else:
@@ -334,31 +335,6 @@ class VJEPA2MLP(nn.Module):
         return hidden_state
 
 
-class VJEPA2SwiGLUFFN(nn.Module):
-    def __init__(
-        self,
-        config: VJEPA2Config,
-        hidden_size: int = 1024,
-        mlp_ratio: float = 4.0,
-    ):
-        super().__init__()
-        in_features = out_features = hidden_size
-        if config.wide_SiLU:
-            hidden_features = int(hidden_size * mlp_ratio)
-            hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
-        else:
-            hidden_features = int(hidden_size * mlp_ratio)
-
-        self.weights_in = nn.Linear(in_features, 2 * hidden_features, bias=True)
-        self.weights_out = nn.Linear(hidden_features, out_features, bias=True)
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.weights_in(hidden_state)
-        x1, x2 = hidden_state.chunk(2, dim=-1)
-        hidden = nn.functional.silu(x1) * x2
-        return self.weights_out(hidden)
-
-
 class VJEPA2Layer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the original implementation."""
 
@@ -377,16 +353,10 @@ class VJEPA2Layer(GradientCheckpointingLayer):
         self.mlp_ratio = mlp_ratio
 
         self.norm1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
-
         self.attention = VJEPA2RopeAttention(config, hidden_size, num_attention_heads)
         self.drop_path = VJEPA2DropPath(drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-
         self.norm2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
-
-        if config.use_SiLU:
-            self.mlp = VJEPA2SwiGLUFFN(config, hidden_size=hidden_size, mlp_ratio=mlp_ratio)
-        else:
-            self.mlp = VJEPA2MLP(config, hidden_size=hidden_size, mlp_ratio=mlp_ratio)
+        self.mlp = VJEPA2MLP(config, hidden_size=hidden_size, mlp_ratio=mlp_ratio)
 
     def forward(
         self,
@@ -394,28 +364,28 @@ class VJEPA2Layer(GradientCheckpointingLayer):
         position_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Tuple[torch.Tensor, ...]:
+        # Self-Attention
+        residual = hidden_states
+        hidden_states = self.norm1(hidden_states)
         self_attention_outputs = self.attention(
-            self.norm1(hidden_states),  # in Dinov2, layernorm is applied before self-attention
+            hidden_states,
             position_mask=position_mask,  # position mask for context/target selection
             head_mask=head_mask,  # head mask is applied at F.scaled_dot_product_attention
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
+        hidden_states = self.drop_path(attention_output) + residual
 
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        # MLP
+        residual = hidden_states
+        hidden_states = self.norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.drop_path(hidden_states) + residual
 
-        # first residual connection
-        hidden_states = self.drop_path(attention_output) + hidden_states
-
-        # in Dinov2, layernorm is also applied after self-attention
-        layer_output = self.norm2(hidden_states)
-        layer_output = self.mlp(layer_output)
-
-        # second residual connection
-        layer_output = self.drop_path(layer_output) + hidden_states
-
-        outputs = (layer_output,) + outputs
+        # Add self attentions if we output attention weights
+        outputs = self_attention_outputs[1:]
+        outputs = (hidden_states,) + outputs
 
         return outputs
 
@@ -686,7 +656,7 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "vjepa2"
     main_input_name = "pixel_values_videos"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["VJEPA2SwiGLUFFN"]
+    _no_split_modules = ["VJEPA2Layer"]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
 
