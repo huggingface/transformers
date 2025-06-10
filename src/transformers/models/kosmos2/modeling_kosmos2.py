@@ -1542,7 +1542,7 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
         )
 
         # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-        if cache_position[0] == 0:
+        if cache_position[0] != 0:
             image_embeds = None
             image_embeds_position_mask = None
 

@@ -802,6 +802,7 @@ class Attention(nn.Module):
             else:
                 curr_past_key_value = layer_state
 
+        # NOTE: FSMT has format (seq_len, BS, model_dim) ofr inputs
         current_states = key if self.encoder_decoder_attention else query
         if self.encoder_decoder_attention and layer_state is not None and is_updated:
             # reuse k,v, cross_attentions
@@ -810,8 +811,8 @@ class Attention(nn.Module):
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
-            key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-            value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+            key_states = key_states.view(-1, bsz, self.num_heads, self.head_dim).permute(1, 2, 0, 3)
+            value_states = value_states.view(-1, bsz, self.num_heads, self.head_dim).permute(1, 2, 0, 3)
 
             if layer_state is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
@@ -825,11 +826,10 @@ class Attention(nn.Module):
 
         query_states = self.q_proj(query) * self.scaling
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = query_states.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2)
-        query_states = query_states.reshape(*proj_shape)
-        key_states = key_states.reshape(*proj_shape)
-        value_states = value_states.reshape(*proj_shape)
+        # Reshape back to 3D tensors for `bmm`
+        query_states = query_states.view(-1, bsz * self.num_heads, self.head_dim).transpose(0, 1)
+        key_states = key_states.reshape(bsz * self.num_heads, -1, self.head_dim)
+        value_states = value_states.reshape(bsz * self.num_heads, -1, self.head_dim)
 
         assert key_states is not None
         src_len = key_states.size(1)

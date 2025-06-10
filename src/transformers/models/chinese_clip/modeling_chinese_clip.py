@@ -590,7 +590,7 @@ class ChineseCLIPTextLayer(nn.Module):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = ChineseCLIPTextAttention(config, layer_idx)
+        self.attention = ChineseCLIPTextAttention(config, layer_idx=layer_idx)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:

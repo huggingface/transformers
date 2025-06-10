@@ -823,7 +823,14 @@ class SpeechT5TextDecoderPrenet(nn.Module):
         else:
             raise ValueError("You have to specify `decoder_input_ids`")
 
-        past_key_values_length = past_key_values[0][0].shape[-2] if past_key_values is not None else 0
+        past_key_values_length = 0
+        if past_key_values is not None:
+            past_key_values_length = (
+                past_key_values[0][0].shape[-2]
+                if not isinstance(past_key_values, Cache)
+                else past_key_values.get_seq_length()
+            )
+
         positions = self.embed_positions(input_ids, past_key_values_length)
 
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
