@@ -65,13 +65,14 @@ class VJEPA2Embeddings(nn.Module):
         self.patch_size = config.patch_size
 
     def forward(self, pixel_values_videos: torch.Tensor) -> torch.Tensor:
+        num_frames = pixel_values_videos.shape[1]
+
         # Swap `frames` and `channels` dims, the result is:
         # (batch_size, channels, num_frames, height, width)
         pixel_values_videos = pixel_values_videos.permute(0, 2, 1, 3, 4)
 
         # For some cases, if the input vision (image/video) consists of num_frames < tubelet_size,
         # then embedding lookup fails. In these cases, we duplicate the frames.
-        num_frames = pixel_values_videos.shape[2]
         if num_frames < self.config.tubelet_size:
             pixel_values_videos = pixel_values_videos.repeat(1, 1, self.config.tubelet_size, 1, 1)
 
