@@ -125,9 +125,9 @@ class CausalLMModelTester:
         self.use_token_type_ids = use_token_type_ids
         self.use_labels = use_labels
         self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+        self.hidden_size = self.n_embd = hidden_size
+        self.n_layer = self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = self.n_head = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
