@@ -26,8 +26,6 @@ class VJEPA2Config(PretrainedConfig):
             Use SwiGLUFFN for MLP
         wide_SiLU (`bool`, *optional*, defaults to `True`):
             Increases the hidden size for SwiGLUFFN
-        uniform_power (`bool`, *optional*, defaults to `False`):
-            If not using RoPE, setting this flag enables uniform power on grid height, width and depth in 3d positional encodings.
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers
         in_chans (`int`, *optional*, defaults to 3):
@@ -59,8 +57,6 @@ class VJEPA2Config(PretrainedConfig):
             Number of attention heads for each attention layer in the Predictor
         pred_num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Predictor
-        pred_use_mask_tokens (`bool`, *optional*, defaults to `False`):
-            Use mask tokens in the Predictor
         pred_num_mask_tokens (`int`, *optional*, defaults to 10):
             Define the number of mask tokens to use in the Predictor
         pred_zero_init_mask_tokens (`bool`, *optional*, defaults to `True`):

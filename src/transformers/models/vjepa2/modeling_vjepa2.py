@@ -426,7 +426,6 @@ class VJEPA2Layer(nn.Module):
         return outputs
 
 
-# Adapted from transformers.models.vit.modeling_vit.ViTEncoder with ViT->Dinov2->VJEPA
 class VJEPA2Encoder(nn.Module):
     def __init__(
         self,
