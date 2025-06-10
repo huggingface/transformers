@@ -516,7 +516,7 @@ class NllbMoeAttention(nn.Module):
         bias: bool = True,
         is_causal: bool = False,
         config: Optional[NllbMoeConfig] = None,
-        layer_idx: Optional[int] = None,
+        layer_idx: Optional[bool] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -547,7 +547,7 @@ class NllbMoeAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
+        output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
@@ -573,7 +573,7 @@ class NllbMoeAttention(nn.Module):
             if isinstance(past_key_value, EncoderDecoderCache):
                 is_updated = past_key_value.is_updated.get(self.layer_idx)
                 if is_cross_attention:
-                    # after the first generated id, we can subsequently re-use all key/value_states from cache
+                    # after the first generated id, we can subsequently re-use all key/value_layer from cache
                     curr_past_key_value = past_key_value.cross_attention_cache
                 else:
                     curr_past_key_value = past_key_value.self_attention_cache
@@ -586,10 +586,8 @@ class NllbMoeAttention(nn.Module):
             key_states = curr_past_key_value.key_cache[self.layer_idx]
             value_states = curr_past_key_value.value_cache[self.layer_idx]
         else:
-            key_states = self.k_proj(current_states)
-            value_states = self.v_proj(current_states)
-            key_states = key_states.view(*kv_input_shape).transpose(1, 2)
-            value_states = value_states.view(*kv_input_shape).transpose(1, 2)
+            key_states = self.k_proj(current_states).view(*kv_input_shape).transpose(1, 2)
+            value_states = self.v_proj(current_states).view(*kv_input_shape).transpose(1, 2)
 
             if past_key_value is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
@@ -1806,15 +1804,6 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
         total_router_logits = torch.cat(total_router_logits, dim=1) if len(total_router_logits) > 0 else None
         total_expert_indexes = torch.stack(total_expert_indexes, dim=1) if len(total_expert_indexes) > 0 else None
         return total_router_logits, total_expert_indexes
-
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
 
 
 __all__ = [

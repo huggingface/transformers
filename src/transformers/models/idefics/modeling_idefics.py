@@ -1672,12 +1672,5 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         model_kwargs["image_hidden_states"] = outputs.image_hidden_states
         return model_kwargs
 
-    @staticmethod
-    def _reorder_cache(past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
-        return reordered_past
-
 
 __all__ = ["IdeficsForVisionText2Text", "IdeficsModel", "IdeficsPreTrainedModel"]

@@ -893,14 +893,6 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel, GenerationMixin):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def _reorder_cache(self, past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
-            )
-        return reordered_past
-
 
 @auto_docstring
 class Data2VecTextForMaskedLM(Data2VecTextPreTrainedModel):
