@@ -1,143 +1,198 @@
 <!--Copyright 2025 Deepseek AI and The HuggingFace Team. All rights reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
 
 http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
 
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
+
 # DeepseekVLHybrid
 
-## Overview
+[Deepseek-VL-Hybrid](https://arxiv.org/abs/2403.05525) was introduced by the DeepSeek AI team. It is a vision-language model (VLM) designed to process both text and images for generating contextually relevant responses. The model leverages [LLaMA](./llama) as its text encoder, while [SigLip](./siglip) is used for encoding low-resolution images and [SAM (Segment Anything Model)](./sam) is incorporated to handle high-resolution image encoding, enhancing the model’s ability to process fine-grained visual details. Deepseek-VL-Hybrid is a variant of Deepseek-VL that uses [SAM (Segment Anything Model)](./sam) to handle high-resolution image encoding.
 
-The DeepseekVLHybrid model was introduced in [DeepSeek-VL: Towards Real-World Vision-Language Understanding](https://arxiv.org/abs/2403.05525) by the DeepSeek AI team. It is a vision-language model (VLM) designed to process both text and images for generating contextually relevant responses. The model leverages [LLaMA](./llama) as its text encoder, while [SigLip](./siglip) is used for encoding low-resolution images and [SAM (Segment Anything Model)](./sam) is incorporated to handle high-resolution image encoding, enhancing the model’s ability to process fine-grained visual details. DeepseekVLHybrid is a variant of DeepseekVL that uses [SAM (Segment Anything Model)](./sam) to handle high-resolution image encoding.
+You can find all the original Deepseek-VL-Hybrid checkpoints under the [DeepSeek-community](https://huggingface.co/deepseek-community) organization.
 
-The abstract from the original paper is the following:
+> [!TIP]
+> Click on the Deepseek-VL-Hybrid models in the right sidebar for more examples of how to apply Deepseek-VL-Hybrid to different vision and language tasks.
 
-*We present DeepSeek-VL, an open-source Vision-Language (VL) Model designed for real-world vision and language understanding applications. Our approach is structured around three key dimensions:
-We strive to ensure our data is diverse, scalable, and extensively covers real-world scenarios including web screenshots, PDFs, OCR, charts, and knowledge-based content, aiming for a comprehensive representation of practical contexts. Further, we create a use case taxonomy from real user scenarios and construct an instruction tuning dataset accordingly. The fine-tuning with this dataset substantially improves the model's user experience in practical applications. Considering efficiency and the demands of most real-world scenarios, DeepSeek-VL incorporates a hybrid vision encoder that efficiently processes high-resolution images (1024 x 1024), while maintaining a relatively low computational overhead. This design choice ensures the model's ability to capture critical semantic and detailed information across various visual tasks. We posit that a proficient Vision-Language Model should, foremost, possess strong language abilities. To ensure the preservation of LLM capabilities during pretraining, we investigate an effective VL pretraining strategy by integrating LLM training from the beginning and carefully managing the competitive dynamics observed between vision and language modalities.
-The DeepSeek-VL family (both 1.3B and 7B models) showcases superior user experiences as a vision-language chatbot in real-world applications, achieving state-of-the-art or competitive performance across a wide range of visual-language benchmarks at the same model size while maintaining robust performance on language-centric benchmarks. We have made both 1.3B and 7B models publicly accessible to foster innovations based on this foundation model.*
+The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/deepseek_vl_outputs.png"
-alt="DeepseekVL Outputs" width="600"/>
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-<small> DeepseekVL Outputs. Taken from the <a href="https://github.com/deepseek-ai/DeepSeek-VL" target="_blank">official code</a>. </small>
+```py
+import torch
+from transformers import pipeline
 
-This model was contributed by [geetu040](https://github.com/geetu040) and [Shakib](https://github.com/Shakib-IO).
-The original code can be found [here](https://github.com/deepseek-ai/DeepSeek-VL).
+pipe = pipeline(
+    task="image-text-to-text",
+    model="deepseek-community/deepseek-vl-7b-chat",
+    device=0,
+    torch_dtype=torch.bfloat16
+)
 
-## Usage Example
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+            },
+            { "type": "text", "text": "Describe this image."},
+        ]
+    }
+]
 
-### Single image inference
+pipe(text=messages, max_new_tokens=20, return_full_text=False)
+```
+</hfoption>
 
-Here is the example of visual understanding with a single image.
+<hfoption id="AutoModel">
+
+```py
+import torch
+from transformers import DeepseekVLHybridForConditionalGeneration, AutoProcessor
+
+model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
+    "deepseek-community/deepseek-vl-7b-chat",
+    torch_dtype=torch.float16,
+    device_map="auto",
+    attn_implementation="sdpa"
+)
+
+processor = AutoProcessor.from_pretrained("deepseek-community/deepseek-vl-7b-chat")
+
+messages = [
+    {
+        "role":"user",
+        "content":[
+            {
+                "type":"image",
+                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+            },
+            {
+                "type":"text",
+                "text":"Describe this image."
+            }
+        ]
+    }
+
+]
+
+inputs = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt"
+).to("cuda")
+
+generated_ids = model.generate(**inputs, max_new_tokens=128)
+generated_ids_trimmed = [
+    out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+]
+output_text = processor.batch_decode(
+    generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+)
+
+print(output_text)
+```
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
 ```python
->>> import torch
->>> from transformers import DeepseekVLForConditionalGeneration, DeepseekVLProcessor
+import torch
+from transformers import TorchAoConfig, DeepseekVLHybridForConditionalGeneration, AutoProcessor
 
->>> model_id = "deepseek-ai/deepseek-vl-1.3b-chat-hf"
+quantization_config = TorchAoConfig(
+    "int4_weight_only",
+    group_size=128
+)
 
->>> messages = [
-...     {
-...         "role": "user",
-...         "content": [
-...             {'type':'image', 'url': 'http://images.cocodataset.org/val2017/000000039769.jpg'},
-...             {'type':"text", "text":"What do you see in this image?."}
-...         ]
-...     },
-... ]
-
->>> processor = DeepseekVLProcessor.from_pretrained(model_id)
->>> model = DeepseekVLForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="auto")
-
->>> inputs = processor.apply_chat_template(
-...     messages,
-...     add_generation_prompt=True,
-...     tokenize=True,
-...     return_dict=True,
-...     return_tensors="pt",
-... ).to(model.device, dtype=torch.bfloat16)
-
->>> output = model.generate(**inputs, max_new_tokens=40, do_sample=True)
->>> text = processor.decode(output[0], skip_special_tokens=True)
+model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
+    "deepseek-community/deepseek-vl-7b-chat",
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+    quantization_config=quantization_config
+)
 ```
+### Notes
 
-As can be seen, the instruction-tuned model requires a [chat template](../chat_templating) to be applied to make sure the inputs are prepared in the right format.
+- Do inference with multiple images in a single conversation.
+    ```py
+    import torch
+    from transformers import DeepseekVLHybridForConditionalGeneration, AutoProcessor
 
-### Multi image inference
+    model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
+        "deepseek-community/deepseek-vl-7b-chat",
+        torch_dtype=torch.float16,
+        device_map="auto",
+        attn_implementation="sdpa"
+    )
 
-DeepseekVL can perform inference with multiple images as input, where images can belong to the same prompt or different prompts in batched inference, where the model processes many conversations in parallel. Here is how you can do it:
+    processor = AutoProcessor.from_pretrained("deepseek-community/deepseek-vl-7b-chat")
 
-```python
->>> import torch
->>> from transformers import DeepseekVLForConditionalGeneration, DeepseekVLProcessor
+    messages = [
+        [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What’s the difference between"},
+                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {"type": "text", "text": " and "},
+                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"}
+                ]
+            }
+        ],
+        [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"},
+                    {"type": "text", "text": "What do you see in this image?"}
+                ]
+            }
+        ]
+    ]
 
->>> model_id = "deepseek-ai/deepseek-vl-1.3b-chat-hf"
+    inputs = processor.apply_chat_template(
+        messages,
+        add_generation_prompt=True,
+        tokenize=True,
+        return_dict=True,
+        return_tensors="pt"
+    ).to("cuda")
 
->>> image_urls = [
-...     "http://images.cocodataset.org/val2017/000000039769.jpg",
-...     "https://www.ilankelman.org/stopsigns/australia.jpg",
-...     "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
-... ]
+    generated_ids = model.generate(**inputs, max_new_tokens=128)
+    generated_ids_trimmed = [
+        out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+    ]
+    output_text = processor.batch_decode(
+        generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+    )
 
->>> messages = [
-...     [
-...         {
-...             "role": "user",
-...             "content": [
-...                 {"type": "text", "text": "What’s the difference between"},
-...                 {"type": "image", "url": image_urls[0]},
-...                 {"type": "text", "text": " and "},
-...                 {"type": "image", "url": image_urls[1]}
-...             ]
-...         }
-...     ],
-...     [
-...         {
-...             "role": "user",
-...             "content": [
-...                 {"type": "image", "url": image_urls[2]},
-...                 {"type": "text", "text": "What do you see in this image?"}
-...             ]
-...         }
-...     ]
-... ]
-
->>> processor = DeepseekVLProcessor.from_pretrained(model_id)
->>> model = DeepseekVLForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="auto")
-
->>> inputs = processor.apply_chat_template(
-...     messages,
-...     add_generation_prompt=True,
-...     tokenize=True,
-...     return_dict=True,
-...     return_tensors="pt",
-... ).to(model.device, dtype=torch.bfloat16)
-
->>> output = model.generate(**inputs, max_new_tokens=40, do_sample=True)
->>> text = processor.decode(output[0], skip_special_tokens=True)
-```
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Deepseek-VL:
-
-- Research Paper: [DeepSeek-VL: Towards Real-World Vision-Language Understanding](https://arxiv.org/abs/2403.05525)
-- Official Implementation: [deepseek-ai/DeepSeek-VL](https://github.com/deepseek-ai/DeepSeek-VL)
-
-If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+    print(output_text)
+    ```
 
 ## DeepseekVLHybridConfig
 
