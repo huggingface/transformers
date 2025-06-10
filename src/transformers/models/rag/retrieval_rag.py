@@ -117,13 +117,13 @@ class LegacyIndex(Index):
         try:
             # Load from URL or cache if already cached
             resolved_archive_file = cached_file(index_path, filename)
-        except EnvironmentError:
+        except OSError:
             msg = (
                 f"Can't load '{filename}'. Make sure that:\n\n"
                 f"- '{index_path}' is a correct remote path to a directory containing a file named {filename}\n\n"
                 f"- or '{index_path}' is the correct path to a directory containing a file named {filename}.\n\n"
             )
-            raise EnvironmentError(msg)
+            raise OSError(msg)
         if is_local:
             logger.info(f"loading file {resolved_archive_file}")
         else:
