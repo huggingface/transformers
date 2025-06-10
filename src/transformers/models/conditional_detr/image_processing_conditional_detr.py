@@ -17,7 +17,8 @@
 import io
 import pathlib
 from collections import defaultdict
-from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
+from collections.abc import Iterable
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 

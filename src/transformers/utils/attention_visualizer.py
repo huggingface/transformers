@@ -178,6 +178,7 @@ class AttentionMaskVisualizer:
     def visualize_attention_mask(self, input_sentence: str, suffix=""):
         model = self.model
         kwargs = {}
+        image_seq_length = None
         if self.config.model_type in PROCESSOR_MAPPING_NAMES:
             img = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg?download=true"
             img = Image.open(requests.get(img, stream=True).raw)
