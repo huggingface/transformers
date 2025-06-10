@@ -348,6 +348,8 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
 
     shard_size = math.ceil(empty_param.shape[dim] / world_size)
     start = rank * shard_size
+
+    # Construct slicing index dynamically
     end = min(start + shard_size, empty_param.shape[dim])
     slice_indices = [slice(None)] * param_dim
     if start < empty_param.shape[dim]:
