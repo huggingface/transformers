@@ -79,6 +79,7 @@ from .configuration_utils import (
     GenerationConfig,
     GenerationMode,
 )
+from .continuous_batching import ContinuousMixin
 from .logits_process import (
     EncoderNoRepeatNGramLogitsProcessor,
     EncoderRepetitionPenaltyLogitsProcessor,
@@ -352,7 +353,7 @@ GenerateBeamOutput = Union[GenerateBeamDecoderOnlyOutput, GenerateBeamEncoderDec
 GenerateOutput = Union[GenerateNonBeamOutput, GenerateBeamOutput]
 
 
-class GenerationMixin:
+class GenerationMixin(ContinuousMixin):
     """
     A class containing all functions for auto-regressive text generation, to be used as a mixin in model classes.
     Inheriting from this class causes the model to have special generation-related behavior, such as loading a
@@ -635,7 +636,7 @@ class GenerationMixin:
             and attention_mask is not None
             and attention_mask.ndim == 2
         ):
-            if model_inputs["inputs_embeds"] is not None:
+            if not self.config.is_encoder_decoder and model_inputs["inputs_embeds"] is not None:
                 batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
             else:
                 batch_size, sequence_length = model_inputs[input_ids_key].shape[:2]
@@ -654,7 +655,6 @@ class GenerationMixin:
 
             # If it's not defined, it means the model uses the new general mask API
             if causal_mask_creation_function is None:  # can't be found
-                output_attentions = kwargs.get("output_attentions", False)
                 token_type_ids = getattr(model_input, "token_type_ids", None)
                 # Some models may overwrite the general one
                 causal_mask_creation_function = getattr(self, "create_masks_for_generate", create_masks_for_generate)
@@ -665,7 +665,6 @@ class GenerationMixin:
                     attention_mask=attention_mask,
                     cache_position=cache_position,
                     past_key_values=past_key_values,
-                    output_attentions=output_attentions,
                     token_type_ids=token_type_ids,
                 )
             else:
@@ -1099,10 +1098,10 @@ class GenerationMixin:
     def _get_logits_processor(
         self,
         generation_config: GenerationConfig,
-        input_ids_seq_length: int,
-        encoder_input_ids: torch.LongTensor,
-        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
-        logits_processor: Optional[LogitsProcessorList],
+        input_ids_seq_length: Optional[int] = None,
+        encoder_input_ids: torch.LongTensor = None,
+        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
+        logits_processor: Optional[LogitsProcessorList] = None,
         device: Optional[str] = None,
         model_kwargs: Optional[Dict[str, Any]] = None,
         negative_prompt_ids: Optional[torch.Tensor] = None,
@@ -1114,6 +1113,8 @@ class GenerationMixin:
         """
         # instantiate processors list
         processors = LogitsProcessorList()
+        if logits_processor is None:
+            logits_processor = []
 
         if generation_config.guidance_scale is not None and generation_config.guidance_scale != 1:
             processors.append(
@@ -1183,7 +1184,7 @@ class GenerationMixin:
             )
         if (
             generation_config.min_length is not None
-            and generation_config._eos_token_tensor is not None
+            and getattr(generation_config, "_eos_token_tensor", None) is not None
             and generation_config.min_length > 0
         ):
             processors.append(
@@ -1195,7 +1196,7 @@ class GenerationMixin:
             )
         if (
             generation_config.min_new_tokens is not None
-            and generation_config._eos_token_tensor is not None
+            and getattr(generation_config, "_eos_token_tensor", None) is not None
             and generation_config.min_new_tokens > 0
         ):
             processors.append(
@@ -2341,12 +2342,18 @@ class GenerationMixin:
                     - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
         # 0. If requested, load an arbitrary generation recipe from the Hub and run it instead
+        trust_remote_code = kwargs.pop("trust_remote_code", None)
         if custom_generate is not None:
-            trust_remote_code = kwargs.pop("trust_remote_code", None)
             # Get all `generate` arguments in a single variable. Custom functions are responsible for handling them:
-            # they receive the same inputs as `generate`, only with `model` instead of `self`. They can access to
-            # methods from `GenerationMixin` through `model`.
-            global_keys_to_exclude = {"self", "kwargs"}
+            # they receive the same inputs as `generate`, with `model` instead of `self` and excluding the arguments to
+            # trigger the custom generation. They can access to methods from `GenerationMixin` through `model`.
+            global_keys_to_exclude = {
+                "self",
+                "kwargs",
+                "global_keys_to_exclude",
+                "trust_remote_code",
+                "custom_generate",
+            }
             generate_arguments = {key: value for key, value in locals().items() if key not in global_keys_to_exclude}
             generate_arguments.update(kwargs)
 
@@ -2557,6 +2564,11 @@ class GenerationMixin:
                 **model_kwargs,
             )
         elif generation_mode == GenerationMode.DOLA_GENERATION:
+            if not trust_remote_code:
+                logger.warning_once(
+                    "DoLa Decoding is scheduled to be moved to a `custom_generate` repository in v4.55.0. "
+                    "To prevent loss of backward compatibility, add `trust_remote_code=True` to your `generate` call."
+                )
             if self._is_stateful:
                 # DoLa decoding was not designed for stateful models, and would require some changes
                 raise ValueError(
@@ -2574,6 +2586,11 @@ class GenerationMixin:
             )
 
         elif generation_mode == GenerationMode.CONTRASTIVE_SEARCH:
+            if not trust_remote_code:
+                logger.warning_once(
+                    "Contrastive Search is scheduled to be moved to a `custom_generate` repository in v4.55.0. "
+                    "To prevent loss of backward compatibility, add `trust_remote_code=True` to your `generate` call."
+                )
             if not model_kwargs["use_cache"]:
                 raise ValueError("Contrastive search requires `use_cache=True`")
             if self._is_stateful:
@@ -2631,6 +2648,10 @@ class GenerationMixin:
             )
 
         elif generation_mode == GenerationMode.GROUP_BEAM_SEARCH:
+            logger.warning_once(
+                "Group Beam Search is scheduled to be moved to a `custom_generate` repository in v4.55.0. "
+                "To prevent loss of backward compatibility, add `trust_remote_code=True` to your `generate` call."
+            )
             # 11. prepare beam search scorer
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
@@ -2661,6 +2682,10 @@ class GenerationMixin:
             )
 
         elif generation_mode == GenerationMode.CONSTRAINED_BEAM_SEARCH:
+            logger.warning_once(
+                "Constrained Beam Search is scheduled to be moved to a `custom_generate` repository in v4.55.0. "
+                "To prevent loss of backward compatibility, add `trust_remote_code=True` to your `generate` call."
+            )
             final_constraints = []
             if generation_config.constraints is not None:
                 final_constraints = generation_config.constraints

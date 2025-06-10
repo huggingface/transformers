@@ -18,6 +18,7 @@ import unittest
 
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, FbgemmFp8Config, OPTForCausalLM
 from transformers.testing_utils import (
+    backend_empty_cache,
     require_accelerate,
     require_fbgemm_gpu,
     require_read_token,
@@ -126,7 +127,7 @@ class FbgemmFp8Test(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
         gc.collect()
 
     def test_quantized_model_conversion(self):

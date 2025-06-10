@@ -40,14 +40,10 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     is_torchdynamo_compiling,
-    logging,
     torch_int,
 )
 from ..auto import AutoModel
 from .configuration_internvl import InternVLConfig, InternVLVisionConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -151,13 +147,7 @@ class InternVLVisionAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -188,6 +178,8 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["InternVLVisionLayer"]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -547,6 +539,7 @@ class InternVLPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_quantized_cache = True
     _supports_static_cache = True
+    _supports_flex_attn = True
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -637,8 +630,8 @@ class InternVLModel(InternVLPreTrainedModel):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: Union[int, List[int]],
-        vision_feature_select_strategy: str,
+        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_select_strategy: Optional[str] = None,
         **kwargs,
     ):
         """
@@ -652,6 +645,15 @@ class InternVLModel(InternVLPreTrainedModel):
         Returns:
             vision_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`.
         """
+        vision_feature_layer = (
+            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
+        )
+        vision_feature_select_strategy = (
+            vision_feature_select_strategy
+            if vision_feature_select_strategy is not None
+            else self.config.vision_feature_select_strategy
+        )
+
         downsample_ratio = self.config.downsample_ratio
         if vision_feature_layer == -1:
             vision_features = self.vision_tower(pixel_values=pixel_values).last_hidden_state
@@ -676,7 +678,6 @@ class InternVLModel(InternVLPreTrainedModel):
 
         # Project features through multi-modal projector
         vision_features = self.multi_modal_projector(vision_features)
-
         return vision_features
 
     @can_return_tuple
@@ -696,7 +697,6 @@ class InternVLModel(InternVLPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        image_sizes: torch.Tensor = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, InternVLModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -724,7 +724,6 @@ class InternVLModel(InternVLPreTrainedModel):
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
-                image_sizes=image_sizes,
             )
 
             if input_ids is None:
@@ -877,6 +876,12 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.model = decoder
+
+    def get_decoder(self):
+        return self.model
 
     # Make modules available throught conditional class for BC
     @property

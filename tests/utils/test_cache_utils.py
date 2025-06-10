@@ -22,6 +22,7 @@ from transformers.generation.configuration_utils import ALL_CACHE_IMPLEMENTATION
 from transformers.testing_utils import (
     CaptureStderr,
     backend_device_count,
+    backend_torch_accelerator_module,
     cleanup,
     get_gpu_count,
     is_torch_available,
@@ -430,11 +431,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         original = GenerationConfig(**common)
         offloaded = GenerationConfig(cache_implementation="offloaded", **common)
 
-        torch_accelerator_module = None
-        if device.type == "cuda":
-            torch_accelerator_module = torch.cuda
-        elif device.type == "xpu":
-            torch_accelerator_module = torch.xpu
+        torch_accelerator_module = backend_torch_accelerator_module(device.type)
 
         torch_accelerator_module.reset_peak_memory_stats(device)
         model.generate(generation_config=original, **inputs)
