@@ -50,3 +50,6 @@ class FirefliesOnnxConfig(OnnxConfig):
                 "attention_mask": {0: "batch", 1: "sequence"},
             }
         )
+
+
+__all__ = ["FirefliesConfig", "FirefliesOnnxConfig"]

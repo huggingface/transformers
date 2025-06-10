@@ -53,3 +53,6 @@ class FirefliesModel(PreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return FirefliesModelOutput(last_hidden_state=logits, loss=loss)
+
+
+__all__ = ["FirefliesModel"]
