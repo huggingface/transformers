@@ -11,13 +11,20 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import (_create_4d_causal_attention_mask,
-                                         _prepare_4d_attention_mask)
+from ...modeling_attn_mask_utils import (
+    _create_4d_causal_attention_mask,
+    _prepare_4d_attention_mask,
+)
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, logging, torch_int
-from .configuration_x_clip import (XCLIPConfig, XCLIPTextConfig,
-                                   XCLIPVisionConfig)
+from ...utils import (
+    ModelOutput,
+    auto_docstring,
+    logging,
+    torch_int,
+)
+from .configuration_x_clip import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
+
 
 logger = logging.get_logger(__name__)
 
