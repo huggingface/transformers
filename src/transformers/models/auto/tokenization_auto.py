@@ -53,12 +53,8 @@ else:
 
 logger = logging.get_logger(__name__)
 
-if TYPE_CHECKING:
-    # This significantly improves completion suggestion performance when
-    # the transformers package is used with Microsoft's Pylance language server.
-    TOKENIZER_MAPPING_NAMES: OrderedDict[str, Tuple[Optional[str], Optional[str]]] = OrderedDict()
-else:
-    TOKENIZER_MAPPING_NAMES = OrderedDict(
+# Explicit rather than inferred generics to significantly improves completion suggestion performance for language servers.
+TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         [
             (
                 "albert",
