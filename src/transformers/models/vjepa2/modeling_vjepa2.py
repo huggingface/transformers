@@ -715,7 +715,7 @@ class VJEPA2Predictor(nn.Module):
 @auto_docstring
 class VJEPA2PreTrainedModel(PreTrainedModel):
     config_class = VJEPA2Config
-    base_model_prefix = "vjepa"
+    base_model_prefix = "vjepa2"
     main_input_name = "pixel_values_videos"
     supports_gradient_checkpointing = True
     _no_split_modules = ["VJEPA2SwiGLUFFN"]
