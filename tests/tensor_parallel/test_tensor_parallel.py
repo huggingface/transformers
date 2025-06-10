@@ -174,7 +174,6 @@ class TestTensorParallel(TestCasePlus):
                     del non_tp_tensor, tp_tensor
 
 
-
 @require_torch_multi_gpu
 class TestTensorParallelCuda(TestTensorParallel):
     nproc_per_node = backend_device_count(torch_device)
