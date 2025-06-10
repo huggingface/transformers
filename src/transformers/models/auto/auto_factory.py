@@ -423,6 +423,7 @@ class _BaseAutoModelClass:
 
     @classmethod
     def from_config(cls, config, **kwargs):
+        config, kwargs = _BaseAutoModelClass._route_kwargs(config, kwargs)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping.keys()
@@ -464,6 +465,22 @@ class _BaseAutoModelClass:
     def _prepare_config_for_auto_class(cls, config: PretrainedConfig) -> PretrainedConfig:
         """Additional autoclass-specific config post-loading manipulation. May be overridden in subclasses."""
         return config
+
+    @staticmethod
+    def _route_kwargs(config, kwargs):
+        if getattr(config, "is_composite", False):
+            # If the config is a composite config, we route the kwargs to the sub-configs
+            # This is useful for models that have multiple sub-configs, like T5 or BART
+            kwargs_to_route = kwargs.copy()
+            sub_config_name = [k for k in config.to_dict().keys() if k.endswith("_config")]
+            for key, value in kwargs_to_route.items():
+                for sub_config in sub_config_name:
+                    if hasattr(config, sub_config):
+                        sub_config = getattr(config, sub_config)
+                        if sub_config is not None and hasattr(sub_config, key):
+                            setattr(sub_config, key, value)
+
+        return config, kwargs
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike[str]], *model_args, **kwargs):
@@ -558,7 +575,7 @@ class _BaseAutoModelClass:
                 kwargs["torch_dtype"] = "auto"
             if kwargs_orig.get("quantization_config", None) is not None:
                 kwargs["quantization_config"] = kwargs_orig["quantization_config"]
-
+        config, kwargs = cls._route_kwargs(config, kwargs)
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping.keys()
         upstream_repo = None
