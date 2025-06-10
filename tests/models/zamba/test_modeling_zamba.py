@@ -16,7 +16,6 @@
 import unittest
 
 import pytest
-import math
 
 from transformers import AutoTokenizer, ZambaConfig, is_torch_available
 from transformers.testing_utils import (
