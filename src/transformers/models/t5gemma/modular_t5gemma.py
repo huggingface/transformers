@@ -229,8 +229,8 @@ class T5GemmaConfig(PretrainedConfig):
     }
     def __init__(
         self,
-        encoder: Optional[T5GemmaModuleConfig | Dict[Any, Any]] = None,
-        decoder: Optional[T5GemmaModuleConfig | Dict[Any, Any]] = None,
+        encoder: Optional[Union[T5GemmaModuleConfig, Dict[Any, Any]]] = None,
+        decoder: Optional[Union[T5GemmaModuleConfig, Dict[Any, Any]]] = None,
         is_encoder_decoder: bool = True,
         dropout_rate: float = 0.0,
         classifier_dropout_rate: float = 0.0,
