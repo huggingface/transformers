@@ -718,7 +718,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
 
     @require_torch_accelerator
     @is_flaky()
-    def test_inference_object_detection_head_equivalence_cpu_gpu(self):
+    def test_inference_object_detection_head_equivalence_cpu_accelerator(self):
         processor = self.default_processor
         image = prepare_img()
         text = prepare_text()
@@ -730,7 +730,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             cpu_outputs = model(**encoding)
 
-        # 2. run model on GPU
+        # 2. run model on accelerator
         model.to(torch_device)
         encoding = encoding.to(torch_device)
         with torch.no_grad():
