@@ -122,7 +122,7 @@ def _convert_model(
     num_key_value_heads = config.num_key_value_heads
     key_value_head_dim = config.num_key_value_heads * head_dim
 
-    # state_dict = _preprocess_state_dict(state_dict, config)
+    state_dict = _preprocess_state_dict(state_dict, config)
 
     # permute for sliced rotary
     def permute(w, n_heads, dim1=hidden_size, dim2=hidden_size):
@@ -175,17 +175,17 @@ def _convert_model(
             else:
                 state_dict[new_k] = state_dict.pop(k)
 
-    # # Do the last one by hand
-    # state_dict["depth_decoder.text_embed_tokens.weight"] = state_dict.pop(
-    #     "depth_decoder.decoder.model.embed_tokens.weight"
-    # )
+    # Do the last one by hand
+    state_dict["depth_decoder.text_embed_tokens.weight"] = state_dict.pop(
+        "depth_decoder.decoder.model.embed_tokens.weight"
+    )
 
-    # extra_keys = set(state_dict.keys()) - set(hf_model.state_dict().keys())
-    # missing_keys = set(hf_model.state_dict().keys()) - set(state_dict.keys())
-    # if len(extra_keys) != 0:
-    #     raise ValueError(f"extra keys found: {extra_keys}")
-    # if len(missing_keys) != 0:
-    #     raise ValueError(f"missing keys: {missing_keys}")
+    extra_keys = set(state_dict.keys()) - set(hf_model.state_dict().keys())
+    missing_keys = set(hf_model.state_dict().keys()) - set(state_dict.keys())
+    if len(extra_keys) != 0:
+        raise ValueError(f"extra keys found: {extra_keys}")
+    if len(missing_keys) != 0:
+        raise ValueError(f"missing keys: {missing_keys}")
     hf_model.load_state_dict(state_dict, strict=False)
     n_params = param_count(hf_model)
 
