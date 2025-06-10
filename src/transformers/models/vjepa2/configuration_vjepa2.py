@@ -85,7 +85,7 @@ class VJEPA2Config(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "vjepa_vision_model"
+    model_type = "vjepa2"
 
     def __init__(
         self,
