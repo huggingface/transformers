@@ -117,6 +117,11 @@ class CausalLMModelTester:
         mamba_chunk_size=16,
     ):
         self._verify_model_attributes()
+        # Some attributes have variable names, so we sync them here
+        self.hidden_size = self.embeddings_size = self.n_embd = hidden_size
+        self.n_layer = self.n_layers = self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = self.n_head = self.n_heads = num_attention_heads
+        self.num_key_value_heads = self.num_kv_heads = num_key_value_heads
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
@@ -125,10 +130,6 @@ class CausalLMModelTester:
         self.use_token_type_ids = use_token_type_ids
         self.use_labels = use_labels
         self.vocab_size = vocab_size
-        self.hidden_size = self.n_embd = hidden_size
-        self.n_layer = self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = self.n_head = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
