@@ -12,10 +12,9 @@ This AGENTS.md file provides guidance for code agents working with this codebase
 
 ## Coding Conventions for Hugging Face Transformers
 
-- The conventions for models and tests are quite consistent and repeated. You can use the modeling code and tests from other models as a base for new PRs.
+- PRs should be as brief as possible. Bugfix PRs in particular can often be only one or two lines long, and do not need large comments, docstrings or new functions in this case. Aim to minimize the size of the diff.
 - When writing tests, they should be added to an existing file. The only exception is for PRs to add a new model, when a new test directory should be created for that model.
 - Code style is enforced in the CI. You can install the style tools with `pip install -e .[quality]`. You can then run `make fixup` to apply style and consistency fixes to your code.
-- PRs should be as brief as possible. Bugfix PRs in particular can often be only one or two lines long, and do not need large comments, docstrings or new functions in this case.
 
 ## Copying and inheritance
 
