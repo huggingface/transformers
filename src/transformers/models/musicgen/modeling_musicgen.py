@@ -1897,6 +1897,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
         encoder_outputs=None,
         decoder_delay_pattern_mask=None,
         guidance_scale=None,
+        cache_position=None,
         **kwargs,
     ):
         # Overwritten -- MusicGen has custom processing
@@ -1918,16 +1919,15 @@ class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
                 decoder_attention_mask = decoder_attention_mask.repeat((2, 1))
 
         if past_key_values is not None:
-            past_length = past_key_values.get_seq_length()
-
-            # Some generation methods already pass only the last input ID
-            if decoder_input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
+            if cache_position[-1] >= decoder_input_ids.shape[1]:
+                decoder_input_ids = decoder_input_ids[:, -cache_position.shape[0] :]
+            elif (
+                decoder_input_ids.shape[1] != cache_position.shape[0]
+            ):  # Default case (the "else", a no op, is Exception 2)
+                decoder_input_ids = decoder_input_ids[:, cache_position]
             else:
                 # Default to old behavior: keep only final ID
-                remove_prefix_length = decoder_input_ids.shape[1] - 1
-
-            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
+                decoder_input_ids = decoder_input_ids[:, -1:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed

@@ -23,7 +23,7 @@ from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, EncoderDecoderCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -288,20 +288,18 @@ class BlipTextAttention(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
-            attention_mask,
-            head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            past_key_value,
-            output_attentions,
-            cache_position,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            cache_position=cache_position,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -367,8 +365,8 @@ class BlipTextLayer(GradientCheckpointingLayer):
     ) -> Tuple[torch.Tensor]:
         self_attention_outputs = self.attention(
             hidden_states,
-            attention_mask,
-            head_mask,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
             output_attentions=output_attentions,
             past_key_value=past_key_value,
             cache_position=cache_position,
@@ -379,10 +377,9 @@ class BlipTextLayer(GradientCheckpointingLayer):
         if encoder_hidden_states is not None:
             cross_attention_outputs = self.crossattention(
                 attention_output,
-                attention_mask,
-                head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
+                attention_mask=encoder_attention_mask,
+                head_mask=head_mask,
+                encoder_hidden_states=encoder_hidden_states,
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
@@ -434,14 +431,19 @@ class BlipTextEncoder(nn.Module):
                 use_cache = False
 
         return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-            )
-            return_legacy_cache = True
-            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
+        if use_cache:
+            if not isinstance(past_key_values, Cache):
+                logger.warning_once(
+                    "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
+                    "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
+                    "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
+                )
+                return_legacy_cache = True
+                past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
+            # The model acts as encoder decoder but is not an encoder decoder. So we cast all cache objects to
+            # `EncoderDecoderCache` type assuming that the incoming cache is from `self_attention`
+            elif isinstance(past_key_values, DynamicCache):
+                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
 
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -957,32 +959,15 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
         # Overwrite -- hardcoded key return (`is_decoder=True`)
 
-        input_shape = input_ids.shape
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            **model_kwargs,
+        )
+        model_inputs["is_decoder"] = True
 
-        # cut decoder_input_ids if past_key_values is used
-        if past_key_values is not None:
-            past_length = past_key_values.get_seq_length()
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-
-        return {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "encoder_hidden_states": model_kwargs.get("encoder_hidden_states", None),
-            "encoder_attention_mask": model_kwargs.get("encoder_attention_mask", None),
-            "is_decoder": True,
-        }
+        return model_inputs
 
 
 __all__ = ["BlipTextModel", "BlipTextLMHeadModel", "BlipTextPreTrainedModel"]
