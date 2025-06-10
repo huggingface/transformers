@@ -54,7 +54,7 @@ class VJEPA2Embeddings(nn.Module):
     Construct mask token, position and patch embeddings.
     """
 
-    def __init__(self, config: VJEPA2Config, hidden_size: int = 1024) -> None:
+    def __init__(self, config: VJEPA2Config, hidden_size: int = 1024):
         super().__init__()
 
         self.config = config
@@ -146,7 +146,7 @@ class VJEPA2RopeAttention(nn.Module):
         config: VJEPA2Config,
         hidden_size: int = 1024,
         num_attention_heads: int = 16,
-    ) -> None:
+    ):
         super().__init__()
         self.config = config
         self.hidden_size = hidden_size
@@ -307,7 +307,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 class VJEPA2DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
+    def __init__(self, drop_prob: Optional[float] = None):
         super().__init__()
         self.drop_prob = drop_prob
 
@@ -319,7 +319,7 @@ class VJEPA2DropPath(nn.Module):
 
 
 class VJEPA2MLP(nn.Module):
-    def __init__(self, config: VJEPA2Config, hidden_size: int = 1024, mlp_ratio: float = 4.0) -> None:
+    def __init__(self, config: VJEPA2Config, hidden_size: int = 1024, mlp_ratio: float = 4.0):
         super().__init__()
         in_features = out_features = hidden_size
         hidden_features = int(hidden_size * mlp_ratio)
@@ -499,7 +499,7 @@ class VJEPA2PredictorEmbeddings(nn.Module):
     Construct mask token, position and patch embeddings.
     """
 
-    def __init__(self, config: VJEPA2Config) -> None:
+    def __init__(self, config: VJEPA2Config):
         super().__init__()
 
         self.config = config
@@ -565,7 +565,7 @@ class VJEPA2PredictorEmbeddings(nn.Module):
 
 
 class VJEPA2Predictor(nn.Module):
-    def __init__(self, config: VJEPA2Config) -> None:
+    def __init__(self, config: VJEPA2Config):
         super().__init__()
         self.config = config
         self.embeddings = VJEPA2PredictorEmbeddings(config)
@@ -699,7 +699,7 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
             VJEPA2Embeddings,
             VJEPA2PredictorEmbeddings,
         ],
-    ) -> None:
+    ):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv3d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
@@ -820,7 +820,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
     def get_input_embeddings(self) -> VJEPA2PatchEmbeddings3D:
         return self.encoder.embeddings.patch_embeddings
 
-    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
+    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
         class PreTrainedModel
