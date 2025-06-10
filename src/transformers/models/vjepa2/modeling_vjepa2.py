@@ -564,7 +564,8 @@ class VJEPA2PredictorEmbeddings(nn.Module):
         mask_index = mask_index % self.num_mask_tokens
         target = self.mask_tokens[mask_index]
 
-        # Note: this is problematic if the config isn't initialized with the right frames_per_clip value, eg for scenarios if we want to run predictor for more tokens than in the config.
+        # Note: this is problematic if the config isn't initialized with the right frames_per_clip value,
+        # e.g. for scenarios if we want to run predictor for more tokens than in the config.
         # target = target.repeat(B, self.num_patches(self.config), 1)
         # Remedy: use the provided target mask to get the max patch num
         max_patch_num = target_mask[0].max() + 1  # one extra to include the last patch
