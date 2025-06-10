@@ -25,7 +25,7 @@ class DeepseekVLConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`DeepseekVLModel`]. It is used to instantiate a
     DeepseekVL model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the DeepseekVL
-    [deepseek-ai/deepseek-vl-1.3b-chat-hf](https://huggingface.co/deepseek-ai/deepseek-vl-1.3b-chat-hf) architecture.
+    [deepseek-community/deepseek-vl-1.3b-chat](https://huggingface.co/deepseek-community/deepseek-vl-1.3b-chat) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -43,10 +43,10 @@ class DeepseekVLConfig(PretrainedConfig):
     ```python
     >>> from transformers import DeepseekVLConfig, DeepseekVLModel
 
-    >>> # Initializing a DeepseekVL deepseek-ai/deepseek-vl-1.3b-chat-hf style configuration
+    >>> # Initializing a DeepseekVL deepseek-community/deepseek-vl-1.3b-chat style configuration
     >>> configuration = DeepseekVLConfig()
 
-    >>> # Initializing a model (with random weights) from the deepseek-ai/deepseek-vl-1.3b-chat-hf style configuration
+    >>> # Initializing a model (with random weights) from the deepseek-community/deepseek-vl-1.3b-chat style configuration
     >>> model = DeepseekVLModel(configuration)
 
     >>> # Accessing the model configuration

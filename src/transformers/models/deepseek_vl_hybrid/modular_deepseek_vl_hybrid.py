@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -39,18 +39,14 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
-)
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import (
     PreTokenizedInput,
     TextInput,
 )
 from ...utils import (
-    LossKwargs,
     TensorType,
+    auto_docstring,
     filter_out_non_signature_kwargs,
     logging,
 )
@@ -69,9 +65,12 @@ from ..sam.modeling_sam import SamLayerNorm, SamVisionNeck
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "DeepseekVLHybridConfig"
-_CHECKPOINT_FOR_DOC = "deepseek-ai/deepseek-vl-7b-chat-hf"
-_EXPECTED_OUTPUT_SHAPE = [1, 628, 4096]
+
+DEEPSEEK_VL_COMMON_CUSTOM_ARGS = r"""
+    high_res_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size), *optional*):
+        The tensors corresponding to the input images. Pixel values can be obtained using
+        [`AutoImageProcessor`].
+"""
 
 
 class DeepseekVLHybridConfig(DeepseekVLConfig):
@@ -79,7 +78,7 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
     This is the configuration class to store the configuration of a [`DeepseekVLHybridModel`]. It is used to instantiate a
     DeepseekVLHybrid model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the DeepseekVLHybrid
-    [deepseek-ai/deepseek-vl-7b-chat-hf](https://huggingface.co/deepseek-ai/deepseek-vl-7b-chat-hf) architecture.
+    [deepseek-community/deepseek-vl-7b-chat](https://huggingface.co/deepseek-community/deepseek-vl-7b-chat) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -99,10 +98,10 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
     ```python
     >>> from transformers import DeepseekVLHybridConfig, DeepseekVLHybridModel
 
-    >>> # Initializing a DeepseekVLHybrid deepseek-ai/deepseek-vl-7b-chat-hf style configuration
+    >>> # Initializing a DeepseekVLHybrid deepseek-community/deepseek-vl-7b-chat style configuration
     >>> configuration = DeepseekVLHybridConfig()
 
-    >>> # Initializing a model (with random weights) from the deepseek-ai/deepseek-vl-7b-chat-hf style configuration
+    >>> # Initializing a model (with random weights) from the deepseek-community/deepseek-vl-7b-chat style configuration
     >>> model = DeepseekVLHybridModel(configuration)
 
     >>> # Accessing the model configuration
@@ -230,76 +229,6 @@ class DeepseekVLHybridPreTrainedModel(DeepseekVLPreTrainedModel):
             module.high_res_vision_alpha.data.zero_()
 
 
-DEEPSEEK_VL_HYBRID_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size), *optional*):
-            The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`].
-        high_res_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size), *optional*):
-            The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`].
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
-            `past_key_values`).
-
-            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-            the complete sequence length.
-"""
-
-
 class DeepseekVLHybridModel(DeepseekVLModel):
     def __init__(self, config):
         self.output_size = config.vision_config.image_size // config.vision_config.patch_size
@@ -346,6 +275,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         images_embeds = self.aligner(vision_encodings, high_res_vision_encodings)
         return images_embeds
 
+    @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -360,11 +290,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
-        r"""
-        Returns:
-
-        """
+    ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -427,10 +353,8 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         return output
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneration):
+    @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -446,55 +370,8 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
-        r"""
-            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-            logits_to_keep (`int` or `torch.Tensor`, *optional*):
-                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
-                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
-                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
-                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
-                This is useful when using packed tensor format (single dimension for batch and sequence length).
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> import torch
-        >>> from transformers import DeepseekVLHybridForConditionalGeneration, DeepseekVLHybridProcessor
-
-        >>> model_id = "deepseek-ai/deepseek-vl-7b-chat-hf"
-
-        >>> messages = [
-        ...     {
-        ...         "role": "user",
-        ...         "content": [
-        ...             {'type':'image', 'url': 'http://images.cocodataset.org/val2017/000000039769.jpg'},
-        ...             {'type':"text", "text":"What do you see in this image?."}
-        ...         ]
-        ...     },
-        ... ]
-
-        >>> processor = DeepseekVLHybridProcessor.from_pretrained(model_id)
-        >>> model = DeepseekVLHybridForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="auto")
-
-        >>> inputs = processor.apply_chat_template(
-        ...     messages,
-        ...     add_generation_prompt=True,
-        ...     tokenize=True,
-        ...     return_dict=True,
-        ...     return_tensors="pt",
-        ... ).to(model.device, dtype=torch.bfloat16)
-
-        >>> output = model.generate(**inputs, max_new_tokens=40, do_sample=True)
-        >>> text = processor.decode(output[0], skip_special_tokens=True)
-        ```"""
+        **kwargs,
+    ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

@@ -31,7 +31,7 @@ class DeepseekVLHybridConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`DeepseekVLHybridModel`]. It is used to instantiate a
     DeepseekVLHybrid model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the DeepseekVLHybrid
-    [deepseek-ai/deepseek-vl-7b-chat-hf](https://huggingface.co/deepseek-ai/deepseek-vl-7b-chat-hf) architecture.
+    [deepseek-community/deepseek-vl-7b-chat](https://huggingface.co/deepseek-community/deepseek-vl-7b-chat) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -51,10 +51,10 @@ class DeepseekVLHybridConfig(PretrainedConfig):
     ```python
     >>> from transformers import DeepseekVLHybridConfig, DeepseekVLHybridModel
 
-    >>> # Initializing a DeepseekVLHybrid deepseek-ai/deepseek-vl-7b-chat-hf style configuration
+    >>> # Initializing a DeepseekVLHybrid deepseek-community/deepseek-vl-7b-chat style configuration
     >>> configuration = DeepseekVLHybridConfig()
 
-    >>> # Initializing a model (with random weights) from the deepseek-ai/deepseek-vl-7b-chat-hf style configuration
+    >>> # Initializing a model (with random weights) from the deepseek-community/deepseek-vl-7b-chat style configuration
     >>> model = DeepseekVLHybridModel(configuration)
 
     >>> # Accessing the model configuration
