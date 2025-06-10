@@ -58,56 +58,32 @@ print(result["text"])
 <hfoption id="AutoModel">
 
 ```py
-# uncomment to install rjieba which is needed for the tokenizer
-# !pip install rjieba
+# uncomment to install librosa which is used for audio and music anlaysis. It is used to preprocess the data.
+# !pip install librosa
 import torch
-from transformers import AutoModelForMaskedLM, AutoTokenizer
+from transformers import AutoProcessor, AutoModelForSpeechSeq2Seq
 
-model = AutoModelForMaskedLM.from_pretrained(
-    "junnyu/roformer_chinese_base", torch_dtype=torch.float16
-)
-tokenizer = AutoTokenizer.from_pretrained("junnyu/roformer_chinese_base")
+processor = AutoProcessor.from_pretrained("UsefulSensors/moonshine-tiny")
+model = AutoModelForSpeechSeq2Seq.from_pretrained("UsefulSensors/moonshine-tiny")
 
-input_ids = tokenizer("水在零度时会[MASK]", return_tensors="pt").to(model.device)
-outputs = model(**input_ids)
-decoded = tokenizer.batch_decode(outputs.logits.argmax(-1), skip_special_tokens=True)
-print(decoded)
+audio_array, sr = librosa.load("pathToFile", sr=16000)
+inputs = processor(audio_array, return_tensors="pt", sampling_rate=16000)
+
+generated_ids = model.generate(**inputs, max_new_tokens=256)
+transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+print(f"Transcription: '{transcription}'")
 ```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "水在零度时会[MASK]" | transformers-cli run --task fill-mask --model junnyu/roformer_chinese_base --device 0
-```
-
 </hfoption>
 </hfoptions>
 
-
-
-
-
-
-The Moonshine model was proposed in [Moonshine: Speech Recognition for Live Transcription and Voice Commands
-](https://arxiv.org/abs/2410.15608) by Nat Jeffries, Evan King, Manjunath Kudlur, Guy Nicholson, James Wang, Pete Warden.
-
-The abstract from the paper is the following:
-
-*This paper introduces Moonshine, a family of speech recognition models optimized for live transcription and voice command processing. Moonshine is based on an encoder-decoder transformer architecture and employs Rotary Position Embedding (RoPE) instead of traditional absolute position embeddings. The model is trained on speech segments of various lengths, but without using zero-padding, leading to greater efficiency for the encoder during inference time. When benchmarked against OpenAI's Whisper tiny-en, Moonshine Tiny demonstrates a 5x reduction in compute requirements for transcribing a 10-second speech segment while incurring no increase in word error rates across standard evaluation datasets. These results highlight Moonshine's potential for real-time and resource-constrained applications.*
-
-Tips:
+## Notes
 
 - Moonshine improves upon Whisper's architecture:
   1. It uses SwiGLU activation instead of GELU in the decoder layers
   2. Most importantly, it replaces absolute position embeddings with Rotary Position Embeddings (RoPE). This allows Moonshine to handle audio inputs of any length, unlike Whisper which is restricted to fixed 30-second windows.
 
-This model was contributed by [Eustache Le Bihan (eustlb)](https://huggingface.co/eustlb).
-The original code can be found [here](https://github.com/usefulsensors/moonshine).
-
-## Resources
-
-- [Automatic speech recognition task guide](../tasks/asr)
+- A guide for automatic speech recognition can be found [here](../tasks/asr)
 
 ## MoonshineConfig
 
