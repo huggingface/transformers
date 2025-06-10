@@ -837,7 +837,7 @@ class MViTV2Encoder(nn.Module):
 
 
 @auto_docstring
-class MViTV2PretrainedModel(PreTrainedModel):
+class MViTV2PreTrainedModel(PreTrainedModel):
     config_class = MViTV2Config
     base_model_prefix = "mvitv2"
     main_input_name = "pixel_values"
@@ -886,7 +886,7 @@ class MViTV2PretrainedModel(PreTrainedModel):
 
 
 @auto_docstring
-class MViTV2Model(MViTV2PretrainedModel):
+class MViTV2Model(MViTV2PreTrainedModel):
     def __init__(self, config: MViTV2Config) -> None:
         super().__init__(config)
 
@@ -966,7 +966,7 @@ class MViTV2Model(MViTV2PretrainedModel):
         MViTV2 Model transformer with an image classification head on top (a linear layer on top of the mean of the final hidden states / the [CLS] token) e.g. for ImageNet.
     """
 )
-class MViTV2ForImageClassification(MViTV2PretrainedModel):
+class MViTV2ForImageClassification(MViTV2PreTrainedModel):
     def __init__(self, config: MViTV2Config) -> None:
         super().__init__(config)
         self.mvitv2 = MViTV2Model(config)
@@ -1073,4 +1073,4 @@ class MViTV2ForImageClassification(MViTV2PretrainedModel):
         )
 
 
-__all__ = ["MViTV2ForImageClassification", "MViTV2Model", "MViTV2PretrainedModel"]
+__all__ = ["MViTV2ForImageClassification", "MViTV2Model", "MViTV2PreTrainedModel"]
