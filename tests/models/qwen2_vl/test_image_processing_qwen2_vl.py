@@ -314,11 +314,12 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertListEqual(list(process_out.pixel_values.shape), expected_output_video_shape)
 
     def test_custom_pixels(self):
+        pixel_choices = frozenset(itertools.product((100, 150, 200, 20000), (100, 150, 200, 20000)))
         for image_processing_class in self.image_processor_list:
             image_processor_dict = self.image_processor_dict.copy()
-            for min_pixels, max_pixels in itertools.product((100, 150, 200), (100, 150, 200)):
-                image_processor_dict["min_pixels"] = min_pixels
-                image_processor_dict["max_pixels"] = max_pixels
+            for a_pixels, b_pixels in pixel_choices:
+                image_processor_dict["min_pixels"] = min(a_pixels, b_pixels)
+                image_processor_dict["max_pixels"] = max(a_pixels, b_pixels)
                 image_processor = image_processing_class(**image_processor_dict)
                 image_inputs = self.image_processor_tester.prepare_image_inputs()
                 # Just checking that it doesn't raise an error
