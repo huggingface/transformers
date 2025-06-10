@@ -246,18 +246,6 @@ class RotaryEmbedding(torch.nn.Module):
             return self.freqs_cis[0:seqlen]
 
 
-def _reshape_for_attn_bias(
-    attn_bias: None,
-    *tensors: torch.Tensor,
-) -> list[torch.Tensor]:
-    to_transform = list(tensors)
-    if isinstance(attn_bias):
-        # could be `view` instead of reshape during training, but for inference
-        # have to reshape due to strides mismatch
-        to_transform = [t.reshape(1, -1, *t.shape[2:]) for t in to_transform]
-    return to_transform
-
-
 class Attention(nn.Module):
     def __init__(
         self,
@@ -450,7 +438,7 @@ class FeedForward(nn.Module):
         )
 
 
-class TransformerBlock(nn.Module):
+class TransformerLayer(nn.Module):
     def __init__(self, args):
         super().__init__()
 
@@ -515,9 +503,27 @@ class SequenceModelWithOutput(abc.ABC):
         pass
 
 
-class BaseTransformer(nn.Module, SequenceModelWithOutput):
-    def __init__(self, config):
+
+class LMTransformer(
+    nn.Module,
+    SequenceModelWithOutput,
+    PyTorchModelHubMixin,
+    repo_url="https://github.com/facebookresearch/blt",
+    # paper_url="https://arxiv.org/abs/2412.09871",
+    pipeline_tag="text-generation",
+    license="other",
+    license_name="fair-noncommercial-research-license",
+    license_link="https://huggingface.co/facebook/blt/blob/main/LICENSE",
+    coders={
+        LMTransformerConfig: (
+            lambda x: {"config": x.to_dict()},
+            lambda data: LMTransformerConfig(**data),
+        )
+    },
+):
+    def __init__(self, config: LMTransformerConfig):
         super().__init__()
+        
         self.dim = config.dim
         self.init_base_std = config.init_base_std
         self.attn_impl = config.attn_impl
@@ -535,56 +541,9 @@ class BaseTransformer(nn.Module, SequenceModelWithOutput):
 
         self.layers = nn.ModuleList()
         for _ in range(config.n_layers):
-            self.layers.append(TransformerBlock(config))
-
-    def get_output_seq_len(self):
-        return self.max_seqlen
-
-    def forward(
-        self,
-        h,
-        tok_idx: Optional[torch.Tensor] = None,
-        mask: Optional[Union[BlockMask, str]] = None,
-        attn_impl: str = "sdpa",
-    ):
-
-        freq_cis = self.rope_embeddings(seqlen=self.max_seqlen, tok_idx=tok_idx)
-
-        for i, layer in enumerate(self.layers):
-            h = layer(h, freq_cis, tok_idx=tok_idx, mask=mask, attn_impl=attn_impl)
-        return h
-
-    def init_weights(self):
-        self.rope_embeddings.reset_parameters()
-        for depth, layer in enumerate(self.layers):
-            factor = {
-                InitStdFactor.CURRENT_DEPTH: (2 * (depth + 1)) ** 0.5,
-                InitStdFactor.GLOBAL_DEPTH: (2 * (len(self.layers) + 1)) ** 0.5,
-                InitStdFactor.DIM_RATIO: self.dim / 4096,
-                InitStdFactor.DISABLED: 1.0,
-            }[self.init_std_factor]
-
-            layer.init_weights(self.init_base_std, factor)
-
-
-class LMTransformer(
-    BaseTransformer,
-    PyTorchModelHubMixin,
-    repo_url="https://github.com/facebookresearch/blt",
-    # paper_url="https://arxiv.org/abs/2412.09871",
-    pipeline_tag="text-generation",
-    license="other",
-    license_name="fair-noncommercial-research-license",
-    license_link="https://huggingface.co/facebook/blt/blob/main/LICENSE",
-    coders={
-        LMTransformerConfig: (
-            lambda x: {"config": x.to_dict()},
-            lambda data: LMTransformerConfig(**data),
-        )
-    },
-):
-    def __init__(self, config: LMTransformerConfig):
-        super().__init__(config)
+            self.layers.append(TransformerLayer(config))
+        
+        # LMTransformer specific attributes
         self.weight_tying = config.weight_tying
         self.sliding_window = config.sliding_window
 
@@ -601,7 +560,10 @@ class LMTransformer(
         )
 
         if config.weight_tying:
-            self.output.weight = self.embeddings.tok_embeddings.weight
+            self.output.weight = self.tok_embeddings.weight
+    
+    def get_output_seq_len(self):
+        return self.max_seqlen
 
     def push_to_hub(self, *args, **kwargs):
         raise ValueError(
@@ -621,7 +583,6 @@ class LMTransformer(
         bsz, seqlen = token_values.shape
 
         h = self.tok_embeddings(token_values)
-     #   attn_impl = "sdpa"
         mask = (
             mask
             if mask is not None
@@ -634,7 +595,11 @@ class LMTransformer(
                 eos_id=self.eos_id,
             )
         )
-        h = super().forward(h, tok_idx=tok_idx, mask=mask, attn_impl=attn_impl)
+        
+        freq_cis = self.rope_embeddings(seqlen=self.max_seqlen, tok_idx=tok_idx)
+
+        for i, layer in enumerate(self.layers):
+            h = layer(h, freq_cis, tok_idx=tok_idx, mask=mask, attn_impl=attn_impl)
 
         logits = self.output(self.norm(h))
         if target is not None:
@@ -655,7 +620,17 @@ class LMTransformer(
             a=-3 * init_std,
             b=3 * init_std,
         )
-        super().init_weights()
+        
+        self.rope_embeddings.reset_parameters()
+        for depth, layer in enumerate(self.layers):
+            factor = {
+                InitStdFactor.CURRENT_DEPTH: (2 * (depth + 1)) ** 0.5,
+                InitStdFactor.GLOBAL_DEPTH: (2 * (len(self.layers) + 1)) ** 0.5,
+                InitStdFactor.DIM_RATIO: self.dim / 4096,
+                InitStdFactor.DISABLED: 1.0,
+            }[self.init_std_factor]
+
+            layer.init_weights(self.init_base_std, factor)
 
         if not self.weight_tying:
             nn.init.trunc_normal_(
@@ -852,8 +827,6 @@ def split_large_numbers(lst, m):
     return new_lst
 
 
-
-
 def get_encoder_dim_token_emb(args):
     if args.dim_token is not None:
         dim_token_emb = args.dim_token
@@ -902,18 +875,6 @@ def get_decoder_dim_token_emb(args):
     else:
         dim_token_emb = args.dim_local_decoder
     return dim_token_emb
-
-
-def parse_ngram_to_size(ngram_to_size_str: str | None) -> dict[int, int]:
-    if ngram_to_size_str is None:
-        return None
-    ngram_to_size = {}
-    for entry in ngram_to_size_str.split(","):
-        ngram, size = entry.split(":")
-        ngram = int(ngram)
-        size = int(size)
-        ngram_to_size[ngram] = size
-    return ngram_to_size
 
 
 def fill_tokens(tokens, patch_size, fill_id):
@@ -1233,14 +1194,14 @@ class LocalModelBase(nn.Module):
         self.cross_attn_encoder = getattr(config, "cross_attn_encoder", None)
         self.cross_attn_decoder = getattr(config, "cross_attn_decoder", None)
         self.cross_attn_k = getattr(config, "cross_attn_k", None)
-        self.eos_id = config.eos_id
+        self.eos_id = config.eos_token_id
 
         self.boe_id = BOE_ID
         
         # Initialize cross attention layers as None (will be set by subclasses if needed)
         self.cross_attn_layers = None
 
-        # Create component-specific config for TransformerBlocks by copying config and overriding dimensions
+        # Create component-specific config for TransformerLayers by copying config and overriding dimensions
         component_config = type(config)(**config.to_dict())
         component_config.dim = self.dim
         component_config.n_layers = self.n_layers
@@ -1251,7 +1212,7 @@ class LocalModelBase(nn.Module):
             component_config.max_seqlen = self.max_seqlen
 
         self.layers = nn.ModuleList(
-            [TransformerBlock(component_config) for _ in range(self.n_layers)]
+            [TransformerLayer(component_config) for _ in range(self.n_layers)]
         )
 
         if not self.use_rope:
@@ -1455,39 +1416,27 @@ class LocalEncoder(LocalModelBase):
             if self.cross_attn_encoder and (
                 i == len(self.layers) - 1 or self.cross_attn_all_layers_encoder
             ):
-                patch_embeds = self.apply_cross_attention(
-                    h, patch_embeds, i, bs, num_patches, patch_ids, cross_mask
+                # apply pooling and project
+                if self.cross_attn_init_by_pooling and patch_embeds is None:
+                    patch_embeds = self.patch_reduce(h, num_patches, "amax", patch_ids)
+                    if self.patch_embedding_projection is not None:
+                        patch_embeds = self.patch_embedding_projection(patch_embeds)
+                        patch_embeds = patch_embeds.reshape(
+                            bs, patch_embeds.shape[1] * self.cross_attn_k, self.dim
+                        )
+
+                layer_idx = i if self.cross_attn_all_layers_encoder else 0
+                patch_embeds_cross = self.cross_attn_layers[layer_idx](
+                    x=patch_embeds,
+                    kv=h,
+                    mask=cross_mask,
                 )
+                patch_embeds = patch_embeds + patch_embeds_cross
 
         h_residual = patch_embeds if self.cross_attn_encoder else None
         return (h, h_residual), cache
 
-    def apply_cross_attention(
-        self, h, patch_embeds, layer_idx, bs, num_patches, patch_ids, cross_mask
-    ):
-        # apply pooling and project
-        if self.cross_attn_init_by_pooling and patch_embeds is None:
-            # patch_embeds = downsample(
-            #     h,
-            #     num_patches,
-            #     patch_ids=patch_ids,
-            #     downsampling_by_pooling=self.downsampling_by_pooling,
-            #     patch_size=self.patch_size,
-            # )
-            patch_embeds = self.patch_reduce(h, num_patches, "amax", patch_ids)
-            if self.patch_embedding_projection is not None:
-                patch_embeds = self.patch_embedding_projection(patch_embeds)
-                patch_embeds = patch_embeds.reshape(
-                    bs, patch_embeds.shape[1] * self.cross_attn_k, self.dim
-                )
 
-        layer_idx = layer_idx if self.cross_attn_all_layers_encoder else 0
-        patch_embeds_cross = self.cross_attn_layers[layer_idx](
-            x=patch_embeds,
-            kv=h,
-            mask=cross_mask,
-        )
-        return patch_embeds + patch_embeds_cross
 
     def patch_reduce(self, h, max_num_patches, reduction, patch_ids):
         """
@@ -1740,11 +1689,31 @@ class CrossAttention(nn.Module):
         self.cross_attn_norm_kv.reset_parameters()
 
 
-class GlobalTransformer(BaseTransformer):
+class GlobalTransformer(nn.Module, SequenceModelWithOutput):
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__()
+        
+        self.dim = config.dim
+        self.init_base_std = config.init_base_std
+        self.attn_impl = config.attn_impl
+        self.attn_bias_type = config.attn_bias_type
+        self.init_std_factor = config.init_std_factor
+        self.max_seqlen = config.max_seqlen
+        self.rope_embeddings = RotaryEmbedding(
+            theta=config.rope_theta,
+            head_dim=config.head_dim or config.dim // config.n_heads,
+            max_seqlen=config.max_seqlen,
+            rope_use_fp32_in_outer_product=config.rope_use_fp32_in_outer_product,
+        )
+        # Handle both eos_id and eos_token_id for compatibility
+        self.eos_id = getattr(config, 'eos_id', getattr(config, 'eos_token_id', 2))
+
+        self.layers = nn.ModuleList()
+        for _ in range(config.n_layers):
+            self.layers.append(TransformerLayer(config))
+        
+        # GlobalTransformer specific attributes
         self.dropout = config.dropout
-        # eos_id is already set in BaseTransformer
         self.dim_token_emb = config.dim_token_emb
 
         self.token_embedding_projection = None
@@ -1754,6 +1723,9 @@ class GlobalTransformer(BaseTransformer):
                 config.dim,
                 bias=False,
             )
+    
+    def get_output_seq_len(self):
+        return self.max_seqlen
 
     def forward(
         self,
@@ -1763,10 +1735,6 @@ class GlobalTransformer(BaseTransformer):
         mask: Optional[Union[BlockMask, torch.Tensor, str]] = None,
         cache: Optional[List[Tuple[torch.Tensor, torch.Tensor, int]]] = None,
     ):
-        """
-        Similar to BaseTransformer.forward, but with an additional embeds argument
-        and projection to the token space.
-        """
         bs, seqlen = tokens.shape
 
         h = embeds
@@ -1788,11 +1756,26 @@ class GlobalTransformer(BaseTransformer):
 
         h = F.dropout(h, p=self.dropout, training=self.training)
 
-        h = super().forward(h, tok_idx=tok_idx, mask=mask, attn_impl=self.attn_impl)
+        freq_cis = self.rope_embeddings(seqlen=self.max_seqlen, tok_idx=tok_idx)
+
+        for i, layer in enumerate(self.layers):
+            h = layer(h, freq_cis, tok_idx=tok_idx, mask=mask, attn_impl=self.attn_impl)
+        
         return h, cache
 
     def init_weights(self):
-        super().init_weights()
+        self.rope_embeddings.reset_parameters()
+        for depth, layer in enumerate(self.layers):
+            factor = {
+                InitStdFactor.CURRENT_DEPTH: (2 * (depth + 1)) ** 0.5,
+                InitStdFactor.GLOBAL_DEPTH: (2 * (len(self.layers) + 1)) ** 0.5,
+                InitStdFactor.DIM_RATIO: self.dim / 4096,
+                InitStdFactor.DISABLED: 1.0,
+            }[self.init_std_factor]
+
+            layer.init_weights(self.init_base_std, factor)
+        
+        # GlobalTransformer specific initialization
         std = self.dim_token_emb ** (-0.5)
         if self.token_embedding_projection is not None:
             nn.init.trunc_normal_(
@@ -1803,47 +1786,7 @@ class GlobalTransformer(BaseTransformer):
                 b=3 * std,
             )
 
-class EmbeddingType(Enum):
-    HASH_TOK = auto()
-    NGRAM = auto()
 
-
-def init_embeddings(
-    config,
-    embedding_type: EmbeddingType,
-    local_encoder_dim: int,
-    encoder_hash_byte_group_size: list = None,
-):
-    if (
-        embedding_type == EmbeddingType.HASH_TOK
-        and config.encoder_hash_byte_group_size is None
-    ):
-        return None
-    if embedding_type == EmbeddingType.NGRAM and config.encoder_ngram_to_size_str is None:
-        return None
-
-    embeddings = []
-
-    if embedding_type == EmbeddingType.HASH_TOK:
-        emb_dim = local_encoder_dim
-        encoder_hash_byte_group_vocab = config.encoder_hash_byte_group_vocab
-        for _ in range(config.encoder_hash_byte_group_nb_functions):
-            for _ in encoder_hash_byte_group_size:
-                embeddings.append(
-                    nn.Embedding(
-                        encoder_hash_byte_group_vocab,
-                        emb_dim,
-                    )
-                )
-
-    elif embedding_type == EmbeddingType.NGRAM:
-        encoder_ngram_to_size = parse_ngram_to_size(config.encoder_ngram_to_size_str)
-        emb_dim = local_encoder_dim
-        OFFSET = 4  # This should be passed as parameter if it's variable
-        for ngram_vocab_size in encoder_ngram_to_size.values():
-            embeddings.append(nn.Embedding(ngram_vocab_size + OFFSET, emb_dim))
-
-    return nn.ModuleList(embeddings)
 
 
 def compute_hash_embeddings(
@@ -1919,7 +1862,7 @@ class ByteLatentTransformer(
 
         # Store config reference
         self.config = config
-        
+
         # General configuration
         self.weight_tying = config.weight_tying
         self.patch_size = config.patch_size
@@ -1966,31 +1909,28 @@ class ByteLatentTransformer(
         self.global_transformer = GlobalTransformer(global_config)
 
         self.local_decoder = LocalDecoder(config)
-        self.encoder_hash_tok_embedding = init_embeddings(
+        self.encoder_hash_tok_embedding = init_hash_embeddings(
             config,
-            EmbeddingType.HASH_TOK,
             local_encoder_dim=self.local_encoder.dim,
             encoder_hash_byte_group_size=self.encoder_hash_byte_group_size,
         )
-        self.encoder_ngram_embedding = init_embeddings(
-            config,
-            EmbeddingType.NGRAM,
-            local_encoder_dim=self.local_encoder.dim,
-            encoder_hash_byte_group_size=None,
-        )
-
-        # Encoder ngram embedding tables
-        self.encoder_ngram_embedding = None
-        if config.encoder_enable_byte_ngrams:
-            self.encoder_ngram_embedding = nn.ModuleList()
-            self.encoder_ngram_to_size = parse_ngram_to_size(
-                config.encoder_ngram_to_size_str
+        
+        # NOTE: Frequency-based n-gram embeddings were experimental and removed in final model
+        # See paper section 3.2.1: "we subsequently moved to hash-based n-gram embeddings"
+        # The code below is kept for backward compatibility but should not be used
+        if hasattr(config, 'encoder_enable_byte_ngrams') and config.encoder_enable_byte_ngrams:
+            import warnings
+            warnings.warn(
+                "Frequency-based n-gram embeddings (encoder_enable_byte_ngrams) are deprecated. "
+                "The final BLT model uses only hash-based n-gram embeddings. "
+                "Consider setting encoder_enable_byte_ngrams=False.",
+                DeprecationWarning
             )
-            ngram_emb_dim = self.local_encoder.dim
-            for ngram_vocab_size in self.encoder_ngram_to_size.values():
-                self.encoder_ngram_embedding.append(
-                    nn.Embedding(ngram_vocab_size + OFFSET, ngram_emb_dim)
-                )
+            
+        # Remove the duplicate/unused ngram embedding initialization
+        # self.encoder_ngram_embedding = init_embeddings(...)  # Removed
+        # self.encoder_ngram_embedding = None  # Removed
+        # if config.encoder_enable_byte_ngrams: ...  # Removed
 
         # Output layer
         assert config.vocab_size > 0, "vocab_size must be greater than 0"
@@ -2066,8 +2006,6 @@ class ByteLatentTransformer(
                     param.requires_grad = False
             else:
                 self.patcher = None
-
-
 
     def patch(
         self,
@@ -2173,12 +2111,9 @@ class ByteLatentTransformer(
         self,
         tokens: torch.Tensor,
         patch_lengths: Optional[torch.Tensor] = None,
-        ngram_ids: Optional[torch.Tensor] = None,
     ):
-        # Ensure ngram_ids is either a tensor or None
-        assert (
-            isinstance(ngram_ids, torch.Tensor) or ngram_ids is None
-        ), f"ngram_ids must be a tensor or None, but was: {type(ngram_ids)}"
+        # NOTE: ngram_ids parameter removed since frequency-based n-gram embeddings 
+        # are no longer used in the final BLT model
 
         bs, N = tokens.shape  # Batch size and sequence length
 
@@ -2239,23 +2174,8 @@ class ByteLatentTransformer(
             encoder_hash_byte_group_vocab=self.encoder_hash_byte_group_vocab,
         )
 
-        # N-gram table embeddings
-        if self.encoder_ngram_embedding is not None:
-            assert ngram_ids is not None, "ngram_ids must be provided"
-            if local_encoder_embeds is None:
-                local_encoder_embeds = self.local_encoder.tok_embeddings(
-                    local_encoder_tokens
-                )
-            assert len(ngram_ids) == len(
-                self.encoder_ngram_embedding
-            ), f"ngram_ids.shape[0]={ngram_ids.shape[0]} versus len(encoder_ngram_embedding)={len(self.encoder_ngram_embedding)}, ngram_ids.shape={ngram_ids.shape}"
-            for i in range(ngram_ids.shape[0]):
-                ngram_embedding = self.encoder_ngram_embedding[i]
-                ngram_embeds = ngram_embedding(ngram_ids[i])
-                assert (
-                    local_encoder_embeds.shape == ngram_embeds.shape
-                ), f"Shape mismatch: {local_encoder_embeds.shape} vs {ngram_embeds.shape}, ngram_ids.shape={ngram_ids.shape}"
-                local_encoder_embeds = local_encoder_embeds + ngram_embeds
+        # NOTE: Frequency-based n-gram embeddings removed as per paper
+        # The final BLT model uses only hash-based n-gram embeddings
 
         # Local encoder
         (h_encoder, h_cross), cache_encoder = self.local_encoder(
@@ -2336,3 +2256,27 @@ class ByteLatentTransformer(
                 a=-3 * emb_std,
                 b=3 * emb_std,
             )
+
+def init_hash_embeddings(
+    config,
+    local_encoder_dim: int,
+    encoder_hash_byte_group_size: list,
+):
+    """Initialize hash-based token embeddings for the BLT encoder."""
+    if config.encoder_hash_byte_group_size is None:
+        return None
+
+    embeddings = []
+    emb_dim = local_encoder_dim
+    encoder_hash_byte_group_vocab = config.encoder_hash_byte_group_vocab
+    
+    for _ in range(config.encoder_hash_byte_group_nb_functions):
+        for _ in encoder_hash_byte_group_size:
+            embeddings.append(
+                nn.Embedding(
+                    encoder_hash_byte_group_vocab,
+                    emb_dim,
+                )
+            )
+
+    return nn.ModuleList(embeddings)
