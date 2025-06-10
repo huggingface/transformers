@@ -108,6 +108,7 @@ if TYPE_CHECKING:
     from .falcon_h1 import *
     from .falcon_mamba import *
     from .fastspeech2_conformer import *
+    from .fireflies import *
     from .flaubert import *
     from .flava import *
     from .fnet import *
@@ -115,7 +116,6 @@ if TYPE_CHECKING:
     from .fsmt import *
     from .funnel import *
     from .fuyu import *
-    from .fireflies import *
     from .gemma import *
     from .gemma2 import *
     from .gemma3 import *

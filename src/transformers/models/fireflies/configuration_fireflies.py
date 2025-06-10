@@ -1,7 +1,9 @@
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from collections import OrderedDict
 from collections.abc import Mapping
+
+from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
+
 
 class FirefliesConfig(PretrainedConfig):
     model_type = "fireflies"
@@ -38,10 +40,13 @@ class FirefliesConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
 
+
 class FirefliesOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict({
-            "input_ids": {0: "batch", 1: "sequence"},
-            "attention_mask": {0: "batch", 1: "sequence"},
-        })
+        return OrderedDict(
+            {
+                "input_ids": {0: "batch", 1: "sequence"},
+                "attention_mask": {0: "batch", 1: "sequence"},
+            }
+        )
