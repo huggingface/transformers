@@ -272,13 +272,7 @@ class T5GemmaSelfAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -775,7 +769,6 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": None,
-                "output_attentions": output_attentions,
             }
             # Create the masks
             self_attn_mask_mapping = {
@@ -930,7 +923,6 @@ class T5GemmaDecoder(T5GemmaEncoder):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values.self_attention_cache if past_key_values is not None else None,
-                "output_attentions": output_attentions,
             }
             # Create the masks
             self_attn_mask_mapping = {
@@ -947,7 +939,6 @@ class T5GemmaDecoder(T5GemmaEncoder):
                 "attention_mask": encoder_attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": None,
-                "output_attentions": output_attentions,
             }
             cross_attn_mask_mapping = {
                 "full_attention": create_causal_mask(

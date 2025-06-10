@@ -303,6 +303,11 @@ class T5GemmaConfig(PretrainedConfig):
             setattr(self.decoder, key, value)
         super().__setattr__(key, value)
 
+    def get_text_config(self, decoder=False) -> "PretrainedConfig":
+        # Always return self, regardless of the decoder option.
+        del decoder
+        return self
+
 
 class T5GemmaRMSNorm(Gemma2RMSNorm):
     pass
@@ -785,7 +790,6 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": None,
-                "output_attentions": output_attentions,
             }
             # Create the masks
             self_attn_mask_mapping = {
@@ -940,7 +944,6 @@ class T5GemmaDecoder(T5GemmaEncoder):
                 "attention_mask": attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": past_key_values.self_attention_cache if past_key_values is not None else None,
-                "output_attentions": output_attentions,
             }
             # Create the masks
             self_attn_mask_mapping = {
@@ -957,7 +960,6 @@ class T5GemmaDecoder(T5GemmaEncoder):
                 "attention_mask": encoder_attention_mask,
                 "cache_position": cache_position,
                 "past_key_values": None,
-                "output_attentions": output_attentions,
             }
             cross_attn_mask_mapping = {
                 "full_attention": create_causal_mask(
