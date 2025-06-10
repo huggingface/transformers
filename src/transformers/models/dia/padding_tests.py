@@ -320,8 +320,6 @@ prediction_2 = processor.forward(predictions)
 
 
 # revert
-codebooks = revert_delay(
-    delayed_batch, (bsz, seq_len, channels), delay_pattern, pad_id=audio_pad_id
-)
+codebooks = revert_delay(delayed_batch, (bsz, seq_len, channels), delay_pattern, pad_id=audio_pad_id)
 
 print(codebooks)
