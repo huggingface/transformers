@@ -26,7 +26,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import TYPE_CHECKING, Any, Callable, ContextManager, List, Optional, TypedDict
+from typing import Any, Callable, ContextManager, List, Optional, TypedDict
 
 import numpy as np
 from packaging import version
@@ -39,6 +39,7 @@ from .import_utils import (
     is_torch_available,
     is_torch_fx_proxy,
 )
+
 
 if is_torch_available():
     # required for @can_return_tuple decorator to work with torchdynamo
