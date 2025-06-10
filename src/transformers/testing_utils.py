@@ -3223,7 +3223,9 @@ def cleanup(device: str, gc_collect=False):
 
 
 # Type definition of key used in `Expectations` class.
-DeviceProperties = tuple[Union[str, None], Union[None, int, tuple[int, int]]]
+DeviceProperties = tuple[Optional[str], Optional[int], Optional[int]]
+# Helper type. Makes creating instances of `Expectations` smoother.
+PackedDeviceProperties = tuple[Optional[str], Union[None, int, tuple[int, int]]]
 
 
 @cache
@@ -3236,9 +3238,9 @@ def get_device_properties() -> DeviceProperties:
 
         major, minor = torch.cuda.get_device_capability()
         if IS_ROCM_SYSTEM:
-            return ("rocm", (major, minor))
+            return ("rocm", major, minor)
         else:
-            return ("cuda", (major, minor))
+            return ("cuda", major, minor)
     elif IS_XPU_SYSTEM:
         import torch
 
@@ -3246,38 +3248,42 @@ def get_device_properties() -> DeviceProperties:
         arch = torch.xpu.get_device_capability()["architecture"]
         gen_mask = 0x000000FF00000000
         gen = (arch & gen_mask) >> 32
-        return ("xpu", gen)
+        return ("xpu", gen, None)
     else:
-        return (torch_device, None)
+        return (torch_device, None, None)
 
 
-class Expectations(UserDict[DeviceProperties, Any]):
+class Expectations(UserDict[PackedDeviceProperties, Any]):
     def get_expectation(self) -> Any:
         """
         Find best matching expectation based on environment device properties.
         """
         return self.find_expectation(get_device_properties())
 
+    def unpacked(self) -> list[tuple[DeviceProperties, Any]]:
+        return [(Expectations.unpack(k), v) for k, v in self.data.items()]
+
     @staticmethod
-    def unpack(key: DeviceProperties) -> tuple[Optional[str], Optional[int], Optional[int]]:
+    def unpack(properties: PackedDeviceProperties) -> DeviceProperties:
         """
-        Unpack a `DeviceProperties` tuple into a `device_type`, `major`, and `minor`.
+        Unpack `PackedDeviceProperties` tuple into consistently formatted `DeviceProperties` tuple.
         """
-        device_type, major_minor = key
+        device_type, major_minor = properties
         if major_minor is None:
             major, minor = None, None
         elif isinstance(major_minor, int):
             major, minor = major_minor, None
         else:
             major, minor = major_minor
+
         return device_type, major, minor
 
     @staticmethod
-    def is_default(key: DeviceProperties) -> bool:
-        return all(p is None for p in key)
+    def is_default(properties: DeviceProperties) -> bool:
+        return all(p is None for p in properties)
 
     @staticmethod
-    def score(key: DeviceProperties, other: DeviceProperties) -> int:
+    def score(properties: DeviceProperties, other: DeviceProperties) -> float:
         """
         Returns score indicating how similar two instances of the `Properties` tuple are.
         Rules are as follows:
@@ -3285,8 +3291,8 @@ class Expectations(UserDict[DeviceProperties, Any]):
             * If types match, matching `major` adds another point, and then matching `minor` adds another.
             * Default expectation (if present) is worth 0.1 point to distinguish it from a straight-up zero.
         """
-        device_type, major, minor = Expectations.unpack(key)
-        other_device_type, other_major, other_minor = Expectations.unpack(other)
+        device_type, major, minor = properties
+        other_device_type, other_major, other_minor = other
 
         score = 0
         # Matching device type, maybe major and minor
@@ -3299,19 +3305,21 @@ class Expectations(UserDict[DeviceProperties, Any]):
         # Semi-matching device type
         elif device_type in ["cuda", "rocm"] and other_device_type in ["cuda", "rocm"]:
             score = 0.5
+
         # Default expectation
         if Expectations.is_default(other):
             score = 0.1
+
         return score
 
-    def find_expectation(self, key: DeviceProperties = (None, None)) -> Any:
+    def find_expectation(self, properties: DeviceProperties = (None, None, None)) -> Any:
         """
         Find best matching expectation based on provided device properties.
         """
-        (result_key, result) = max(self.data.items(), key=lambda x: Expectations.score(key, x[0]))
+        (result_key, result) = max(self.unpacked(), key=lambda x: Expectations.score(properties, x[0]))
 
-        if Expectations.score(key, result_key) == 0:
-            raise ValueError(f"No matching expectation found for {key}")
+        if Expectations.score(properties, result_key) == 0:
+            raise ValueError(f"No matching expectation found for {properties}")
 
         return result
 
