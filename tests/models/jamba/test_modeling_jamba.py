@@ -16,19 +16,20 @@
 import math
 import tempfile
 import unittest
+from typing import Optional
 
 import pytest
 
 from transformers import AutoTokenizer, JambaConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    get_device_properties,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
     slow,
     torch_device,
+    unpack_device_properties,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -557,7 +558,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
     tokenizer = None
     # This variable is used to determine which acclerator are we using for our runners (e.g. A10 or T4)
     # Depending on the hardware we get different logits / generations
-    device_properties = None
+    device_properties: tuple[Optional[str], Optional[int], Optional[int]] = None
 
     @classmethod
     def setUpClass(cls):
@@ -567,7 +568,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
             torch_dtype=torch.bfloat16,
         )
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
-        cls.device_properties = get_device_properties()
+        cls.device_properties = unpack_device_properties(properties=None)
 
     @slow
     def test_simple_generate(self):
@@ -595,7 +596,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output_sentence, expected_sentence)
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.device_properties == ("cuda", 8):
+        if self.device_properties[0] == "cuda" and self.device_properties[1] == 8:
             with torch.no_grad():
                 logits = self.model(input_ids=input_ids).logits
 
@@ -638,7 +639,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output_sentences[1], expected_sentences[1])
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.device_properties == ("cuda", 8):
+        if self.device_properties[0] == "cuda" and self.device_properties[1] == 8:
             with torch.no_grad():
                 logits = self.model(input_ids=inputs["input_ids"]).logits
 

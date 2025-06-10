@@ -19,7 +19,6 @@ import unittest
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, AwqConfig, OPTForCausalLM
 from transformers.testing_utils import (
     backend_empty_cache,
-    get_device_properties,
     require_accelerate,
     require_auto_awq,
     require_flash_attn,
@@ -30,6 +29,7 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
     torch_device,
+    unpack_device_properties,
 )
 from transformers.utils import is_accelerate_available, is_torch_available
 
@@ -62,7 +62,7 @@ class AwqConfigTest(unittest.TestCase):
 
         # Only cuda and xpu devices can run this function
         support_llm_awq = False
-        device_type, major = get_device_properties()
+        device_type, major, _ = unpack_device_properties(properties=None)
         if device_type == "cuda" and major >= 8:
             support_llm_awq = True
         elif device_type == "xpu":
@@ -354,7 +354,7 @@ class AwqFusedTest(unittest.TestCase):
         self.assertTrue(isinstance(model.model.layers[0].block_sparse_moe.gate, torch.nn.Linear))
 
     @unittest.skipIf(
-        get_device_properties()[0] == "cuda" and get_device_properties()[1] < 8,
+        unpack_device_properties(properties=None)[0] == "cuda" and unpack_device_properties(properties=None)[1] < 8,
         "Skipping because RuntimeError: FlashAttention only supports Ampere GPUs or newer, so not supported on GPU with capability < 8.0",
     )
     @require_flash_attn
@@ -384,7 +384,7 @@ class AwqFusedTest(unittest.TestCase):
     @require_flash_attn
     @require_torch_gpu
     @unittest.skipIf(
-        get_device_properties()[0] == "cuda" and get_device_properties()[1] < 8,
+        unpack_device_properties(properties=None)[0] == "cuda" and unpack_device_properties(properties=None)[1] < 8,
         "Skipping because RuntimeError: FlashAttention only supports Ampere GPUs or newer, so not supported on GPU with capability < 8.0",
     )
     def test_generation_fused_batched(self):
@@ -436,7 +436,7 @@ class AwqFusedTest(unittest.TestCase):
     @require_flash_attn
     @require_torch_multi_gpu
     @unittest.skipIf(
-        get_device_properties()[0] == "cuda" and get_device_properties()[1] < 8,
+        unpack_device_properties(properties=None)[0] == "cuda" and unpack_device_properties(properties=None)[1] < 8,
         "Skipping because RuntimeError: FlashAttention only supports Ampere GPUs or newer, so not supported on GPU with capability < 8.0",
     )
     def test_generation_custom_model(self):

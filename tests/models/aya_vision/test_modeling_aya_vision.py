@@ -27,13 +27,13 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
-    get_device_properties,
     require_deterministic_for_xpu,
     require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
     torch_device,
+    unpack_device_properties,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -347,7 +347,8 @@ class AyaVisionIntegrationTest(unittest.TestCase):
     @classmethod
     def get_model(cls):
         # Use 4-bit on T4
-        load_in_4bit = get_device_properties()[0] == "cuda" and get_device_properties()[1] < 8
+        device_type, major, minor = unpack_device_properties(properties=None)
+        load_in_4bit = (device_type == "cuda") and (major < 8)
         torch_dtype = None if load_in_4bit else torch.float16
 
         if cls.model is None:

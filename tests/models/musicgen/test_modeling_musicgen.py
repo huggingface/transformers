@@ -31,8 +31,6 @@ from transformers import (
     T5Config,
 )
 from transformers.testing_utils import (
-    Expectations,
-    get_device_properties,
     is_torch_available,
     require_flash_attn,
     require_torch,
@@ -42,6 +40,7 @@ from transformers.testing_utils import (
     require_torch_sdpa,
     slow,
     torch_device,
+    unpack_device_properties,
 )
 from transformers.utils import cached_property
 
@@ -1042,8 +1041,7 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        device_properties = get_device_properties()
-        device_type, major, minor = Expectations.unpack(device_properties)
+        device_type, major, minor = unpack_device_properties(properties=None)
         if device_type == "cuda" and major < 8:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
         elif device_type == "rocm" and major < 9:

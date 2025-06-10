@@ -3265,26 +3265,30 @@ def get_device_properties() -> DeviceProperties:
         return (torch_device, None)
 
 
+def unpack_device_properties(
+    properties: Optional[DeviceProperties],
+) -> tuple[Optional[str], Optional[int], Optional[int]]:
+    """
+    Unpack a `DeviceProperties` tuple into a `device_type`, `major`, and `minor`. If properties is None, it is fetched.
+    """
+    if properties is None:
+        properties = get_device_properties()
+    device_type, major_minor = properties
+    if major_minor is None:
+        major, minor = None, None
+    elif isinstance(major_minor, int):
+        major, minor = major_minor, None
+    else:
+        major, minor = major_minor
+    return device_type, major, minor
+
+
 class Expectations(UserDict[DeviceProperties, Any]):
     def get_expectation(self) -> Any:
         """
         Find best matching expectation based on environment device properties.
         """
         return self.find_expectation(get_device_properties())
-
-    @staticmethod
-    def unpack(key: DeviceProperties) -> tuple[Optional[str], Optional[int], Optional[int]]:
-        """
-        Unpack a `DeviceProperties` tuple into a `device_type`, `major`, and `minor`.
-        """
-        device_type, major_minor = key
-        if major_minor is None:
-            major, minor = None, None
-        elif isinstance(major_minor, int):
-            major, minor = major_minor, None
-        else:
-            major, minor = major_minor
-        return device_type, major, minor
 
     @staticmethod
     def is_default(key: DeviceProperties) -> bool:
@@ -3299,8 +3303,8 @@ class Expectations(UserDict[DeviceProperties, Any]):
             * If types match, matching `major` adds another point, and then matching `minor` adds another.
             * Default expectation (if present) is worth 0.1 point to distinguish it from a straight-up zero.
         """
-        device_type, major, minor = Expectations.unpack(key)
-        other_device_type, other_major, other_minor = Expectations.unpack(other)
+        device_type, major, minor = unpack_device_properties(key)
+        other_device_type, other_major, other_minor = unpack_device_properties(other)
 
         score = 0
         # Matching device type, maybe major and minor
