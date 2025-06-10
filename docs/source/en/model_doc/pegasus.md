@@ -122,7 +122,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ## Notes
 
 - [`AdaFactor`] is the recommended optimizer for fine-tuning Pegasus.
-- This implementation of Pegasus inherits from [`BartForConditionalGeneration`] but it uses static/sinusoidal positional embeddings instead. Pegaus also starts generating with `pad_token_id` as the prefix and uses `num_beams=8`.
+- This implementation of Pegasus inherits from [`BartForConditionalGeneration`] but it uses static/sinusoidal positional embeddings instead. Pegasus also starts generating with `pad_token_id` as the prefix and uses `num_beams=8`.
 
 ## PegasusConfig
 
