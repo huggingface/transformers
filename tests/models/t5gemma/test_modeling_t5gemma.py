@@ -192,8 +192,7 @@ class T5GemmaModelTester:
             num_key_value_heads=self.num_key_value_heads,
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
-            # num_hidden_layers=self.num_hidden_layers,
-            # encoder_layers=self.encoder_num_hidden_layers,
+            num_hidden_layers=self.num_hidden_layers,
         )
 
     def prepare_config_and_inputs(self):
@@ -1018,7 +1017,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             past_kv = outputs["past_key_values"]
             is_legacy_cache = not isinstance(past_kv, Cache)
 
-            text_config = config.get_text_config()
+            text_config = config.get_text_config().decoder
             num_decoder_layers = text_config.num_hidden_layers
 
             if custom_all_cache_shapes is None:
