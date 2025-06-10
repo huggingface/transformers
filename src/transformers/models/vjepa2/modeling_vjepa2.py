@@ -3,12 +3,13 @@ from typing import Callable, Dict, List, Optional, Set, Tuple, Union
 import numpy as np
 import torch
 from torch import nn
+from dataclasses import dataclass
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, dataclass
+from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, auto_docstring, logging, can_return_tuple
 from .configuration_vjepa2 import VJEPA2Config
 
 
@@ -1040,7 +1041,7 @@ class VJEPA2Predictor(nn.Module):
 @auto_docstring
 class VJEPA2PreTrainedModel(PreTrainedModel):
     config_class = VJEPA2Config
-    base_model_prefix = "vjepa"
+    base_model_prefix = "vjepa2"
     main_input_name = "pixel_values_videos"
     supports_gradient_checkpointing = True
     _no_split_modules = ["VJEPA2SwiGLUFFN"]
@@ -1297,4 +1298,118 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         return encoder_outputs.last_hidden_state
 
 
-__all__ = ["VJEPA2Model", "VJEPA2PreTrainedModel"]
+@auto_docstring(
+    custom_intro="""
+    VJEPA2 Model transformer with a video classification head on top (a linear layer on top of the average pooled hidden
+    states of all tokens) e.g. for ImageNet.
+    """
+)
+# Modified from transformers.models.videomae.modeling_videomae.VideoMAEForVideoClassification with VideoMAE->VJEPA2, videomae->vjepa2
+class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+        self.vjepa2 = VJEPA2Model(config)
+
+        # Classifier head
+        self.fc_norm = nn.LayerNorm(config.hidden_size)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values_videos: torch.Tensor,
+        context_head_mask: Optional[torch.Tensor] = None,
+        context_mask: Optional[List[torch.Tensor]] = None,
+        target_head_mask: Optional[torch.Tensor] = None,
+        target_mask: Optional[List[torch.Tensor]] = None,
+        labels: Optional[torch.Tensor] = None,
+        skip_predictor: bool = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+    ) -> Union[Tuple, ImageClassifierOutput]:
+        r"""
+        pixel_values_videos (`torch.Tensor` with shape `[batch size x num_frames x num_channels x height x width]`):
+            The input video pixels which is processed by VJEPA2VideoProcessor.
+        context_head_mask (`torch.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
+            The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard) for the context.
+        target_head_mask (`torch.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
+            The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard) for the target.
+        context_mask (`torch.Tensor` with shape `[batch_size, patch_size, 1]`, *optional*):
+            The mask position ids indicating which encoder output patches are going to be exposed to the predictor.
+            By default, this mask is created as torch.arange(N).unsqueeze(0).repeat(B,1), indicating full context
+            available to the predictor.
+        target_mask (`torch.Tensor` with shape `[batch_size, patch_size, 1]`, *optional*):
+            The mask position ids indicating which encoder output patches are going to be used as a prediction target
+            for the predictor. By default, this mask is created as torch.arange(N).unsqueeze(0).repeat(B,1), indicating
+            that the predictor should predict all encoder patches.
+        skip_predictor (`bool`):
+            Flag to skip the predictor forward, useful if you just need the encoder outputs. Defaults to `False`.
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Examples:
+
+        ```python
+        >>> import torch
+        >>> import numpy as np
+        >>> from transformers import AutoVideoProcessor, VJEPA2ForVideoClassification
+
+        >>> device = "cuda"
+
+        >>> video_processor = AutoVideoProcessor.from_pretrained("facebook/vjepa2-vitl-fpc64-256")
+        >>> model = VJEPA2ForVideoClassification.from_pretrained("facebook/vjepa2-vitl-fpc64-256", num_labels=400).to(device)
+
+        >>> video = np.ones((64, 256, 256, 3))  # 64 frames, 256x256 RGB
+        >>> inputs = video_processor(video, return_tensors="pt").to(device)
+
+        >>> # For inference
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+        >>> logits = outputs.logits
+
+        >>> predicted_label = logits.argmax(-1).item()
+        >>> print(model.config.id2label[predicted_label])
+
+        >>> # For training
+        >>> labels = torch.ones(1, dtype=torch.long, device=device)
+        >>> loss = model(**inputs, labels=labels).loss
+
+        ```"""
+
+        outputs = self.vjepa2(
+            pixel_values_videos=pixel_values_videos,
+            context_head_mask=context_head_mask,
+            context_mask=context_mask,
+            target_head_mask=target_head_mask,
+            target_mask=target_mask,
+            skip_predictor=skip_predictor,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+
+        last_hidden_state = outputs.last_hidden_state
+        last_hidden_state = last_hidden_state.mean(1) # average across tokens
+        normalized_last_hidden_state = self.fc_norm(last_hidden_state)
+        logits = self.classifier(normalized_last_hidden_state)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(pooled_logits=logits, labels=labels, config=self.config)
+
+        return ImageClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+__all__ = ["VJEPA2Model", "VJEPA2PreTrainedModel", "VJEPA2ForVideoClassification"]
