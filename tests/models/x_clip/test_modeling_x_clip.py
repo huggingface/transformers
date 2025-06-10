@@ -21,7 +21,7 @@ import unittest
 import numpy as np
 from huggingface_hub import hf_hub_download
 
-from transformers import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
+from transformers import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig, XCLIPVideoFeatureOutput
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -680,6 +680,48 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model_name = "microsoft/xclip-base-patch32"
         model = XCLIPModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    def test_get_video_features_output_formats(self):
+        """Test different output formats of get_video_features."""
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config = config_and_inputs[0]
+        pixel_values = config_and_inputs[3]  # pixel_values is the 4th argument
+
+        model = XCLIPModel(config)
+        model.to(torch_device)
+        model.eval()
+
+        # Test default behavior (return pooled output)
+        outputs = model.get_video_features(pixel_values)
+        self.assertTrue(isinstance(outputs, torch.Tensor))
+        self.assertEqual(outputs.ndim, 2)  # (batch_size, hidden_size)
+
+        # Test return_last_hidden_state=True
+        outputs = model.get_video_features(pixel_values, return_last_hidden_state=True)
+        self.assertTrue(isinstance(outputs, torch.Tensor))
+        self.assertEqual(outputs.ndim, 3)  # (batch_size, sequence_length, hidden_size)
+
+        # Test return_dict=True with all options
+        outputs = model.get_video_features(
+            pixel_values,
+            return_dict=True,
+            return_last_hidden_state=True,
+            output_hidden_states=True,
+            output_attentions=True
+        )
+        self.assertTrue(isinstance(outputs, XCLIPVideoFeatureOutput))
+        self.assertIsNotNone(outputs.pooled_output)
+        self.assertIsNotNone(outputs.last_hidden_state)
+        self.assertIsNotNone(outputs.hidden_states)
+        self.assertIsNotNone(outputs.attentions)
+
+        # Test return_dict=True without optional outputs
+        outputs = model.get_video_features(pixel_values, return_dict=True)
+        self.assertTrue(isinstance(outputs, XCLIPVideoFeatureOutput))
+        self.assertIsNotNone(outputs.pooled_output)
+        self.assertIsNone(outputs.last_hidden_state)
+        self.assertIsNone(outputs.hidden_states)
+        self.assertIsNone(outputs.attentions)
 
 
 # We will verify our results on a spaghetti video
