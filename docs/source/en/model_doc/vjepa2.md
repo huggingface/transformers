@@ -23,14 +23,14 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-# VJEPA 2
+# V-JEPA 2
 
-V-JEPA 2 is a self-supervised approach to training video encoders, using internet-scale video data, that attains state-of-the-art performance on motion understanding and human action anticpation tasks. V-JEPA 2-AC is a latent action-conditioned world model post-trained from V-JEPA 2 (using a small amount of robot trajectory interaction data) that solves robot manipulation tasks without environment-specific data collection or task-specific training or calibration.
+V-JEPA 2 is a self-supervised approach to training video encoders developed by FAIR, Meta. Using internet-scale video data, VJEPA 2 attains state-of-the-art performance on motion understanding and human action anticpation tasks. V-JEPA 2-AC is a latent action-conditioned world model post-trained from V-JEPA 2 (using a small amount of robot trajectory interaction data) that solves robot manipulation tasks without environment-specific data collection or task-specific training or calibration.
 
 You can find all original VJEPA2 checkpoints under the [VJEPA 2](https://huggingface.co/collections/facebook/v-jepa-2-6841bad8413014e185b497a6) collection.
 
 
-This model was contributed by [koustuvs](https://huggingface.co/koustuvs) and [yonigozlan](https://huggingface.co/yonigozlan). The original code can be found [here](to-fill-in).
+This model was contributed by [koustuvs](https://huggingface.co/koustuvs) and [yonigozlan](https://huggingface.co/yonigozlan). The original code can be found [here](https://github.com/facebookresearch/vjepa2).
 
 ## Usage example
 
