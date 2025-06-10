@@ -325,6 +325,12 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
     rank 2 gets					(4, 5120, 8190)			 (12 ... 16, 5120, 8190)
 
     In case (2), empty shards are returned with appropriate dimension to allow for operations to work smoothly.
+    Args:
+        param (torch.Tensor): The tensor to shard.
+        empty_param (torch.Tensor): A tensor used for shape reference.
+        device_mesh (torch.Tensor): Shape [d_0, ..., d_n] representing the mesh.
+        rank (int): Global rank of the current process/device.
+        dim (int): Dimension along which to shard the tensor.
     """
     param_dim = empty_param.dim()
 
