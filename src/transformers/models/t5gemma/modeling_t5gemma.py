@@ -44,6 +44,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     add_code_sample_docstrings,
+    add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     can_return_tuple,
@@ -746,7 +747,6 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        use_cache = False
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -1427,6 +1427,12 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
     """,
     T5GEMMA_START_DOCSTRING,
 )
+@add_end_docstrings(
+    """
+        is_encoder_decoder (`Optional`, *optional*):
+            Whether use encoder_decoder for sequence classification. When set to False, only encoder is used.
+    """
+)
 class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
     def __init__(self, config: T5GemmaConfig, is_encoder_decoder: Optional[bool] = None):
         if is_encoder_decoder is not None:
@@ -1564,6 +1570,12 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
     output) e.g. for Named-Entity-Recognition (NER) tasks.
     """,
     T5GEMMA_START_DOCSTRING,
+)
+@add_end_docstrings(
+    """
+        is_encoder_decoder (`Optional`, *optional*):
+            Whether use encoder_decoder for token classification. When set to False, only encoder is used.
+    """
 )
 class T5GemmaForTokenClassification(T5GemmaPreTrainedModel):
     def __init__(self, config: T5GemmaConfig, is_encoder_decoder: Optional[bool] = None):
