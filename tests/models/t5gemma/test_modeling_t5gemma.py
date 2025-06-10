@@ -18,27 +18,20 @@ import inspect
 import unittest
 
 import pytest
-from packaging import version
 from parameterized import parameterized
-from pytest import mark
 
 from transformers import T5GemmaConfig, T5GemmaModuleConfig, is_torch_available
-from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
-    require_flash_attn,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
     require_torch_sdpa,
-    slow,
-    tooslow,
     torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -47,11 +40,11 @@ if is_torch_available():
     import torch.nn.functional as F
 
     from transformers import (
+        T5GemmaEncoderModel,
         T5GemmaForConditionalGeneration,
         T5GemmaForSequenceClassification,
         T5GemmaForTokenClassification,
         T5GemmaModel,
-        T5GemmaEncoderModel,
     )
     from transformers.cache_utils import Cache
 
@@ -59,7 +52,7 @@ if is_torch_available():
 class T5GemmaModelTester:
     config_class = T5GemmaConfig
     module_config_class = T5GemmaModuleConfig
-    
+
     if is_torch_available():
         model_class = T5GemmaModel
         for_causal_lm_class = T5GemmaForConditionalGeneration
@@ -88,7 +81,7 @@ class T5GemmaModelTester:
         encoder_num_attention_heads=4,
         encoder_num_key_value_heads=2,
         encoder_intermediate_size=37,
-        # common    
+        # common
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -145,7 +138,7 @@ class T5GemmaModelTester:
         # assume the number of attention heads are the same across encoder and decoder
         # only used for generation testing purpose.
         assert self.num_attention_heads == self.encoder_num_attention_heads
-    
+
     def get_encoder_config(self):
         return self.module_config_class(
             vocab_size=self.vocab_size,
@@ -188,19 +181,21 @@ class T5GemmaModelTester:
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
         )
-    
+
     def get_config(self, is_encoder_decoder=True):
         return self.config_class(
-            encoder_config=self.get_encoder_config(),
-            decoder_config=self.get_decoder_config(),
+            encoder=self.get_encoder_config(),
+            decoder=self.get_decoder_config(),
             is_encoder_decoder=is_encoder_decoder,
             # Used for generation test.
             num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
+            # num_hidden_layers=self.num_hidden_layers,
+            # encoder_layers=self.encoder_num_hidden_layers,
         )
-    
+
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -632,7 +627,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # Copied from tests.models.t5.test_modeling_t5.T5ModelTest.test_inputs_embeds
+    # Based on tests.models.t5.test_modeling_t5.T5ModelTest.test_inputs_embeds
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -678,7 +673,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_with_sequence_classification_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_sequence_classification_head(*config_and_inputs)
-    
+
     @parameterized.expand([(True,), (False, )])
     def test_encoderonly_sequence_classification_head(self, is_encoder_decoder):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -703,7 +698,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
 
-    # Copied from tests.models.t5.test_modeling_t5.T5ModelTest.test_decoder_model_past_with_3d_attn_mask
+    # Based on tests.models.t5.test_modeling_t5.T5ModelTest.test_decoder_model_past_with_3d_attn_mask
     def test_decoder_model_past_with_3d_attn_mask(self):
         (
             config,
@@ -742,14 +737,13 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_generate_with_past_key_values(*config_and_inputs)
 
-    # Copied from tests.models.t5.test_modeling_t5.T5ModelTest.test_model_fp16_forward
     @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
+    # Copied from tests.models.t5.test_modeling_t5.T5ModelTest.test_model_fp16_forward
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
 
-    # Copied from tests.models.gemma.test_modeling_gemma.GemmaModelTest.test_Gemma_sequence_classification_model with Gemma -> T5Gemma
-    # Add is_encoder_decoder option
+    # Based on tests.models.gemma.test_modeling_gemma.GemmaModelTest.test_Gemma_sequence_classification_model with Gemma -> T5Gemma (Add is_encoder_decoder option)
     def test_T5Gemma_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -762,8 +756,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
             self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    # Copied from tests.models.gemma.test_modeling_gemma.GemmaModelTest.test_Gemma_sequence_classification_model_for_single_label with Gemma -> T5Gemma
-    # Add is_encoder_decoder option
+    # Based on tests.models.gemma.test_modeling_gemma.GemmaModelTest.test_Gemma_sequence_classification_model_for_single_label with Gemma -> T5Gemma (Add is_encoder_decoder option)
     def test_T5Gemma_sequence_classification_model_for_single_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -777,8 +770,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
             self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    # Copied from tests.models.gemma.test_modeling_gemma.GemmaModelTest.test_Gemma_sequence_classification_model_for_multi_label with Gemma -> T5Gemma
-    # Add is_encoder_decoder option
+    # Based on tests.models.gemma.test_modeling_gemma.GemmaModelTest.test_Gemma_sequence_classification_model_for_multi_label with Gemma -> T5Gemma (Add is_encoder_decoder option)
     def test_T5Gemma_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -794,8 +786,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
             self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    # Copied from tests.models.gemma.test_modeling_gemma.GemmaModelTest.test_Gemma_token_classification_model with Gemma -> T5Gemma
-    # Add is_encoder_decoder option
+    # Based on tests.models.gemma.test_modeling_gemma.GemmaModelTest.test_Gemma_token_classification_model with Gemma -> T5Gemma (Add is_encoder_decoder option)
     def test_T5Gemma_token_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -812,7 +803,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
             )
 
-    # Copied from tests.models.gemma.test_modeling_gemma.GemmaModelTest.test_sdpa_equivalence
+    # Based on tests.models.gemma.test_modeling_gemma.GemmaModelTest.test_sdpa_equivalence
     # Add decoder_input_ids and adjust hidden states.
     @require_torch_sdpa
     @require_torch_accelerator
@@ -828,7 +819,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             model.config._attn_implementation = "sdpa"
             states_sdpa = model(dummy_input, decoder_input_ids=decoder_dummy_input, output_hidden_states=True)
-            
+
             model.config._attn_implementation = "eager"
             states_eager = model(dummy_input, decoder_input_ids=decoder_dummy_input, output_hidden_states=True)
 
@@ -845,7 +836,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_flash_attn_2_equivalence(self):
         pass
 
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_attention_outputs
+    # Based on tests.test_modeling_common.ModelTesterMixin.test_attention_outputs
     # Skip token classification
     def test_attention_outputs(self):
         if not self.has_attentions:
@@ -968,7 +959,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
 
-    # Copied from tests.generation.test_utils.GenerationTesterMixin.test_past_key_values_format
+    # Based on tests.generation.test_utils.GenerationTesterMixin.test_past_key_values_format
     # Adjust encoder attention number for cross-attention caching and update attention head dimension
     @pytest.mark.generate
     def test_past_key_values_format(self, custom_all_cache_shapes=None):
@@ -998,17 +989,12 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             is_legacy_cache = not isinstance(past_kv, Cache)
 
             text_config = config.get_text_config()
-            num_decoder_layers = (
-                getattr(text_config, "decoder_layers", None)
-                or getattr(text_config, "num_decoder_layers", None)
-                or text_config.num_hidden_layers
-            )
+            num_decoder_layers = text_config.num_hidden_layers
 
             if custom_all_cache_shapes is None:
                 num_query_attention_heads = getattr(
                     text_config, "decoder_attention_heads", text_config.num_attention_heads
                 )
-                embed_dim = getattr(text_config, "d_model", text_config.hidden_size)
                 per_head_embed_dim = text_config.head_dim
                 num_key_value_heads = (
                     text_config.num_key_value_heads
@@ -1099,7 +1085,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_load_with_mismatched_shapes(self):
         pass
 
-    # Copied from tests.generation.test_utils.GenerationTesterMixin.test_generate_continue_from_past_key_values
+    # Based on tests.generation.test_utils.GenerationTesterMixin.test_generate_continue_from_past_key_values
     # Updated decoder_attention_mask to consider the appended bos token
     @pytest.mark.generate
     def test_generate_continue_from_past_key_values(self):
@@ -1151,7 +1137,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 "return_dict_in_generate": True,
                 "output_scores": True,
             }
-            
+
             # Traditional way of generating text, with `return_dict_in_generate` to return the past key values
             outputs = model.generate(**inputs, **generate_kwargs, max_new_tokens=4)
 
@@ -1180,7 +1166,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                     mode="constant",
                     value=1,
                 )
-           
+
             first_caches_scores = outputs_cached.scores
             outputs_cached = model.generate(**inputs, **generate_kwargs, max_new_tokens=1)
             full_cached_scores = first_caches_scores + outputs_cached.scores
@@ -1197,7 +1183,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                         )
                     )
 
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_inputs_embeds_matches_input_ids
+    # Based on tests.test_modeling_common.ModelTesterMixin.test_inputs_embeds_matches_input_ids
     # Update encoder and decoder embeddings
     def test_inputs_embeds_matches_input_ids(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1234,7 +1220,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         torch.testing.assert_close(out_embeds, out_ids)
 
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_inputs_embeds_matches_input_ids
+    # Based on tests.test_modeling_common.ModelTesterMixin.test_inputs_embeds_matches_input_ids
     # Adjust token classiifcation
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -1294,7 +1280,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    # Copied from tests.models.t5.test_modeling_t5.T5ModelTest.test_custom_4d_attention_mask
+    # Based on tests.models.t5.test_modeling_t5.T5ModelTest.test_custom_4d_attention_mask
     # Excluding the final token from input_ids
     def test_custom_4d_attention_mask(self):
         for model_class in self.all_generative_model_classes:
@@ -1330,7 +1316,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             normalized_1 = F.softmax(out_shared_prefix_last_tokens)
             torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
 
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flex_attention_with_grads
+    # Based on tests.test_modeling_common.ModelTesterMixin.test_flex_attention_with_grads
     # Update hidden size for encoder and decoder
     @require_torch_gpu
     def test_flex_attention_with_grads(self):
@@ -1380,7 +1366,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 class T5GemmaEncoderOnlyModelTester:
     config_class = T5GemmaConfig
     module_config_class = T5GemmaModuleConfig
-    
+
     if is_torch_available():
         model_class = T5GemmaEncoderModel
 
@@ -1399,7 +1385,7 @@ class T5GemmaEncoderOnlyModelTester:
         num_attention_heads=4,
         num_key_value_heads=2,
         intermediate_size=37,
-        # common    
+        # common
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -1465,11 +1451,11 @@ class T5GemmaEncoderOnlyModelTester:
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
         )
-    
+
     def get_config(self):
         return self.config_class(
-            encoder_config=self.get_encoder_config(),
-            decoder_config=None,
+            encoder=self.get_encoder_config(),
+            decoder=None,
             is_encoder_decoder=False,
             # Used for generation test.
             num_attention_heads=self.num_attention_heads,
@@ -1569,7 +1555,7 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = T5GemmaEncoderOnlyModelTester(self)
         self.config_tester = ConfigTester(
             self,
-            config_class=T5GemmaConfig, 
+            config_class=T5GemmaConfig,
             # For faking the testing.
             hidden_size=37,
             vocab_size=self.model_tester.vocab_size,
@@ -1596,7 +1582,7 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip("No loss in the output of T5GemmaEncoderModel")
     def test_training(self):
         pass
-    
+
     @unittest.skip("No loss in the output of T5GemmaEncoderModel")
     def test_training_gradient_checkpointing(self):
         pass
@@ -1609,7 +1595,7 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    # Copied from tests.test_modeling_common.ModelTesterMixin.test_flex_attention_with_grads
+    # Based on tests.test_modeling_common.ModelTesterMixin.test_flex_attention_with_grads
     # Update hidden size for encoder
     @require_torch_gpu
     def test_flex_attention_with_grads(self):
@@ -1641,7 +1627,7 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
             _ = model(**dummy_inputs)
 
 
-# Copied from tests.models.t5.test_modeling_t5.TestAsymmetricT5
+# Based on tests.models.t5.test_modeling_t5.TestAsymmetricT5
 # Adapted for T5Gemma
 @require_torch
 class TestAsymmetricT5Gemma(unittest.TestCase):
