@@ -407,7 +407,6 @@ class VJEPA2Layer(nn.Module):
         )
         attention_output = self_attention_outputs[0]
 
-        # attention_output = self.layer_scale1(attention_output)
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # first residual connection
@@ -416,7 +415,6 @@ class VJEPA2Layer(nn.Module):
         # in Dinov2, layernorm is also applied after self-attention
         layer_output = self.norm2(hidden_states)
         layer_output = self.mlp(layer_output)
-        # layer_output = self.layer_scale2(layer_output)
 
         # second residual connection
         layer_output = self.drop_path(layer_output) + hidden_states
@@ -503,7 +501,7 @@ class VJEPA2Encoder(nn.Module):
         )
 
 
-def apply_masks(x, masks, concat=True) -> torch.Tensor:
+def apply_masks(x, masks) -> torch.Tensor:
     """
     :param x: tensor of shape [B (batch-size), N (num-patches), D (feature-dim)]
     :param masks: list of tensors of shape [B, K] containing indices of K patches in [N] to keep
@@ -512,8 +510,6 @@ def apply_masks(x, masks, concat=True) -> torch.Tensor:
     for m in masks:
         mask_keep = m.unsqueeze(-1).repeat(1, 1, x.size(-1))
         all_x += [torch.gather(x, dim=1, index=mask_keep)]
-    if not concat:
-        return all_x
 
     return torch.cat(all_x, dim=0)
 
@@ -526,7 +522,6 @@ class VJEPA2PredictorEmbeddings(nn.Module):
     def __init__(self, config: VJEPA2Config) -> None:
         super().__init__()
 
-        # self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.config = config
         self.predictor_embeddings = nn.Linear(config.hidden_size, config.pred_hidden_size)
         self.num_mask_tokens = 0
@@ -534,7 +529,6 @@ class VJEPA2PredictorEmbeddings(nn.Module):
         self.num_mask_tokens = config.pred_num_mask_tokens
         self.mask_tokens = nn.Parameter(torch.zeros(self.num_mask_tokens, 1, 1, config.pred_hidden_size))
 
-        # self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.patch_size
         self.config = config
 
@@ -832,7 +826,6 @@ def _convert_head_mask_to_5d(head_mask, num_hidden_layers):
     if head_mask is not None:
         head_mask = head_mask.unsqueeze(1).unsqueeze(0)
         head_mask = head_mask.expand(num_hidden_layers, -1, -1, -1, -1)
-        # head_mask = head_mask.to(dtype=self.dtype)  # switch to float if need + fp16 compatibility
     else:
         head_mask = [None] * num_hidden_layers
     return head_mask

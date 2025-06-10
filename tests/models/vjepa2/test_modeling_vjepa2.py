@@ -222,14 +222,6 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model = VJEPA2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    # @unittest.skip(reason="Permuting pixel_values_videos within VJEPA2Embedding breaks this test.")
-    # def test_torch_fx(self):
-    #     pass
-
-    # @unittest.skip(reason="Permuting pixel_values_videos within VJEPA2Embedding breaks this test.")
-    # def test_torch_fx_output_loss(self):
-    #     pass
-
 
 # We will verify our results on an image of cute cats
 def prepare_img():
