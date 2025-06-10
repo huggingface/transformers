@@ -58,7 +58,7 @@ from transformers import AutoModel
 
 model = AutoModel.from_pretrained("google/canine-c")
 
-text = "Hello World!"
+text = "Plant create energy through a process known as photosynthesis."
 input_ids = torch.tensor([[ord(char) for char in text]])
 
 outputs = model(input_ids)  
