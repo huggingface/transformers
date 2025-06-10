@@ -25,6 +25,7 @@ rendered properly in your Markdown viewer.
 **Fireflies** is a minimal encoder-only Transformer model designed for experimentation and lightweight deployment. It was built from scratch as a custom architecture and is currently focused on the Indonesian NLP domain, but flexible enough for general-purpose text modeling.
 
 The model supports standard input/output patterns similar to BERT and is intended for continued development toward pretraining, downstream fine-tuning, and GGUF quantization.
+This model was contributed by [Arynz](https://huggingface.co/Arynz/Fireflies300M/tree/main).
 
 The implementation supports:
 - Custom architecture defined with `FirefliesConfig`

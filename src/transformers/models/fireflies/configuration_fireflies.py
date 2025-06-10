@@ -7,6 +7,11 @@ from ...onnx import OnnxConfig
 
 class FirefliesConfig(PretrainedConfig):
     model_type = "fireflies"
+    """
+    This is the configuration class to store the configuration of a [`FirefliesModel`].
+
+    Checkpoint Example: [Arynz/Fireflies300M](https://huggingface.co/Arynz/Fireflies300M)
+    """
 
     def __init__(
         self,
