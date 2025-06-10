@@ -40,11 +40,6 @@ from .import_utils import (
     is_torch_fx_proxy,
 )
 
-
-if TYPE_CHECKING:
-    if is_torch_available():
-        import torch
-
 if is_torch_available():
     # required for @can_return_tuple decorator to work with torchdynamo
     import torch  # noqa: F401
@@ -862,7 +857,7 @@ class LossKwargs(TypedDict, total=False):
             you are doing gradient accumulation.
     """
 
-    num_items_in_batch: Optional[torch.Tensor]
+    num_items_in_batch: Optional["torch.Tensor"]
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
