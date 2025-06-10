@@ -52,7 +52,7 @@ class DeepseekVLHybridImageProcessingTester:
         high_res_image_std=[0.5, 0.5, 0.5],
     ):
         size = size if size is not None else {"height": 18, "width": 18}
-        high_res_size = high_res_size if high_res_size is not None else {"height": 24, "width": 24}
+        high_res_size = high_res_size if high_res_size is not None else {"height": 36, "width": 36}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
