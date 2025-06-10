@@ -143,7 +143,6 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
             pre_tok_state["strip_accents"] = strip_accents
             self.backend_tokenizer.normalizer = pre_tok_class(**pre_tok_state)
 
-        self.do_lower_case = do_lower_case
 
         # additional properties
         self.cls_token_box = cls_token_box
@@ -804,9 +803,6 @@ class LayoutLMv2TokenizerFast(PreTrainedTokenizerFast):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
-        return tuple(files)
 
 
 __all__ = ["LayoutLMv2TokenizerFast"]

@@ -171,45 +171,6 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
         else:
             return self._special_token_mask(token_ids_0 + token_ids_1) + [1]
 
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
-        """
-        Build model inputs from a sequence by adding eos to the end. no bos token is added to the front.
-
-        - single sequence: `X </s>`
-        - pair of sequences: `A B </s>` (not intended use)
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs to which the special tokens will be added
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        if token_ids_1 is None:
-            return token_ids_0 + [self.eos_token_id]
-        # We don't expect to process pairs, but leave the pair logic for API consistency
-        return token_ids_0 + token_ids_1 + [self.eos_token_id]
-
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        if not self.can_save_slow_tokenizer:
-            raise ValueError(
-                "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
-                "tokenizer."
-            )
-
-        if not os.path.isdir(save_directory):
-            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return
-        out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
-
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
-            copyfile(self.vocab_file, out_vocab_file)
-
-        return (out_vocab_file,)
 
 
 __all__ = ["PegasusTokenizerFast"]

@@ -526,14 +526,6 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
             bos_sequence.append(notimestamps_token_id)
         return bos_sequence
 
-    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.build_inputs_with_special_tokens
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
-        """Build model inputs from a sequence by appending eos_token_id."""
-        if token_ids_1 is None:
-            return self.prefix_tokens + token_ids_0 + [self.eos_token_id]
-        # We don't expect to process pairs, but leave the pair logic for API consistency
-        return self.prefix_tokens + token_ids_0 + token_ids_1 + [self.eos_token_id]
-
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False

@@ -114,7 +114,6 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
             pre_tok_state["strip_accents"] = strip_accents
             self.backend_tokenizer.normalizer = pre_tok_class(**pre_tok_state)
 
-        self.do_lower_case = do_lower_case
 
     @property
     def question_token_id(self):
@@ -185,9 +184,6 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
             # Input is context-then-question
             return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + question_suffix + sep) * [1]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
-        return tuple(files)
 
 
 __all__ = ["SplinterTokenizerFast"]
