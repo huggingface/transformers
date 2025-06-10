@@ -1523,7 +1523,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         if decoder_attention_mask is not None:  # xla
             decoder_position_ids = tf.math.cumsum(decoder_attention_mask, axis=-1, exclusive=True)[:, -1:]
         elif past_key_values is not None:  # no xla + past_key_values
-            decoder_position_ids = past_key_values.get_seq_length()
+            decoder_position_ids = past_key_values[0][0].shape[2]
         else:  # no xla + no past_key_values
             decoder_position_ids = tf.range(decoder_input_ids.shape[1])
 
