@@ -28,7 +28,7 @@ We use two mechanisms to keep this code in sync:
   automatically generate a complete modeling file, like `modeling_bert.py`, from the modular file like `modular_bert.py`. If a model has a modular file, the modeling file
   should never be edited directly! Instead, changes should be made in the modular file, and then you should run `make fixup` to update the modeling file automatically.
 
-When adding new models, you should prefer `modular` style
+When adding new models, you should prefer `modular` style.
 
 ## Testing
 
