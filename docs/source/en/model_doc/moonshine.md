@@ -76,7 +76,6 @@ print(f"Transcription: '{transcription}'")
 </hfoption>
 </hfoptions>
 
-## Notes
 
 - Moonshine improves upon Whisper's architecture:
   1. It uses SwiGLU activation instead of GELU in the decoder layers
