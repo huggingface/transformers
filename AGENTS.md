@@ -18,7 +18,7 @@ This AGENTS.md file provides guidance for code agents working with this codebase
 
 ## Copying and inheritance
 
-Many models in the codebase have similar code, but it is not shared by inheritance, because we want each model file to be self-contained.
+Many models in the codebase have similar code, but it is not shared by inheritance because we want each model file to be self-contained.
 We use two mechanisms to keep this code in sync:
 
 - "Copied from" syntax. Functions or entire classes can have a comment at the top like this: `# Copied from transformers.models.llama.modeling_llama.rotate_half` or `# Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->MT5`
