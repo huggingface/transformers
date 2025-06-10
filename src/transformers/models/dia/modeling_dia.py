@@ -70,7 +70,7 @@ class DiaPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = getattr(self.config, "init_std", 0.2)
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
+        if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -78,9 +78,8 @@ class DiaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, DiaRMSNorm):
             module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
 
     def _update_full_mask(
         self,

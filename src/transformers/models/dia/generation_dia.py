@@ -69,14 +69,14 @@ class DiaGenerationMixin(GenerationMixin):
         custom_processors.append(
             DiaEOSChannelFilterLogitsProcessor(
                 num_channels=len(self.config.delay_pattern),
-                eos_token_id=generation_config.eos_token_id,
+                eos_token_id=self.config.eos_token_id,
             )
         )
 
         custom_processors.append(
             DiaEOSDelayPatternLogitsProcessor(
                 delay_pattern=self.config.delay_pattern,
-                eos_token_id=generation_config.eos_token_id,
+                eos_token_id=self.config.eos_token_id,
                 max_generation_len=generation_config.max_length,
                 device=device,
             )
@@ -221,8 +221,8 @@ class DiaGenerationMixin(GenerationMixin):
         )
 
         # 4. Overwrite and convert to 2D
-        decoder_input_ids = delayed_batch[:, : max_audio_len + 1, :].reshape(real_batch_size * num_channels, -1)
-        model_kwargs["decoder_attention_mask"] = decoder_attention_mask[:, : max_audio_len + 1]
+        decoder_input_ids = delayed_batch[:, : max_audio_len + 1, :].reshape(real_batch_size * num_channels, -1).long()
+        model_kwargs["decoder_attention_mask"] = decoder_attention_mask[:, : max_audio_len + 1].long()
         model_kwargs["decoder_delay_mask"] = delayed_batch
 
         return decoder_input_ids, model_kwargs
@@ -473,11 +473,6 @@ class DiaGenerationMixin(GenerationMixin):
         custom_generate: Optional[str] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
-        # Get total input len to parse the output after generation
-        decoder_input_len = 1  # +1 for BOS
-        if kwargs is not None and "decoder_input_ids" in kwargs:
-            decoder_input_len = kwargs["decoder_input_ids"].shape[1] + 1
-
         output = self._main_generate_loop(
             inputs=inputs,
             generation_config=generation_config,
@@ -503,7 +498,8 @@ class DiaGenerationMixin(GenerationMixin):
 
         # TODO: check for correctness
         # Reshape from 2D (bsz * channels, seq_len) to 3D (bsz, seq_len, channels)
-        bsz, num_channels = output_sequences.shape[0], self.config.decoder_config.num_channels
+        num_channels = self.config.decoder_config.num_channels
+        bsz = output_sequences.shape[0] // num_channels
         output_sequences = output_sequences.reshape(bsz, -1, num_channels)
         seq_len = output_sequences.shape[1]
 
@@ -520,7 +516,7 @@ class DiaGenerationMixin(GenerationMixin):
             pad_value=self.config.pad_token_id,
             precomp=revert_precomp,
             T=seq_len,
-        )[:, : -max(self.config.delay_pattern), :]
+        )
 
         # Cut out invalid values, e.g. audio bos/eos/pad
         # (note that Dia has their special tokens >= eos)
@@ -529,8 +525,8 @@ class DiaGenerationMixin(GenerationMixin):
         invalid_mask = (output_sequences < min_valid_index) | (output_sequences > max_valid_index)
         output_sequences[invalid_mask] = 0
 
-        # Cut non generated tokens out
-        output_sequences = output_sequences[:, :decoder_input_len]
+        # Cut non generated tokens out TODO: move to processor via padding mask
+        # output_sequences = output_sequences[:, decoder_input_len:]
 
         if return_dict_in_generate:
             output.sequences = output_sequences
@@ -553,6 +549,7 @@ class DiaGenerationMixin(GenerationMixin):
 
         return input_ids
 
+    # TODO: rewrite with more better namings
     @staticmethod
     def build_delay_indices(B: int, T: int, C: int, delay_pattern: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
         """
