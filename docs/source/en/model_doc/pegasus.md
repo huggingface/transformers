@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 # Pegasus
 
-[Pegasus](https://huggingface.co/papers/1912.08777) is an encoder-decoder (sequence-to-sequence) transformer model pretrained on unlabeled text to perform abstractive summarization. Pegasus is trained jointly on two self-supervised objective functions: Masked Language Modeling (MLM) and a novel summarization-focused objective called Gap Sentence Generation (GSG). These models excel in low-resource summarization settings, needing only a small fine-tuning dataset to perform well.
+[Pegasus](https://huggingface.co/papers/1912.08777) is an encoder-decoder (sequence-to-sequence) transformer model pretrained on unlabeled text to perform abstractive summarization. Pegasus is trained jointly on two self-supervised objective functions, masked language modeling (MLM) and gap sentence generation (GSG). Whole sentences are masked and the model has to fill in the gaps in the document. It can be fine-tuned with good performance even on small datasets with only 1000 examples.
 
 You can find all the original Pegasus checkpoints under the [Google](https://huggingface.co/google?search_models=pegasus) organization.
 
@@ -89,7 +89,7 @@ echo -e "Plants are remarkable organisms that produce their own food using a met
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [bitsandbytes](https://huggingface.co/docs/transformers/main/en/quantization/bitsandbytes) to only quantize the weights to int4.
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
 
 ```py
 import torch
@@ -121,8 +121,8 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ## Notes
 
-- The [`Adafactor`] optimizer is recommended for fine-tuning this model.
-- The model starts generating with `pad_token_id` (embedding of all zeros) as the prefix.
+- [`AdaFactor`] is the recommended optimizer for fine-tuning Pegasus.
+- This implementation of Pegasus inherits from [`BartForConditionalGeneration`] but it uses static/sinusoidal positional embeddings instead. Pegaus also starts generating with `pad_token_id` as the prefix and uses `num_beams=8`.
 
 ## PegasusConfig
 
