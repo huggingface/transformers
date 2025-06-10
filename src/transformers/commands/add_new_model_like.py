@@ -27,8 +27,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import yaml
 
-from . import BaseTransformersCLICommand
-from .add_fast_image_processor import add_fast_image_processor
 from ..models import auto as auto_module
 from ..models.auto.configuration_auto import model_type_to_module_name
 from ..utils import (
@@ -37,6 +35,9 @@ from ..utils import (
     is_torch_available,
     logging,
 )
+from . import BaseTransformersCLICommand
+from .add_fast_image_processor import add_fast_image_processor
+
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
