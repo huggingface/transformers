@@ -397,7 +397,7 @@ class VJEPA2Encoder(nn.Module):
         self.config = config
 
         self.embeddings = VJEPA2Embeddings(config, hidden_size=config.hidden_size)
-        dpr = [
+        drop_path_rates = [
             (config.drop_path_rate * i / (config.num_hidden_layers - 1) if config.num_hidden_layers > 1 else 0.0)
             for i in range(config.num_hidden_layers)
         ]
@@ -405,7 +405,7 @@ class VJEPA2Encoder(nn.Module):
             [
                 VJEPA2Layer(
                     config,
-                    drop_path_rate=dpr[i],
+                    drop_path_rate=drop_path_rates[i],
                     hidden_size=config.hidden_size,
                     num_attention_heads=config.num_attention_heads,
                     mlp_ratio=config.mlp_ratio,
@@ -539,8 +539,9 @@ class VJEPA2Predictor(nn.Module):
     def __init__(self, config: VJEPA2Config):
         super().__init__()
         self.config = config
+        self.gradient_checkpointing = False
         self.embeddings = VJEPA2PredictorEmbeddings(config)
-        dpr = [
+        drop_path_rates = [
             (
                 config.drop_path_rate * i / (config.pred_num_hidden_layers - 1)
                 if config.pred_num_hidden_layers > 1
@@ -552,7 +553,7 @@ class VJEPA2Predictor(nn.Module):
             [
                 VJEPA2Layer(
                     config,
-                    drop_path_rate=dpr[i],
+                    drop_path_rate=drop_path_rates[i],
                     hidden_size=config.pred_hidden_size,
                     num_attention_heads=config.pred_num_attention_heads,
                     mlp_ratio=config.pred_mlp_ratio,
@@ -560,7 +561,6 @@ class VJEPA2Predictor(nn.Module):
                 for i in range(config.pred_num_hidden_layers)
             ]
         )
-        self.gradient_checkpointing = False
         self.layernorm = nn.LayerNorm(config.pred_hidden_size, eps=config.layer_norm_eps)
         self.proj = nn.Linear(config.pred_hidden_size, config.hidden_size, bias=True)
 
