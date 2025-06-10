@@ -158,13 +158,18 @@ class OpenaiRotaryEmbedding(nn.Module):
     rope_type = "default"
     def __init__(self, config: OpenaiConfig, device=None):
         super().__init__()
-        self.attention_scaling = 1.0
-        with torch.device("cpu"):
-            inv_freq = 1.0 / (config.rope_theta ** ( torch.arange(0, config.head_dim, 2, dtype=torch.float32)/ config.head_dim))
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
-        self.config = config        
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 

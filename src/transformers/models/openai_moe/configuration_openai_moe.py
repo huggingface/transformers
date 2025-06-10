@@ -65,11 +65,12 @@ class OpenaiConfig(PretrainedConfig):
         tie_word_embeddings=False,
         hidden_act: str = "silu",
         initializer_range: float = 0.02,
+        max_position_embeddings=131072,
         rms_norm_eps: float = 1e-5,
         pad_token_id: int = 0,
         bos_token_id: int = 1,
         eos_token_id: int = 2,
-        rope_scaling=None,
+        rope_scaling={"rope_type": "yarn", "factor": 32.0, "beta_fast": 32.0, "beta_slow": 1.0, "truncate": False},
         attention_dropout: float = 0.0,
         num_experts_per_tok=4,
         router_aux_loss_coef: float = 0.9,
@@ -113,7 +114,7 @@ class OpenaiConfig(PretrainedConfig):
         
         self.attention_bias = True 
         self.mlp_bias = False
-        self.max_position_embeddings = 8192
+        self.max_position_embeddings = max_position_embeddings
         self.router_aux_loss_coef = router_aux_loss_coef
         self.output_router_logits = output_router_logits
         self.use_cache = use_cache
