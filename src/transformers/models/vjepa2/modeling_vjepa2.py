@@ -6,6 +6,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, dataclass
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_layers import GradientCheckpointingLayer
 from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_vjepa2 import VJEPA2Config
 
@@ -133,9 +134,8 @@ def rotate_queries_or_keys(x, pos):
 
     # --
     y = x.unflatten(-1, (-1, 2))
-    y1, y2 = y.unbind(
-        dim=-1,
-    )
+    y1, y2 = y.unbind(dim=-1)
+
     y = torch.stack((-y2, y1), dim=-1)
     y = y.flatten(-2)
     return (x * emb_cos) + (y * emb_sin)
@@ -360,7 +360,7 @@ class VJEPA2SwiGLUFFN(nn.Module):
         return self.weights_out(hidden)
 
 
-class VJEPA2Layer(nn.Module):
+class VJEPA2Layer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the original implementation."""
 
     def __init__(
@@ -467,18 +467,7 @@ class VJEPA2Encoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    None,  # Note: passing none position mask for now
-                    layer_head_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, None, layer_head_mask, output_attentions)
-
+            layer_outputs = layer_module(hidden_states, None, layer_head_mask, output_attentions)
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -674,18 +663,7 @@ class VJEPA2Predictor(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
-
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    position_masks,
-                    layer_head_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, position_masks, layer_head_mask, output_attentions)
-
+            layer_outputs = layer_module(hidden_states, position_masks, layer_head_mask, output_attentions)
             hidden_states = layer_outputs[0]
 
             if output_attentions:
