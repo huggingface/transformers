@@ -20,7 +20,7 @@ from collections import namedtuple
 from dataclasses import dataclass
 from functools import reduce
 from operator import mul
-from typing import List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -29,6 +29,7 @@ from torch.autograd.function import Function
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...cache_utils import DynamicCache
 from ...generation import GenerationMixin
 from ...modeling_outputs import CausalLMOutput, MaskedLMOutput, QuestionAnsweringModelOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
@@ -58,6 +59,117 @@ ReformerEncoderOutput = namedtuple(
     "ReformerEncoderOutput",
     ["hidden_states", "all_hidden_states", "all_attentions", "past_buckets_states"],
 )
+
+
+class ReformerDynamicCache(DynamicCache):
+    """
+    A dynamic cache that stores past buckets instead of key/values.
+    """
+
+    def __init__(self, _distributed_cache_data: Optional[Iterable] = None) -> None:
+        super().__init__()
+        self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
+        self.buckets_cache: List[torch.Tensor] = []
+        self.states_cache: List[torch.Tensor] = []
+
+        if _distributed_cache_data is not None:
+            for buckets, states in _distributed_cache_data:
+                self.buckets_cache.append(buckets)
+                self.states_cache.append(states)
+
+    def __getitem__(self, layer_idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Support for backwards-compatible `past_key_value` indexing, e.g. `past_key_value[0][0].shape[2]` to get the
+        sequence length.
+        """
+        if layer_idx < len(self):
+            return (self.buckets_cache[layer_idx], self.states_cache[layer_idx])
+        else:
+            raise KeyError(f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}")
+
+    def __iter__(self):
+        """
+        Support for backwards-compatible `past_key_value` iteration, e.g. `for x in past_key_value:` to iterate over
+        keys and values
+        """
+        for layer_idx in range(len(self)):
+            yield (self.buckets_cache[layer_idx], self.states_cache[layer_idx])
+
+    def __len__(self):
+        """
+        Support for backwards-compatible `past_key_value` length, e.g. `len(past_key_value)`. This value corresponds
+        to the number of layers in the model.
+        """
+        return len(self.states_cache)
+
+    def update(
+        self,
+        buckets: torch.Tensor,
+        states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
+
+        Parameters:
+            key_states (`torch.Tensor`):
+                The new key states to cache.
+            value_states (`torch.Tensor`):
+                The new value states to cache.
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+            cache_kwargs (`Dict[str, Any]`, `optional`):
+                Additional arguments for the cache subclass. No additional arguments are used in `ReformerDynamicCache`.
+
+        Return:
+            A tuple containing the updated key and value states.
+        """
+        # Update the number of seen tokens
+        if layer_idx == 0:
+            self._seen_tokens += states.shape[-2]
+
+        # Update the cache
+        if states is not None:
+            if len(self.states_cache) <= layer_idx:
+                self.states_cache.append(states)
+            else:
+                self.states_cache[layer_idx] = torch.cat([self.states_cache[layer_idx], states], dim=1)
+
+        if buckets is not None:
+            if len(self.buckets_cache) <= layer_idx:
+                self.buckets_cache.append(buckets)
+            else:
+                self.buckets_cache[layer_idx] = torch.cat([self.buckets_cache[layer_idx], buckets], dim=-1)
+        else:
+            # `ReformerLocalAttn` passes `None` to buckets as the module uses no buckets
+            self.buckets_cache.append(torch.tensor([]))
+
+        return self.buckets_cache[layer_idx], self.states_cache[layer_idx]
+
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        return None
+
+    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
+        """Converts the `ReformerDynamicCache` instance into the its equivalent in the legacy cache format. Used for
+        backward compatibility."""
+        legacy_cache = ()
+        for layer_idx in range(len(self)):
+            legacy_cache += ((self.buckets_cache[layer_idx], self.states_cache[layer_idx]),)
+        return legacy_cache
+
+    @classmethod
+    def from_legacy_cache(
+        cls, past_buckets_states: Optional[Tuple[Tuple[torch.FloatTensor, torch.FloatTensor]]] = None
+    ) -> "ReformerDynamicCache":
+        """Converts a cache in the legacy cache format into an equivalent `ReformerDynamicCache`. Used for
+        backward compatibility."""
+        cache = cls()
+        if past_buckets_states is not None:
+            for layer_idx in range(len(past_buckets_states)):
+                buckets, states = past_buckets_states[layer_idx]
+                cache.update(buckets, states, layer_idx)
+        return cache
 
 
 def _stable_argsort(vector, dim):
@@ -316,7 +428,7 @@ class EfficientAttentionMixin:
 
 
 class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
-    def __init__(self, config):
+    def __init__(self, config, layer_idx=None):
         super().__init__()
         self.config = config
 
@@ -328,6 +440,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         self.hash_seed = config.hash_seed
         self.is_decoder = config.is_decoder
         self.max_position_embeddings = config.max_position_embeddings
+        self.layer_idx = layer_idx
 
         self.dropout = config.lsh_attention_probs_dropout_prob
 
@@ -356,6 +469,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         past_buckets_states=None,
         use_cache=False,
         output_attentions=False,
+        cache_position=None,
         **kwargs,
     ):
         sequence_length = hidden_states.shape[1]
@@ -364,22 +478,22 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         # num hashes can optionally be overwritten by user
         num_hashes = num_hashes if num_hashes is not None else self.num_hashes
 
-        do_cached_attention = use_cache and past_buckets_states[1] is not None
-
         # check if cache shall be used and that hidden states are already cached
-        if do_cached_attention:
+        exists_cache = past_buckets_states is not None and len(past_buckets_states) > self.layer_idx
+        if exists_cache:
             assert sequence_length == 1, (
                 "At the moment, auto-regressive language generation is only possible one word at a time. Make sure"
                 f" that input sequence length {sequence_length} equals 1, when `past_buckets_states` is passed."
             )
-            past_buckets = past_buckets_states[0]
-            past_states = past_buckets_states[1]
 
             # get query vector
             query_vectors = self.query_key(hidden_states)
             query_vectors = self._split_hidden_size_dim(
                 query_vectors, self.num_attention_heads, self.attention_head_size
             )
+
+            past_buckets = past_buckets_states.buckets_cache[self.layer_idx]
+            past_states = past_buckets_states.states_cache[self.layer_idx]
 
             if past_buckets is not None:
                 key_value_hidden_states, sorted_bucket_idx, buckets = self._get_relevant_hid_states_and_buckets(
@@ -425,7 +539,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             value_vectors = self.value(hidden_states)
 
         # if query key is not already split
-        if not do_cached_attention or past_buckets is None:
+        if not use_cache or not exists_cache:
             query_key_vectors = self._split_hidden_size_dim(
                 query_key_vectors, self.num_attention_heads, self.attention_head_size
             )
@@ -434,7 +548,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             )
 
         # cache buckets for next incremental decoding
-        if do_cached_attention and past_buckets is None and key_value_hidden_states.shape[1] >= self.chunk_length:
+        if exists_cache and key_value_hidden_states.shape[1] >= self.chunk_length:
             buckets = self._hash_vectors(query_key_vectors, num_hashes, attention_mask)
 
         # free memory
@@ -448,7 +562,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         )
 
         do_standard_self_attention = (sequence_length <= self.chunk_length) or (
-            use_cache and past_buckets_states[1] is not None
+            exists_cache and past_states is not None
         )
         # LSH attention only makes sense if chunked attention should be performed
         if not do_standard_self_attention:
@@ -498,7 +612,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                     "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and"
                     " `config.num_chunks_before` are set to 0."
                 )
-        elif do_cached_attention and past_buckets is not None:
+        elif exists_cache and past_buckets is not None:
             # use max sequence length
             sorted_bucket_idx_per_hash = sorted_bucket_idx
         else:
@@ -526,7 +640,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             attention_mask=attention_mask,
             head_mask=head_mask,
             do_standard_self_attention=do_standard_self_attention,
-            do_cached_attention=do_cached_attention,
+            use_cache=use_cache,
         )
 
         # free memory
@@ -537,7 +651,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             # sort clusters back to correct ordering
             out_vectors, logits = ReverseSort.apply(out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx)
 
-        if not do_standard_self_attention or (do_cached_attention and past_buckets is not None):
+        if not do_standard_self_attention or (exists_cache and past_buckets is not None):
             # sum up all hash rounds
             if num_hashes > 1:
                 out_vectors = self._split_seq_length_dim_to(
@@ -721,7 +835,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         attention_mask,
         head_mask,
         do_standard_self_attention,
-        do_cached_attention,
+        use_cache,
     ):
         # look at previous and following chunks if chunked attention
         if not do_standard_self_attention:
@@ -741,12 +855,12 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                 sorted_bucket_idx_per_hash, -1, self.chunk_length, self.num_attention_heads
             )
             key_value_bucket_idx = self._look_adjacent(query_bucket_idx, self.num_chunks_before, self.num_chunks_after)
-        elif do_cached_attention and query_key_dots.ndim > 4:
+        elif use_cache and query_key_dots.ndim > 4:
             key_value_bucket_idx = sorted_bucket_idx_per_hash
             query_bucket_idx = (
                 key_value_bucket_idx.new_ones(key_value_bucket_idx.shape[:-1] + (1,)) * key_value_bucket_idx.max()
             )
-        elif do_cached_attention and query_key_dots.ndim <= 4:
+        elif use_cache and query_key_dots.ndim <= 4:
             query_bucket_idx = (query_key_dots.shape[-1] - 1) * torch.ones_like(query_key_dots)[:, :, :, -1]
             key_value_bucket_idx = torch.arange(
                 query_key_dots.shape[-1], dtype=torch.long, device=query_key_dots.device
@@ -762,7 +876,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             self_mask_value = self.self_mask_value_float32
             mask_value = self.mask_value_float32
 
-        if not do_cached_attention:
+        if not use_cache:
             mask = self._compute_attn_mask(
                 query_bucket_idx,
                 key_value_bucket_idx,
@@ -1016,7 +1130,7 @@ class ReverseSort(Function):
 
 
 class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
-    def __init__(self, config):
+    def __init__(self, config, layer_idx=None):
         super().__init__()
 
         self.num_attention_heads = config.num_attention_heads
@@ -1029,6 +1143,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         self.attention_head_size = config.attention_head_size
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.hidden_size = config.hidden_size
+        self.layer_idx = layer_idx
 
         # projection matrices
         self.query = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
@@ -1055,13 +1170,16 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         batch_size = hidden_states.shape[0]
 
         # check if cache shall be used and that hidden states are already cached
-        if use_cache and past_buckets_states[1] is not None:
-            assert past_buckets_states[0] is None, (
+        if past_buckets_states is not None and len(past_buckets_states) > self.layer_idx:
+            past_buckets = past_buckets_states.buckets_cache[self.layer_idx]
+            past_states = past_buckets_states.states_cache[self.layer_idx]
+
+            assert past_buckets.numel() == 0, (
                 "LocalSelfAttention should not make use of `buckets`. There seems to be an error when caching"
                 " hidden_states_and_buckets."
             )
             key_value_hidden_states = self._retrieve_relevant_hidden_states(
-                past_buckets_states[1], self.chunk_length, self.num_chunks_before
+                past_states, self.chunk_length, self.num_chunks_before
             )
             key_value_hidden_states = torch.cat([key_value_hidden_states, hidden_states], dim=1)
 
@@ -1262,15 +1380,15 @@ class ReformerAttention(nn.Module):
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         if len(set(self.attn_layers)) == 1 and self.attn_layers[0] == "lsh":
-            self.self_attention = LSHSelfAttention(config)
+            self.self_attention = LSHSelfAttention(config, layer_idx=layer_id)
         elif len(set(self.attn_layers)) == 1 and self.attn_layers[0] == "local":
-            self.self_attention = LocalSelfAttention(config)
+            self.self_attention = LocalSelfAttention(config, layer_idx=layer_id)
         elif len(set(self.attn_layers)) == 2 and set(self.attn_layers) == {"lsh", "local"}:
             # get correct attn layers
             if self.attn_layers[self.layer_id] == "lsh":
-                self.self_attention = LSHSelfAttention(config)
+                self.self_attention = LSHSelfAttention(config, layer_idx=layer_id)
             else:
-                self.self_attention = LocalSelfAttention(config)
+                self.self_attention = LocalSelfAttention(config, layer_idx=layer_id)
         else:
             raise NotImplementedError(
                 f"Only attn layer types 'lsh' and 'local' exist, but got `config.attn_layers`: {self.attn_layers}. "
@@ -1289,14 +1407,9 @@ class ReformerAttention(nn.Module):
         orig_sequence_length=None,
         output_attentions=False,
         buckets=None,
+        cache_position=None,
     ):
         hidden_states = self.layer_norm(hidden_states)
-
-        # make sure cached hidden states is set to None for backward pass
-        if past_buckets_states is not None:
-            past_buckets_states_layer = past_buckets_states[self.layer_id]
-        else:
-            past_buckets_states_layer = None
 
         # use cached buckets for backprob if buckets not None for LSHSelfAttention
         self_attention_outputs = self.self_attention(
@@ -1304,37 +1417,30 @@ class ReformerAttention(nn.Module):
             head_mask=head_mask,
             attention_mask=attention_mask,
             num_hashes=num_hashes,
-            past_buckets_states=past_buckets_states_layer,
+            past_buckets_states=past_buckets_states,
             use_cache=use_cache,
             output_attentions=output_attentions,
             buckets=buckets,
+            cache_position=cache_position,
         )
 
         # add buckets if necessary
         if hasattr(self_attention_outputs, "buckets"):
             buckets = self_attention_outputs.buckets
+            buckets = buckets[:, :, :, :orig_sequence_length] if orig_sequence_length > 1 else buckets
         else:
             buckets = None
 
         # cache hidden states for future use
-        if use_cache:
-            if past_buckets_states[self.layer_id][0] is None:
-                # padded input should not be cached
-                past_buckets = (
-                    buckets[:, :, :, :orig_sequence_length]
-                    if (buckets is not None and orig_sequence_length > 1)
-                    else buckets
-                )
-            else:
-                past_buckets = torch.cat([past_buckets_states[self.layer_id][0], buckets], dim=-1)
+        if use_cache and past_buckets_states is not None:
+            # padded input should not be cached during prefill
+            states = (
+                hidden_states[:, :orig_sequence_length] if len(past_buckets_states) <= self.layer_id else hidden_states
+            )
+            buckets, hidden_states = past_buckets_states.update(
+                buckets, states[:, :orig_sequence_length], self.layer_id
+            )
 
-            if past_buckets_states[self.layer_id][1] is None:
-                # padded input should not be cached
-                past_states = hidden_states[:, :orig_sequence_length]
-            else:
-                past_states = torch.cat([past_buckets_states[self.layer_id][1], hidden_states], dim=1)
-
-            past_buckets_states[self.layer_id] = (past_buckets, past_states)
         # compute attention feed forward output
         attention_output = self.output(self_attention_outputs.hidden_states)
 
@@ -1708,8 +1814,15 @@ class ReformerEncoder(nn.Module):
         all_attentions = []
 
         # init cached hidden states if necessary
-        if past_buckets_states is None:
-            past_buckets_states = [((None), (None)) for i in range(len(self.layers))]
+        return_legacy_cache = False
+        if use_cache or not isinstance(past_buckets_states, ReformerDynamicCache):
+            logger.warning_once(
+                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
+                "You should pass an instance of `ReformerDynamicCache` instead, e.g. "
+                "`past_key_values=ReformerDynamicCache.from_legacy_cache(past_key_values)`."
+            )
+            return_legacy_cache = True
+            past_buckets_states = ReformerDynamicCache.from_legacy_cache(past_buckets_states)
 
         # concat same tensor for reversible ResNet
         hidden_states = torch.cat([hidden_states, hidden_states], dim=-1)
@@ -1734,11 +1847,15 @@ class ReformerEncoder(nn.Module):
         # Apply dropout
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
+        next_cache = past_buckets_states if use_cache else None
+        if return_legacy_cache:
+            next_cache = past_buckets_states.to_legacy_cache()
+
         return ReformerEncoderOutput(
             hidden_states=hidden_states,
             all_hidden_states=all_hidden_states,
             all_attentions=all_attentions,
-            past_buckets_states=past_buckets_states,
+            past_buckets_states=next_cache,
         )
 
 
@@ -2250,7 +2367,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
         reord_past_buckets_states = []
         for layer_past in past_key_values:
             # buckets
-            if layer_past[0] is not None:
+            if layer_past[0].numel() != 0:
                 reord_buckets = layer_past[0].index_select(0, beam_idx.to(layer_past[0].device))
             else:
                 reord_buckets = None
@@ -2258,6 +2375,9 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
             # hidden states
             reord_hidden_states = layer_past[1].index_select(0, beam_idx.to(layer_past[1].device))
             reord_past_buckets_states.append((reord_buckets, reord_hidden_states))
+
+        if isinstance(past_key_values, ReformerDynamicCache):
+            reord_past_buckets_states = ReformerDynamicCache.from_legacy_cache(reord_past_buckets_states)
         return reord_past_buckets_states
 
 
