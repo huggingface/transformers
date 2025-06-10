@@ -12,12 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for Dia."""
+"""Tokenization class for Dia."""
 
 from typing import List, Optional, Tuple
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 
 
@@ -26,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 class DiaTokenizer(PreTrainedTokenizer):
     """
-    Construct a "fast" Dia tokenizer (backed by HuggingFace's *tokenizers* library).
+    Construct a Dia tokenizer. Dia simply uses raw bytes utf-8 encoding except for special tokens `[S1]` and `[S2]`.
 
     This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
@@ -47,12 +46,16 @@ class DiaTokenizer(PreTrainedTokenizer):
 
     def __init__(
         self,
-        pad_token: Optional[str] = AddedToken("<pad>"),
-        unk_token: Optional[str] = AddedToken("<pad>"),
+        pad_token: Optional[str] = "<pad>",
+        unk_token: Optional[str] = "<pad>",
         max_length: Optional[int] = 1024,
         offset: int = 0,
         **kwargs,
     ):
+        # We have no eos/bos tokens but allow padding -- no l/r strip as we treat them as tokens as well
+        pad_token = AddedToken(pad_token) if isinstance(pad_token, str) else pad_token
+        unk_token = AddedToken(unk_token) if isinstance(unk_token, str) else unk_token
+
         self._utf_vocab_size = 2**8  # utf is 8 bits
         self._added_tokens_decoder = {0: pad_token, 1: AddedToken("[S1]"), 2: AddedToken("[S2]")}
         self.offset = offset
@@ -66,11 +69,6 @@ class DiaTokenizer(PreTrainedTokenizer):
     @property
     def vocab_size(self):
         return self._utf_vocab_size
-
-    def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (str) using the vocab."""
-        token = chr(index - self.offset)
-        return token
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size + self.offset)}
@@ -92,6 +90,11 @@ class DiaTokenizer(PreTrainedTokenizer):
 
         return token_id
 
+    def _convert_id_to_token(self, index):
+        """Converts an index (integer) in a token (str) using the vocab."""
+        token = chr(index - self.offset)
+        return token
+
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
         """Converts a sequence of tokens (string) in a single string."""
         bstring = b""
@@ -107,20 +110,9 @@ class DiaTokenizer(PreTrainedTokenizer):
         string = bstring.decode("utf-8", errors="ignore")
         return string
 
+    # No vocab file
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         return ()
 
 
-class DiaTokenizerFast(PreTrainedTokenizerFast):
-    """
-    This is the fast version of the Dia tokenizer.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def _tokenize(self, text: str) -> List[str]:
-        return super()._tokenize(text)
-
-
-__all__ = ["DiaTokenizer", "DiaTokenizerFast"]
+__all__ = ["DiaTokenizer"]
