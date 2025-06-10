@@ -19,7 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 
@@ -252,8 +252,8 @@ class T5GemmaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        encoder: Optional[T5GemmaModuleConfig | Dict[Any, Any]] = None,
-        decoder: Optional[T5GemmaModuleConfig | Dict[Any, Any]] = None,
+        encoder: Optional[Union[T5GemmaModuleConfig, Dict[Any, Any]]] = None,
+        decoder: Optional[Union[T5GemmaModuleConfig, Dict[Any, Any]]] = None,
         is_encoder_decoder: bool = True,
         dropout_rate: float = 0.0,
         classifier_dropout_rate: float = 0.0,
