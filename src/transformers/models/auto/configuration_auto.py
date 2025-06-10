@@ -409,7 +409,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("bert", "BERT"),
         ("bert-generation", "Bert Generation"),
         ("bert-japanese", "BertJapanese"),
-        ("bert2d", "Bert2D2D"),
+        ("bert2d", "Bert2D"),
         ("bertweet", "BERTweet"),
         ("big_bird", "BigBird"),
         ("bigbird_pegasus", "BigBird-Pegasus"),
