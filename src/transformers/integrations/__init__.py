@@ -119,6 +119,7 @@ _import_structure = {
         "run_hp_search_sigopt",
         "run_hp_search_wandb",
     ],
+    "mxpf4":["replace_with_mxfp4_linear"],
     "peft": ["PeftAdapterMixin"],
     "quanto": ["replace_with_quanto_layers"],
     "spqr": ["replace_with_spqr_linear"],
