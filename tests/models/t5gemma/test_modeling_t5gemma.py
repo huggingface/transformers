@@ -260,14 +260,16 @@ class T5GemmaModelTester:
             input_ids=input_ids,
             decoder_input_ids=decoder_input_ids,
             attention_mask=attention_mask,
-            decoder_attention_mask=decoder_attention_mask
+            decoder_attention_mask=decoder_attention_mask,
         )
 
         decoder_output = result.last_hidden_state
         decoder_past = result.past_key_values
         encoder_output = result.encoder_last_hidden_state
 
-        self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.encoder_hidden_size))
+        self.parent.assertEqual(
+            encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.encoder_hidden_size)
+        )
         self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertIsNotNone(decoder_past)
         self.parent.assertEqual(len(decoder_past.self_attention_cache), config.decoder.num_hidden_layers)
@@ -364,7 +366,7 @@ class T5GemmaModelTester:
         attention_mask,
         decoder_attention_mask,
         lm_labels,
-        is_encoder_decoder
+        is_encoder_decoder,
     ):
         labels = torch.tensor([1] * self.seq_length * self.batch_size, dtype=torch.long, device=torch_device)
         model = self.for_token_class(config=config, is_encoder_decoder=is_encoder_decoder)
@@ -409,7 +411,9 @@ class T5GemmaModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids, encoder_hidden_states=encoder_hidden_states)["last_hidden_state"]
-        output_from_past = model(next_tokens, encoder_hidden_states=encoder_hidden_states, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(
+            next_tokens, encoder_hidden_states=encoder_hidden_states, past_key_values=past_key_values
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -441,10 +445,7 @@ class T5GemmaModelTester:
 
         # first forward pass
         output, past_key_values = model(
-            input_ids,
-            encoder_hidden_states=encoder_hidden_states,
-            attention_mask=attn_mask,
-            use_cache=True
+            input_ids, encoder_hidden_states=encoder_hidden_states, attention_mask=attn_mask, use_cache=True
         ).to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
@@ -467,7 +468,10 @@ class T5GemmaModelTester:
             next_input_ids, encoder_hidden_states=encoder_hidden_states, attention_mask=attn_mask
         )["last_hidden_state"]
         output_from_past = model(
-            next_tokens, encoder_hidden_states=encoder_hidden_states, past_key_values=past_key_values, attention_mask=attn_mask
+            next_tokens,
+            encoder_hidden_states=encoder_hidden_states,
+            past_key_values=past_key_values,
+            attention_mask=attn_mask,
         )["last_hidden_state"]
 
         # select random slice
@@ -493,7 +497,9 @@ class T5GemmaModelTester:
         ).to(torch_device)
 
         # first forward pass
-        outputs = model(input_ids, encoder_hidden_states=encoder_hidden_states, attention_mask=attention_mask, use_cache=True)
+        outputs = model(
+            input_ids, encoder_hidden_states=encoder_hidden_states, attention_mask=attention_mask, use_cache=True
+        )
 
         output, past_key_values = outputs.to_tuple()
 
@@ -509,7 +515,10 @@ class T5GemmaModelTester:
             next_input_ids, encoder_hidden_states=encoder_hidden_states, attention_mask=next_attention_mask
         )["last_hidden_state"]
         output_from_past = model(
-            next_tokens, encoder_hidden_states=encoder_hidden_states, attention_mask=next_attention_mask, past_key_values=past_key_values
+            next_tokens,
+            encoder_hidden_states=encoder_hidden_states,
+            attention_mask=next_attention_mask,
+            past_key_values=past_key_values,
         )["last_hidden_state"]
 
         # select random slice
@@ -557,7 +566,12 @@ class T5GemmaModelTester:
 @require_torch
 class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (T5GemmaModel, T5GemmaForConditionalGeneration, T5GemmaForSequenceClassification, T5GemmaForTokenClassification)
+        (
+            T5GemmaModel,
+            T5GemmaForConditionalGeneration,
+            T5GemmaForSequenceClassification,
+            T5GemmaForTokenClassification,
+        )
         if is_torch_available()
         else ()
     )
@@ -674,14 +688,14 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_with_sequence_classification_head(*config_and_inputs)
 
-    @parameterized.expand([(True,), (False, )])
+    @parameterized.expand([(True,), (False,)])
     def test_encoderonly_sequence_classification_head(self, is_encoder_decoder):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_encoderonly_for_sequence_classification_head(
             *config_and_inputs, is_encoder_decoder
         )
 
-    @parameterized.expand([(True,), (False, )])
+    @parameterized.expand([(True,), (False,)])
     def test_encoderonly_token_classification_head(self, is_encoder_decoder):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_encoderonly_for_token_classification_head(
@@ -752,7 +766,11 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
 
         for is_encoder_decoder in [True, False]:
-            model = self.model_tester.for_sequence_class(config, is_encoder_decoder=is_encoder_decoder).to(torch_device).eval()
+            model = (
+                self.model_tester.for_sequence_class(config, is_encoder_decoder=is_encoder_decoder)
+                .to(torch_device)
+                .eval()
+            )
             result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
             self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
@@ -766,7 +784,11 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
 
         for is_encoder_decoder in [True, False]:
-            model = self.model_tester.for_sequence_class(config, is_encoder_decoder=is_encoder_decoder).to(torch_device).eval()
+            model = (
+                self.model_tester.for_sequence_class(config, is_encoder_decoder=is_encoder_decoder)
+                .to(torch_device)
+                .eval()
+            )
             result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
             self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
@@ -782,7 +804,11 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         ).to(torch.float)
 
         for is_encoder_decoder in [True, False]:
-            model = self.model_tester.for_sequence_class(config, is_encoder_decoder=is_encoder_decoder).to(torch_device).eval()
+            model = (
+                self.model_tester.for_sequence_class(config, is_encoder_decoder=is_encoder_decoder)
+                .to(torch_device)
+                .eval()
+            )
             result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
             self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
@@ -795,7 +821,11 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
 
         for is_encoder_decoder in [True, False]:
-            model = self.model_tester.for_token_class(config, is_encoder_decoder=is_encoder_decoder).to(torch_device).eval()
+            model = (
+                self.model_tester.for_token_class(config, is_encoder_decoder=is_encoder_decoder)
+                .to(torch_device)
+                .eval()
+            )
 
             result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
             self.assertEqual(
@@ -823,7 +853,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             model.config._attn_implementation = "eager"
             states_eager = model(dummy_input, decoder_input_ids=decoder_dummy_input, output_hidden_states=True)
 
-            if hasattr(states_sdpa, 'decoder_hidden_states'):
+            if hasattr(states_sdpa, "decoder_hidden_states"):
                 states_sdpa = states_sdpa.decoder_hidden_states[-1]
                 states_eager = states_eager.decoder_hidden_states[-1]
             else:
@@ -1214,9 +1244,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         decoder_inputs_embeds = decoder_embedding(decoder_input_ids)
         with torch.no_grad():
             out_ids = model(input_ids=encoder_input_ids, decoder_input_ids=decoder_input_ids, **inputs)[0]
-            out_embeds = model(
-                inputs_embeds=inputs_embeds, decoder_inputs_embeds=decoder_inputs_embeds, **inputs
-            )[0]
+            out_embeds = model(inputs_embeds=inputs_embeds, decoder_inputs_embeds=decoder_inputs_embeds, **inputs)[0]
 
         torch.testing.assert_close(out_embeds, out_ids)
 
@@ -1224,7 +1252,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     # Adjust token classiifcation
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
-
             if model_class == self.model_tester.for_token_class:
                 model = model_class(config, is_encoder_decoder=False)
             else:
@@ -1335,10 +1362,18 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             # However, triton cannot handle hidden dimensions of less than 16
             # --> forcing at least a hidden dim of 16
             config.encoder.hidden_size *= max(
-                16 // getattr(config.encoder, "head_dim", config.encoder.hidden_size // config.encoder.num_attention_heads), 1
+                16
+                // getattr(
+                    config.encoder, "head_dim", config.encoder.hidden_size // config.encoder.num_attention_heads
+                ),
+                1,
             )
             config.decoder.hidden_size *= max(
-                16 // getattr(config.decoder, "head_dim", config.decoder.hidden_size // config.decoder.num_attention_heads), 1
+                16
+                // getattr(
+                    config.decoder, "head_dim", config.decoder.hidden_size // config.decoder.num_attention_heads
+                ),
+                1,
             )
             config.decoder.cross_attention_hidden_size = config.encoder.hidden_size
 
@@ -1360,7 +1395,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @unittest.skip("EncoderDecoderCache can't be gathered because it is not iterable.")
     def test_multi_gpu_data_parallel_forward(self):
         pass
-
 
 
 class T5GemmaEncoderOnlyModelTester:
@@ -1560,7 +1594,7 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
             hidden_size=37,
             vocab_size=self.model_tester.vocab_size,
             num_attention_heads=self.model_tester.num_attention_heads,
-            num_hidden_layers=self.model_tester.num_hidden_layers
+            num_hidden_layers=self.model_tester.num_hidden_layers,
         )
 
     def test_config(self):
@@ -1613,7 +1647,11 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
             # However, triton cannot handle hidden dimensions of less than 16
             # --> forcing at least a hidden dim of 16
             config.encoder.hidden_size *= max(
-                16 // getattr(config.encoder, "head_dim", config.encoder.hidden_size // config.encoder.num_attention_heads), 1
+                16
+                // getattr(
+                    config.encoder, "head_dim", config.encoder.hidden_size // config.encoder.num_attention_heads
+                ),
+                1,
             )
             config.encoder.head_dim = max(16, config.encoder.head_dim)
 
