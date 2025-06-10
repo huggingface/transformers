@@ -3800,6 +3800,9 @@ class Trainer:
         How the loss is computed by Trainer. By default, all models return the loss in the first element.
 
         Subclass and override for custom behavior.
+
+        As of Transformers v4.48, this method includes the `num_items_in_batch` argument to support dynamic batch sizes. If you override this method, include this argument to avoid compatibility issues.
+
         """
         if (self.label_smoother is not None or self.compute_loss_func is not None) and "labels" in inputs:
             labels = inputs.pop("labels")
