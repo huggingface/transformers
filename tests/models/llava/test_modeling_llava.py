@@ -341,7 +341,11 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20)
-        EXPECTED_DECODED_TEXT = "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,"  # fmt: skip
+        expected_decoded_texts = Expectations({
+            ("cuda", None): "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,",
+            ("rocm", (9, 5)): "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. First, the",
+        })  # fmt: skip
+        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -397,12 +401,29 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, you', 'USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat is located on']  # fmt: skip
-
-        self.assertEqual(
-            processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+        expected_decoded_texts = Expectations(
+            {
+                ("cuda", None): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
+                    "with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, "
+                    "you",
+                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
+                    "is located on",
+                ],
+                ("rocm", (9, 5)): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
+                    "with me? ASSISTANT: When visiting this serene location, which features a wooden pier overlooking a "
+                    "lake, you should",
+                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
+                    "is located on",
+                ],
+            }
         )
+        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
+
+        decoded_output = processor.batch_decode(output, skip_special_tokens=True)
+        print(decoded_output)
+        self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
 
     @slow
     @require_bitsandbytes
@@ -432,6 +453,10 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
                 ("cuda", 8): [
                     'USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring along',
                     'USER:  \nWhat is this?\nASSISTANT: Cats',
+                ],
+                ("rocm", (9, 5)): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this dock on a lake, there are several things to be cautious about and items to",
+                    "USER:  \nWhat is this?\nASSISTANT: This is a picture of two cats lying on a couch.",
                 ],
             }
         )  # fmt: skip
@@ -467,12 +492,28 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a body of water', 'USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.']  # fmt: skip
-
-        self.assertEqual(
-            processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+        expected_decoded_texts = Expectations(
+            {
+                ("cuda", None): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
+                    "with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a "
+                    "body of water",
+                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat "
+                    "sleeping on a bed.",
+                ],
+                ("rocm", (9, 5)): [
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
+                    "with me?\nASSISTANT: When visiting this place, which is a pier or dock overlooking a lake, you should "
+                    "be",
+                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat "
+                    "sleeping on a bed.",
+                ],
+            }
         )
+        EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
+
+        decoded_output = processor.batch_decode(output, skip_special_tokens=True)
+        self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
 
     @slow
     @require_torch
