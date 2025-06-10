@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -7,7 +7,6 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, dataclass
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_vjepa2 import VJEPA2Config
 
@@ -264,7 +263,7 @@ def eager_attention_forward(
 
 
 # Adapted from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->Dinov2->VJEPA
-class VJEPA2SelfAttention(nn.Module):
+class VJEPA2Attention(nn.Module):
     def __init__(
         self,
         config: VJEPA2Config,
@@ -369,7 +368,7 @@ def rotate_queries_or_keys(x, pos):
     return (x * emb_cos) + (y * emb_sin)
 
 
-class VJEPA2RopeSelfAttention(nn.Module):
+class VJEPA2RopeAttention(nn.Module):
     def __init__(
         self,
         config: VJEPA2Config,
@@ -504,54 +503,10 @@ class VJEPA2RopeSelfAttention(nn.Module):
         )
 
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = self.proj(context_layer.view(new_context_layer_shape))
+        context_layer = self.proj(context_layer.reshape(new_context_layer_shape))
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
-        return outputs
-
-
-# Adapted from transformers.models.vit.modeling_vit.ViTAttention with ViT->Dinov2->VJEPA
-class VJEPA2Attention(nn.Module):
-    def __init__(self, config: VJEPA2Config, **kwargs) -> None:
-        super().__init__()
-        self.attention = (
-            VJEPA2RopeSelfAttention(config, **kwargs) if config.use_rope else VJEPA2SelfAttention(config, **kwargs)
-        )
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads: Set[int]) -> None:
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads,
-            self.attention.num_attention_heads,
-            self.attention.attention_head_size,
-            self.pruned_heads,
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        head_mask: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_outputs = self.attention(hidden_states, position_mask, output_attentions, head_mask)
-
-        attention_output = self_outputs[0]
-
-        outputs = (attention_output,) + self_outputs[1:]
         return outputs
 
 
@@ -653,11 +608,11 @@ class VJEPA2Layer(nn.Module):
         self.mlp_ratio = mlp_ratio
 
         self.norm1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
-        self.attention = VJEPA2Attention(
-            config,
-            hidden_size=hidden_size,
-            num_attention_heads=num_attention_heads,
-        )
+
+        if config.use_rope:
+            self.attention = VJEPA2RopeAttention(config, hidden_size, num_attention_heads)
+        else:
+            self.attention = VJEPA2Attention(config, hidden_size, num_attention_heads)
 
         self.drop_path = VJEPA2DropPath(drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
@@ -824,9 +779,8 @@ class VJEPA2PredictorEmbeddings(nn.Module):
             self._init_pos_embed(self.position_embeddings.data)  # sincos pos-embed
         self.num_mask_tokens = 0
         self.zero_init_mask_tokens = config.pred_zero_init_mask_tokens
-        if config.pred_use_mask_tokens:
-            self.num_mask_tokens = config.pred_num_mask_tokens
-            self.mask_tokens = nn.Parameter(torch.zeros(self.num_mask_tokens, 1, 1, config.pred_hidden_size))
+        self.num_mask_tokens = config.pred_num_mask_tokens
+        self.mask_tokens = nn.Parameter(torch.zeros(self.num_mask_tokens, 1, 1, config.pred_hidden_size))
 
         # self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.patch_size
@@ -1045,6 +999,7 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["VJEPA2SwiGLUFFN"]
     _supports_sdpa = True
+    _supports_flash_attn_2 = True
 
     def _init_weights(
         self,
