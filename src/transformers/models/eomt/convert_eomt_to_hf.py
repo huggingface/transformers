@@ -40,7 +40,6 @@ MAPPINGS = {
     r"network.encoder.backbone.blocks.(\d+).attn.proj"   : r"layers.\1.attention.out_proj",
     r"network.encoder.backbone.blocks.(\d+).ls1.gamma"   : r"layers.\1.layer_scale1.lambda1",
     r"network.encoder.backbone.blocks.(\d+).norm2"       : r"layers.\1.norm2",
-    r"network.encoder.backbone.blocks.(\d+).mlp"         : r"layers.\1.mlp",
     r"network.encoder.backbone.blocks.(\d+).ls2.gamma"   : r"layers.\1.layer_scale2.lambda1",
     r"network.encoder.backbone.blocks.(\d+).attn"        : r"layers.\1.attention",
 
@@ -57,6 +56,17 @@ MAPPINGS = {
     r"network.attn_mask_probs"                           : r"attn_mask_probs",
 }
 # fmt: on
+
+# Mappings for MLP layers, depending on the type of MLP used in ckpts.
+MLP_MAPPINGS = {
+    "swiglu_ffn": {
+        r"network.encoder.backbone.blocks.(\d+).mlp.fc1": r"layers.\1.mlp.weights_in",
+        r"network.encoder.backbone.blocks.(\d+).mlp.fc2": r"layers.\1.mlp.weights_out",
+    },
+    "vanilla_mlp": {
+        r"network.encoder.backbone.blocks.(\d+).mlp": r"layers.\1.mlp",
+    },
+}
 
 
 def convert_old_keys_to_new_keys(state_dict):
@@ -215,12 +225,22 @@ def convert_model(
         }
     )
 
-    if "semantic" in repo_id:
+    if "semantic" in repo_id.split("_"):
         size = {"shortest_edge": config.image_size, "longest_edge": None}
         do_split_image = True
     else:
         size = {"shortest_edge": config.image_size, "longest_edge": config.image_size}
         do_split_image = False
+
+    if "giant" in repo_id.split("_"):
+        config.use_swiglu_ffn = True
+        config.hidden_size = 1536
+        config.num_hidden_layers = 40
+        config.num_attention_heads = 24
+        # Add additional mappings for giant checkpoints
+        MAPPINGS.update(MLP_MAPPINGS["swiglu_ffn"])
+    else:
+        MAPPINGS.update(MLP_MAPPINGS["vanilla_mlp"])
 
     processor = EoMTImageProcessor(size=size, do_split_image=do_split_image)
 
