@@ -47,6 +47,7 @@ from ...tokenization_utils_base import (
 from ...utils import (
     TensorType,
     auto_docstring,
+    can_return_tuple,
     filter_out_non_signature_kwargs,
     logging,
 )
@@ -275,6 +276,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         images_embeds = self.aligner(vision_encodings, high_res_vision_encodings)
         return images_embeds
 
+    @can_return_tuple
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def forward(
         self,
@@ -354,6 +356,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
 
 
 class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneration):
+    @can_return_tuple
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def forward(
         self,

@@ -30,7 +30,11 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, logging
+from ...utils import (
+    auto_docstring,
+    can_return_tuple,
+    logging,
+)
 from ..auto import AutoModel
 from .configuration_deepseek_vl_hybrid import DeepseekVLHybridConfig
 
@@ -303,6 +307,7 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
         images_embeds = self.aligner(vision_encodings, high_res_vision_encodings)
         return images_embeds
 
+    @can_return_tuple
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def forward(
         self,
@@ -438,6 +443,7 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLHybridPreTrainedModel, 
     def get_decoder(self):
         return self.model
 
+    @can_return_tuple
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def forward(
         self,
