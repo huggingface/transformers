@@ -24,9 +24,7 @@ rendered properly in your Markdown viewer.
 
 # Moonshine
 
-[Moonshine](https://huggingface.co/papers/2410.15608)
-
-
+[Moonshine](https://huggingface.co/papers/2410.15608) is a speech recognition model that is optimized for real-time transcription and voice command. Instead of using traditional absolute position embeddings, Moonshine uses Rotary Position Embedding (RoPE).
 
 
 You can find all the Moonshine checkpoints on the [Hub](https://huggingface.co/models?search=moonshine).
