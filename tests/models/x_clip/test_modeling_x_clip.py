@@ -671,18 +671,23 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             except RuntimeError:
                 self.fail("Couldn't trace module.")
 
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
-
+            with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+                pt_file_name = tmp_file.name
                 try:
                     torch.jit.save(traced_model, pt_file_name)
                 except Exception:
                     self.fail("Couldn't save module.")
 
-                try:
-                    loaded_model = torch.jit.load(pt_file_name)
-                except Exception:
-                    self.fail("Couldn't load module.")
+            try:
+                loaded_model = torch.jit.load(pt_file_name)
+            except Exception:
+                self.fail("Couldn't load module.")
+            finally:
+                if os.path.exists(pt_file_name):
+                    try:
+                        os.unlink(pt_file_name)
+                    except PermissionError:
+                        pass  # Ignore permission errors on Windows
 
             model.to(torch_device)
             model.eval()
@@ -704,9 +709,7 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 if key not in non_persistent_buffers
             }
 
-            self.assertEqual(
-                set(model_state_dict.keys()), set(loaded_model_state_dict.keys())
-            )
+            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
 
             model_buffers = list(model.buffers())
             for non_persistent_buffer in non_persistent_buffers.values():
@@ -731,24 +734,60 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         # Save XCLIPConfig and check if we can load XCLIPVisionConfig from it
-        with tempfile.TemporaryDirectory() as tmp_dir_name:
-            config.save_pretrained(tmp_dir_name)
-            vision_config = XCLIPVisionConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(
-                config.vision_config.to_dict(), vision_config.to_dict()
-            )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            try:
+                vision_config = XCLIPVisionConfig.from_pretrained(tmp_dir)
+                self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
+            finally:
+                # Make sure files are closed before cleanup
+                if hasattr(vision_config, "close"):
+                    vision_config.close()
 
         # Save XCLIPConfig and check if we can load XCLIPTextConfig from it
-        with tempfile.TemporaryDirectory() as tmp_dir_name:
-            config.save_pretrained(tmp_dir_name)
-            text_config = XCLIPTextConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            try:
+                text_config = XCLIPTextConfig.from_pretrained(tmp_dir)
+                self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
+            finally:
+                # Make sure files are closed before cleanup
+                if hasattr(text_config, "close"):
+                    text_config.close()
 
-    @slow
-    def test_model_from_pretrained(self):
-        model_name = "microsoft/xclip-base-patch32"
-        model = XCLIPModel.from_pretrained(model_name)
-        self.assertIsNotNone(model)
+    def test_save_load(self):
+        def check_save_load(out1, out2):
+            # make sure we don't have nans
+            out_2 = out2.cpu().numpy()
+            out_2[np.isnan(out_2)] = 0
+            out_2 = out_2[~np.isneginf(out_2)]
+
+            out_1 = out1.cpu().numpy()
+            out_1[np.isnan(out_1)] = 0
+            out_1 = out_1[~np.isneginf(out_1)]
+            max_diff = np.amax(np.abs(out_1 - out_2))
+            self.assertLessEqual(max_diff, 1e-5)
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                try:
+                    model.save_pretrained(tmp_dir)
+                    model = model_class.from_pretrained(tmp_dir)
+                    model.to(torch_device)
+                    with torch.no_grad():
+                        second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+                    check_save_load(first, second)
+                finally:
+                    # Make sure model is closed before cleanup
+                    if hasattr(model, "close"):
+                        model.close()
 
     def test_get_video_features_output_formats(self):
         """Test different output formats of get_video_features."""

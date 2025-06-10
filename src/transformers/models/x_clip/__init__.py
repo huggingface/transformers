@@ -17,10 +17,28 @@ from ...utils import _LazyModule
 from ...utils.import_utils import define_import_structure
 
 
+_import_structure = {
+    "configuration_x_clip": ["XCLIPConfig", "XCLIPTextConfig", "XCLIPVisionConfig"],
+    "modeling_x_clip": [
+        "XCLIPModel",
+        "XCLIPPreTrainedModel",
+        "XCLIPTextModel",
+        "XCLIPVisionModel",
+        "XCLIPVideoFeatureOutput",
+    ],
+    "processing_x_clip": ["XCLIPProcessor"],
+}
+
 if TYPE_CHECKING:
-    from .configuration_x_clip import *
-    from .modeling_x_clip import *
-    from .processing_x_clip import *
+    from .configuration_x_clip import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
+    from .modeling_x_clip import (
+        XCLIPModel,
+        XCLIPPreTrainedModel,
+        XCLIPTextModel,
+        XCLIPVideoFeatureOutput,
+        XCLIPVisionModel,
+    )
+    from .processing_x_clip import XCLIPProcessor
 else:
     import sys
 

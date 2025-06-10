@@ -1,18 +1,6 @@
-# coding=utf-8
-# Copyright 2022 Microsoft Research and The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """PyTorch X-CLIP model."""
+
+from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
@@ -23,34 +11,42 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import (
-    _create_4d_causal_attention_mask,
-    _prepare_4d_attention_mask,
-)
+from ...modeling_attn_mask_utils import (_create_4d_causal_attention_mask,
+                                         _prepare_4d_attention_mask)
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-    torch_int,
-)
-from .configuration_x_clip import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
-
+from ...utils import ModelOutput, auto_docstring, logging, torch_int
+from .configuration_x_clip import (XCLIPConfig, XCLIPTextConfig,
+                                   XCLIPVisionConfig)
 
 logger = logging.get_logger(__name__)
 
 
-# contrastive loss function, adapted from
-# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
+    """
+    Compute contrastive loss for video-text similarity.
+
+    Args:
+        logits (torch.Tensor): The similarity scores between video and text features.
+
+    Returns:
+        torch.Tensor: The computed contrastive loss.
+    """
     return nn.functional.cross_entropy(
         logits, torch.arange(len(logits), device=logits.device)
     )
 
 
-# Copied from transformers.models.clip.modeling_clip.clip_loss with clip->x_clip
 def x_clip_loss(similarity: torch.Tensor) -> torch.Tensor:
+    """
+    Compute bidirectional contrastive loss for X-CLIP.
+
+    Args:
+        similarity (torch.Tensor): The similarity matrix between video and text features.
+
+    Returns:
+        torch.Tensor: The computed X-CLIP loss (average of caption and image losses).
+    """
     caption_loss = contrastive_loss(similarity)
     image_loss = contrastive_loss(similarity.t())
     return (caption_loss + image_loss) / 2.0
@@ -59,26 +55,17 @@ def x_clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 @dataclass
 class XCLIPOutput(ModelOutput):
     """
+    Output type of the X-CLIP model.
+
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for video-text similarity.
-        logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
-            The scaled dot product scores between `video_embeds` and `text_embeds`. This represents the video-text
-            similarity scores.
-        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, video_batch_size)`):
-            The scaled dot product scores between `text_embeds` and `video_embeds`. This represents the text-video
-            similarity scores.
-        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`XCLIPTextModel`].
-        video_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The video embeddings obtained by applying the projection layer to the pooled output of
-            [`XCLIPVisionModel`].
-        text_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`XCLIPTextModel`].
-        vision_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`XCLIPVisionModel`].
-        mit_output (`BaseModelOutputWithPooling`):
-            The output of `XCLIPMultiframeIntegrationTransformer` (MIT for short).
+        loss (torch.FloatTensor, optional): Contrastive loss for video-text similarity.
+        logits_per_video (torch.FloatTensor): Video-text similarity scores.
+        logits_per_text (torch.FloatTensor): Text-video similarity scores.
+        text_embeds (torch.FloatTensor): Text embeddings from text encoder.
+        video_embeds (torch.FloatTensor): Video embeddings from vision encoder.
+        text_model_output (BaseModelOutputWithPooling): Raw output of text model.
+        vision_model_output (BaseModelOutputWithPooling): Raw output of vision model.
+        mit_output (BaseModelOutputWithPooling): Output of multiframe integration transformer.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -95,7 +82,11 @@ class XCLIPOutput(ModelOutput):
             (
                 self[k]
                 if k not in ["text_model_output", "vision_model_output", "mit_output"]
-                else getattr(self, k).to_tuple()
+                else (
+                    getattr(self, k).last_hidden_state
+                    if hasattr(getattr(self, k), "last_hidden_state")
+                    else getattr(self, k)
+                )
             )
             for k in self.keys()
         )
@@ -306,7 +297,7 @@ def eager_attention_forward(
 class XCLIPAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config):
+    def __init__(self, config: XCLIPConfig) -> None:
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -333,8 +324,20 @@ class XCLIPAttention(nn.Module):
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        """Input shape: Batch x Time x Channel"""
+        """
+        Forward pass of the attention layer.
 
+        Args:
+            hidden_states (torch.Tensor): Input tensor.
+            attention_mask (torch.Tensor, optional): Attention mask.
+            causal_attention_mask (torch.Tensor, optional): Causal attention mask.
+            output_attentions (bool, optional): Whether to return attention weights.
+
+        Returns:
+            Tuple[torch.Tensor, Optional[torch.Tensor]]:
+                - Output tensor
+                - Attention weights if output_attentions=True
+        """
         batch_size, seq_length, embed_dim = hidden_states.shape
 
         queries = self.q_proj(hidden_states)
@@ -394,7 +397,9 @@ class XCLIPAttention(nn.Module):
 
 
 class XCLIPMLP(nn.Module):
-    def __init__(self, config):
+    """MLP module."""
+
+    def __init__(self, config: XCLIPConfig) -> None:
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
@@ -402,6 +407,15 @@ class XCLIPMLP(nn.Module):
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass of the MLP.
+
+        Args:
+            hidden_states (torch.Tensor): Input tensor.
+
+        Returns:
+            torch.Tensor: Output tensor.
+        """
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
@@ -869,9 +883,21 @@ class XCLIPTextModel(XCLIPPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
+        """
+        Returns the model's input embeddings layer.
+
+        Returns:
+            nn.Module: The input embeddings layer.
+        """
         return self.text_model.embeddings.token_embedding
 
-    def set_input_embeddings(self, value):
+    def set_input_embeddings(self, value: nn.Module) -> None:
+        """
+        Set model's input embeddings.
+
+        Args:
+            value (nn.Module): The new embeddings to be set.
+        """
         self.text_model.embeddings.token_embedding = value
 
     @auto_docstring
@@ -1093,97 +1119,23 @@ class XCLIPVisionModel(XCLIPPreTrainedModel):
 
     def __init__(self, config: XCLIPVisionConfig):
         super().__init__(config)
+        self.config = config
         self.vision_model = XCLIPVisionTransformer(config)
+        self.post_layernorm = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
+
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
-
-    @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        return_last_hidden_state: Optional[bool] = False,
-    ) -> Union[torch.FloatTensor, XCLIPVideoFeatureOutput]:
         """
-        Extract video features from the model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
-                The video input pixels.
-            output_attentions (`bool`, *optional*):
-                Whether to return attention weights.
-            output_hidden_states (`bool`, *optional*):
-                Whether to return hidden states.
-            return_dict (`bool`, *optional*):
-                Whether to return a ModelOutput instead of a tuple.
-            return_last_hidden_state (`bool`, *optional*, defaults to False):
-                If True, returns the last hidden state instead of the pooled output.
+        Returns the vision model's patch embedding layer.
 
         Returns:
-            video_features (`Union[torch.FloatTensor, XCLIPVideoFeatureOutput]`):
-                If return_dict=True, returns XCLIPVideoFeatureOutput containing:
-                    - pooled_output (`torch.FloatTensor`): The pooled output features
-                    - last_hidden_state (`torch.FloatTensor`, *optional*): The last hidden state
-                    - hidden_states (`tuple(torch.FloatTensor)`, *optional*): Hidden states from all layers
-                    - attentions (`tuple(torch.FloatTensor)`, *optional*): Attention weights from all layers
-                If return_dict=False:
-                    - Returns pooled_output if return_last_hidden_state=False
-                    - Returns last_hidden_state if return_last_hidden_state=True
+            nn.Module: The patch embedding layer.
         """
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
-        output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
-        )
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
-
-        batch_size, num_frames, num_channels, height, width = pixel_values.shape
-        pixel_values = pixel_values.reshape(-1, num_channels, height, width)
-
-        vision_outputs = self.vision_model(
-            pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        video_embeds = vision_outputs[1]
-        video_embeds = self.visual_projection(video_embeds)
-
-        cls_features = video_embeds.view(batch_size, num_frames, -1)
-
-        mit_outputs = self.mit(
-            cls_features,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        # Get both outputs for flexibility
-        pooled_output = mit_outputs[1]  # pooled output
-        last_hidden_state = mit_outputs[0]  # last hidden state
-
-        if not return_dict:
-            return last_hidden_state if return_last_hidden_state else pooled_output
-
-        return XCLIPVideoFeatureOutput(
-            pooled_output=pooled_output,
-            last_hidden_state=last_hidden_state if return_last_hidden_state else None,
-            hidden_states=mit_outputs.hidden_states if output_hidden_states else None,
-            attentions=mit_outputs.attentions if output_attentions else None,
-        )
+        return self.vision_model.embeddings.patch_embedding
 
     @auto_docstring
     def forward(
@@ -1434,7 +1386,30 @@ class XCLIPPromptGenerator(nn.Module):
 
 @auto_docstring
 class XCLIPModel(XCLIPPreTrainedModel):
+    """
+    X-CLIP (Cross-frame CLIP) model for video-text matching and retrieval.
+
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
+    usage and behavior.
+
+    Args:
+        config (XCLIPConfig): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+
+    Attributes:
+        text_model (XCLIPTextTransformer): The text encoder.
+        vision_model (XCLIPVisionTransformer): The vision encoder.
+        visual_projection (nn.Linear): Projects vision features to joint space.
+        text_projection (nn.Linear): Projects text features to joint space.
+        logit_scale (nn.Parameter): Learnable temperature parameter.
+        mit (XCLIPMultiframeIntegrationTransformer): Processes temporal information.
+        prompts_generator (XCLIPPromptGenerator): Generates video-specific text prompts.
+    """
+
     config_class = XCLIPConfig
+    main_input_name = "input_ids"
 
     def __init__(self, config: XCLIPConfig):
         super().__init__(config)
@@ -1477,6 +1452,8 @@ class XCLIPModel(XCLIPPreTrainedModel):
         self.prompts_visual_projection = nn.Parameter(
             torch.randn(self.vision_embed_dim, self.projection_dim)
         )
+
+        # Initialize MIT config
         mit_config = copy.copy(vision_config)
         mit_config.hidden_size = vision_config.mit_hidden_size
         mit_config.intermediate_size = vision_config.mit_intermediate_size
@@ -1489,7 +1466,6 @@ class XCLIPModel(XCLIPPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring
     def get_text_features(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1499,23 +1475,20 @@ class XCLIPModel(XCLIPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
-        r"""
+        """
+        Extract text features from the model.
+
+        Args:
+            input_ids (torch.Tensor, optional): Input token ids.
+            attention_mask (torch.Tensor, optional): Attention mask.
+            position_ids (torch.Tensor, optional): Position ids.
+            output_attentions (bool, optional): Whether to return attention weights.
+            output_hidden_states (bool, optional): Whether to return hidden states.
+            return_dict (bool, optional): Whether to return a ModelOutput instead of tuple.
+
         Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`XCLIPTextModel`].
-
-        Examples:
-
-        ```python
-        >>> from transformers import AutoTokenizer, AutoModel
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/xclip-base-patch32")
-        >>> model = AutoModel.from_pretrained("microsoft/xclip-base-patch32")
-
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
-        >>> text_features = model.get_text_features(**inputs)
-        ```"""
-        # Use X_CLIP model's config for some fields (if specified) instead of those of vision & text components.
+            torch.FloatTensor: The text embeddings of shape (batch_size, projection_dim).
+        """
         output_attentions = (
             output_attentions
             if output_attentions is not None
@@ -1544,7 +1517,6 @@ class XCLIPModel(XCLIPPreTrainedModel):
 
         return text_embeds
 
-    @auto_docstring
     def get_video_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1554,25 +1526,19 @@ class XCLIPModel(XCLIPPreTrainedModel):
         return_last_hidden_state: Optional[bool] = False,
     ) -> Union[torch.FloatTensor, XCLIPVideoFeatureOutput]:
         """
+        Extract video features from the model.
+
         Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
-                The video input pixels.
-            output_attentions (`bool`, *optional*):
-                Whether to return attention weights.
-            output_hidden_states (`bool`, *optional*):
-                Whether to return hidden states.
-            return_dict (`bool`, *optional*):
-                Whether to return a ModelOutput instead of a tuple.
-            return_last_hidden_state (`bool`, *optional*, defaults to False):
-                If True, returns the last hidden state instead of the pooled output.
+            pixel_values (torch.FloatTensor, optional): Video frames of shape (batch_size, num_frames, channels, height, width).
+            output_attentions (bool, optional): Whether to return attention weights.
+            output_hidden_states (bool, optional): Whether to return hidden states.
+            return_dict (bool, optional): Whether to return a ModelOutput instead of tuple.
+            return_last_hidden_state (bool, optional): If True, returns last hidden state instead of pooled output.
 
         Returns:
-            video_features (`Union[torch.FloatTensor, XCLIPVideoFeatureOutput]`):
-            If return_dict=True, returns XCLIPVideoFeatureOutput containing:
-                - video_embeds (`torch.FloatTensor`): The video embeddings (pooled output or last hidden state)
-                - hidden_states (`tuple(torch.FloatTensor)`, *optional*): Hidden states from all layers
-                - attentions (`tuple(torch.FloatTensor)`, *optional*): Attention weights from all layers
-            If return_dict=False, returns only video_embeds
+            Union[torch.FloatTensor, XCLIPVideoFeatureOutput]:
+                If return_dict=True: XCLIPVideoFeatureOutput containing video features and optional states.
+                If return_dict=False: Just the video embeddings tensor.
         """
         output_attentions = (
             output_attentions
@@ -1584,9 +1550,8 @@ class XCLIPModel(XCLIPPreTrainedModel):
             if output_hidden_states is not None
             else self.config.output_hidden_states
         )
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        # Override return_dict to False if not explicitly set
+        return_dict = False if return_dict is None else return_dict
 
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
         pixel_values = pixel_values.reshape(-1, num_channels, height, width)
@@ -1595,10 +1560,10 @@ class XCLIPModel(XCLIPPreTrainedModel):
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,  # Always use return_dict=True for internal calls
         )
 
-        video_embeds = vision_outputs[1]
+        video_embeds = vision_outputs.pooler_output
         video_embeds = self.visual_projection(video_embeds)
 
         cls_features = video_embeds.view(batch_size, num_frames, -1)
@@ -1607,15 +1572,22 @@ class XCLIPModel(XCLIPPreTrainedModel):
             cls_features,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,  # Always use return_dict=True for internal calls
         )
 
         # Get both outputs for flexibility
-        pooled_output = mit_outputs[1]  # pooled output
-        last_hidden_state = mit_outputs[0]  # last hidden state
+        pooled_output = mit_outputs.pooler_output  # pooled output
+        last_hidden_state = mit_outputs.last_hidden_state  # last hidden state
 
         if not return_dict:
-            return last_hidden_state if return_last_hidden_state else pooled_output
+            # When return_dict=False, return last_hidden_state if return_last_hidden_state=True,
+            # otherwise return pooled_output
+            return_tensor = (
+                last_hidden_state if return_last_hidden_state else pooled_output
+            )
+            return (
+                return_tensor.detach() if return_tensor.requires_grad else return_tensor
+            )
 
         return XCLIPVideoFeatureOutput(
             pooled_output=pooled_output,
@@ -1637,92 +1609,33 @@ class XCLIPModel(XCLIPPreTrainedModel):
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, XCLIPOutput]:
-        r"""
-        return_loss (`bool`, *optional*):
-            Whether or not to return the contrastive loss.
+        """
+        The main forward pass of the X-CLIP model.
 
-        Examples:
+        Args:
+            input_ids (torch.LongTensor, optional): Text input token ids.
+            pixel_values (torch.FloatTensor, optional): Video frames tensor.
+            attention_mask (torch.Tensor, optional): Text attention mask.
+            position_ids (torch.LongTensor, optional): Text position ids.
+            return_loss (bool, optional): Whether to compute and return the contrastive loss.
+            output_attentions (bool, optional): Whether to return attention weights.
+            output_hidden_states (bool, optional): Whether to return hidden states.
+            interpolate_pos_encoding (bool, defaults to False): Whether to interpolate position encodings.
+            return_dict (bool, optional): Whether to return a ModelOutput instead of tuple.
 
-        ```python
-        >>> import av
-        >>> import torch
-        >>> import numpy as np
-
-        >>> from transformers import AutoProcessor, AutoModel
-        >>> from huggingface_hub import hf_hub_download
-
-        >>> np.random.seed(0)
-
-
-        >>> def read_video_pyav(container, indices):
-        ...     '''
-        ...     Decode the video with PyAV decoder.
-        ...     Args:
-        ...         container (`av.container.input.InputContainer`): PyAV container.
-        ...         indices (`List[int]`): List of frame indices to decode.
-        ...     Returns:
-        ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
-        ...     '''
-        ...     frames = []
-        ...     container.seek(0)
-        ...     start_index = indices[0]
-        ...     end_index = indices[-1]
-        ...     for i, frame in enumerate(container.decode(video=0)):
-        ...         if i > end_index:
-        ...             break
-        ...         if i >= start_index and i in indices:
-        ...             frames.append(frame)
-        ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
-
-
-        >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
-        ...     '''
-        ...     Sample a given number of frame indices from the video.
-        ...     Args:
-        ...         clip_len (`int`): Total number of frames to sample.
-        ...         frame_sample_rate (`int`): Sample every n-th frame.
-        ...         seg_len (`int`): Maximum allowed index of sample's last frame.
-        ...     Returns:
-        ...         indices (`List[int]`): List of sampled frame indices
-        ...     '''
-        ...     converted_len = int(clip_len * frame_sample_rate)
-        ...     end_idx = np.random.randint(converted_len, seg_len)
-        ...     start_idx = end_idx - converted_len
-        ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
-        ...     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
-        ...     return indices
-
-
-        >>> # video clip consists of 300 frames (10 seconds at 30 FPS)
-        >>> file_path = hf_hub_download(
-        ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
-        ... )
-        >>> container = av.open(file_path)
-
-        >>> # sample 8 frames
-        >>> indices = sample_frame_indices(clip_len=8, frame_sample_rate=1, seg_len=container.streams.video[0].frames)
-        >>> video = read_video_pyav(container, indices)
-
-        >>> processor = AutoProcessor.from_pretrained("microsoft/xclip-base-patch32")
-        >>> model = AutoModel.from_pretrained("microsoft/xclip-base-patch32")
-
-        >>> inputs = processor(
-        ...     text=["playing sports", "eating spaghetti", "go shopping"],
-        ...     videos=list(video),
-        ...     return_tensors="pt",
-        ...     padding=True,
-        ... )
-
-        >>> # forward pass
-        >>> with torch.no_grad():
-        ...     outputs = model(**inputs)
-
-        >>> logits_per_video = outputs.logits_per_video  # this is the video-text similarity score
-        >>> probs = logits_per_video.softmax(dim=1)  # we can take the softmax to get the label probabilities
-        >>> print(probs)
-        tensor([[1.9496e-04, 9.9960e-01, 2.0825e-04]])
-        ```"""
-        # Use X_CLIP model's config for some fields (if specified) instead of those of vision & text components.
+        Returns:
+            Union[Tuple, XCLIPOutput]:
+                If return_dict=True: XCLIPOutput containing:
+                    - loss (optional): Contrastive loss if return_loss=True
+                    - logits_per_video: Video-text similarity scores
+                    - logits_per_text: Text-video similarity scores
+                    - text_embeds: Text embeddings
+                    - video_embeds: Video embeddings
+                    - text_model_output: Raw text model outputs
+                    - vision_model_output: Raw vision model outputs
+                    - mit_output: Multiframe integration outputs
+                If return_dict=False: Tuple containing the above elements
+        """
         output_attentions = (
             output_attentions
             if output_attentions is not None
@@ -1744,11 +1657,10 @@ class XCLIPModel(XCLIPPreTrainedModel):
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
+            return_dict=True,  # Always use return_dict=True for internal calls
         )
 
-        video_embeds = vision_outputs[1]
+        video_embeds = vision_outputs.pooler_output
         video_embeds = self.visual_projection(video_embeds)
 
         cls_features = video_embeds.view(batch_size, num_frames, -1)
@@ -1757,11 +1669,11 @@ class XCLIPModel(XCLIPPreTrainedModel):
             cls_features,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,  # Always use return_dict=True for internal calls
         )
-        video_embeds = mit_outputs[1]
+        video_embeds = mit_outputs.pooler_output
 
-        img_features = vision_outputs[0][:, 1:, :]
+        img_features = vision_outputs.last_hidden_state[:, 1:, :]
         img_features = self.prompts_visual_layernorm(img_features)
         img_features = img_features @ self.prompts_visual_projection
         img_features = img_features.view(
@@ -1775,10 +1687,10 @@ class XCLIPModel(XCLIPPreTrainedModel):
             position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,  # Always use return_dict=True for internal calls
         )
 
-        text_embeds = text_outputs[1]
+        text_embeds = text_outputs.pooler_output
         text_embeds = self.text_projection(text_embeds)
 
         text_embeds = text_embeds.unsqueeze(0).expand(batch_size, -1, -1)
@@ -1805,8 +1717,9 @@ class XCLIPModel(XCLIPPreTrainedModel):
                 logits_per_text,
                 text_embeds,
                 video_embeds,
-                text_outputs,
-                vision_outputs,
+                text_outputs.last_hidden_state,
+                vision_outputs.last_hidden_state,
+                mit_outputs.last_hidden_state,
             )
             return ((loss,) + output) if loss is not None else output
 
