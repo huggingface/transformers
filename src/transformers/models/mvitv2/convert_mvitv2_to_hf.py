@@ -36,11 +36,11 @@ def get_mvitv2_config(model_name):
     config.id2label = dict(enumerate(labels))
     config.label2id = {label: i for i, label in enumerate(labels)}
     if "tiny" in model_name:
-        config.depths = (1, 2, 5, 2)
+        config.depths = [1, 2, 5, 2]
     if "small" in model_name:
-        config.depths = (1, 2, 11, 2)
+        config.depths = [1, 2, 11, 2]
     if "large" in model_name:
-        config.depths = (2, 6, 36, 4)
+        config.depths = [2, 6, 36, 4]
         config.hidden_size = 144
         config.num_heads = 2
         config.expand_feature_dimension_in_attention = False

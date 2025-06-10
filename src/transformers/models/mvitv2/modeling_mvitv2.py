@@ -31,6 +31,7 @@ from .configuration_mvitv2 import MViTV2Config
 
 logger = logging.get_logger(__name__)
 
+
 # Adapted from https://github.com/huggingface/pytorch-image-models/blob/6a621b5b1cd88d5286067acdbef2057adb3cef27/timm/layers/drop.py#L150
 def drop_path(
     hidden_states: torch.Tensor, drop_rate: float = 0.0, training: bool = False, scale_by_keep: bool = True
@@ -118,6 +119,7 @@ def calculate_relative_positional_embeddings(
     ).view(batch_size, -1, query_height * query_width, key_height * key_width)
 
     return attention
+
 
 # Adapted from https://github.com/huggingface/pytorch-image-models/blob/6a621b5b1cd88d5286067acdbef2057adb3cef27/timm/models/mvitv2.py#L119
 def reshape_pre_pool(
@@ -269,7 +271,9 @@ class MViTV2SelfAttentionPoolingFirst(nn.Module):
         # relative positional embedding
         if self.config.relative_positional_embeddings_type == "spatial":
             if feature_size[0] != feature_size[1]:
-                raise ValueError("Relative positional embeddings can only be used with square feature maps (height must equal width)")
+                raise ValueError(
+                    "Relative positional embeddings can only be used with square feature maps (height must equal width)"
+                )
             size = feature_size[0]
             q_size = size // stride_q[0]
             kv_size = size // stride_kv[0]
@@ -758,7 +762,8 @@ class MViTV2Encoder(nn.Module):
         super().__init__()
         self.stages = nn.ModuleList()
         drop_path_rate = [
-            x.tolist() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths)).split(config.depths)
+            x.tolist()
+            for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu").split(config.depths)
         ]
 
         num_stages = len(config.depths)
@@ -788,8 +793,8 @@ class MViTV2Encoder(nn.Module):
                 out_dim=out_dims[i],
                 num_heads=num_heads[i],
                 feature_size=feature_size,
-                kernel_qkv=config.kernel_qkv,
-                stride_q=config.stride_q[i],
+                kernel_qkv=tuple(config.kernel_qkv),
+                stride_q=tuple(config.stride_q[i]),
                 stride_kv=stride_kv[i],
                 drop_path_rate=drop_path_rate[i],
             )
@@ -852,7 +857,7 @@ class MViTV2PretrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, MViTV2Attention):
+        elif isinstance(module, MViTV2SelfAttention):
             if hasattr(module, "relative_positional_embeddings_height"):
                 module.relative_positional_embeddings_height.data = nn.init.trunc_normal_(
                     module.relative_positional_embeddings_height.data.to(torch.float32),
@@ -934,8 +939,8 @@ class MViTV2Model(MViTV2PretrainedModel):
         >>> # Inference
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
-        ...     last_hidden_states = outputs.last_hidden_state
-        ...     print(list(last_hidden_states.shape))
+        ... last_hidden_states = outputs.last_hidden_state
+        ... print(list(last_hidden_states.shape))
         [1, 49, 768]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -966,8 +971,9 @@ class MViTV2ForImageClassification(MViTV2PretrainedModel):
         super().__init__(config)
         self.mvitv2 = MViTV2Model(config)
         self.classifier_dropout = nn.Dropout(p=config.drop_rate) if config.drop_rate > 0.0 else nn.Identity()
+        classifier_hidden_size = config.hidden_size * 2 ** (len(config.depths) - 1)
         self.classifier = (
-            nn.Linear(config.classifier_hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+            nn.Linear(classifier_hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
         )
 
         self.post_init()
@@ -1008,9 +1014,9 @@ class MViTV2ForImageClassification(MViTV2PretrainedModel):
         >>> # Inference
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
-        ...     logits = outputs.logits
-        ...     predicted_class = torch.argmax(logits, dim=1).item()
-        ...     print(f"Predicted class: {model.config.id2label[predicted_class]}")
+        ... logits = outputs.logits
+        ... predicted_class = torch.argmax(logits, dim=1).item()
+        ... print(f"Predicted class: {model.config.id2label[predicted_class]}")
         Predicted class: dingo
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

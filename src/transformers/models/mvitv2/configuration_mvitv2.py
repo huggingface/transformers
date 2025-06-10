@@ -105,24 +105,28 @@ class MViTV2Config(PretrainedConfig):
 
     model_type = "mvitv2"
 
+    attribute_map = {
+        "num_attention_heads": "num_heads",
+    }
+
     def __init__(
         self,
-        depths=(2, 3, 16, 3),
+        depths=[2, 3, 16, 3],
         in_channels=3,
         hidden_size=96,
         num_heads=1,
-        image_size=(224, 224),
-        patch_kernel_size=(7, 7),
-        patch_stride_size=(4, 4),
-        patch_padding_size=(3, 3),
+        image_size=[224, 224],
+        patch_kernel_size=[7, 7],
+        patch_stride_size=[4, 4],
+        patch_padding_size=[3, 3],
         use_cls_token=False,
         use_absolute_positional_embeddings=False,
         attention_pool_first=False,
         expand_feature_dimension_in_attention=True,
         mode="conv",
-        kernel_qkv=(3, 3),
-        stride_q=((1, 1), (2, 2), (2, 2), (2, 2)),
-        stride_kv_adaptive=(4, 4),
+        kernel_qkv=[3, 3],
+        stride_q=[[1, 1], [2, 2], [2, 2], [2, 2]],
+        stride_kv_adaptive=[4, 4],
         stride_kv=None,
         qkv_bias=True,
         residual_pooling=True,
@@ -166,10 +170,6 @@ class MViTV2Config(PretrainedConfig):
         self.drop_rate = drop_rate
         self.initializer_range = initializer_range
         self.layer_norm_epsilon = layer_norm_epsilon
-
-    @property
-    def classifier_hidden_size(self):
-        return self.hidden_size * (2 ** (len(self.depths) - 1))
 
 
 __all__ = ["MViTV2Config"]
