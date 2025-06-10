@@ -367,7 +367,6 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
-        # breakpoint()
         self.assertEqual(decoded_output, expected_output)
 
     def test_qwen2_small_model_integration_generate_chat_template(self):
@@ -395,8 +394,6 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             )
         expected_output = "The image shows two cats lying on a pink surface, which appears to be a bed or couch."
 
-        # breakpoint()
-
         self.assertEqual(decoded_output, expected_output)
 
     @require_deterministic_for_xpu
@@ -422,8 +419,6 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         expected_output = "user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature's peace."  # fmt: skip
-
-        # breakpoint()
 
         self.assertEqual(
             decoded_output,
@@ -622,8 +617,6 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
-        # breakpoint()
-
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -715,8 +708,6 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_logits = torch.tensor(expected_logits_all.get_expectation(), dtype=torch.float16)
 
-        # breakpoint()
-
         # The original implementation and the transformers implementation do not match exactly, hence the higher tolerance.
         # The difference is likely due to the different implementations of the attention mechanism (different order of operations)
         # between the transformers Llama model and the original InternLM model.
@@ -748,8 +739,6 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             }
         )
         expected_output = expected_outputs.get_expectation()
-
-        # breakpoint()
 
         self.assertEqual(decoded_output, expected_output)
 
@@ -809,8 +798,6 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
 
-        # breakpoint()
-
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -862,8 +849,6 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
         expected_output = "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors."
-
-        # breakpoint()
 
         self.assertEqual(
             decoded_output,
@@ -979,8 +964,6 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         ).to(torch_device, dtype=torch.float16)
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
-
-        # breakpoint()
 
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
