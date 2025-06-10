@@ -115,17 +115,18 @@ CHAT_TEMPLATE = (
 )
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict):
     output_dict = {}
-    if state_dict_keys is not None:
-        old_text = "\n".join(state_dict_keys)
-        new_text = old_text
-        for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
-            if replacement is None:
-                new_text = re.sub(pattern, "", new_text)  # an empty line
-                continue
-            new_text = re.sub(pattern, replacement, new_text)
-        output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
+
+    old_text = "\n".join(state_dict_keys)
+    new_text = old_text
+    for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
+        if replacement is None:
+            new_text = re.sub(pattern, "", new_text)  # an empty line
+            continue
+        new_text = re.sub(pattern, replacement, new_text)
+    output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
+
     return output_dict
 
 

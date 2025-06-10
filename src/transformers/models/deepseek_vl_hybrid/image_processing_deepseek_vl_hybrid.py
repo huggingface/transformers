@@ -108,8 +108,8 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
-        high_res_size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
+        high_res_size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         high_res_resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
@@ -119,7 +119,7 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         high_res_image_mean: Optional[Union[float, List[float]]] = None,
         high_res_image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = None,
+        do_convert_rgb: Optional[bool] = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -219,8 +219,8 @@ class DeepseekVLHybridImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
-        high_res_size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
+        high_res_size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         high_res_resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,

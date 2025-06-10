@@ -620,8 +620,8 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
-        high_res_size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
+        high_res_size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         high_res_resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
@@ -631,7 +631,7 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         high_res_image_mean: Optional[Union[float, List[float]]] = None,
         high_res_image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = None,
+        do_convert_rgb: Optional[bool] = None,
         **kwargs,
     ) -> None:
         high_res_size = high_res_size if high_res_size is not None else {"height": 1024, "width": 1024}
@@ -664,8 +664,8 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
-        high_res_size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
+        high_res_size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         high_res_resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
