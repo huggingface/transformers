@@ -425,13 +425,15 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
         if is_torch_greater_or_equal("2.7.0"):
-            cuda_expectation = "Today is a nice day and the sun is shining. A nice day with warm rainy and windy weather today."
+            cuda_expectation = (
+                "Today is a nice day and the sun is shining. A nice day with warm rainy and windy weather today."
+            )
         else:
-            cuda_expectation = "Today is a nice day and the water is still cold. We just stopped off for some fresh coffee. This place looks like a",
-        
+            cuda_expectation = "Today is a nice day and the water is still cold. We just stopped off for some fresh coffee. This place looks like a"
+
         expected_output_strings = Expectations(
-            { # Here, rocm 9.5 diverge a lot from cuda, dont hesitate to change the expectation. TODO: investigate
-                ("rocm", (9, 5)): "Today is a nice day and the sun is shining. A nice day with warm rainy and windy weather today." ,
+            {
+                ("rocm", (9, 5)): "Today is a nice day and the sun is shining. A nice day with warm rainy and windy weather today.",
                 ("cuda", None): cuda_expectation,
             }
         )  # fmt: skip
