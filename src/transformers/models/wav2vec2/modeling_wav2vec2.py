@@ -1288,7 +1288,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
                 state_dict = safe_load_file(weight_path)
 
-            except EnvironmentError:
+            except OSError:
                 if use_safetensors:
                     # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
                     # to the original exception.
@@ -1297,7 +1297,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             except Exception:
                 # For any other exception, we throw a generic error.
                 if use_safetensors:
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Can't load the model for '{model_path_or_id}'. If you were trying to load it"
                         " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                         f" same name. Otherwise, make sure '{model_path_or_id}' is the correct path to a"
@@ -1328,7 +1328,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
                     weights_only=True,
                 )
 
-            except EnvironmentError:
+            except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
                 # to the original exception.
                 raise
@@ -1338,7 +1338,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
             except Exception:
                 # For any other exception, we throw a generic error.
-                raise EnvironmentError(
+                raise OSError(
                     f"Can't load the model for '{model_path_or_id}'. If you were trying to load it"
                     " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                     f" same name. Otherwise, make sure '{model_path_or_id}' is the correct path to a"

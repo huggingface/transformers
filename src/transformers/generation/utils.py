@@ -1951,7 +1951,7 @@ class GenerationMixin(ContinuousMixin):
         """
         return all(
             special_model_name not in self.__class__.__name__.lower()
-            for special_model_name in ["jamba", "zamba", "mamba", "bamba", "reformer"]
+            for special_model_name in ["jamba", "zamba", "mamba", "bamba", "reformer", "minimax"]
         )
 
     def _prepare_cache_for_generation(
