@@ -132,7 +132,6 @@ class SplinterSelfAttention(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
@@ -286,7 +285,6 @@ class SplinterAttention(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
@@ -296,7 +294,6 @@ class SplinterAttention(nn.Module):
             attention_mask,
             head_mask,
             encoder_hidden_states,
-            encoder_attention_mask,
             past_key_value,
             output_attentions,
             cache_position=cache_position,
@@ -343,7 +340,7 @@ class SplinterLayer(nn.Module):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = SplinterAttention(config, layer_idx)
+        self.attention = SplinterAttention(config, layer_idx=layer_idx)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
@@ -366,8 +363,8 @@ class SplinterLayer(nn.Module):
     ) -> Tuple[torch.Tensor]:
         self_attention_outputs = self.attention(
             hidden_states,
-            attention_mask,
-            head_mask,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
             output_attentions=output_attentions,
             past_key_value=past_key_value,
             cache_position=cache_position,
@@ -389,12 +386,11 @@ class SplinterLayer(nn.Module):
 
             cross_attention_outputs = self.crossattention(
                 attention_output,
-                attention_mask,
-                head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                past_key_value,
-                output_attentions,
+                attention_mask=encoder_attention_mask,
+                head_mask=head_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
                 cache_position=cache_position,
             )
             attention_output = cross_attention_outputs[0]

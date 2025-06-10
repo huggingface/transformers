@@ -210,6 +210,16 @@ class TFBlenderbotSmallAttention(keras.layers.Layer):
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
             value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
+        if self.is_decoder:
+            # if cross_attention save Tuple(tf.Tensor, tf.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(tf.Tensor, tf.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_states, value_states)
+
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = tf.reshape(self._shape(query_states, tgt_len, bsz), proj_shape)
         key_states = tf.reshape(key_states, proj_shape)
@@ -1485,7 +1495,7 @@ class TFBlenderbotSmallForConditionalGeneration(TFBlenderbotSmallPreTrainedModel
         if decoder_attention_mask is not None:  # xla
             decoder_position_ids = tf.math.cumsum(decoder_attention_mask, axis=-1, exclusive=True)[:, -1:]
         elif past_key_values is not None:  # no xla + past_key_values
-            decoder_position_ids = past_key_values[0][0].shape[2]
+            decoder_position_ids = past_key_values.get_seq_length()
         else:  # no xla + no past_key_values
             decoder_position_ids = tf.range(decoder_input_ids.shape[1])
 

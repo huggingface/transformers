@@ -464,7 +464,7 @@ class BridgeTowerSelfAttention(nn.Module):
             if isinstance(past_key_value, EncoderDecoderCache):
                 is_updated = past_key_value.is_updated.get(self.layer_idx)
                 if is_cross_attention:
-                    # after the first generated id, we can subsequently re-use all key/value_states from cache
+                    # after the first generated id, we can subsequently re-use all key/value_layer from cache
                     curr_past_key_value = past_key_value.cross_attention_cache
                 else:
                     curr_past_key_value = past_key_value.self_attention_cache

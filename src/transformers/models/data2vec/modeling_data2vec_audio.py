@@ -249,10 +249,9 @@ class Data2VecAudioAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
+        output_attentions: Optional[bool] = False,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -273,32 +272,9 @@ class Data2VecAudioAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
 
-        # get key, value proj
-        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
-        # is checking that the `sequence_length` of the `past_key_value` is the same as
-        # the provided `key_value_states` to support prefix tuning
-        if (
-            is_cross_attention
-            and past_key_value is not None
-            and past_key_value[0].shape[2] == key_value_states.shape[1]
-        ):
-            # reuse k,v, cross_attentions
-            key_states = past_key_value[0]
-            value_states = past_key_value[1]
-        elif is_cross_attention:
-            # cross_attentions
-            key_states = self.k_proj(key_value_states).view(*kv_input_shape).transpose(1, 2)
-            value_states = self.v_proj(key_value_states).view(*kv_input_shape).transpose(1, 2)
-        elif past_key_value is not None:
-            # reuse k, v, self_attention
-            key_states = self.k_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
-            value_states = self.v_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
-        else:
-            # self_attention
-            key_states = self.k_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
-            value_states = self.v_proj(hidden_states).view(*kv_input_shape).transpose(1, 2)
+        current_states = key_value_states if is_cross_attention else hidden_states
+        key_states = self.key(current_states).view(*kv_input_shape).transpose(1, 2)
+        value_states = self.value(current_states).view(*kv_input_shape).transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -320,7 +296,7 @@ class Data2VecAudioAttention(nn.Module):
         attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights, None
 
 
 class Data2VecAudioFeedForward(nn.Module):

@@ -335,13 +335,14 @@ class BigBirdSelfAttention(nn.Module):
         mixed_query_layer = self.query(hidden_states)
 
         # NOTE: BigBird has only cross attention layers so we can ignore self attn path
+        current_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
         if past_key_value is not None and past_key_value.get_seq_length(self.layer_idx) > 0:
             # reuse k,v, cross_attentions
             key_layer = past_key_value.key_cache[self.layer_idx]
             value_layer = past_key_value.value_cache[self.layer_idx]
         else:
-            key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
-            value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
+            key_layer = self.transpose_for_scores(self.key(current_states))
+            value_layer = self.transpose_for_scores(self.value(current_states))
 
             if past_key_value is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
