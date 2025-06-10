@@ -113,7 +113,6 @@ class VJEPA2Config(PretrainedConfig):
         pred_hidden_size=384,
         pred_num_attention_heads=12,
         pred_num_hidden_layers=12,
-        pred_use_mask_tokens=False,
         pred_num_mask_tokens=10,
         pred_zero_init_mask_tokens=True,
         pred_mlp_ratio=4.0,
@@ -149,7 +148,6 @@ class VJEPA2Config(PretrainedConfig):
         self.pred_hidden_size = pred_hidden_size
         self.pred_num_attention_heads = pred_num_attention_heads
         self.pred_num_hidden_layers = pred_num_hidden_layers
-        self.pred_use_mask_tokens = pred_use_mask_tokens
         self.pred_num_mask_tokens = pred_num_mask_tokens
         self.pred_zero_init_mask_tokens = pred_zero_init_mask_tokens
         self.pred_mlp_ratio = pred_mlp_ratio

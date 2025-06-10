@@ -116,7 +116,7 @@ def convert_encoder_keys(model_state_dict, og_encoder_state_dict, config):
         if key.startswith("blocks."):
             key = key.replace("blocks.", "encoder.layer.")
         if "attn." in key:
-            key = key.replace("attn.", "attention.attention.")
+            key = key.replace("attn.", "attention.")
         if key == "pos_embed":
             key = "encoder.embeddings.position_embeddings"
         if "patch_embed." in key:
@@ -159,7 +159,7 @@ def convert_predictor_keys(model_state_dict, og_predictor_state_dict, config):
         if key.startswith("predictor_blocks."):
             key = key.replace("predictor_blocks.", "predictor.layer.")
         if "attn." in key:
-            key = key.replace("attn.", "attention.attention.")
+            key = key.replace("attn.", "attention.")
         if key == "predictor_pos_embed":
             key = "predictor.embeddings.position_embeddings"
         if "predictor_embed." in key:
