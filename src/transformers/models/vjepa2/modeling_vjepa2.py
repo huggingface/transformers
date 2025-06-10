@@ -21,7 +21,7 @@ class VJEPA2PatchEmbeddings3D(nn.Module):
     def __init__(
         self,
         config: VJEPA2Config,
-        hidden_size: int = -1,
+        hidden_size: int = 1024,
     ):
         super().__init__()
         self.patch_size = config.patch_size
@@ -53,7 +53,7 @@ class VJEPA2Embeddings(nn.Module):
     Construct mask token, position and patch embeddings.
     """
 
-    def __init__(self, config: VJEPA2Config, hidden_size: int = -1) -> None:
+    def __init__(self, config: VJEPA2Config, hidden_size: int = 1024) -> None:
         super().__init__()
 
         self.config = config
@@ -145,8 +145,8 @@ class VJEPA2RopeAttention(nn.Module):
     def __init__(
         self,
         config: VJEPA2Config,
-        hidden_size: int = -1,
-        num_attention_heads: int = 1,
+        hidden_size: int = 1024,
+        num_attention_heads: int = 16,
     ) -> None:
         super().__init__()
         self.config = config
@@ -320,7 +320,7 @@ class VJEPA2DropPath(nn.Module):
 
 
 class VJEPA2MLP(nn.Module):
-    def __init__(self, config: VJEPA2Config, hidden_size: int = -1, mlp_ratio: float = 4.0) -> None:
+    def __init__(self, config: VJEPA2Config, hidden_size: int = 1024, mlp_ratio: float = 4.0) -> None:
         super().__init__()
         in_features = out_features = hidden_size
         hidden_features = int(hidden_size * mlp_ratio)
@@ -342,9 +342,9 @@ class VJEPA2SwiGLUFFN(nn.Module):
     def __init__(
         self,
         config: VJEPA2Config,
-        hidden_size: int = -1,
+        hidden_size: int = 1024,
         mlp_ratio: float = 4.0,
-    ) -> None:
+    ):
         super().__init__()
         in_features = out_features = hidden_size
         if config.wide_SiLU:
@@ -370,10 +370,10 @@ class VJEPA2Layer(nn.Module):
         self,
         config: VJEPA2Config,
         drop_path_rate: float = 0.0,
-        hidden_size: int = -1,
-        num_attention_heads: int = 1,
+        hidden_size: int = 1024,
+        num_attention_heads: int = 16,
         mlp_ratio: float = 4.0,
-    ) -> None:
+    ):
         super().__init__()
         self.config = config
         self.hidden_size = hidden_size
