@@ -26,7 +26,7 @@ We use two mechanisms to keep this code in sync:
   either update the base function and use `make fixup` to propagate the change to all copies, or simply remove the `# Copied from` comment if that is inappropriate.
 - "Modular" files. These files briefly define models by composing them using inheritance from other models. They are not meant to be used directly. Instead, the style tools
   automatically generate a complete modeling file, like `modeling_bert.py`, from the modular file like `modular_bert.py`. If a model has a modular file, the modeling file
-  should never be edited directly! Instead, changes should be made in the modular file, and the modeling file will be updated automatically.
+  should never be edited directly! Instead, changes should be made in the modular file, and then you should run `make fixup` to update the modeling file automatically.
 
 ## Testing
 
