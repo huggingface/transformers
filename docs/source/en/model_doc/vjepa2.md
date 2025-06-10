@@ -38,7 +38,7 @@ The snippet below shows how to load the VJEPA 2 model using `AutoModel` class.
 
 ```py
 import requests
-from transformers import AutoImageProcessor, AutoModelForImageClassification
+from transformers import AutoModel, AutoVideoProcessor
 from PIL import Image
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
