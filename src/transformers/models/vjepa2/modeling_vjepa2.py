@@ -232,7 +232,7 @@ class VJEPA2Embeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.vit.modeling_vit.eager_attention_forward
+# Adapted from transformers.models.vit.modeling_vit.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -263,7 +263,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->Dinov2->VJEPA
+# Adapted from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->Dinov2->VJEPA
 class VJEPA2SelfAttention(nn.Module):
     def __init__(
         self,
@@ -511,7 +511,7 @@ class VJEPA2RopeSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Dinov2->VJEPA
+# Adapted from transformers.models.vit.modeling_vit.ViTAttention with ViT->Dinov2->VJEPA
 class VJEPA2Attention(nn.Module):
     def __init__(self, config: VJEPA2Config, **kwargs) -> None:
         super().__init__()
@@ -555,7 +555,7 @@ class VJEPA2Attention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.beit.modeling_dinov2.drop_path
+# Adapted from transformers.models.beit.modeling_dinov2.drop_path
 def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
@@ -576,7 +576,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     return output
 
 
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath
+# Adapted from transformers.models.beit.modeling_beit.BeitDropPath
 class VJEPA2DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
@@ -702,7 +702,7 @@ class VJEPA2Layer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->Dinov2->VJEPA
+# Adapted from transformers.models.vit.modeling_vit.ViTEncoder with ViT->Dinov2->VJEPA
 class VJEPA2Encoder(nn.Module):
     def __init__(
         self,
@@ -1208,10 +1208,10 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, VJEPA2OutputWithMaskedInput]:
         r"""
-        pixel_values_videos (`torch.Tensor` with shape `[batch size x num_frames x num_channels x height x width]`, required)
+        pixel_values_videos (`torch.Tensor` with shape `[batch size x num_frames x num_channels x height x width]`, required):
             The input video pixels which is processed by VJEPA2VideoProcessor.
         context_head_mask (`torch.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
-                The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard) for the context.
+            The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard) for the context.
         target_head_mask (`torch.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
             The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard) for the target.
         context_mask (`torch.Tensor` with shape `[batch_size, patch_size, 1]`, *optional*):

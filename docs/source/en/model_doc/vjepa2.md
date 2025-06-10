@@ -53,3 +53,7 @@ predictor_outputs = outputs.predictor_output.last_hidden_state
     - forward
 
 </frameworkcontent>
+
+## VJEPA2VideoProcessor
+
+[[autodoc]] VJEPA2VideoProcessor

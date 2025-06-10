@@ -14,8 +14,6 @@ class VJEPA2Config(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        model_name (`str`, *optional*, defaults to `"vit_large"`):
-            Model name, choices: vit_large, vit_huge, vit_giant, vit_giant_384
         patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
         crop_size (`int`, *optional*, defaults to 256):
@@ -42,8 +40,6 @@ class VJEPA2Config(PretrainedConfig):
             Stochastic depth rate per sample (when applied in the main path of residual layers).
         mlp_ratio (`float`, *optional*, defaults to 4.0):
             Ratio of the hidden size of the MLPs used in Encoder relative to the `hidden_size`.
-        is_causal (`bool`, *optional*, defaults to `False`):
-            If set, the attention is applied in a causal pattern, with past tokens cannot attend to the future.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
         qkv_bias (`bool`, *optional*, defaults to `True`):
@@ -93,7 +89,6 @@ class VJEPA2Config(PretrainedConfig):
 
     def __init__(
         self,
-        model_name="vit_large",
         patch_size=16,
         crop_size=256,
         frames_per_clip=64,
@@ -107,7 +102,6 @@ class VJEPA2Config(PretrainedConfig):
         num_hidden_layers=12,
         drop_path_rate=0.0,
         mlp_ratio=4.0,
-        is_causal=False,
         layer_norm_eps=1e-6,
         qkv_bias=True,
         attention_probs_dropout_prob=0.0,
@@ -127,7 +121,6 @@ class VJEPA2Config(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
-        self.model_name = model_name
         self.crop_size = crop_size
         self.img_height = crop_size
         self.img_width = crop_size
@@ -144,7 +137,6 @@ class VJEPA2Config(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.drop_path_rate = drop_path_rate
         self.mlp_ratio = mlp_ratio
-        self.is_causal = is_causal
         self.layer_norm_eps = layer_norm_eps
         self.qkv_bias = qkv_bias
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
