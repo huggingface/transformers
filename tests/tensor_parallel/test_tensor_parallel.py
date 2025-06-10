@@ -32,9 +32,6 @@ from transformers.testing_utils import (
 if is_torch_available():
     import torch
 
-LLAMA_68M = "JackFram/llama-68m"
-LLAMA_1B = "unsloth/Llama-3.2-1B"
-
 
 class TestTensorParallelUtils(TestCasePlus):
     def test_packed_unpacked_conversion(self):
@@ -88,14 +85,14 @@ class TestTensorParallel(TestCasePlus):
             except subprocess.CalledProcessError as e:
                 raise Exception(f"The following error was captured: {e.stderr}")
 
-    def model_forward(self, model, nproc_per_node):
+    def test_model_forward(self):
         script_to_run = textwrap.dedent(
-            f"""
+            """
             import torch
             import os
             from transformers import AutoModelForCausalLM, AutoTokenizer
 
-            model_id = "{model}"
+            model_id = "JackFram/llama-68m"
 
             rank = int(os.environ["RANK"])
             world_size = int(os.environ["WORLD_SIZE"])
@@ -120,16 +117,13 @@ class TestTensorParallel(TestCasePlus):
             next_token_logits = outputs[0][:, -1, :]
             next_token = torch.argmax(next_token_logits, dim=-1)
             response = tokenizer.decode(next_token)
-            assert "you" in response or "with" in response
+            assert response == "with"
 
             torch.distributed.barrier()
             torch.distributed.destroy_process_group()
             """
         )
-        self.torchrun(script_to_run, nproc_per_node)
-
-    def test_model_forward_llama_1b(self):
-        self.model_forward(LLAMA_1B, 4)
+        self.torchrun(script_to_run)
 
     @require_huggingface_hub_greater_or_equal("0.31.4")
     def test_model_save(self):
