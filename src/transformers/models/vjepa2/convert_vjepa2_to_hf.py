@@ -237,13 +237,15 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
 
     # load image
     image = prepare_img()
+    image = torch.Tensor(np.array(image)).unsqueeze(0).permute(0, 3, 1, 2)
+    print("Input shape: ", image.shape)
 
     crop_size = config.crop_size
     processor = VJEPA2VideoProcessor(crop_size=crop_size)
-    pr_out = processor(torch.Tensor(np.array(image)), return_tensors="pt")
+    pr_out = processor(image, return_tensors="pt")
     pixel_values_videos = pr_out.pixel_values_videos
     # run original preprocessor
-    original_pixel_values = original_preprocessor([torch.Tensor(np.array(image)).permute(2, 0, 1)])
+    original_pixel_values = original_preprocessor(image)
     assert original_pixel_values[0].permute(1, 0, 2, 3).shape == pixel_values_videos[0].shape
     assert torch.allclose(original_pixel_values[0].permute(1, 0, 2, 3), pixel_values_videos[0], atol=1e-3)
 
@@ -292,15 +294,9 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
         processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        model_name_to_hf_name = {
-            "vit_large": "vjepa2-vitl-fpc64-256",
-            "vit_huge": "vjepa2-vith-fpc64-256",
-            "vit_giant": "vjepa2-vitg-fpc64-256",
-            "vit_giant_384": "vjepa2-vith-fpc64-384",
-        }
-        name = model_name_to_hf_name[model_name]
-        model.push_to_hub(f"facebook/{name}")
-        processor.push_to_hub(f"facebook/{name}")
+        name = HUB_MODELS[model_name]
+        model.push_to_hub(name, private=True)
+        processor.push_to_hub(name, private=True)
 
 
 if __name__ == "__main__":
