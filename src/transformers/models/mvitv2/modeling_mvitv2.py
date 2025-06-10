@@ -646,7 +646,7 @@ class MViTV2Block(nn.Module):
         )
 
         self.layernorm_after = nn.LayerNorm(attention_out_dim, eps=config.layer_norm_epsilon)
-        hidden_intermediate_dim = attention_out_dim * 4
+        hidden_intermediate_dim = attention_out_dim * config.mlp_ratio
         self.intermediate = MViTV2Intermediate(attention_out_dim, hidden_intermediate_dim, config)
         self.output = MViTV2Output(hidden_intermediate_dim, out_dim)
 
