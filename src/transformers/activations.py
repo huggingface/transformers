@@ -109,7 +109,7 @@ class ClippedGELUActivation(nn.Module):
         self.max = max
 
     def forward(self, x: Tensor) -> Tensor:
-        return torch.clip(gelu(x), self.min, self.max)
+        return torch.clip(nn.functional.gelu(x), self.min, self.max)
 
 
 class AccurateGELUActivation(nn.Module):
