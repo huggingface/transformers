@@ -18,6 +18,7 @@ import os
 import re
 from functools import partial, reduce
 from typing import Optional, Union
+import math
 
 import torch
 import torch.distributed as dist
@@ -280,36 +281,6 @@ def repack_weights(
 def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
     """
     Generalized tensor sharding across a multi-dimensional device mesh.
-
-    Args:
-        param (torch.Tensor): The tensor to shard.
-        empty_param (torch.Tensor): A tensor used for shape reference.
-        device_mesh (torch.Tensor): Shape [d_0, ..., d_n] representing the mesh.
-        rank (int): Global rank of the current process/device.
-        dim (int): Dimension along which to shard the tensor.
-    """
-    param_dim = empty_param.dim()
-    if dim < 0:
-        dim = param_dim + dim
-    if dim >= param_dim:
-        raise ValueError(f"dim {dim} is out of bounds for tensor of dimension {param_dim}")
-
-    # Flatten the mesh to get the total number of devices
-    mesh_shape = device_mesh.shape
-    world_size = reduce(operator.mul, mesh_shape)
-
-    if rank >= world_size:
-        raise ValueError(f"Rank {rank} is out of bounds for mesh size {world_size}")
-
-    shard_size = empty_param.shape[dim] // world_size
-    start = rank * shard_size
-    end = start + shard_size
-
-    # Construct slicing index dynamically
-    slice_indices = [slice(None)] * param_dim
-    slice_indices[dim] = slice(start, end)
-
-    return param[tuple(slice_indices)]
     Extract only the fraction of the parameter owned by the given `rank` when the parameter would have gone sharding at provided `dim`.
     Extraction follows the pytorch `Shard` placement so that sharding and materializing back to full tensor follows `Shard` semantics.
     `Shard` follows torch.chunk style sharding of the tensor. We demonstrate some cases below on how sharding happens including some edge cases
@@ -353,40 +324,30 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
 
     In case (2), empty shards are returned with appropriate dimension to allow for operations to work smoothly.
     """
-    if not (-len(empty_param.shape) <= dim < len(empty_param.shape)):
-        raise ValueError(
-            f"provided index {dim} should be within the range of number of parameter's dimensions {len(empty_param.shape)}"
-        )
-    _dim_size = empty_param.shape[dim]
-    _split_size = math.ceil(_dim_size / device_mesh.size())
-    if dim == 0:
-        if (rank * _split_size) < _dim_size:
-            param = param[rank * _split_size : min((rank + 1) * _split_size, _dim_size), ...]
-        else:
-            param = torch.empty((0, *empty_param.shape[1:]), dtype=torch.int64)
-    elif dim == 1:
-        if (rank * _split_size) < _dim_size:
-            param = param[:, rank * _split_size : min((rank + 1) * _split_size, _dim_size), ...]
-        else:
-            param = torch.empty((empty_param.shape[0], 0, empty_param.shape[2:]), dtype=torch.int64)
-    elif dim == -2:
-        if (rank * _split_size) < _dim_size:
-            param = param[..., rank * _split_size : min((rank + 1) * _split_size, _dim_size), :]
-        else:
-            param = torch.empty((*empty_param.shape[:-2], 0, empty_param.shape[-1]), dtype=torch.int64)
-    elif dim == 2:
-        if (rank * _split_size) < _dim_size:
-            param = param[:, :, rank * _split_size : min((rank + 1) * _split_size, _dim_size), ...]
-        else:
-            param = torch.empty((*empty_param.shape[:2], 0, *empty_param.shape[3:]), dtype=torch.int64)
-    elif dim == -1:
-        if (rank * _split_size) < _dim_size:
-            param = param[..., rank * _split_size : min((rank + 1) * _split_size, _dim_size)]
-        else:
-            param = torch.empty((*empty_param.shape[:-1], 0), dtype=torch.int64)
-    else:
-        raise ValueError(f"Unsupported dim {dim}, only dim 0, 1 or 2 are supported")
-    return param
+    param_dim = empty_param.dim()
+    
+    if dim < 0:
+        dim = param_dim + dim
+    if dim >= param_dim:
+        raise ValueError(f"dim {dim} is out of bounds for tensor of dimension {param_dim}")
+
+    # Flatten the mesh to get the total number of devices
+    mesh_shape = device_mesh.shape
+    world_size = reduce(operator.mul, mesh_shape)
+
+    if rank >= world_size:
+        raise ValueError(f"Rank {rank} is out of bounds for mesh size {world_size}")
+    
+    shard_size = math.ceil(empty_param.shape[dim] / world_size)
+    start = rank * shard_size
+    end = min(start + shard_size, empty_param.shape[dim])
+    slice_indices = [slice(None)] * param_dim
+    if start < empty_param.shape[dim]:
+        slice_indices[dim] = slice(start, end)
+        return param[tuple(slice_indices)]
+    dimensions = list(param.shape)
+    dimensions[dim] = 0
+    return torch.empty(tuple(dimensions),dtype=torch.int64)
 
 
 def distribute_module(
