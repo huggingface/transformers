@@ -347,7 +347,7 @@ def load_flax_checkpoint_in_pytorch_model(model, flax_checkpoint_path):
             try:
                 flax_state_dict = from_bytes(flax_cls, state_f.read())
             except UnpicklingError:
-                raise EnvironmentError(f"Unable to convert {flax_checkpoint_path} to Flax deserializable object. ")
+                raise OSError(f"Unable to convert {flax_checkpoint_path} to Flax deserializable object. ")
 
     return load_flax_weights_in_pytorch_model(model, flax_state_dict)
 
