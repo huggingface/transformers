@@ -6,24 +6,33 @@ from ...onnx import OnnxConfig
 
 
 class FirefliesConfig(PretrainedConfig):
-    model_type = "fireflies"
     """
-    This is the configuration class to store the configuration of a [`FirefliesModel`].
+    This is the configuration class to store the configuration of a [`FirefliesModel`]. It is used to instantiate a
+    Fireflies model according to the specified arguments, defining the model architecture.
 
-    Checkpoint Example: [Arynz/Fireflies300M](https://huggingface.co/Arynz/Fireflies300M)
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read more in
+    the [documentation](https://huggingface.co/docs/transformers/main_classes/configuration).
+
+    Example:
+
+    ```python
+    >>> from transformers import FirefliesConfig, FirefliesModel
+
+    >>> config = FirefliesConfig()
+    >>> model = FirefliesModel(config)
+    ```
+
+    [Arynz/Fireflies300M](https://huggingface.co/Arynz/Fireflies300M)
     """
+
+    model_type = "fireflies"
 
     def __init__(
         self,
         vocab_size=32000,
-        hidden_size=256,
-        num_hidden_layers=4,
-        num_attention_heads=4,
-        intermediate_size=1024,
-        hidden_act="gelu",
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        layer_norm_eps=1e-5,
+        d_model=1024,
+        n_heads=8,
+        num_layers=12,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -36,14 +45,9 @@ class FirefliesConfig(PretrainedConfig):
             **kwargs,
         )
         self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
+        self.d_model = d_model
+        self.n_heads = n_heads
+        self.num_layers = num_layers
 
 
 class FirefliesOnnxConfig(OnnxConfig):
@@ -52,7 +56,6 @@ class FirefliesOnnxConfig(OnnxConfig):
         return OrderedDict(
             {
                 "input_ids": {0: "batch", 1: "sequence"},
-                "attention_mask": {0: "batch", 1: "sequence"},
             }
         )
 
