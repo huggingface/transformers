@@ -32,7 +32,7 @@ You can find all the original Moonshine checkpoints under the [Useful Sensors](h
 > [!TIP]
 > Click on the Moonshine models in the right sidebar for more examples of how to apply Moonshine to different speech recognition tasks.
 
-The example below demonstrates how to generate a transcription based on an audio file with [`Pipeline`] or the [`AutoModel`] class.
+The example below demonstrates how to transcribe speech into text with [`Pipeline`] or the [`AutoModel`] class.
 
 
 
