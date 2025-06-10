@@ -228,21 +228,23 @@ def convert_model(
     if "semantic" in repo_id.split("_"):
         size = {"shortest_edge": config.image_size, "longest_edge": None}
         do_split_image = True
+        do_pad = False
     else:
         size = {"shortest_edge": config.image_size, "longest_edge": config.image_size}
         do_split_image = False
+        do_pad = True
 
     if "giant" in repo_id.split("_"):
         config.use_swiglu_ffn = True
         config.hidden_size = 1536
         config.num_hidden_layers = 40
         config.num_attention_heads = 24
-        # Add additional mappings for giant checkpoints
+        # Update MAPPINGS for ckpts depending on the MLP type
         MAPPINGS.update(MLP_MAPPINGS["swiglu_ffn"])
     else:
         MAPPINGS.update(MLP_MAPPINGS["vanilla_mlp"])
 
-    processor = EoMTImageProcessor(size=size, do_split_image=do_split_image)
+    processor = EoMTImageProcessor(size=size, do_split_image=do_split_image, do_pad=do_pad)
 
     # Save the config and processor
     if output_dir:

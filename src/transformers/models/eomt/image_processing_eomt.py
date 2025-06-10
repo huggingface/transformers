@@ -30,6 +30,8 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     get_image_size,
+    infer_channel_dimension_format,
+    is_batched,
     make_flat_list_of_images,
     to_numpy_array,
     valid_images,
@@ -50,6 +52,44 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
     import torch.nn.functional as F
+
+
+# Adapted from transformers.models.maskformer.image_processing_maskformer.convert_segmentation_map_to_binary_masks
+def convert_segmentation_map_to_binary_masks(
+    segmentation_map: "np.ndarray",
+    instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
+    ignore_index: Optional[int] = None,
+):
+    if ignore_index is not None:
+        segmentation_map = np.where(segmentation_map == 0, ignore_index, segmentation_map - 1)
+
+    # Get unique ids (class or instance ids based on input)
+    all_labels = np.unique(segmentation_map)
+
+    # Drop background label if applicable
+    if ignore_index is not None:
+        all_labels = all_labels[all_labels != ignore_index]
+
+    # Generate a binary mask for each object instance
+    binary_masks = [(segmentation_map == i) for i in all_labels]
+
+    # Stack the binary masks
+    if binary_masks:
+        binary_masks = np.stack(binary_masks, axis=0)
+    else:
+        binary_masks = np.zeros((0, *segmentation_map.shape))
+
+    # Convert instance ids to class ids
+    if instance_id_to_semantic_id is not None:
+        labels = np.zeros(all_labels.shape[0])
+
+        for label in all_labels:
+            class_id = instance_id_to_semantic_id[label + 1 if ignore_index is not None else label]
+            labels[all_labels == label] = class_id - 1 if ignore_index is not None else class_id
+    else:
+        labels = all_labels
+
+    return binary_masks.astype(np.float32), labels.astype(np.int64)
 
 
 def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, int]:
@@ -176,7 +216,7 @@ def compute_segments(
         if not mask_exists:
             continue
 
-        if pred_class in stuff_classes:
+        if stuff_classes and pred_class in stuff_classes:
             if pred_class in stuff_memory_list:
                 segmentation[final_mask] = stuff_memory_list[pred_class]
                 continue
@@ -231,6 +271,13 @@ class EoMTImageProcessor(BaseImageProcessor):
             Rescale the input by the given factor. Only has an effect if `do_rescale` is set to `True`.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with mean and standard deviation.
+        do_split_image (`bool`, *optional*, defaults to `False`):
+            Whether to split the input images into overlapping crops for semantic segmentation. If set to `True`, the
+            input images will be split into crops of size `size["shortest_edge"]` with an overlap between crops.
+            Otherwise, the input images will be padded to the target size.
+        do_pad (`bool`, *optional*, defaults to `False`):
+            Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
+            number of patches in the batch. Padding will be applied to the bottom and right with zeros.
         image_mean (`int`, *optional*, defaults to `[0.485, 0.456, 0.406]`):
             The sequence of means for each channel, to be used when normalizing images. Defaults to the ImageNet mean.
         image_std (`int`, *optional*, defaults to `[0.229, 0.224, 0.225]`):
@@ -238,10 +285,6 @@ class EoMTImageProcessor(BaseImageProcessor):
             ImageNet std.
         num_labels (`int`, *optional*):
             The number of labels in the segmentation map.
-        do_split_image (`bool`, *optional*, defaults to `False`):
-            Whether to split the input images into overlapping crops for semantic segmentation. If set to `True`, the
-            input images will be split into crops of size `size["shortest_edge"]` with an overlap between crops.
-            Otherwise, the input images will be padded to the target size.
     """
 
     model_input_names = ["pixel_values"]
@@ -254,10 +297,12 @@ class EoMTImageProcessor(BaseImageProcessor):
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
         do_normalize: bool = True,
+        do_split_image: bool = False,
+        do_pad: bool = False,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        ignore_index: Optional[int] = None,
         num_labels: Optional[int] = None,
-        do_split_image: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -271,10 +316,12 @@ class EoMTImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
+        self.do_split_image = do_split_image
+        self.do_pad = do_pad
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
+        self.ignore_index = ignore_index
         self.num_labels = num_labels
-        self.do_split_image = do_split_image
 
     def resize(
         self,
@@ -355,12 +402,109 @@ class EoMTImageProcessor(BaseImageProcessor):
         padded_image = pad(image=image, padding=padding, mode=PaddingMode.CONSTANT, constant_values=0.0)
         return padded_image
 
+    def _preprocess_images(
+        self,
+        images: ImageInput,
+        do_resize: Optional[bool] = None,
+        size: Optional[Dict[str, int]] = None,
+        resample: PILImageResampling = None,
+        do_split_image: Optional[bool] = None,
+        do_pad: Optional[bool] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.ndarray:
+        """Preprocesses a batch of images."""
+        images = [to_numpy_array(image) for image in images]
+
+        if do_resize:
+            images = [
+                self.resize(
+                    image,
+                    size=size,
+                    resample=resample,
+                    data_format=data_format,
+                    input_data_format=input_data_format,
+                )
+                for image in images
+            ]
+
+        processed_images, patch_offsets = [], []
+
+        if do_split_image:
+            for idx, img in enumerate(images):
+                patches, offsets = self._split_image(img, size, idx)
+                processed_images.extend(patches)
+                patch_offsets.extend(offsets)
+
+            images = processed_images
+
+        if do_pad:
+            images = [self._pad(img, size) for img in images]
+
+        if do_rescale:
+            images = [self.rescale(img, scale=rescale_factor, input_data_format=input_data_format) for img in images]
+
+        if do_normalize:
+            images = [
+                self.normalize(
+                    image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
+                )
+                for image in images
+            ]
+
+        return images, patch_offsets
+
+    def _preprocess_mask(
+        self,
+        segmentation_map: ImageInput,
+        do_resize: Optional[bool] = False,
+        do_pad: Optional[bool] = False,
+        size: Optional[Dict[str, int]] = None,
+        resample: PILImageResampling = None,
+        data_format: Union[str, ChannelDimension] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.ndarray:
+        """Preprocesses a single mask."""
+        # Add channel dimension if missing - needed for certain transformations
+        if segmentation_map.ndim == 2:
+            added_channel_dim = True
+            segmentation_map = segmentation_map[None, ...]
+            input_data_format = ChannelDimension.FIRST
+        else:
+            added_channel_dim = False
+            if input_data_format is None:
+                input_data_format = infer_channel_dimension_format(segmentation_map)
+
+        if do_resize:
+            segmentation_map = self.resize(
+                segmentation_map,
+                size=size,
+                resample=resample,
+                data_format=data_format,
+            )
+
+        if do_pad:
+            segmentation_map = self._pad(segmentation_map, size)
+
+        # Remove extra channel dimension if added for processing
+        if added_channel_dim:
+            segmentation_map = segmentation_map.squeeze(0)
+        return torch.from_numpy(segmentation_map)
+
     @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
-        mask_labels: Optional[ImageInput] = None,
-        class_labels: Optional[Dict[int, int]] = None,
+        segmentation_maps: Optional[Union[List[Dict[int, int]], Dict[int, int]]] = None,
+        instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
         do_split_image: Optional[bool] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
@@ -368,8 +512,10 @@ class EoMTImageProcessor(BaseImageProcessor):
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
+        do_pad: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        ignore_index: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -380,10 +526,10 @@ class EoMTImageProcessor(BaseImageProcessor):
         Args:
             images (`ImageInput`):
                 Image or batch of images to preprocess.
-            mask_labels (`ImageInput`, *optional*):
-                Ground truth segmentation mask corresponding to input images.
-            class_labels (`Dict[int, int]`, *optional*):
-                Class labels to map instance/panoptic segments to semantic classes.
+            segmentation_maps (`ImageInput`, *optional*):
+                The corresponding semantic segmentation maps with the pixel-wise annotations.
+            instance_id_to_semantic_id (`List[Dict[int, int]]` or `Dict[int, int]`, *optional*):
+                A mapping between object instance ids and class ids.
             do_split_image (`bool`, *optional*, defaults to `self.do_split_image`):
                 Whether to split the input images into overlapping crops for semantic segmentation.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
@@ -398,6 +544,9 @@ class EoMTImageProcessor(BaseImageProcessor):
                 Factor to scale image pixel values.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the input images.
+            do_pad (`bool`, *optional*, defaults to `False`):
+                Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
+                number of patches in the batch. Padding will be applied to the bottom and right with zeros.
             image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
                 Mean for normalization. Single value or list for each channel.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
@@ -418,8 +567,10 @@ class EoMTImageProcessor(BaseImageProcessor):
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        do_pad = do_pad if do_pad is not None else self.do_pad
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
+        ignore_index = ignore_index if ignore_index is not None else self.ignore_index
 
         images = make_flat_list_of_images(images)
 
@@ -440,60 +591,144 @@ class EoMTImageProcessor(BaseImageProcessor):
             resample=resample,
         )
 
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
+        pixel_values_list, patch_offsets = self._preprocess_images(
+            images=images,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+            do_split_image=do_split_image,
+            do_pad=do_pad,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            data_format=data_format,
+            input_data_format=input_data_format,
+        )
 
-        if do_resize:
-            images = [
-                self.resize(
-                    image,
+        if segmentation_maps is not None:
+            segmentation_maps = [segmentation_maps] if not is_batched(segmentation_maps) else segmentation_maps
+            segmentation_maps = [to_numpy_array(mask) for mask in segmentation_maps]
+
+            segmentation_maps = [
+                self._preprocess_mask(
+                    segmentation_map,
+                    do_resize=do_resize,
+                    do_pad=do_pad,
                     size=size,
                     resample=resample,
                     data_format=data_format,
                     input_data_format=input_data_format,
                 )
-                for image in images
+                for segmentation_map in segmentation_maps
             ]
 
-        # patch_offsets are only used for semantic segmentation.
-        processed_images, patch_offsets = [], []
-
-        if do_split_image:
-            for idx, img in enumerate(images):
-                patches, offsets = self._split_image(img, size, idx)
-                processed_images.extend(patches)
-                patch_offsets.extend(offsets)
-        else:
-            processed_images = [self._pad(img, size) for img in images]
-
-        if do_rescale:
-            images = [
-                self.rescale(img, scale=rescale_factor, input_data_format=input_data_format)
-                for img in processed_images
-            ]
-
-        if do_normalize:
-            images = [
-                self.normalize(
-                    image,
-                    mean=image_mean,
-                    std=image_std,
-                    input_data_format=input_data_format,
-                )
-                for image in images
-            ]
-
-        output = {"pixel_values": images}
+        encoded_inputs = self.encode_inputs(
+            pixel_values_list,
+            segmentation_maps,
+            instance_id_to_semantic_id,
+            ignore_index,
+            return_tensors,
+            input_data_format=data_format,
+        )
 
         if do_split_image and patch_offsets:
-            output["patch_offsets"] = patch_offsets
+            encoded_inputs["patch_offsets"] = patch_offsets
 
-        if mask_labels is not None:
-            mask_labels = [self._pad(mask, size) for mask in mask_labels]
-            output["mask_labels"] = mask_labels
-            output["class_labels"] = class_labels
+        return encoded_inputs
 
-        return BatchFeature(output, tensor_type=return_tensors)
+    def encode_inputs(
+        self,
+        pixel_values_list: List[ImageInput],
+        segmentation_maps: ImageInput = None,
+        instance_id_to_semantic_id: Optional[Union[List[Dict[int, int]], Dict[int, int]]] = None,
+        ignore_index: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ):
+        """
+        Pad images up to the largest image in a batch and create a corresponding `pixel_mask`.
+
+        EoMT addresses semantic segmentation with a mask classification paradigm, thus input segmentation maps
+        will be converted to lists of binary masks and their respective labels. Let's see an example, assuming
+        `segmentation_maps = [[2,6,7,9]]`, the output will contain `mask_labels =
+        [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]` (four binary masks) and `class_labels = [2,6,7,9]`, the labels for
+        each mask.
+
+        Args:
+            pixel_values_list (`List[ImageInput]`):
+                List of images (pixel values) to be padded. Each image should be a tensor of shape `(channels, height,
+                width)`.
+
+            segmentation_maps (`ImageInput`, *optional*):
+                The corresponding semantic segmentation maps with the pixel-wise annotations.
+
+             (`bool`, *optional*, defaults to `True`):
+                Whether or not to pad images up to the largest image in a batch and create a pixel mask.
+
+                If left to the default, will return a pixel mask that is:
+
+                - 1 for pixels that are real (i.e. **not masked**),
+                - 0 for pixels that are padding (i.e. **masked**).
+
+            instance_id_to_semantic_id (`List[Dict[int, int]]` or `Dict[int, int]`, *optional*):
+                A mapping between object instance ids and class ids. If passed, `segmentation_maps` is treated as an
+                instance segmentation map where each pixel represents an instance id. Can be provided as a single
+                dictionary with a global/dataset-level mapping or as a list of dictionaries (one per image), to map
+                instance ids in each image separately.
+
+            return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
+                If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
+                objects.
+
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **pixel_values** -- Pixel values to be fed to a model.
+            - **mask_labels** -- Optional list of mask labels of shape `(labels, height, width)` to be fed to a model
+              (when `annotations` are provided).
+            - **class_labels** -- Optional list of class labels of shape `(labels)` to be fed to a model (when
+              `annotations` are provided). They identify the labels of `mask_labels`, e.g. the label of
+              `mask_labels[i][j]` if `class_labels[i][j]`.
+        """
+        ignore_index = self.ignore_index if ignore_index is None else ignore_index
+
+        pixel_values_list = [to_numpy_array(pixel_values) for pixel_values in pixel_values_list]
+
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(pixel_values_list[0])
+
+        encoded_inputs = BatchFeature({"pixel_values": pixel_values_list}, tensor_type=return_tensors)
+
+        if segmentation_maps is not None:
+            mask_labels = []
+            class_labels = []
+            # Convert to list of binary masks and labels
+            for idx, segmentation_map in enumerate(segmentation_maps):
+                segmentation_map = to_numpy_array(segmentation_map)
+                if isinstance(instance_id_to_semantic_id, list):
+                    instance_id = instance_id_to_semantic_id[idx]
+                else:
+                    instance_id = instance_id_to_semantic_id
+                # Use instance2class_id mapping per image
+                masks, classes = convert_segmentation_map_to_binary_masks(
+                    segmentation_map,
+                    instance_id,
+                    ignore_index=ignore_index,
+                )
+
+                mask_labels.append(torch.from_numpy(masks))
+                class_labels.append(torch.from_numpy(classes))
+
+            # we cannot batch them since they don't share a common class size
+            encoded_inputs["mask_labels"] = mask_labels
+            encoded_inputs["class_labels"] = class_labels
+
+        return encoded_inputs
 
     def merge_image_patches(
         self,
@@ -518,16 +753,13 @@ class EoMTImageProcessor(BaseImageProcessor):
                 List of original (height, width) dimensions for each image before preprocessing.
             size (`Dict[str, int]`):
                 A size dict which was used to resize.
-
         """
         num_classes = segmentation_logits.shape[1]
         aggregated_logits = []
         crop_counts = []
 
         for image_size in original_image_sizes:
-            height, width = get_size_with_aspect_ratio(
-                image_size, size["shortest_edge"], size["longest_edge"]
-            )
+            height, width = get_size_with_aspect_ratio(image_size, size["shortest_edge"], size["longest_edge"])
             aggregated_logits.append(torch.zeros((num_classes, height, width), device=segmentation_logits.device))
             crop_counts.append(torch.zeros((num_classes, height, width), device=segmentation_logits.device))
 
@@ -581,9 +813,11 @@ class EoMTImageProcessor(BaseImageProcessor):
         outputs,
         patch_offsets: List[Tuple[int, int, int]],
         original_image_sizes: List[Tuple[int, int]],
-        size: Dict[str, int],
+        size: Optional[Dict[str, int]] = None,
     ) -> np.ndarray:
         """Post-processes model outputs into final semantic segmentation prediction."""
+
+        size = size if size is not None else self.size
 
         masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
@@ -601,9 +835,7 @@ class EoMTImageProcessor(BaseImageProcessor):
 
         segmentation_logits = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
 
-        output_logits = self.merge_image_patches(
-            segmentation_logits, patch_offsets, original_image_sizes, size
-        )
+        output_logits = self.merge_image_patches(segmentation_logits, patch_offsets, original_image_sizes, size)
 
         preds = torch.stack(output_logits).argmax(dim=1)
         return preds
@@ -612,13 +844,15 @@ class EoMTImageProcessor(BaseImageProcessor):
         self,
         outputs,
         original_image_sizes: List[Tuple[int, int]],
-        size: Dict[str, int],
-        stuff_classes: List[int] = [0],
         threshold: float = 0.8,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
+        stuff_classes: Optional[List[int]] = None,
+        size: Optional[Dict[str, int]] = None,
     ):
         """Post-processes model outputs into final panoptic segmentation prediction."""
+
+        size = size if size is not None else self.size
 
         masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
@@ -664,72 +898,68 @@ class EoMTImageProcessor(BaseImageProcessor):
         return results
 
     def post_process_instance_segmentation(
-            outputs,
-            original_image_sizes,
-            size,
-            threshold: float = 0.5,
-        ):
+        self,
+        outputs,
+        original_image_sizes: List[Tuple[int, int]],
+        threshold: float = 0.8,
+        size: Optional[Dict[str, int]] = None,
+    ):
+        """Post-processes model outputs into Instance Segmentation Predictions."""
 
-            class_queries_logits = outputs.class_queries_logits
-            masks_queries_logits = outputs.masks_queries_logits
+        size = size if size is not None else self.size
 
-            output_size = get_target_size(size)
-            masks_queries_logits = F.interpolate(
-                masks_queries_logits,
-                size=output_size,
-                mode="bilinear",
+        class_queries_logits = outputs.class_queries_logits
+        masks_queries_logits = outputs.masks_queries_logits
+
+        output_size = get_target_size(size)
+        masks_queries_logits = F.interpolate(
+            masks_queries_logits,
+            size=output_size,
+            mode="bilinear",
+        )
+
+        mask_probs_batch = self.unpad_image(masks_queries_logits, original_image_sizes, size)
+
+        batch_size = class_queries_logits.shape[0]
+        num_labels = class_queries_logits.shape[-1] - 1
+
+        results = []
+
+        for i in range(batch_size):
+            mask_pred = mask_probs_batch[i]
+            mask_class = class_queries_logits[i]
+
+            # Remove the null class `[..., :-1]`
+            scores, pred_classes = mask_class.softmax(dim=-1)[..., :-1].max(-1)
+            pred_masks = (mask_pred > 0).float()
+
+            # Calculate average mask prob
+            mask_scores = (mask_pred.sigmoid().flatten(1) * pred_masks.flatten(1)).sum(1) / (
+                pred_masks.flatten(1).sum(1) + 1e-6
             )
+            pred_scores = scores * mask_scores
 
-            device = masks_queries_logits.device
-            num_classes = class_queries_logits.shape[-1] - 1
-            num_queries = class_queries_logits.shape[-2]
+            segmentation = torch.zeros(original_image_sizes[i]) - 1
 
+            instance_maps, segments = [], []
+            current_segment_id = 0
+            for j in range(num_labels):
+                score = pred_scores[j].item()
 
-            results = []
+                if not torch.all(pred_masks[j] == 0) and score >= threshold:
+                    segmentation[pred_masks[j] == 1] = current_segment_id
+                    segments.append(
+                        {
+                            "id": current_segment_id,
+                            "label_id": pred_classes[j].item(),
+                            "score": round(score, 6),
+                        }
+                    )
+                    current_segment_id += 1
+                    instance_maps.append(pred_masks[j])
 
-            for i in range(class_queries_logits.shape[0]):
-                mask_pred = masks_queries_logits[i]
-                mask_cls = class_queries_logits[i]
-
-                scores = F.softmax(mask_cls, dim=-1)[:, :-1]
-                labels = torch.arange(num_classes, device=device).unsqueeze(0).repeat(num_queries, 1).flatten(0, 1)
-
-                scores_per_image, topk_indices = scores.flatten(0, 1).topk(num_queries, sorted=False)
-                labels_per_image = labels[topk_indices]
-
-                topk_indices = torch.div(topk_indices, num_classes, rounding_mode="floor")
-                mask_pred = mask_pred[topk_indices]
-                pred_masks = (mask_pred > 0).float()
-
-                # Calculate average mask prob
-                mask_scores_per_image = (mask_pred.sigmoid().flatten(1) * pred_masks.flatten(1)).sum(1) / (
-                    pred_masks.flatten(1).sum(1) + 1e-6
-                )
-                pred_scores = scores_per_image * mask_scores_per_image
-                pred_classes = labels_per_image
-
-                segmentation = torch.zeros(original_image_sizes[i]) - 1
-                pred_masks = F.interpolate(pred_masks.unsqueeze(0), size=original_image_sizes[i], mode="nearest")[0]
-
-                instance_maps, segments = [], []
-                current_segment_id = 0
-                for j in range(num_queries):
-                    score = pred_scores[j].item()
-
-                    if not torch.all(pred_masks[j] == 0) and score >= threshold:
-                        segmentation[pred_masks[j] == 1] = current_segment_id
-                        segments.append(
-                            {
-                                "id": current_segment_id,
-                                "label_id": pred_classes[j].item(),
-                                "score": round(score, 6),
-                            }
-                        )
-                        current_segment_id += 1
-                        instance_maps.append(pred_masks[j])
-
-                results.append({"segmentation": segmentation, "segments_info": segments})
-            return results
+            results.append({"segmentation": segmentation, "segments_info": segments})
+        return results
 
 
 __all__ = ["EoMTImageProcessor"]
