@@ -216,7 +216,6 @@ def convert_model(
     safe_serialization: bool = True,
 ):
     os.makedirs(output_dir, exist_ok=True)
-    is_large = "7b" in hf_repo_id
 
     try:
         input_path = snapshot_download(hf_repo_id)
@@ -230,15 +229,14 @@ def convert_model(
 
     config = DeepseekVLConfig(
         text_config={
-            "hidden_size": 4096 if is_large else 2048,
-            "intermediate_size": 11008 if is_large else 5632,
+            "hidden_size": 2048,
+            "intermediate_size": 5632,
             "max_position_embeddings": 16384,
-            "num_attention_heads": 32 if is_large else 16,
-            "num_hidden_layers": 30 if is_large else 24,
+            "num_attention_heads": 16,
+            "num_hidden_layers": 24,
             "vocab_size": 102400,
         },
-        use_high_res_vision=is_large,
-        low_res_vision_config={
+        vision_config={
             "hidden_size": 1024,
             "intermediate_size": 4096,
             "image_size": 384,
@@ -247,14 +245,6 @@ def convert_model(
             "vision_use_head": False,
             "num_attention_heads": 16,
             "num_hidden_layers": 24,
-        },
-        high_res_vision_config={
-            "hidden_size": 768,
-            "intermediate_size": 3072,
-            "image_size": 1024,
-            "patch_size": 16,
-            "num_attention_heads": 12,
-            "num_hidden_layers": 12,
         },
     )
 
@@ -266,14 +256,7 @@ def convert_model(
     # Convert processor
     # ------------------------------------------------------------
 
-    if is_large:
-        image_processor = DeepseekVLImageProcessor(
-            size={"height": 384, "width": 384},
-            image_mean=OPENAI_CLIP_MEAN,
-            image_std=OPENAI_CLIP_STD,
-        )
-    else:
-        image_processor = DeepseekVLImageProcessor()
+    image_processor = DeepseekVLImageProcessor()
 
     tokenizer = AutoTokenizer.from_pretrained(
         input_path,
@@ -333,7 +316,6 @@ def convert_model(
     # Validate the saved model if saved locally
     if output_dir:
         print("Reloading the local model to check if it's saved correctly...")
-        # TODO: warning about weights not being tied is raised here regardless of model.tie_weights() above
         DeepseekVLForConditionalGeneration.from_pretrained(output_dir, device_map="auto")
         print("Local model reloaded successfully.")
 
@@ -347,7 +329,7 @@ def main():
     )
     parser.add_argument(
         "--output_dir",
-        default="geetu040/deepseek-vl-1.3b-chat-hf",
+        default="deepseek-community/deepseek-vl-1.3b-chat",
         help="Location to write the converted model and processor",
     )
     parser.add_argument(

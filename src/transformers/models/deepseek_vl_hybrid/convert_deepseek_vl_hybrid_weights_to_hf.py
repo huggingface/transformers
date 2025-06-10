@@ -27,10 +27,10 @@ from safetensors.torch import load_file
 
 from transformers import (
     AutoTokenizer,
-    DeepseekVLConfig,
-    DeepseekVLForConditionalGeneration,
-    DeepseekVLImageProcessor,
-    DeepseekVLProcessor,
+    DeepseekVLHybridConfig,
+    DeepseekVLHybridForConditionalGeneration,
+    DeepseekVLHybridImageProcessor,
+    DeepseekVLHybridProcessor,
 )
 from transformers.image_utils import (
     OPENAI_CLIP_MEAN,
@@ -237,7 +237,6 @@ def convert_model(
     safe_serialization: bool = True,
 ):
     os.makedirs(output_dir, exist_ok=True)
-    is_large = "7b" in hf_repo_id
 
     try:
         input_path = snapshot_download(hf_repo_id)
@@ -249,17 +248,16 @@ def convert_model(
     # Create and save config
     # ------------------------------------------------------------
 
-    config = DeepseekVLConfig(
+    config = DeepseekVLHybridConfig(
         text_config={
-            "hidden_size": 4096 if is_large else 2048,
-            "intermediate_size": 11008 if is_large else 5632,
+            "hidden_size": 4096,
+            "intermediate_size": 11008,
             "max_position_embeddings": 16384,
-            "num_attention_heads": 32 if is_large else 16,
-            "num_hidden_layers": 30 if is_large else 24,
+            "num_attention_heads": 32,
+            "num_hidden_layers": 30,
             "vocab_size": 102400,
         },
-        use_high_res_vision=is_large,
-        low_res_vision_config={
+        vision_config={
             "hidden_size": 1024,
             "intermediate_size": 4096,
             "image_size": 384,
@@ -276,7 +274,7 @@ def convert_model(
             "patch_size": 16,
             "num_attention_heads": 12,
             "num_hidden_layers": 12,
-        },
+        }
     )
 
     # save config
@@ -287,14 +285,7 @@ def convert_model(
     # Convert processor
     # ------------------------------------------------------------
 
-    if is_large:
-        image_processor = DeepseekVLImageProcessor(
-            size={"height": 384, "width": 384},
-            image_mean=OPENAI_CLIP_MEAN,
-            image_std=OPENAI_CLIP_STD,
-        )
-    else:
-        image_processor = DeepseekVLImageProcessor()
+    image_processor = DeepseekVLHybridImageProcessor()
 
     tokenizer = AutoTokenizer.from_pretrained(
         input_path,
@@ -304,7 +295,7 @@ def convert_model(
         },
     )
 
-    processor = DeepseekVLProcessor(
+    processor = DeepseekVLHybridProcessor(
         image_processor=image_processor,
         tokenizer=tokenizer,
         chat_template=CHAT_TEMPLATE,
@@ -323,7 +314,7 @@ def convert_model(
 
     print("Creating empty model...")
     with init_empty_weights():
-        model = DeepseekVLForConditionalGeneration(config)
+        model = DeepseekVLHybridForConditionalGeneration(config)
 
     # Load and convert state dict
     print("Loading state dict...")
@@ -354,8 +345,7 @@ def convert_model(
     # Validate the saved model if saved locally
     if output_dir:
         print("Reloading the local model to check if it's saved correctly...")
-        # TODO: warning about weights not being tied is raised here regardless of model.tie_weights() above
-        DeepseekVLForConditionalGeneration.from_pretrained(output_dir, device_map="auto")
+        DeepseekVLHybridForConditionalGeneration.from_pretrained(output_dir, device_map="auto")
         print("Local model reloaded successfully.")
 
 
@@ -363,12 +353,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--hf_repo_id",
-        default="deepseek-ai/deepseek-vl-1.3b-chat",
+        default="deepseek-ai/deepseek-vl-7b-chat",
         help="Location of official weights from DeepseekAI on HF",
     )
     parser.add_argument(
         "--output_dir",
-        default="geetu040/deepseek-vl-1.3b-chat-hf",
+        default="deepseek-community/deepseek-vl-7b-chat",
         help="Location to write the converted model and processor",
     )
     parser.add_argument(
