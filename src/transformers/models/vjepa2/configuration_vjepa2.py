@@ -53,8 +53,6 @@ class VJEPA2Config(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        use_rope (`bool`, *optional*, defaults to `False`):
-            If set, we use RoPE positional encoding instead of learned position encodings
         pred_hidden_size (`int`, *optional*, defaults to 384):
             Dimensionality of the predictor layers
         pred_num_attention_heads (`int`, *optional*, defaults to 12):
@@ -95,7 +93,6 @@ class VJEPA2Config(PretrainedConfig):
         tubelet_size=2,
         use_SiLU=False,
         wide_SiLU=True,
-        uniform_power=False,
         hidden_size=1024,
         in_chans=3,
         num_attention_heads=12,
@@ -108,7 +105,6 @@ class VJEPA2Config(PretrainedConfig):
         hidden_dropout_prob=0.0,
         hidden_act="gelu",
         initializer_range=0.02,
-        use_rope=False,
         # predictor params
         pred_hidden_size=384,
         pred_num_attention_heads=12,
@@ -121,13 +117,9 @@ class VJEPA2Config(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.crop_size = crop_size
-        self.img_height = crop_size
-        self.img_width = crop_size
         self.frames_per_clip = frames_per_clip
         self.patch_size = patch_size
-        self.num_frames = frames_per_clip
         self.tubelet_size = tubelet_size
-        self.uniform_power = uniform_power
         self.use_SiLU = use_SiLU
         self.wide_SiLU = wide_SiLU
         self.hidden_size = hidden_size
@@ -143,7 +135,6 @@ class VJEPA2Config(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.image_size = crop_size
-        self.use_rope = use_rope
         # predictor params
         self.pred_hidden_size = pred_hidden_size
         self.pred_num_attention_heads = pred_num_attention_heads

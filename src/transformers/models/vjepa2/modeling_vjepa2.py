@@ -1,6 +1,5 @@
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
-import numpy as np
 import torch
 from torch import nn
 
@@ -12,97 +11,6 @@ from .configuration_vjepa2 import VJEPA2Config
 
 
 logger = logging.get_logger(__name__)
-
-### Utility functions
-
-
-def get_3d_sincos_pos_embed(embed_dim, grid_size, grid_depth, cls_token=False, uniform_power=False):
-    """
-    grid_size: int of the grid height and width
-    grid_depth: int of the grid depth
-    returns:
-        pos_embed: [grid_depth*grid_size*grid_size, embed_dim] (w/o cls_token)
-                or [1+grid_depth*grid_size*grid_size, embed_dim] (w/ cls_token)
-    """
-    grid_d = np.arange(grid_depth, dtype=float)
-    grid_h = np.arange(grid_size, dtype=float)
-    grid_w = np.arange(grid_size, dtype=float)
-    grid_h, grid_d, grid_w = np.meshgrid(
-        grid_h, grid_d, grid_w
-    )  # order of meshgrid is very important for indexing as [d,h,w]
-
-    if not uniform_power:
-        h_embed_dim = embed_dim // 4
-        w_embed_dim = embed_dim // 4
-        d_embed_dim = embed_dim // 2
-    else:
-        h_embed_dim = w_embed_dim = d_embed_dim = int(np.ceil(embed_dim / 6) * 2)
-
-    emb_h = get_1d_sincos_pos_embed_from_grid(h_embed_dim, grid_h)  # (T*H*W, D1)
-    emb_w = get_1d_sincos_pos_embed_from_grid(w_embed_dim, grid_w)  # (T*H*W, D2)
-    emb_d = get_1d_sincos_pos_embed_from_grid(d_embed_dim, grid_d)  # (T*H*W, D3)
-    pos_embed = np.concatenate([emb_d, emb_h, emb_w], axis=1)
-    pos_embed = pos_embed[:, :embed_dim]
-    if cls_token:
-        pos_embed = np.concatenate([np.zeros([1, embed_dim]), pos_embed], axis=0)
-    return pos_embed
-
-
-def get_2d_sincos_pos_embed(embed_dim, grid_size, cls_token=False):
-    """
-    grid_size: int of the grid height and width
-    returns:
-        pos_embed: [grid_size*grid_size, embed_dim] (w/o cls_token)
-                or [1+grid_size*grid_size, embed_dim] (w/ cls_token)
-    """
-    grid_h = np.arange(grid_size, dtype=float)
-    grid_w = np.arange(grid_size, dtype=float)
-    grid_w, grid_h = np.meshgrid(grid_w, grid_h)  # order of meshgrid is very important for indexing as [h, w]
-
-    emb_h = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid_h)  # (H*W, D/2)
-    emb_w = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid_w)  # (H*W, D/2)
-    pos_embed = np.concatenate([emb_h, emb_w], axis=1)  # (H*W, D)
-    if cls_token:
-        pos_embed = np.concatenate([np.zeros([1, embed_dim]), pos_embed], axis=0)
-    return pos_embed
-
-
-def get_1d_sincos_pos_embed(embed_dim, grid_size, cls_token=False):
-    """
-    embed_dim: output dimension for each position
-    grid_size: int of the grid length
-    returns:
-        pos_embed: [grid_size, embed_dim] (w/o cls_token)
-                or [1+grid_size, embed_dim] (w/ cls_token)
-    """
-    grid = np.arange(grid_size, dtype=float)
-    pos_embed = get_1d_sincos_pos_embed_from_grid(embed_dim, grid)
-    if cls_token:
-        pos_embed = np.concatenate([np.zeros([1, embed_dim]), pos_embed], axis=0)
-    return pos_embed
-
-
-def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
-    """
-    embed_dim: output dimension for each position
-    pos: a list of positions to be encoded: size (M,)
-    returns: (M, D)
-    """
-    omega = np.arange(embed_dim // 2, dtype=float)
-    omega /= embed_dim / 2.0
-    omega = 1.0 / 10000**omega  # (D/2,)
-
-    pos = pos.reshape(-1)  # (M,)
-    out = np.einsum("m,d->md", pos, omega)  # (M, D/2), outer product
-
-    emb_sin = np.sin(out)  # (M, D/2)
-    emb_cos = np.cos(out)  # (M, D/2)
-
-    emb = np.concatenate([emb_sin, emb_cos], axis=1)  # (M, D)
-    return emb
-
-
-## Modules
 
 
 class VJEPA2PatchEmbeddings3D(nn.Module):
@@ -153,59 +61,7 @@ class VJEPA2Embeddings(nn.Module):
         self.patch_embeddings = VJEPA2PatchEmbeddings3D(config, hidden_size=hidden_size)
 
         self.num_patches = self.patch_embeddings.num_patches
-        if not self.config.use_rope:
-            # position embeddings
-            self.position_embeddings = nn.Parameter(
-                torch.zeros(1, self.num_patches(config), hidden_size),
-                requires_grad=False,
-            )
-            self._init_pos_embed(self.position_embeddings.data)  # sincos pos-embed
-
-        # self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.patch_size
-
-    def _init_pos_embed(self, pos_embed):
-        grid_size = self.config.crop_size // self.config.patch_size
-        grid_depth = self.config.frames_per_clip // self.config.tubelet_size
-        sincos = get_3d_sincos_pos_embed(
-            self.hidden_size,
-            grid_size,
-            grid_depth,
-            cls_token=False,
-            uniform_power=self.config.uniform_power,
-        )
-        pos_embed.copy_(torch.from_numpy(sincos).float().unsqueeze(0))
-
-    def interpolate_pos_encoding(self, x, pos_embed):
-        _, N, dim = pos_embed.shape
-
-        # If pos_embed already corret size, just return
-        _, _, T, H, W = x.shape
-        if H == self.config.img_height and W == self.config.img_width and T == self.config.frames_per_clip:
-            return pos_embed
-
-        # Convert depth, height, width of input to be measured in patches
-        # instead of pixels/frames
-        T = T // self.config.tubelet_size
-        H = H // self.patch_size
-        W = W // self.patch_size
-
-        # Compute the initialized shape of the positional embedding measured
-        # in patches
-        N_t = self.config.frames_per_clip // self.config.tubelet_size
-        N_h = self.config.img_height // self.patch_size
-        N_w = self.config.img_width // self.patch_size
-
-        # Compute scale factor for spatio-temporal interpolation
-        scale_factor = (T / N_t, H / N_h, W / N_w)
-
-        pos_embed = nn.functional.interpolate(
-            pos_embed.reshape(1, N_t, N_h, N_w, dim).permute(0, 4, 1, 2, 3),
-            scale_factor=scale_factor,
-            mode="trilinear",
-        )
-        pos_embed = pos_embed.permute(0, 2, 3, 4, 1).view(1, -1, dim)
-        return pos_embed
 
     def forward(
         self,
@@ -222,11 +78,6 @@ class VJEPA2Embeddings(nn.Module):
         target_dtype = self.patch_embeddings.proj.weight.dtype
 
         embeddings = self.patch_embeddings(pixel_values_videos.to(dtype=target_dtype))
-
-        # add positional encoding to each token
-        # ignore if we are using Rope
-        if not self.config.use_rope:
-            embeddings = embeddings + self.interpolate_pos_encoding(pixel_values_videos, self.position_embeddings)
 
         return embeddings
 
@@ -260,84 +111,6 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
-
-
-# Adapted from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->Dinov2->VJEPA
-class VJEPA2Attention(nn.Module):
-    def __init__(
-        self,
-        config: VJEPA2Config,
-        hidden_size: int = -1,
-        num_attention_heads: int = 1,
-    ) -> None:
-        super().__init__()
-        self.config = config
-        self.hidden_size = hidden_size
-        self.num_attention_heads = num_attention_heads
-        if hidden_size % num_attention_heads != 0:
-            raise ValueError(
-                f"The hidden size {(hidden_size,)} is not a multiple of the number of attention "
-                f"heads {num_attention_heads}."
-            )
-
-        self.attention_head_size = int(hidden_size / num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-
-        self.query = nn.Linear(hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(hidden_size, self.all_head_size, bias=config.qkv_bias)
-
-        self.proj = nn.Linear(hidden_size, hidden_size)
-        self.dropout_prob = config.attention_probs_dropout_prob
-        self.dropout = nn.Dropout(self.dropout_prob)
-
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (
-            self.num_attention_heads,
-            self.attention_head_size,
-        )
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
-    def forward(
-        self,
-        hidden_states,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        context_layer, attention_probs = attention_interface(
-            self,
-            query_layer,
-            key_layer,
-            value_layer,
-            head_mask,
-            is_causal=self.is_causal,
-            scaling=self.scaling,
-            dropout=0.0 if not self.training else self.dropout_prob,
-        )
-
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = self.proj(context_layer.view(new_context_layer_shape))
-
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        return outputs
 
 
 def rotate_queries_or_keys(x, pos):
@@ -609,11 +382,7 @@ class VJEPA2Layer(nn.Module):
 
         self.norm1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
-        if config.use_rope:
-            self.attention = VJEPA2RopeAttention(config, hidden_size, num_attention_heads)
-        else:
-            self.attention = VJEPA2Attention(config, hidden_size, num_attention_heads)
-
+        self.attention = VJEPA2RopeAttention(config, hidden_size, num_attention_heads)
         self.drop_path = VJEPA2DropPath(drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.norm2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
@@ -750,15 +519,6 @@ def apply_masks(x, masks, concat=True) -> torch.Tensor:
     return torch.cat(all_x, dim=0)
 
 
-def repeat_interleave_batch(x, B, repeat) -> torch.Tensor:
-    N = len(x) // B
-    x = torch.cat(
-        [torch.cat([x[i * B : (i + 1) * B] for _ in range(repeat)], dim=0) for i in range(N)],
-        dim=0,
-    )
-    return x
-
-
 class VJEPA2PredictorEmbeddings(nn.Module):
     """
     Construct mask token, position and patch embeddings.
@@ -770,13 +530,6 @@ class VJEPA2PredictorEmbeddings(nn.Module):
         # self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.config = config
         self.predictor_embeddings = nn.Linear(config.hidden_size, config.pred_hidden_size)
-        if not self.config.use_rope:
-            # position embeddings
-            self.position_embeddings = nn.Parameter(
-                torch.zeros(1, self.num_patches(config), config.pred_hidden_size),
-                requires_grad=False,
-            )
-            self._init_pos_embed(self.position_embeddings.data)  # sincos pos-embed
         self.num_mask_tokens = 0
         self.zero_init_mask_tokens = config.pred_zero_init_mask_tokens
         self.num_mask_tokens = config.pred_num_mask_tokens
@@ -797,19 +550,6 @@ class VJEPA2PredictorEmbeddings(nn.Module):
         else:
             return (config.crop_size // config.patch_size) * (config.crop_size // config.patch_size)
 
-    def _init_pos_embed(self, pos_embed):
-        grid_size = self.config.crop_size // self.config.patch_size
-        grid_depth = self.config.frames_per_clip // self.config.tubelet_size
-        sincos = get_3d_sincos_pos_embed(
-            self.config.pred_hidden_size,
-            grid_size,
-            grid_depth,
-            cls_token=False,
-            uniform_power=self.config.uniform_power,
-        )
-
-        pos_embed.copy_(torch.from_numpy(sincos).float().unsqueeze(0))
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -827,12 +567,6 @@ class VJEPA2PredictorEmbeddings(nn.Module):
         B = hidden_states.size(0)
         context = self.predictor_embeddings(hidden_states)
 
-        # add positional encoding to each token
-        # ignore if we are using Rope
-        if not self.config.use_rope:
-            pos_embed = self.position_embeddings.repeat(B, 1, 1)
-            context = context + apply_masks(pos_embed, context_mask)
-
         # Make target tokens
         mask_index = mask_index % self.num_mask_tokens
         target = self.mask_tokens[mask_index]
@@ -843,12 +577,6 @@ class VJEPA2PredictorEmbeddings(nn.Module):
         max_patch_num = target_mask[0].max() + 1  # one extra to include the last patch
         target = target.repeat(B, max_patch_num, 1)
         target = apply_masks(target, target_mask)
-
-        if not self.config.use_rope:
-            pos_embs = self.position_embeddings.repeat(B, 1, 1)
-            pos_embs = apply_masks(pos_embs, target_mask)
-            pos_embs = repeat_interleave_batch(pos_embs, B, repeat=len(context_mask))
-            target += pos_embs
 
         # Concatenate context & target tokens
         context = context.repeat(len(context_mask), 1, 1)
@@ -1025,20 +753,7 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, VJEPA2Embeddings):
-            if not module.config.use_rope:
-                module.position_embeddings.data = nn.init.trunc_normal_(
-                    module.position_embeddings.data.to(torch.float32),
-                    mean=0.0,
-                    std=self.config.initializer_range,
-                ).to(module.position_embeddings.dtype)
         elif isinstance(module, VJEPA2PredictorEmbeddings):
-            if not module.config.use_rope:
-                module.position_embeddings.data = nn.init.trunc_normal_(
-                    module.position_embeddings.data.to(torch.float32),
-                    mean=0.0,
-                    std=self.config.initializer_range,
-                ).to(module.position_embeddings.dtype)
             if not module.zero_init_mask_tokens:
                 module.mask_token = nn.init.trunc_normal_(
                     module.mask_token.to(torch.float32),

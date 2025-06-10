@@ -56,7 +56,6 @@ class VJEPA2ModelTester:
     def __init__(
         self,
         parent,
-        model_name="vit_large",
         batch_size=2,
         image_size=16,
         patch_size=16,
@@ -76,7 +75,6 @@ class VJEPA2ModelTester:
         mask_ratio=0.5,
     ):
         self.parent = parent
-        self.model_name = model_name
         self.batch_size = batch_size
         self.image_size = image_size
         self.patch_size = patch_size
@@ -117,19 +115,15 @@ class VJEPA2ModelTester:
 
     def get_config(self):
         return VJEPA2Config(
-            model_name=self.model_name,
             crop_size=self.image_size,
             frames_per_clip=self.num_frames,
-            uniform_power=True,
             hidden_size=self.hidden_size,
             num_attention_heads=self.num_attention_heads,
             num_hidden_layers=self.num_hidden_layers,
-            use_rope=True,
             mlp_ratio=self.mlp_ratio,
             pred_hidden_size=self.pred_hidden_size,
             pred_num_attention_heads=self.pred_num_attention_heads,
             pred_num_hidden_layers=self.pred_num_hidden_layers,
-            pred_use_mask_tokens=self.pred_use_mask_tokens,
             pred_num_mask_tokens=self.pred_num_mask_tokens,
         )
 

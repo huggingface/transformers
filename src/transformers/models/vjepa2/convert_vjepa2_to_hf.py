@@ -39,70 +39,54 @@ def get_vjepa2_config(model_name):
     # size of the architecture
     if model_name == "vit_large":
         return VJEPA2Config(
-            model_name="vit_large",
             crop_size=256,
             frames_per_clip=64,
-            uniform_power=True,
             hidden_size=1024,
             num_attention_heads=16,
             num_hidden_layers=24,
-            use_rope=True,
             mlp_ratio=4,
             pred_hidden_size=384,
             pred_num_attention_heads=12,
             pred_num_hidden_layers=12,
-            pred_use_mask_tokens=True,
             pred_num_mask_tokens=10,
         )
     elif model_name == "vit_huge":
         return VJEPA2Config(
-            model_name="vit_huge",
             crop_size=256,
             frames_per_clip=64,
-            uniform_power=True,
             hidden_size=1280,
             num_attention_heads=16,
             num_hidden_layers=32,
-            use_rope=True,
             mlp_ratio=4,
             pred_hidden_size=384,
             pred_num_attention_heads=12,
             pred_num_hidden_layers=12,
-            pred_use_mask_tokens=True,
             pred_num_mask_tokens=10,
         )
     elif model_name == "vit_giant":
         return VJEPA2Config(
-            model_name="vit_giant",
             crop_size=256,
             frames_per_clip=64,
-            uniform_power=True,
             hidden_size=1408,
             num_attention_heads=22,
             num_hidden_layers=40,
-            use_rope=True,
             mlp_ratio=48 / 11,
             pred_hidden_size=384,
             pred_num_attention_heads=12,
             pred_num_hidden_layers=12,
-            pred_use_mask_tokens=True,
             pred_num_mask_tokens=10,
         )
     elif model_name == "vit_giant_384":
         return VJEPA2Config(
-            model_name="vit_giant_384",
             crop_size=384,
             frames_per_clip=64,
-            uniform_power=True,
             hidden_size=1408,
             num_attention_heads=22,
             num_hidden_layers=40,
-            use_rope=True,
             mlp_ratio=48 / 11,
             pred_hidden_size=384,
             pred_num_attention_heads=12,
             pred_num_hidden_layers=12,
-            pred_use_mask_tokens=True,
             pred_num_mask_tokens=10,
         )
     else:
@@ -148,9 +132,8 @@ def convert_encoder_keys(model_state_dict, og_encoder_state_dict, config):
 
 def convert_predictor_keys(model_state_dict, og_predictor_state_dict, config):
     emb_dim = config.pred_hidden_size
-    if config.use_rope:
-        if "predictor_pos_embed" in og_predictor_state_dict:
-            del og_predictor_state_dict["predictor_pos_embed"]
+    if "predictor_pos_embed" in og_predictor_state_dict:
+        del og_predictor_state_dict["predictor_pos_embed"]
     # update predictor weights
     mask_tokens = {}
     mask_token_keys_to_delete = []
