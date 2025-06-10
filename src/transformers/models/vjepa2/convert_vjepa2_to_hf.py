@@ -5,6 +5,7 @@ import os
 import tempfile
 from pathlib import Path
 
+import numpy as np
 import requests
 import torch
 from huggingface_hub import HfApi
@@ -233,6 +234,9 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
     original_encoder, original_predictor = torch.hub.load(HUB_REPO, "vjepa2_" + model_name, source=HUB_SOURCE)
     original_encoder.eval()
     original_predictor.eval()
+    original_preprocessor = torch.hub.load(
+        HUB_REPO, "vjepa2_preprocessor", source=HUB_SOURCE, crop_size=config.crop_size
+    )
 
     # load state_dict of original model, remove and rename some keys
     encoder_state_dict = original_encoder.state_dict()
@@ -253,8 +257,12 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
 
     crop_size = config.crop_size
     processor = VJEPA2VideoProcessor(crop_size=crop_size)
-    pr_out = processor(image, return_tensors="pt")
+    pr_out = processor(torch.Tensor(np.array(image)), return_tensors="pt")
     pixel_values_videos = pr_out.pixel_values_videos
+    # run original preprocessor
+    original_pixel_values = original_preprocessor([torch.Tensor(np.array(image)).permute(2, 0, 1)])
+    assert original_pixel_values[0].permute(1, 0, 2, 3).shape == pixel_values_videos[0].shape
+    assert torch.allclose(original_pixel_values[0].permute(1, 0, 2, 3), pixel_values_videos[0], atol=1e-3)
 
     with torch.no_grad():
         # reshape and move to gpu

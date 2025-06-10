@@ -16,6 +16,8 @@
 
 import unittest
 
+import numpy as np
+
 from transformers import VJEPA2Config
 from transformers.testing_utils import (
     is_flaky,
@@ -267,7 +269,7 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
 
         video_processor = self.default_video_processor
         image = prepare_img()
-        inputs = video_processor(image, return_tensors="pt").to(torch_device)
+        inputs = video_processor(torch.Tensor(np.array(image)), return_tensors="pt").to(torch_device)
         pixel_values_videos = inputs.pixel_values_videos
         pixel_values_videos = pixel_values_videos.repeat(1, model.config.frames_per_clip, 1, 1, 1)
 
@@ -280,11 +282,7 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [
-                [0.6824, 2.1494, -0.3479],
-                [0.8301, 0.6597, 0.0575],
-                [0.7389, 1.1650, -0.0138],
-            ],
+            [[-0.0061, -1.8365, 2.7343], [-2.5938, -2.7181, -0.1663], [-1.7993, -2.2430, -1.1388]],
             device=torch_device,
         )
         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
