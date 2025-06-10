@@ -50,7 +50,6 @@ class ZambaModelTester(CausalLMModelTester):
     def __init__(self, parent, num_hidden_layers=6, attn_layer_period=1, **kwargs):
         super().__init__(parent=parent, num_hidden_layers=num_hidden_layers, **kwargs)
         self.attn_layer_period = attn_layer_period
-        self.use_mamba_kernels = False # TODO DEBUGGING REMOVE
 
 
 @require_torch
