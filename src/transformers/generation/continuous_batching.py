@@ -1400,16 +1400,45 @@ class ContinuousBatchingManager:
         """Collect data for visualization."""
         data = {
             "batch_contents": [],
+            "words": [],
+            "request_ids_per_token": [],
         }
         data["attention_mask"] = batch_processor.attention_mask.clone()
+        
+        # Collect all tokens and map them to request IDs
+        all_tokens = []
+        all_request_ids = []
+        
         for req in batch_processor.requests_in_batch:
             if self.tokenizer is not None:
                 decoded = self.tokenizer.decode(req.prompt_ids)
                 decoded_tokens_list = self.tokenizer.convert_ids_to_tokens(req.prompt_ids)
                 data["batch_contents"].append({"request_id": req.request_id, "decoded": decoded, "decoded_tokens": decoded_tokens_list})
+                all_tokens.extend(decoded_tokens_list)
             else:
                 data["batch_contents"].append({"request_id": req.request_id, "tokens": req.prompt_ids})
-        # TODO: cache data
+                # Convert token IDs to strings when no tokenizer is available
+                all_tokens.extend([str(token_id) for token_id in req.prompt_ids])
+            
+            # Map each token to its request ID
+            all_request_ids.extend([req.request_id] * len(req.prompt_ids))
+        
+        data["words"] = all_tokens
+        data["request_ids_per_token"] = all_request_ids
+        
+        # Add cache statistics if available
+        if hasattr(batch_processor, 'cache'):
+            cache = batch_processor.cache
+            data["paged_attention_cache"] = {
+                "total_blocks": cache.num_blocks,
+                "used_blocks": cache.num_blocks - len(cache._free_blocks),
+                "free_blocks": len(cache._free_blocks),
+                "block_size": cache.block_size,
+                "num_heads": cache.num_key_value_heads,
+                "head_dim": cache.head_dim,
+                "utilization": (cache.num_blocks - len(cache._free_blocks)) / cache.num_blocks if cache.num_blocks > 0 else 0.0
+            }
+        
         return data
 
 
