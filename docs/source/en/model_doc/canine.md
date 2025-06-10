@@ -38,15 +38,13 @@ The example below demonstrates how to generate embeddings with [`Pipeline`], [`A
 import torch
 from transformers import pipeline
 
-extractor = pipeline(
+pipeline = pipeline(
     task="feature-extraction",
     model="google/canine-c",
-    tokenizer="google/canine-c",
     device=0,               
 )
 
-text = "Hello World!"
-embeddings = extractor(text)
+pipeline("Plant create energy through a process known as photosynthesis.")
 ```
 
 </hfoption>
