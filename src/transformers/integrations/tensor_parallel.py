@@ -13,12 +13,14 @@
 # limitations under the License.
 from __future__ import annotations
 
+import math
 import operator
 import os
 import re
 from functools import partial, reduce
 from typing import Optional, Union
 import math
+
 
 import torch
 import torch.distributed as dist
@@ -325,7 +327,7 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
     In case (2), empty shards are returned with appropriate dimension to allow for operations to work smoothly.
     """
     param_dim = empty_param.dim()
-    
+
     if dim < 0:
         dim = param_dim + dim
     if dim >= param_dim:
@@ -337,7 +339,7 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
 
     if rank >= world_size:
         raise ValueError(f"Rank {rank} is out of bounds for mesh size {world_size}")
-    
+
     shard_size = math.ceil(empty_param.shape[dim] / world_size)
     start = rank * shard_size
     end = min(start + shard_size, empty_param.shape[dim])
@@ -347,7 +349,7 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim):
         return param[tuple(slice_indices)]
     dimensions = list(param.shape)
     dimensions[dim] = 0
-    return torch.empty(tuple(dimensions),dtype=torch.int64)
+    return torch.empty(tuple(dimensions), dtype=torch.int64)
 
 
 def distribute_module(
