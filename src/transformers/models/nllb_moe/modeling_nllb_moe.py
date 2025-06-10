@@ -511,12 +511,12 @@ class NllbMoeAttention(nn.Module):
         self,
         embed_dim: int,
         num_heads: int,
-        dropout: float = 0.0,
-        is_decoder: bool = False,
-        bias: bool = True,
-        is_causal: bool = False,
+        dropout: Optional[float] = 0.0,
+        is_decoder: Optional[bool] = False,
+        bias: Optional[bool] = True,
+        is_causal: Optional[bool] = False,
         config: Optional[NllbMoeConfig] = None,
-        layer_idx: Optional[bool] = None,
+        layer_idx: Optional[int] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim

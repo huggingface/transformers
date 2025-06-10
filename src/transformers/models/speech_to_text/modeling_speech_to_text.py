@@ -249,12 +249,12 @@ class Speech2TextAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
+        output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.Tensor] = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -275,7 +275,7 @@ class Speech2TextAttention(nn.Module):
             if isinstance(past_key_value, EncoderDecoderCache):
                 is_updated = past_key_value.is_updated.get(self.layer_idx)
                 if is_cross_attention:
-                    # after the first generated id, we can subsequently re-use all key/value_states from cache
+                    # after the first generated id, we can subsequently re-use all key/value_layer from cache
                     curr_past_key_value = past_key_value.cross_attention_cache
                 else:
                     curr_past_key_value = past_key_value.self_attention_cache
@@ -288,10 +288,8 @@ class Speech2TextAttention(nn.Module):
             key_states = curr_past_key_value.key_cache[self.layer_idx]
             value_states = curr_past_key_value.value_cache[self.layer_idx]
         else:
-            key_states = self.k_proj(current_states)
-            value_states = self.v_proj(current_states)
-            key_states = key_states.view(*kv_input_shape).transpose(1, 2)
-            value_states = value_states.view(*kv_input_shape).transpose(1, 2)
+            key_states = self.k_proj(current_states).view(*kv_input_shape).transpose(1, 2)
+            value_states = self.v_proj(current_states).view(*kv_input_shape).transpose(1, 2)
 
             if past_key_value is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation

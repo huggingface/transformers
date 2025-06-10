@@ -333,8 +333,8 @@ class HubertAttention(nn.Module):
         query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
 
         current_states = key_value_states if is_cross_attention else hidden_states
-        key_states = self.key(current_states).view(*kv_input_shape).transpose(1, 2)
-        value_states = self.value(current_states).view(*kv_input_shape).transpose(1, 2)
+        key_states = self.k_proj(current_states).view(*kv_input_shape).transpose(1, 2)
+        value_states = self.v_proj(current_states).view(*kv_input_shape).transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
