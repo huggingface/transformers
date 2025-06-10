@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 # Moonshine
 
-[Moonshine](https://huggingface.co/papers/2410.15608) is a speech recognition model that is optimized for real-time transcription and voice command. Instead of using traditional absolute position embeddings, Moonshine uses Rotary Position Embedding (RoPE).
+[Moonshine](https://huggingface.co/papers/2410.15608) is an encoder-decoder speech recognition model optimized for real-time transcription and recognizing voice command. Instead of using traditional absolute position embeddings, Moonshine uses Rotary Position Embedding (RoPE) to handle speech with varying lengths without using padding. This improves efficiency during inference, making it ideal for resource-constrained devices.
 
 Moonshine is trained on speech segments of various lengths, but without using zero-padding, leading to greater efficiency for the encoder during inference time.
 
