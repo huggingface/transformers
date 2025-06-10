@@ -32,10 +32,6 @@ from transformers import (
     DeepseekVLHybridImageProcessor,
     DeepseekVLHybridProcessor,
 )
-from transformers.image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
-)
 
 
 # fmt: off
@@ -274,7 +270,7 @@ def convert_model(
             "patch_size": 16,
             "num_attention_heads": 12,
             "num_hidden_layers": 12,
-        }
+        },
     )
 
     # save config

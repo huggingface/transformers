@@ -32,10 +32,6 @@ from transformers import (
     DeepseekVLImageProcessor,
     DeepseekVLProcessor,
 )
-from transformers.image_utils import (
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
-)
 
 
 # fmt: off
