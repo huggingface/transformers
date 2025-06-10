@@ -995,8 +995,14 @@ def is_torch_xpu_available(check_device=False):
 
 
 @lru_cache()
-def is_bitsandbytes_available():
-    if not is_torch_available() or not _bitsandbytes_available:
+def is_bitsandbytes_available(check_library_only=False) -> bool:
+    if not _bitsandbytes_available:
+        return False
+
+    if check_library_only:
+        return True
+
+    if not is_torch_available():
         return False
 
     import torch
