@@ -1187,9 +1187,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         self.lm_head = new_embeddings
 
     def get_image_features(self, pixel_values: torch.FloatTensor, pixel_attention_mask: torch.LongTensor = None):
-        return self.model.get_image_features(
-            pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask
-        )
+        return self.model.get_image_features(pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask)
 
     @can_return_tuple
     @auto_docstring

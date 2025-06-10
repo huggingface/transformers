@@ -1393,9 +1393,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
         vision_feature_layer: Optional[Union[int, List[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
     ):
-        return self.model.get_image_features(
-            pixel_values_images, vision_feature_layer, vision_feature_select_strategy
-        )
+        return self.model.get_image_features(pixel_values_images, vision_feature_layer, vision_feature_select_strategy)
 
     # Make modules available throught conditional class for BC
     @property
