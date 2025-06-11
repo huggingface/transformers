@@ -422,7 +422,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
 
         decoded_output = processor.batch_decode(output, skip_special_tokens=True)
-        print(decoded_output)
         self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
 
     @slow
