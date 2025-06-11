@@ -143,7 +143,7 @@ class ReformerDynamicCache(DynamicCache):
                 self.buckets_cache[layer_idx] = torch.cat([self.buckets_cache[layer_idx], buckets], dim=-1)
         else:
             # `ReformerLocalAttn` passes `None` to buckets as the module uses no buckets
-            self.buckets_cache.append(torch.tensor([]))
+            self.buckets_cache.append(torch.tensor([], device=self.states_cache[layer_idx].device))
 
         return self.buckets_cache[layer_idx], self.states_cache[layer_idx]
 
@@ -155,7 +155,9 @@ class ReformerDynamicCache(DynamicCache):
         backward compatibility."""
         legacy_cache = ()
         for layer_idx in range(len(self)):
-            legacy_cache += ((self.buckets_cache[layer_idx], self.states_cache[layer_idx]),)
+            buckets, states = self.buckets_cache[layer_idx], self.states_cache[layer_idx]
+            buckets = buckets if buckets.numel() != 0 else None
+            legacy_cache += ((buckets, states),)
         return legacy_cache
 
     @classmethod
@@ -495,7 +497,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             past_buckets = past_buckets_states.buckets_cache[self.layer_idx]
             past_states = past_buckets_states.states_cache[self.layer_idx]
 
-            if past_buckets is not None:
+            if past_buckets.numel() != 0:
                 key_value_hidden_states, sorted_bucket_idx, buckets = self._get_relevant_hid_states_and_buckets(
                     query_vectors=query_vectors,
                     attention_mask=attention_mask,
@@ -539,7 +541,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             value_vectors = self.value(hidden_states)
 
         # if query key is not already split
-        if not use_cache or not exists_cache:
+        if not exists_cache or past_buckets.numel() == 0:
             query_key_vectors = self._split_hidden_size_dim(
                 query_key_vectors, self.num_attention_heads, self.attention_head_size
             )
@@ -612,7 +614,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                     "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and"
                     " `config.num_chunks_before` are set to 0."
                 )
-        elif exists_cache and past_buckets is not None:
+        elif exists_cache and past_buckets.numel() != 0:
             # use max sequence length
             sorted_bucket_idx_per_hash = sorted_bucket_idx
         else:
@@ -640,7 +642,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             attention_mask=attention_mask,
             head_mask=head_mask,
             do_standard_self_attention=do_standard_self_attention,
-            use_cache=use_cache,
+            use_cache=exists_cache,
         )
 
         # free memory
@@ -651,7 +653,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             # sort clusters back to correct ordering
             out_vectors, logits = ReverseSort.apply(out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx)
 
-        if not do_standard_self_attention or (exists_cache and past_buckets is not None):
+        if not do_standard_self_attention or (exists_cache and past_buckets.numel() != 0):
             # sum up all hash rounds
             if num_hashes > 1:
                 out_vectors = self._split_seq_length_dim_to(
@@ -1427,7 +1429,6 @@ class ReformerAttention(nn.Module):
         # add buckets if necessary
         if hasattr(self_attention_outputs, "buckets"):
             buckets = self_attention_outputs.buckets
-            buckets = buckets[:, :, :, :orig_sequence_length] if orig_sequence_length > 1 else buckets
         else:
             buckets = None
 
@@ -1435,7 +1436,16 @@ class ReformerAttention(nn.Module):
         if use_cache and past_buckets_states is not None:
             # padded input should not be cached during prefill
             states = (
-                hidden_states[:, :orig_sequence_length] if len(past_buckets_states) <= self.layer_id else hidden_states
+                hidden_states[:, :orig_sequence_length]
+                if len(past_buckets_states.states_cache) <= self.layer_id
+                else hidden_states
+            )
+            buckets = (
+                buckets[:, :orig_sequence_length]
+                if len(past_buckets_states.buckets_cache) <= self.layer_id
+                and buckets is not None
+                and orig_sequence_length > 1
+                else buckets
             )
             buckets, hidden_states = past_buckets_states.update(
                 buckets, states[:, :orig_sequence_length], self.layer_id
@@ -2222,7 +2232,7 @@ class ReformerModel(ReformerPreTrainedModel):
 
         # Extend `inputs_embeds` with padding to match least common multiple chunk_length
         if inputs_embeds is not None:
-            padded_inputs_embeds = self.embeddings(padded_input_ids, position_ids)
+            padded_inputs_embeds = self.get_input_embeddings()(padded_input_ids)
             inputs_embeds = torch.cat([inputs_embeds, padded_inputs_embeds], dim=-2)
             input_shape = inputs_embeds.size()
         return input_ids, inputs_embeds, attention_mask, position_ids, input_shape
