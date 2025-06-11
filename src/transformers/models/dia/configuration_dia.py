@@ -223,6 +223,8 @@ class DiaDecoderConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
+            Indicating that this model is part of an encoder-decoder architecture.
     """
 
     model_type = "dia_decoder"
@@ -248,6 +250,7 @@ class DiaDecoderConfig(PretrainedConfig):
         rope_scaling: Optional[Dict] = None,
         initializer_range: float = 0.02,
         use_cache: bool = True,
+        is_encoder_decoder: bool = True,
         **kwargs,
     ):
         self.max_length = max_length
@@ -275,7 +278,7 @@ class DiaDecoderConfig(PretrainedConfig):
         rope_config_validation(self)
         self.initializer_range = initializer_range
         self.use_cache = use_cache
-        super().__init__(**kwargs)
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 class DiaConfig(PretrainedConfig):
