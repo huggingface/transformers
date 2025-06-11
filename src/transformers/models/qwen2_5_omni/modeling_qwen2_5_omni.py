@@ -4029,51 +4029,47 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             return thinker_result
 
         # 2. Generate speech tokens from talker module
-        embeds_to_talker = thinker_result.hidden_states[0][0].clone().to(self.talker.device)
+        embeds_to_talker = thinker_result.hidden_states[0][0].clone().to(input_ids.device)
         if thinker_kwargs.get("input_features", None) is not None:
             audio_ids_mask = input_ids == self.config.thinker_config.audio_token_index
-            audio_mask = audio_ids_mask.unsqueeze(-1).expand_as(embeds_to_talker).to(embeds_to_talker.device)
+            audio_mask = audio_ids_mask.unsqueeze(-1).expand_as(embeds_to_talker)
             audio_mask_tensor = torch.zeros(
                 [audio_ids_mask.sum(), embeds_to_talker.shape[-1]],
                 dtype=embeds_to_talker.dtype,
-                device=self.talker.device,
+                device=input_ids.device,
             )
             embeds_to_talker.masked_scatter_(audio_mask, audio_mask_tensor)
         if thinker_kwargs.get("pixel_values", None) is not None:
             image_ids_mask = input_ids == self.config.thinker_config.image_token_index
-            image_mask = image_ids_mask.unsqueeze(-1).expand_as(embeds_to_talker).to(embeds_to_talker.device)
+            image_mask = image_ids_mask.unsqueeze(-1).expand_as(embeds_to_talker)
             image_mask_tensor = torch.zeros(
                 [image_ids_mask.sum(), embeds_to_talker.shape[-1]],
                 dtype=embeds_to_talker.dtype,
-                device=self.talker.device,
+                device=input_ids.device,
             )
             embeds_to_talker.masked_scatter_(image_mask, image_mask_tensor)
         if thinker_kwargs.get("pixel_values_videos", None) is not None:
             video_ids_mask = input_ids == self.config.thinker_config.video_token_index
-            video_mask = video_ids_mask.unsqueeze(-1).expand_as(embeds_to_talker).to(embeds_to_talker.device)
+            video_mask = video_ids_mask.unsqueeze(-1).expand_as(embeds_to_talker)
             video_mask_tensor = torch.zeros(
                 [video_ids_mask.sum(), embeds_to_talker.shape[-1]],
                 dtype=embeds_to_talker.dtype,
-                device=self.talker.device,
+                device=input_ids.device,
             )
             embeds_to_talker.masked_scatter_(video_mask, video_mask_tensor)
 
         processed_thinker_hidden = (
             (embeds_to_talker,) + thinker_result.hidden_states[0][1:],
         ) + thinker_result.hidden_states[1:]
-        thinker_generate_ids = thinker_result.sequences[:, input_ids.size(1) :].to(self.talker.device)
-        thinker_token_embeds = [
-            token_hidden_states[0].to(self.talker.device) for token_hidden_states in processed_thinker_hidden
-        ]
-        thinker_hidden_states = [
-            token_hidden_states[-1].to(self.talker.device) for token_hidden_states in processed_thinker_hidden
-        ]
+        thinker_generate_ids = thinker_result.sequences[:, input_ids.size(1) :].to(input_ids.device)
+        thinker_token_embeds = [token_hidden_states[0].to(input_ids.device) for token_hidden_states in processed_thinker_hidden]
+        thinker_hidden_states = [token_hidden_states[-1].to(input_ids.device) for token_hidden_states in processed_thinker_hidden]
 
         talker_text_bos_token = speaker_params["bos_token"]
         talker_input_text_ids = torch.cat(
             [
-                input_ids.to(self.talker.device),
-                torch.tensor([[talker_text_bos_token]], dtype=torch.long, device=self.talker.device),
+                input_ids,
+                torch.tensor([[talker_text_bos_token]], dtype=torch.long, device=input_ids.device),
                 thinker_generate_ids[:, :1],
             ],
             dim=-1,
@@ -4081,9 +4077,9 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
 
         talker_input_ids = torch.cat(
             [
-                torch.full_like(input_ids, fill_value=self.talker.codec_mask_token, device=self.talker.device),
-                torch.tensor([[self.talker.codec_pad_token]], dtype=torch.long, device=self.talker.device),
-                torch.tensor([[self.talker.codec_bos_token]], dtype=torch.long, device=self.talker.device),
+                torch.full_like(input_ids, fill_value=self.talker.codec_mask_token),
+                torch.tensor([[self.talker.codec_pad_token]], dtype=torch.long, device=input_ids.device),
+                torch.tensor([[self.talker.codec_bos_token]], dtype=torch.long, device=input_ids.device),
             ],
             dim=1,
         )
@@ -4091,8 +4087,10 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         thinker_embed_tokens = self.thinker.get_input_embeddings()
         thinker_reply_part = torch.cat(thinker_hidden_states[1:], dim=1) + torch.cat(thinker_token_embeds[1:], dim=1)
         talker_inputs_embeds = thinker_hidden_states[0] + thinker_token_embeds[0]
-        talker_text_bos_token = torch.tensor([[talker_text_bos_token]], dtype=torch.long, device=self.thinker.device)
-        talker_text_bos_embed = thinker_embed_tokens(talker_text_bos_token).to(self.talker.device)
+        talker_text_bos_token = torch.tensor(
+            [[talker_text_bos_token]], dtype=torch.long, device=input_ids.device
+        )
+        talker_text_bos_embed = thinker_embed_tokens(talker_text_bos_token).to(input_ids.device)
         talker_inputs_embeds = torch.cat(
             [
                 talker_inputs_embeds,
@@ -4103,12 +4101,12 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         )
 
         eos_embedding = thinker_embed_tokens(
-            torch.tensor([[self.talker.text_eos_token]], dtype=torch.long, device=self.thinker.device)
-        ).to(self.talker.device)
+            torch.tensor([[self.talker.text_eos_token]], dtype=torch.long, device=input_ids.device)
+        )
 
         pad_embedding = thinker_embed_tokens(
-            torch.tensor([[self.talker.text_pad_token]], dtype=torch.long, device=self.thinker.device)
-        ).to(self.talker.device)
+            torch.tensor([[self.talker.text_pad_token]], dtype=torch.long, device=input_ids.device)
+        )
 
         thinker_reply_part = torch.cat(
             [
@@ -4123,7 +4121,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         if "attention_mask" in kwargs:
             talker_attention_mask = torch.cat(
                 [kwargs["attention_mask"], kwargs["attention_mask"].new_ones((1, 2))], dim=1
-            ).to(self.talker.device)
+            ).to(input_ids.device)
 
         talker_result = self.talker.generate(
             input_ids=talker_input_ids,
@@ -4132,7 +4130,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             inputs_embeds=talker_inputs_embeds,
             attention_mask=talker_attention_mask,
             suppress_tokens=[self.talker.codec_bos_token],
-            **{k: (v.to(self.talker.device) if torch.is_tensor(v) else v) for k, v in talker_kwargs.items()},
+            **{k: (v.to(input_ids.device) if torch.is_tensor(v) else v) for k, v in talker_kwargs.items()},
         )
         talker_generate_codes = talker_result[:, talker_input_ids.shape[1] : -1]
 
@@ -4142,8 +4140,8 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
 
         wav = self.token2wav(
             talker_generate_codes.to(self.token2wav.device),
-            conditioning=speaker_params["cond"].to(self.token2wav.device).float(),
-            reference_mel=speaker_params["ref_mel"].to(self.token2wav.device).float(),
+            conditioning=speaker_params["cond"].to(input_ids.device).float(),
+            reference_mel=speaker_params["ref_mel"].to(input_ids.device).float(),
             **token2wav_kwargs,
         )
 
