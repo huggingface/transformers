@@ -107,7 +107,7 @@ from datasets import load_dataset
 from peft import LoraConfig
 from trl import SFTConfig, SFTTrainer
 
-model_id = 'mistralai/Mamba-Codestral-7B-v0.1'
+model_id = "mistralai/Mamba-Codestral-7B-v0.1"
 dataset = load_dataset("Abirate/english_quotes", split="train")
 training_args = SFTConfig(dataset_text_field="quote", gradient_checkpointing=True, per_device_train_batch_size=4)
 lora_config =  LoraConfig(target_modules=["x_proj", "embeddings", "in_proj", "out_proj"])
