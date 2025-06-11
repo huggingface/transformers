@@ -31,9 +31,6 @@ You can find all the original AltCLIP checkpoints under the [AltClip](https://hu
 The examples below demonstrates how to calculate similarity scores between an image and one or more captions with the [`AutoModel`] class.
 
 <hfoptions id="usage">
-
-</hfoption>
-
 <hfoption id="AutoModel">
 
 ```python
@@ -60,21 +57,11 @@ for label, prob in zip(labels, probs[0]):
 ```
 
 </hfoption>
-
-<hfoption id="transformers-cli">
-
-AltCLIP does **not** require `transformers-cli` at inference time, but the tool is handy for quantisation (see next section).
-
-</hfoption>
-
 </hfoptions>
 
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-## Quantization
-
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](https://huggingface.co/docs/transformers/main/en/quantization/overview) overview for more available quantization backends.
-
-The example below uses [torchao](https://huggingface.co/docs/transformers/main/en/quantization/torchao) to only quantize the weights to int4.
+The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
 ```python
 # !pip install torchao
@@ -105,43 +92,29 @@ for label, prob in zip(labels, probs[0]):
     print(f"{label}: {prob.item():.4f}")
 ```
 
-
-
-
-
-## Attention visualisation
-
-[AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/main/src/transformers/utils/attention_visualizer.py) is **NOT** compatible yet with encoder models. It may be used **once encoder support lands** (current release only handles decoder-style LLMs).
-
-In the meantime you can manually retrieve ViT self-attention:
-
-```py
-outputs = model(**inputs, output_attentions=True)
-attn = outputs.vision_model_output.attentions  # list[num_layers] of (B,H,S,S)
-```
-
-
 ## Notes
 
 - AltCLIP uses bidirectional attention instead of causal attention and it uses the `[CLS]` token in XLM-R to represent a text embedding.
 - Use [`CLIPImageProcessor`] to resize (or rescale) and normalize images for the model.
 - [`AltCLIPProcessor`] combines [`CLIPImageProcessor`] and [`XLMRobertaTokenizer`] into a single instance to encode text and prepare images.
 
-## API
-
-### Configuration
+## AltCLIPConfig
 [[autodoc]] AltCLIPConfig
 
+## AltCLIPTextConfig
 [[autodoc]] AltCLIPTextConfig
 
+## AltCLIPVisionConfig
 [[autodoc]] AltCLIPVisionConfig
 
-### Models
+## AltCLIPModel
 [[autodoc]] AltCLIPModel
 
+## AltCLIPTextModel
 [[autodoc]] AltCLIPTextModel
 
+## AltCLIPVisionModel
 [[autodoc]] AltCLIPVisionModel
 
-### Processor
+## AltCLIPProcessor
 [[autodoc]] AltCLIPProcessor
