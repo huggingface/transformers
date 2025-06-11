@@ -673,7 +673,7 @@ class AriaPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = False  # MoE models don't work with torch.compile (dynamic slicing)
-    _supports_attention_backend = False
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -1224,6 +1224,18 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
 
     def get_decoder(self):
         return self.model
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_mask: Optional[torch.FloatTensor] = None,
+        vision_feature_layer: int = -1,
+    ):
+        return self.model.get_image_features(
+            pixel_values=pixel_values,
+            pixel_mask=pixel_mask,
+            vision_feature_layer=vision_feature_layer,
+        )
 
     # Make modules available throught conditional class for BC
     @property

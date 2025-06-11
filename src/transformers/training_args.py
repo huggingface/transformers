@@ -39,6 +39,7 @@ from .utils import (
     ExplicitEnum,
     cached_property,
     is_accelerate_available,
+    is_apex_available,
     is_ipex_available,
     is_safetensors_available,
     is_sagemaker_dp_enabled,
@@ -1580,6 +1581,12 @@ class TrainingArguments:
                 FutureWarning,
             )
             self.use_cpu = self.no_cuda
+        if self.use_ipex:
+            warnings.warn(
+                "using `use_ipex` is deprecated and will be removed in version 4.54 of 🤗 Transformers. "
+                "You only need PyTorch for the needed optimizations on Intel CPU and XPU.",
+                FutureWarning,
+            )
 
         self.eval_strategy = IntervalStrategy(self.eval_strategy)
         self.logging_strategy = IntervalStrategy(self.logging_strategy)
@@ -1685,7 +1692,7 @@ class TrainingArguments:
                     # cpu
                     raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")
                 elif not self.use_cpu:
-                    if not is_torch_bf16_gpu_available():
+                    if not is_torch_bf16_gpu_available() and not is_torch_xla_available():  # added for tpu support
                         error_message = "Your setup doesn't support bf16/gpu."
                         if is_torch_cuda_available():
                             error_message += " You need Ampere+ GPU with cuda>=11.0"
@@ -1701,6 +1708,19 @@ class TrainingArguments:
         if self.bf16:
             if self.half_precision_backend == "apex":
                 raise ValueError(" `--half_precision_backend apex`: GPU bf16 is not supported by apex.")
+
+        if self.half_precision_backend == "apex":
+            if not is_apex_available():
+                raise ImportError(
+                    "Using FP16 with APEX but APEX is not installed, please refer to"
+                    " https://www.github.com/nvidia/apex."
+                )
+            try:
+                from apex import amp  # noqa: F401
+            except ImportError as e:
+                raise ImportError(
+                    f"apex.amp is deprecated in the latest version of apex, causing this error {e}. Either revert to an older version or use pytorch amp by setting half_precision_backend='auto' instead. See https://github.com/NVIDIA/apex/pull/1896 "
+                )
 
         if self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU:
             if self.eval_strategy == IntervalStrategy.NO:
