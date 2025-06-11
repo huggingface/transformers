@@ -524,7 +524,7 @@ class ModelTesterMixin:
             # For now, skip everything older than 2025 and "important models" (too much models to patch otherwise)
             # Use `supports_cache_class` as a proxy to judge "important" models in order to prioritize them
             # TODO: relax this as we patch more and more models
-            if addition_year < 2025 and not model_class._supports_cache_class:
+            if addition_year < 2025:
                 self.skipTest(reason=f"{model_class} is not a priorited model for now.")
 
             # Monkey patch the method to add a seed (we do it on PreTrainedModel._initialize_weights, which wraps
@@ -1327,18 +1327,7 @@ class ModelTesterMixin:
                         head_dim = model.config.hidden_size // model.config.num_attention_heads
 
                         cache_shape = (batch_size, num_heads, 0, head_dim)
-                        empty_pkv = tuple(
-                            (
-                                torch.rand(cache_shape, dtype=torch.float, device=torch_device),
-                                torch.rand(cache_shape, dtype=torch.float, device=torch_device),
-                            )
-                            for i in range(model.config.num_hidden_layers)
-                        )
-                        empty_pkv = (
-                            DynamicCache.from_legacy_cache(empty_pkv)
-                            if model_class._supports_cache_class
-                            else empty_pkv
-                        )
+                        empty_pkv = DynamicCache()
 
                         cache_length = 9
                         cache_shape = (batch_size, num_heads, cache_length, head_dim)
@@ -1349,11 +1338,7 @@ class ModelTesterMixin:
                             )
                             for i in range(model.config.num_hidden_layers)
                         )
-                        non_empty_pkv = (
-                            DynamicCache.from_legacy_cache(non_empty_pkv)
-                            if model_class._supports_cache_class
-                            else non_empty_pkv
-                        )
+                        non_empty_pkv = DynamicCache.from_legacy_cache(non_empty_pkv)
 
                         inps = copy.deepcopy(inputs_to_test[0])
 
