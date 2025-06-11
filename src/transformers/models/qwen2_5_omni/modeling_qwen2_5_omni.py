@@ -4062,8 +4062,12 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             (embeds_to_talker,) + thinker_result.hidden_states[0][1:],
         ) + thinker_result.hidden_states[1:]
         thinker_generate_ids = thinker_result.sequences[:, input_ids.size(1) :].to(input_ids.device)
-        thinker_token_embeds = [token_hidden_states[0].to(input_ids.device) for token_hidden_states in processed_thinker_hidden]
-        thinker_hidden_states = [token_hidden_states[-1].to(input_ids.device) for token_hidden_states in processed_thinker_hidden]
+        thinker_token_embeds = [
+            token_hidden_states[0].to(input_ids.device) for token_hidden_states in processed_thinker_hidden
+        ]
+        thinker_hidden_states = [
+            token_hidden_states[-1].to(input_ids.device) for token_hidden_states in processed_thinker_hidden
+        ]
 
         talker_text_bos_token = speaker_params["bos_token"]
         talker_input_text_ids = torch.cat(
@@ -4087,9 +4091,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         thinker_embed_tokens = self.thinker.get_input_embeddings()
         thinker_reply_part = torch.cat(thinker_hidden_states[1:], dim=1) + torch.cat(thinker_token_embeds[1:], dim=1)
         talker_inputs_embeds = thinker_hidden_states[0] + thinker_token_embeds[0]
-        talker_text_bos_token = torch.tensor(
-            [[talker_text_bos_token]], dtype=torch.long, device=input_ids.device
-        )
+        talker_text_bos_token = torch.tensor([[talker_text_bos_token]], dtype=torch.long, device=input_ids.device)
         talker_text_bos_embed = thinker_embed_tokens(talker_text_bos_token).to(input_ids.device)
         talker_inputs_embeds = torch.cat(
             [
@@ -4139,7 +4141,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             self.token2wav.float()
 
         wav = self.token2wav(
-            talker_generate_codes.to(self.token2wav.device),
+            talker_generate_codes.to(input_ids.device),
             conditioning=speaker_params["cond"].to(input_ids.device).float(),
             reference_mel=speaker_params["ref_mel"].to(input_ids.device).float(),
             **token2wav_kwargs,
