@@ -131,6 +131,7 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
     _supports_static_cache = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_flex_attn = True
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -421,6 +422,9 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
 
     def get_decoder(self):
         return self.model
+
+    def get_image_features(self, pixel_values):
+        return self.model.get_image_features(pixel_values)
 
     # Make modules available throught conditional class for BC
     @property

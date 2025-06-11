@@ -344,6 +344,13 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ("megatron-bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
         ("mgp-str", ("MgpstrTokenizer", None)),
         (
+            "minimax",
+            (
+                "GPT2Tokenizer" if is_sentencepiece_available() else None,
+                "GPT2TokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
             "mistral",
             (
                 "LlamaTokenizer" if is_sentencepiece_available() else None,
@@ -813,7 +820,7 @@ class AutoTokenizer:
     """
 
     def __init__(self):
-        raise EnvironmentError(
+        raise OSError(
             "AutoTokenizer is designed to be instantiated "
             "using the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)` method."
         )
