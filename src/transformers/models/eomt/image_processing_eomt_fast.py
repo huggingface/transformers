@@ -33,7 +33,9 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    get_image_size,
+    make_list_of_images,
+    pil_torch_interpolation_mapping,
+    validate_kwargs,
 )
 from ...processing_utils import Unpack
 from ...utils import (
@@ -42,6 +44,12 @@ from ...utils import (
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
+)
+from .image_processing_eomt import (
+    compute_segments,
+    convert_segmentation_map_to_binary_masks,
+    get_size_with_aspect_ratio,
+    remove_low_and_no_objects,
 )
 
 
@@ -58,262 +66,93 @@ if is_torchvision_available():
 class EoMTImageProcessorFastKwargs(DefaultFastImageProcessorKwargs):
     """
     do_split_image (`bool`, *optional*, defaults to `False`):
-            Whether to split the input images into overlapping crops for semantic segmentation. If set to `True`, the
-            input images will be split into crops of size `size["shortest_edge"]` with an overlap between crops.
+            Whether to split the input images into overlapping patches for semantic segmentation. If set to `True`, the
+            input images will be split into patches of size `size["shortest_edge"]` with an overlap between patches.
             Otherwise, the input images will be padded to the target size.
+    do_pad (`bool`, *optional*, defaults to `False`):
+            Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
+            number of patches in the batch. Padding will be applied to the bottom and right with zeros.
+    ignore_index (`int`, *optional*):
+            Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
+            denoted with 0 (background) will be replaced with `ignore_index`.
     """
 
     do_split_image: bool
-
-
-def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, int]:
-    """
-    Computes the output image size given the input image size and the desired output size.
-
-    Args:
-        image_size (`Tuple[int, int]`):
-            The input image size.
-        size (`int`):
-            The desired output size.
-        max_size (`int`, *optional*):
-            The maximum allowed output size.
-    """
-    height, width = image_size
-    raw_size = None
-    if max_size is not None:
-        min_original_size = float(min((height, width)))
-        max_original_size = float(max((height, width)))
-        if max_original_size / min_original_size * size > max_size:
-            raw_size = max_size * min_original_size / max_original_size
-            size = int(round(raw_size))
-
-    if (height <= width and height == size) or (width <= height and width == size):
-        oh, ow = height, width
-    elif width < height:
-        ow = size
-        if max_size is not None and raw_size is not None:
-            oh = round(raw_size * height / width)
-        else:
-            oh = round(size * height / width)
-    else:
-        oh = size
-        if max_size is not None and raw_size is not None:
-            ow = round(raw_size * width / height)
-        else:
-            ow = round(size * width / height)
-
-    return (oh, ow)
-
-
-# Copied from transformers.models.detr.image_processing_detr.remove_low_and_no_objects
-def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
-    """
-    Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
-    `labels`.
-
-    Args:
-        masks (`torch.Tensor`):
-            A tensor of shape `(num_queries, height, width)`.
-        scores (`torch.Tensor`):
-            A tensor of shape `(num_queries)`.
-        labels (`torch.Tensor`):
-            A tensor of shape `(num_queries)`.
-        object_mask_threshold (`float`):
-            A number between 0 and 1 used to binarize the masks.
-    Raises:
-        `ValueError`: Raised when the first dimension doesn't match in all input tensors.
-    Returns:
-        `Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the region
-        < `object_mask_threshold`.
-    """
-    if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
-        raise ValueError("mask, scores and labels must have the same shape!")
-
-    to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
-
-    return masks[to_keep], scores[to_keep], labels[to_keep]
-
-
-def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
-    # Get the mask associated with the k class
-    mask_k = mask_labels == k
-    mask_k_area = mask_k.sum()
-
-    # Compute the area of all the stuff in query k
-    original_mask = mask_probs[k] >= mask_threshold
-    original_area = original_mask.sum()
-
-    final_mask = mask_k & original_mask
-    final_mask_area = final_mask.sum()
-
-    mask_exists = mask_k_area > 0 and original_area > 0 and final_mask_area > 0
-
-    if mask_exists:
-        area_ratio = mask_k_area / original_area
-        if not area_ratio.item() > overlap_mask_area_threshold:
-            mask_exists = False
-
-    return mask_exists, final_mask
-
-
-def compute_segments(
-    mask_probs,
-    pred_scores,
-    pred_labels,
-    stuff_classes,
-    mask_threshold: float = 0.5,
-    overlap_mask_area_threshold: float = 0.8,
-    target_size: Optional[Tuple[int, int]] = None,
-):
-    height = mask_probs.shape[1] if target_size is None else target_size[0]
-    width = mask_probs.shape[2] if target_size is None else target_size[1]
-
-    segmentation = torch.zeros((height, width), dtype=torch.long, device=mask_probs.device) - 1
-    segments: List[Dict] = []
-
-    # Compute per-pixel assignment based on weighted mask scores
-    mask_probs = mask_probs.sigmoid()
-    mask_labels = (pred_scores[:, None, None] * mask_probs).argmax(0)
-
-    # Keep track of instances of each class
-    current_segment_id = 0
-    stuff_memory_list: Dict[str, int] = {}
-
-    for k in range(pred_labels.shape[0]):
-        pred_class = pred_labels[k].item()
-
-        # Check if mask exists and large enough to be a segment
-        mask_exists, final_mask = check_segment_validity(
-            mask_labels, mask_probs, k, mask_threshold, overlap_mask_area_threshold
-        )
-
-        if not mask_exists:
-            continue
-
-        if pred_class in stuff_classes:
-            if pred_class in stuff_memory_list:
-                segmentation[final_mask] = stuff_memory_list[pred_class]
-                continue
-            else:
-                stuff_memory_list[pred_class] = current_segment_id
-
-        segmentation[final_mask] = current_segment_id
-        segment_score = round(pred_scores[k].item(), 6)
-        segments.append(
-            {
-                "id": current_segment_id,
-                "label_id": pred_class,
-                "score": segment_score,
-            }
-        )
-        current_segment_id += 1
-    return segmentation, segments
+    do_pad: bool
+    ignore_index: Optional[int] = None
 
 
 def get_target_size(size_dict: Dict[str, int]) -> Tuple[int, int]:
     """Returns the height and width from a size dict."""
     target_height = size_dict["shortest_edge"]
-    target_width = size_dict.get("longest_edge", None) or target_height
+    target_width = size_dict["longest_edge"] or target_height
 
     return target_height, target_width
 
 
-def reorder_crops_and_offsets(
-    crops: List[torch.Tensor], offsets: List[List[int]]
+def reorder_patches_and_offsets(
+    patches: List[torch.Tensor], offsets: List[List[int]]
 ) -> Tuple[List[torch.Tensor], List[List[int]]]:
-    """Sorts crops and offsets according to the original image index."""
+    """Sorts patches and offsets according to the original image index."""
 
-    combined = list(zip(offsets, crops))
+    combined = list(zip(offsets, patches))
     combined.sort(key=lambda x: x[0][0])
-    sorted_offsets, sorted_crops = zip(*combined)
+    sorted_offsets, sorted_patches = zip(*combined)
 
-    return list(sorted_crops), list(sorted_offsets)
+    return list(sorted_patches), list(sorted_offsets)
 
 
-@auto_docstring()
+@auto_docstring
 class EoMTImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
     size = {"shortest_edge": 640, "longest_edge": 640}
     default_to_square = False
-    crop_size = None
     do_resize = True
-    do_center_crop = None
     do_rescale = True
     do_normalize = True
-    do_convert_rgb = None
     do_split_image = False
+    do_pad = False
+    ignore_index = None
     valid_kwargs = EoMTImageProcessorFastKwargs
 
     def __init__(self, **kwargs: Unpack[EoMTImageProcessorFastKwargs]):
         super().__init__(**kwargs)
 
-    def resize(
-        self,
-        images: torch.Tensor,
-        interpolation: "F.InterpolationMode",
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ) -> torch.Tensor:
-        """
-        Resize an image. The shortest edge of the image is resized to size["shortest_edge"], with the longest edge
-        resized to keep the input aspect ratio.
+    def _split_image(self, images: torch.Tensor, size: Dict, image_indices: int) -> Tuple[List, List]:
+        """Slices an image into overlapping patches for semantic segmentation."""
 
-        Args:
-            image (`np.ndarray`):
-                Image to resize.
-            interpolation (`F.InterpolationMode`):
-                The interpolation method to use for resizing. Defaults to bilinear.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format of the input image. If not provided, it will be inferred.
-        """
+        patches, patch_offsets = [], []
+
         _, _, height, width = images.shape
-        output_size = get_size_with_aspect_ratio(
-            (height, width), self.size["shortest_edge"], self.size["longest_edge"]
-        )
+        patch_size = size["shortest_edge"]
 
-        images = F.resize(
-            images,
-            size=output_size,
-            interpolation=interpolation,
-            **kwargs,
-        )
+        longer_side = max(height, width)
+        num_patches = math.ceil(longer_side / patch_size)
+        total_overlap = num_patches * patch_size - longer_side
+        overlap_per_patch = total_overlap / (num_patches - 1) if num_patches > 1 else 0
 
-        return images
+        for i in range(num_patches):
+            start = int(i * (patch_size - overlap_per_patch))
+            end = start + patch_size
 
-    def _split_image(self, image: ImageInput, image_index: int) -> Tuple[List, List]:
-        """Slices an image into overlapping crops for semantic segmentation."""
-
-        crops, patch_offsets = [], []
-
-        image_size = get_image_size(image)
-        crop_size = self.size["shortest_edge"]
-
-        longer_side = max(image_size)
-        num_crops = math.ceil(longer_side / crop_size)
-        total_overlap = num_crops * crop_size - longer_side
-        overlap_per_crop = total_overlap / (num_crops - 1) if num_crops > 1 else 0
-
-        for i in range(num_crops):
-            start = int(i * (crop_size - overlap_per_crop))
-            end = start + crop_size
-
-            if image_size[0] > image_size[1]:
-                crop = image[:, start:end, :]
+            if height > width:
+                batch_patch = images[:, :, start:end, :]
             else:
-                crop = image[:, :, start:end]
+                batch_patch = images[:, :, :, start:end]
 
-            crops.append(crop)
-            patch_offsets.append([image_index, start, end])
+            for batch_idx, single in enumerate(torch.unbind(batch_patch, dim=0)):
+                patches.append(single)
+                patch_offsets.append([image_indices[batch_idx], start, end])
 
-        return crops, patch_offsets
+        return patches, patch_offsets
 
-    def _pad(self, images: torch.Tensor) -> torch.Tensor:
+    def _pad(self, images: torch.Tensor, size: Dict) -> torch.Tensor:
         """Pads the image to the target size using zero padding."""
         _, _, height, width = images.shape
 
-        target_height, target_width = get_target_size(self.size)
+        target_height, target_width = get_target_size(size)
         pad_h = max(0, target_height - height)
         pad_w = max(0, target_width - width)
         padding = (0, pad_w, 0, pad_h)
@@ -331,24 +170,25 @@ class EoMTImageProcessorFast(BaseImageProcessorFast):
         rescale_factor: float,
         do_normalize: bool,
         do_split_image: bool,
+        do_pad: bool,
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
         return_tensors: Optional[Union[str, TensorType]],
-        mask_labels: Optional[List["torch.Tensor"]] = None,
-        class_labels: Optional[Dict[int, int]] = None,
-        **kwargs: Unpack[EoMTImageProcessorFastKwargs],
-    ) -> BatchFeature:
+        **kwargs,
+    ):
         """Preprocesses the input images and masks if provided."""
         processed_images, patch_offsets = [], []
 
         grouped_images, grouped_images_index = group_images_by_shape(images)
         resized_images_grouped = {}
+
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self.resize(images=stacked_images, interpolation=interpolation)
+                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
                 resized_images_grouped[shape] = stacked_images
         images = reorder_images(resized_images_grouped, grouped_images_index)
 
+        # Group images by size for batched resizing, Needed in case do_resize is False.
         grouped_images, grouped_images_index = group_images_by_shape(images)
         processed_images_grouped = {}
 
@@ -358,21 +198,23 @@ class EoMTImageProcessorFast(BaseImageProcessorFast):
             ]
 
             if do_split_image:
-                for idx, img in enumerate(stacked_images):
-                    crops, offsets = self._split_image(img, original_indices[idx])
-                    processed_images.extend(crops)
-                    patch_offsets.extend(offsets)
-            else:
-                stacked_images = self._pad(stacked_images)
+                patches, offsets = self._split_image(stacked_images, size, original_indices)
+                processed_images.extend(patches)
+                patch_offsets.extend(offsets)
+
+            if do_pad:
+                stacked_images = self._pad(stacked_images, size)
                 processed_images_grouped[shape] = stacked_images
 
         if do_split_image:
-            images, patch_offsets = reorder_crops_and_offsets(processed_images, patch_offsets)
-        else:
+            images, patch_offsets = reorder_patches_and_offsets(processed_images, patch_offsets)
+
+        if do_pad:
             images = reorder_images(processed_images_grouped, grouped_images_index)
 
         grouped_images, grouped_images_index = group_images_by_shape(images)
         processed_images_grouped = {}
+
         for shape, stacked_images in grouped_images.items():
             stacked_images = self.rescale_and_normalize(
                 stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
@@ -381,76 +223,178 @@ class EoMTImageProcessorFast(BaseImageProcessorFast):
         images = reorder_images(processed_images_grouped, grouped_images_index)
 
         processed_images = torch.stack(images, dim=0) if return_tensors else images
-        data = {"pixel_values": processed_images}
 
-        if do_split_image and patch_offsets:
-            data["patch_offsets"] = patch_offsets
+        return processed_images, patch_offsets
 
-        # Only perform padding on masks if they are provided.
-        if mask_labels is not None:
-            grouped_masks, grouped_masks_index = group_images_by_shape(mask_labels)
-            padded_masks_grouped = {}
+    def _preprocess_images(self, images, **kwargs):
+        """Preprocesses the input images."""
+        return self._preprocess(images, **kwargs)
 
-            for shape, stacked_masks in grouped_masks.items():
-                padded = self._pad(stacked_masks)
-                padded_masks_grouped[shape] = padded
-            processed_masks = reorder_images(padded_masks_grouped, grouped_masks_index)
+    def _preprocess_masks(self, segmentation_maps: List[torch.Tensor], **kwargs):
+        """Preprocesses segmentation maps."""
+        processed_segmentation_maps = []
+        for segmentation_map in segmentation_maps:
+            segmentation_map = self._process_image(
+                segmentation_map, do_convert_rgb=False, input_data_format=ChannelDimension.FIRST
+            )
 
-            data["mask_labels"] = torch.stack(processed_masks, dim=0) if return_tensors else processed_masks
-            data["class_labels"] = class_labels
+            if segmentation_map.ndim == 2:
+                segmentation_map = segmentation_map[None, ...]
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+            processed_segmentation_maps.append(segmentation_map)
+
+        kwargs["do_normalize"] = False
+        kwargs["do_rescale"] = False
+        kwargs["input_data_format"] = ChannelDimension.FIRST
+
+        processed_segmentation_maps, _ = self._preprocess(images=processed_segmentation_maps, **kwargs)
+        processed_segmentation_maps = processed_segmentation_maps.squeeze(1)
+        processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
+
+        return processed_segmentation_maps
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[EoMTImageProcessorFastKwargs]) -> BatchFeature:
-        # Pop do_center_crop as it's not required for EoMTImageProcessor.
-        _ = kwargs.pop("do_center_crop", None)
-        return super().preprocess(images, **kwargs)
+    def preprocess(
+        self,
+        images: ImageInput,
+        segmentation_maps: Optional[List[torch.Tensor]] = None,
+        instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
+        **kwargs: Unpack[EoMTImageProcessorFastKwargs],
+    ) -> BatchFeature:
+        r"""
+        segmentation_maps (`ImageInput`, *optional*):
+            The segmentation maps to preprocess for corresponding images.
+        instance_id_to_semantic_id (`List[Dict[int, int]]` or `Dict[int, int]`, *optional*):
+            A mapping between object instance ids and class ids.
+        """
+        # args are not validated, but their order in the `preprocess` and `_preprocess` signatures must be the same
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_kwargs_names)
+        # Set default kwargs from self. This ensures that if a kwarg is not provided
+        # by the user, it gets its default value from the instance, or is set to None.
+        for kwarg_name in self._valid_kwargs_names:
+            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
 
-    def _reverse_semantic_image_preprocessing(
+        # Extract parameters that are only used for preparing the input images
+        do_convert_rgb = kwargs.pop("do_convert_rgb")
+        input_data_format = kwargs.pop("input_data_format")
+        device = kwargs.pop("device")
+        # Prepare input images
+        images = self._prepare_input_images(
+            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+        )
+        # Prepare segmentation maps
+        if segmentation_maps is not None:
+            segmentation_maps = make_list_of_images(images=segmentation_maps, expected_ndims=2)
+
+        # Update kwargs that need further processing before being validated
+        kwargs = self._further_process_kwargs(**kwargs)
+
+        # Validate kwargs
+        self._validate_preprocess_kwargs(**kwargs)
+
+        # torch resize uses interpolation instead of resample
+        resample = kwargs.pop("resample")
+
+        # Check if resample is an int before checking if it's an instance of PILImageResampling
+        # because if pillow < 9.1.0, resample is an int and PILImageResampling is a module.
+        # Checking PILImageResampling will fail with error `TypeError: isinstance() arg 2 must be a type or tuple of types`.
+        kwargs["interpolation"] = (
+            pil_torch_interpolation_mapping[resample] if isinstance(resample, (int, PILImageResampling)) else resample
+        )
+
+        # Pop kwargs that are not needed in _preprocess
+        kwargs.pop("default_to_square")
+        kwargs.pop("data_format")
+
+        ignore_index = kwargs.pop("ignore_index", None)
+
+        processed_images, patch_offsets = self._preprocess_images(images=images, **kwargs)
+
+        outputs = BatchFeature({"pixel_values": processed_images})
+
+        mask_labels, class_labels = [], []
+        if segmentation_maps is not None:
+            segmentation_maps = self._preprocess_masks(segmentation_maps=segmentation_maps, **kwargs)
+            # Convert to list of binary masks and labels
+            for idx, segmentation_map in enumerate(segmentation_maps):
+                if isinstance(instance_id_to_semantic_id, list):
+                    instance_id = instance_id_to_semantic_id[idx]
+                else:
+                    instance_id = instance_id_to_semantic_id
+                # Use instance2class_id mapping per image
+                masks, classes = convert_segmentation_map_to_binary_masks(
+                    segmentation_map,
+                    instance_id,
+                    ignore_index=ignore_index,
+                )
+
+                mask_labels.append(torch.from_numpy(masks))
+                class_labels.append(torch.from_numpy(classes))
+
+            # we cannot batch them since they don't share a common class size
+            outputs["mask_labels"] = mask_labels
+            outputs["class_labels"] = class_labels
+
+        if patch_offsets:
+            outputs["patch_offsets"] = patch_offsets
+
+        return outputs
+
+    def __call__(self, images, segmentation_maps=None, instance_id_to_semantic_id=None, **kwargs):
+        # Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
+        # be passed in as positional arguments.
+        return super().__call__(
+            images,
+            segmentation_maps=segmentation_maps,
+            instance_id_to_semantic_id=instance_id_to_semantic_id,
+            **kwargs,
+        )
+
+    def merge_image_patches(
         self,
         segmentation_logits: torch.Tensor,
         patch_offsets: List[Tuple[int, int, int]],
         original_image_sizes: List[Tuple[int, int]],
+        size: Dict[str, int],
     ) -> List[torch.Tensor]:
         """
-        Reconstructs full-size semantic segmentation logits from cropped image predictions.
+        Reconstructs full-size semantic segmentation logits from patch predictions.
 
         Args:
             segmentation_logits (`torch.Tensor`):
-                A tensor of shape `(num_crops, num_classes, crop_height, crop_width)` representing predicted logits
-                for each image crop.
+                A tensor of shape `(num_patches, num_classes, patch_height, patch_width)` representing predicted logits
+                for each image patch.
             patch_offsets (`List[Tuple[int, int, int]]`):
                 A list of tuples where each tuple contains:
-                - `image_index` (int): Index of the original image this crop belongs to.
-                - `start` (int): Start pixel index of the crop along the long dimension (height or width).
-                - `end` (int): End pixel index of the crop along the long dimension.
+                - `image_index` (int): Index of the original image this patch belongs to.
+                - `start` (int): Start pixel index of the patch along the long dimension (height or width).
+                - `end` (int): End pixel index of the patch along the long dimension.
             original_image_sizes (`List[Tuple[int, int]]`):
                 List of original (height, width) dimensions for each image before preprocessing.
+            size (`Dict[str, int]`):
+                A size dict which was used to resize.
         """
         num_classes = segmentation_logits.shape[1]
         aggregated_logits = []
-        crop_counts = []
+        patch_counts = []
 
         for image_size in original_image_sizes:
-            height, width = get_size_with_aspect_ratio(
-                image_size, self.size["shortest_edge"], self.size["longest_edge"]
-            )
+            height, width = get_size_with_aspect_ratio(image_size, size["shortest_edge"], size["longest_edge"])
             aggregated_logits.append(torch.zeros((num_classes, height, width), device=segmentation_logits.device))
-            crop_counts.append(torch.zeros((num_classes, height, width), device=segmentation_logits.device))
+            patch_counts.append(torch.zeros((num_classes, height, width), device=segmentation_logits.device))
 
-        # Stitch crops back into full-sized logit maps
-        for crop_idx, (image_idx, crop_start, crop_end) in enumerate(patch_offsets):
+        # Stitch patches back into full-sized logit maps
+        for patch_idx, (image_idx, patch_start, patch_end) in enumerate(patch_offsets):
             if original_image_sizes[image_idx][0] > original_image_sizes[image_idx][1]:
-                aggregated_logits[image_idx][:, crop_start:crop_end, :] += segmentation_logits[crop_idx]
-                crop_counts[image_idx][:, crop_start:crop_end, :] += 1
+                aggregated_logits[image_idx][:, patch_start:patch_end, :] += segmentation_logits[patch_idx]
+                patch_counts[image_idx][:, patch_start:patch_end, :] += 1
             else:
-                aggregated_logits[image_idx][:, :, crop_start:crop_end] += segmentation_logits[crop_idx]
-                crop_counts[image_idx][:, :, crop_start:crop_end] += 1
+                aggregated_logits[image_idx][:, :, patch_start:patch_end] += segmentation_logits[patch_idx]
+                patch_counts[image_idx][:, :, patch_start:patch_end] += 1
 
         # Normalize and resize logits to original image size
         reconstructed_logits = []
-        for idx, (logit_sum, count) in enumerate(zip(aggregated_logits, crop_counts)):
+        for idx, (logit_sum, count) in enumerate(zip(aggregated_logits, patch_counts)):
             averaged_logits = logit_sum / count.clamp(min=1)
             resized_logits = torch.nn.functional.interpolate(
                 averaged_logits[None, ...],
@@ -463,10 +407,11 @@ class EoMTImageProcessorFast(BaseImageProcessorFast):
 
         return reconstructed_logits
 
-    def _reverse_panoptic_image_preprocessing(
+    def unpad_image(
         self,
         segmentation_logits: torch.Tensor,
         original_image_sizes: List[Tuple[int, int]],
+        size: Dict[str, int],
     ) -> List[torch.Tensor]:
         """Restores panoptic segmentation logits to their original image resolutions."""
 
@@ -474,7 +419,7 @@ class EoMTImageProcessorFast(BaseImageProcessorFast):
 
         for idx, original_size in enumerate(original_image_sizes):
             target_height, target_width = get_size_with_aspect_ratio(
-                original_size, self.size["shortest_edge"], self.size["longest_edge"]
+                original_size, size["shortest_edge"], size["longest_edge"]
             )
             cropped_logits = segmentation_logits[idx][:, :target_height, :target_width]
             upsampled_logits = torch.nn.functional.interpolate(
@@ -488,16 +433,19 @@ class EoMTImageProcessorFast(BaseImageProcessorFast):
         outputs,
         patch_offsets: List[Tuple[int, int, int]],
         original_image_sizes: List[Tuple[int, int]],
+        size: Optional[Dict[str, int]] = None,
     ) -> np.ndarray:
         """Post-processes model outputs into final semantic segmentation prediction."""
+
+        size = size if size is not None else self.size
 
         masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
 
-        size = get_target_size(self.size)
-        masks_queries_logits = torch.nn.functional.interpolate(
+        output_size = get_target_size(size)
+        masks_queries_logits = F.interpolate(
             masks_queries_logits,
-            size=size,
+            size=output_size,
             mode="bilinear",
         )
 
@@ -507,9 +455,7 @@ class EoMTImageProcessorFast(BaseImageProcessorFast):
 
         segmentation_logits = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
 
-        output_logits = self._reverse_semantic_image_preprocessing(
-            segmentation_logits, patch_offsets, original_image_sizes
-        )
+        output_logits = self.merge_image_patches(segmentation_logits, patch_offsets, original_image_sizes, size)
 
         preds = torch.stack(output_logits).argmax(dim=1)
         return preds
@@ -517,13 +463,16 @@ class EoMTImageProcessorFast(BaseImageProcessorFast):
     def post_process_panoptic_segmentation(
         self,
         outputs,
-        original_image_sizes,
-        stuff_classes: List[int] = [0],
+        original_image_sizes: List[Tuple[int, int]],
         threshold: float = 0.8,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
+        stuff_classes: Optional[List[int]] = None,
+        size: Optional[Dict[str, int]] = None,
     ):
         """Post-processes model outputs into final panoptic segmentation prediction."""
+
+        size = size if size is not None else self.size
 
         masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
@@ -531,14 +480,14 @@ class EoMTImageProcessorFast(BaseImageProcessorFast):
         batch_size = class_queries_logits.shape[0]
         num_labels = class_queries_logits.shape[-1] - 1
 
-        size = get_target_size(self.size)
-        masks_queries_logits = torch.nn.functional.interpolate(
+        output_size = get_target_size(size)
+        masks_queries_logits = F.interpolate(
             masks_queries_logits,
-            size=size,
+            size=output_size,
             mode="bilinear",
         )
 
-        mask_probs_batch = self._reverse_panoptic_image_preprocessing(masks_queries_logits, original_image_sizes)
+        mask_probs_batch = self.unpad_image(masks_queries_logits, original_image_sizes, size)
         pred_scores_batch, pred_labels_batch = class_queries_logits.softmax(dim=-1).max(-1)
 
         results: List = []
@@ -571,56 +520,66 @@ class EoMTImageProcessorFast(BaseImageProcessorFast):
     def post_process_instance_segmentation(
         self,
         outputs,
-        original_image_sizes,
-        stuff_classes: List[int] = [0],
+        original_image_sizes: List[Tuple[int, int]],
         threshold: float = 0.8,
-        mask_threshold: float = 0.5,
-        overlap_mask_area_threshold: float = 0.8,
+        size: Optional[Dict[str, int]] = None,
     ):
-        """Post-processes model outputs into instance segmentation predictions."""
+        """Post-processes model outputs into Instance Segmentation Predictions."""
 
-        panoptic_results = self.post_process_panoptic_segmentation(
-            outputs=outputs,
-            original_image_sizes=original_image_sizes,
-            stuff_classes=stuff_classes,
-            threshold=threshold,
-            mask_threshold=mask_threshold,
-            overlap_mask_area_threshold=overlap_mask_area_threshold,
+        size = size if size is not None else self.size
+
+        class_queries_logits = outputs.class_queries_logits
+        masks_queries_logits = outputs.masks_queries_logits
+
+        output_size = get_target_size(size)
+        masks_queries_logits = torch.nn.functional.interpolate(
+            masks_queries_logits,
+            size=output_size,
+            mode="bilinear",
         )
 
-        instance_results = []
+        mask_probs_batch = self.unpad_image(masks_queries_logits, original_image_sizes, size)
 
-        for result in panoptic_results:
-            segmentation_map = result["segmentation"]
-            segments_info = result["segments_info"]
+        batch_size = class_queries_logits.shape[0]
+        num_labels = class_queries_logits.shape[-1] - 1
 
-            instance_segmentation = torch.zeros_like(segmentation_map, dtype=torch.int32) - 1
-            instance_segments = []
+        results = []
 
-            instance_id = 0
-            for segment in segments_info:
-                label_id = segment["label_id"]
+        for i in range(batch_size):
+            mask_pred = mask_probs_batch[i]
+            mask_class = class_queries_logits[i]
 
-                if label_id in stuff_classes:
-                    continue
+            # Remove the null class `[..., :-1]`
+            scores, pred_classes = mask_class.softmax(dim=-1)[..., :-1].max(-1)
+            pred_masks = (mask_pred > 0).float()
 
-                mask = segmentation_map == segment["id"]
-                if mask.sum() == 0:
-                    continue
+            # Calculate average mask prob
+            mask_scores = (mask_pred.sigmoid().flatten(1) * pred_masks.flatten(1)).sum(1) / (
+                pred_masks.flatten(1).sum(1) + 1e-6
+            )
+            pred_scores = scores * mask_scores
 
-                instance_segmentation[mask] = instance_id
-                instance_segments.append(
-                    {
-                        "id": instance_id,
-                        "label_id": label_id,
-                        "score": segment["score"],
-                    }
-                )
+            segmentation = torch.zeros(original_image_sizes[i]) - 1
 
-                instance_id += 1
+            instance_maps, segments = [], []
+            current_segment_id = 0
+            for j in range(num_labels):
+                score = pred_scores[j].item()
 
-            instance_results.append({"segmentation": instance_segmentation, "segments_info": instance_segments})
-        return instance_results
+                if not torch.all(pred_masks[j] == 0) and score >= threshold:
+                    segmentation[pred_masks[j] == 1] = current_segment_id
+                    segments.append(
+                        {
+                            "id": current_segment_id,
+                            "label_id": pred_classes[j].item(),
+                            "score": round(score, 6),
+                        }
+                    )
+                    current_segment_id += 1
+                    instance_maps.append(pred_masks[j])
+
+            results.append({"segmentation": segmentation, "segments_info": segments})
+        return results
 
 
 __all__ = ["EoMTImageProcessorFast"]

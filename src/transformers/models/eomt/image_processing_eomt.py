@@ -31,8 +31,8 @@ from ...image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
-    is_batched,
     make_flat_list_of_images,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -272,8 +272,8 @@ class EoMTImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with mean and standard deviation.
         do_split_image (`bool`, *optional*, defaults to `False`):
-            Whether to split the input images into overlapping crops for semantic segmentation. If set to `True`, the
-            input images will be split into crops of size `size["shortest_edge"]` with an overlap between crops.
+            Whether to split the input images into overlapping patches for semantic segmentation. If set to `True`, the
+            input images will be split into patches of size `size["shortest_edge"]` with an overlap between patches.
             Otherwise, the input images will be padded to the target size.
         do_pad (`bool`, *optional*, defaults to `False`):
             Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
@@ -283,6 +283,9 @@ class EoMTImageProcessor(BaseImageProcessor):
         image_std (`int`, *optional*, defaults to `[0.229, 0.224, 0.225]`):
             The sequence of standard deviations for each channel, to be used when normalizing images. Defaults to the
             ImageNet std.
+        ignore_index (`int`, *optional*):
+            Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
+            denoted with 0 (background) will be replaced with `ignore_index`.
         num_labels (`int`, *optional*):
             The number of labels in the segmentation map.
     """
@@ -362,28 +365,28 @@ class EoMTImageProcessor(BaseImageProcessor):
         return image
 
     def _split_image(self, image: ImageInput, size: Dict, image_index: int) -> Tuple[List, List]:
-        """Slices an image into overlapping crops for semantic segmentation."""
+        """Slices an image into overlapping patches for semantic segmentation."""
 
         patches, patch_offsets = [], []
 
         image_size = get_image_size(image)
-        crop_size = size["shortest_edge"]
+        patch_size = size["shortest_edge"]
 
         longer_side = max(image_size)
-        num_crops = math.ceil(longer_side / crop_size)
-        total_overlap = num_crops * crop_size - longer_side
-        overlap_per_crop = total_overlap / (num_crops - 1) if num_crops > 1 else 0
+        num_patches = math.ceil(longer_side / patch_size)
+        total_overlap = num_patches * patch_size - longer_side
+        overlap_per_patch = total_overlap / (num_patches - 1) if num_patches > 1 else 0
 
-        for i in range(num_crops):
-            start = int(i * (crop_size - overlap_per_crop))
-            end = start + crop_size
+        for i in range(num_patches):
+            start = int(i * (patch_size - overlap_per_patch))
+            end = start + patch_size
 
             if image_size[0] > image_size[1]:
-                crop = image[:, start:end, :]
+                patch = image[:, start:end, :]
             else:
-                crop = image[:, :, start:end]
+                patch = image[:, :, start:end]
 
-            patches.append(crop)
+            patches.append(patch)
             patch_offsets.append([image_index, start, end])
 
         return patches, patch_offsets
@@ -531,7 +534,7 @@ class EoMTImageProcessor(BaseImageProcessor):
             instance_id_to_semantic_id (`List[Dict[int, int]]` or `Dict[int, int]`, *optional*):
                 A mapping between object instance ids and class ids.
             do_split_image (`bool`, *optional*, defaults to `self.do_split_image`):
-                Whether to split the input images into overlapping crops for semantic segmentation.
+                Whether to split the input images into overlapping patches for semantic segmentation.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the input images.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -551,6 +554,9 @@ class EoMTImageProcessor(BaseImageProcessor):
                 Mean for normalization. Single value or list for each channel.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Standard deviation for normalization. Single value or list for each channel.
+            ignore_index (`int`, *optional*):
+                Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
+                denoted with 0 (background) will be replaced with `ignore_index`.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be `"pt"`, `"tf"`, `"np"`, or `"jax"`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
@@ -608,7 +614,7 @@ class EoMTImageProcessor(BaseImageProcessor):
         )
 
         if segmentation_maps is not None:
-            segmentation_maps = [segmentation_maps] if not is_batched(segmentation_maps) else segmentation_maps
+            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
             segmentation_maps = [to_numpy_array(mask) for mask in segmentation_maps]
 
             segmentation_maps = [
@@ -738,17 +744,17 @@ class EoMTImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
     ) -> List[torch.Tensor]:
         """
-        Reconstructs full-size semantic segmentation logits from cropped image predictions.
+        Reconstructs full-size semantic segmentation logits from patch predictions.
 
         Args:
             segmentation_logits (`torch.Tensor`):
-                A tensor of shape `(num_crops, num_classes, crop_height, crop_width)` representing predicted logits
-                for each image crop.
+                A tensor of shape `(num_patches, num_classes, patch_height, patch_width)` representing predicted logits
+                for each image patch.
             patch_offsets (`List[Tuple[int, int, int]]`):
                 A list of tuples where each tuple contains:
-                - `image_index` (int): Index of the original image this crop belongs to.
-                - `start` (int): Start pixel index of the crop along the long dimension (height or width).
-                - `end` (int): End pixel index of the crop along the long dimension.
+                - `image_index` (int): Index of the original image this patch belongs to.
+                - `start` (int): Start pixel index of the patch along the long dimension (height or width).
+                - `end` (int): End pixel index of the patch along the long dimension.
             original_image_sizes (`List[Tuple[int, int]]`):
                 List of original (height, width) dimensions for each image before preprocessing.
             size (`Dict[str, int]`):
@@ -756,25 +762,25 @@ class EoMTImageProcessor(BaseImageProcessor):
         """
         num_classes = segmentation_logits.shape[1]
         aggregated_logits = []
-        crop_counts = []
+        patch_counts = []
 
         for image_size in original_image_sizes:
             height, width = get_size_with_aspect_ratio(image_size, size["shortest_edge"], size["longest_edge"])
             aggregated_logits.append(torch.zeros((num_classes, height, width), device=segmentation_logits.device))
-            crop_counts.append(torch.zeros((num_classes, height, width), device=segmentation_logits.device))
+            patch_counts.append(torch.zeros((num_classes, height, width), device=segmentation_logits.device))
 
-        # Stitch crops back into full-sized logit maps
-        for crop_idx, (image_idx, crop_start, crop_end) in enumerate(patch_offsets):
+        # Stitch patches back into full-sized logit maps
+        for patch_idx, (image_idx, patch_start, patch_end) in enumerate(patch_offsets):
             if original_image_sizes[image_idx][0] > original_image_sizes[image_idx][1]:
-                aggregated_logits[image_idx][:, crop_start:crop_end, :] += segmentation_logits[crop_idx]
-                crop_counts[image_idx][:, crop_start:crop_end, :] += 1
+                aggregated_logits[image_idx][:, patch_start:patch_end, :] += segmentation_logits[patch_idx]
+                patch_counts[image_idx][:, patch_start:patch_end, :] += 1
             else:
-                aggregated_logits[image_idx][:, :, crop_start:crop_end] += segmentation_logits[crop_idx]
-                crop_counts[image_idx][:, :, crop_start:crop_end] += 1
+                aggregated_logits[image_idx][:, :, patch_start:patch_end] += segmentation_logits[patch_idx]
+                patch_counts[image_idx][:, :, patch_start:patch_end] += 1
 
         # Normalize and resize logits to original image size
         reconstructed_logits = []
-        for idx, (logit_sum, count) in enumerate(zip(aggregated_logits, crop_counts)):
+        for idx, (logit_sum, count) in enumerate(zip(aggregated_logits, patch_counts)):
             averaged_logits = logit_sum / count.clamp(min=1)
             resized_logits = F.interpolate(
                 averaged_logits[None, ...],
