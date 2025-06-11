@@ -17,7 +17,8 @@ Processor class for LLaVa-Onevision.
 """
 
 import math
-from typing import Iterable, List, Union
+from collections.abc import Iterable
+from typing import List, Union
 
 import numpy as np
 
@@ -75,14 +76,6 @@ class LlavaOnevisionProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer", "video_processor"]
-    valid_kwargs = [
-        "chat_template",
-        "num_image_tokens",
-        "vision_feature_select_strategy",
-        "image_token",
-        "video_token",
-        "vision_aspect_ratio",
-    ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
     video_processor_class = "AutoVideoProcessor"

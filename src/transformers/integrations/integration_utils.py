@@ -1623,7 +1623,7 @@ class NeptuneCallback(TrainerCallback):
                 copy_path = os.path.join(consistent_checkpoint_path, cpkt_path)
                 shutil.copytree(relative_path, copy_path)
                 target_path = consistent_checkpoint_path
-            except IOError as e:
+            except OSError as e:
                 logger.warning(
                     "NeptuneCallback was unable to made a copy of checkpoint due to I/O exception: '{}'. "
                     "Could fail trying to upload.".format(e)

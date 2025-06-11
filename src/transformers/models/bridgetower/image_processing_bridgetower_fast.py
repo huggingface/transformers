@@ -14,7 +14,8 @@
 # limitations under the License.
 """Fast Image processor class for BridgeTower."""
 
-from typing import Dict, Iterable, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import Dict, Optional, Tuple, Union
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,

@@ -255,7 +255,7 @@ class AutoFeatureExtractor:
     """
 
     def __init__(self):
-        raise EnvironmentError(
+        raise OSError(
             "AutoFeatureExtractor is designed to be instantiated "
             "using the `AutoFeatureExtractor.from_pretrained(pretrained_model_name_or_path)` method."
         )
