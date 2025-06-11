@@ -19,6 +19,7 @@
 # limitations under the License.
 """PyTorch Persimmon model."""
 
+from functools import partial
 from typing import Callable, List, Optional, Tuple, Union
 
 import torch
@@ -519,7 +520,7 @@ class PersimmonModel(PersimmonPreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
+                    partial(decoder_layer.__call__, **kwargs),
                     hidden_states,
                     causal_mask,
                     position_ids,

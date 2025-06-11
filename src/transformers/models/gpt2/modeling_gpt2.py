@@ -19,6 +19,7 @@ import math
 import os
 import warnings
 from dataclasses import dataclass
+from functools import partial
 from typing import Callable, Optional, Tuple, Union
 
 import torch
@@ -924,7 +925,7 @@ class GPT2Model(GPT2PreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 outputs = self._gradient_checkpointing_func(
-                    block.__call__,
+                    partial(block.__call__, **kwargs),
                     hidden_states,
                     past_key_values,
                     cache_position,

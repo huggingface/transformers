@@ -15,6 +15,7 @@
 """PyTorch Mllama model."""
 
 import math
+from functools import partial
 from typing import Callable, List, Optional, Tuple, Union
 
 import torch
@@ -1404,7 +1405,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
+                    partial(decoder_layer.__call__, **kwargs),
                     hidden_states,
                     cross_attention_states,
                     cross_attention_mask,

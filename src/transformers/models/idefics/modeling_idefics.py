@@ -20,6 +20,7 @@
 """PyTorch Idefics model."""
 
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -1254,7 +1255,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
                     use_cache = False
 
                 layer_outputs = self._gradient_checkpointing_func(
-                    vblock,
+                    partial(vblock, **kwargs),
                     decoder_layer,
                     hidden_states,
                     attention_mask,

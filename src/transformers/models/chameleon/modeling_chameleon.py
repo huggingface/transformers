@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch Chameleon model."""
 
-from functools import cached_property
+from functools import cached_property, partial
 from typing import Callable, Optional, Tuple, Union
 
 import torch
@@ -1016,7 +1016,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
+                    partial(decoder_layer.__call__, **kwargs),
                     hidden_states,
                     causal_mask,
                     position_ids,

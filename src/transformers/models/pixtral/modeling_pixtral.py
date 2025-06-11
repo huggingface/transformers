@@ -15,6 +15,7 @@
 """PyTorch Pixtral model."""
 
 from collections.abc import Callable
+from functools import partial
 from typing import Optional, Tuple, Union
 
 import torch
@@ -377,7 +378,7 @@ class PixtralTransformer(nn.Module):
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
+                    partial(encoder_layer.__call__, **kwargs),
                     hidden_states,
                     attention_mask,
                     position_embeddings,

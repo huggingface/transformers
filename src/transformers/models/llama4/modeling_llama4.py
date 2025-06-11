@@ -15,6 +15,7 @@
 # limitations under the License.
 import math
 from dataclasses import dataclass
+from functools import partial
 from typing import Callable, List, Optional, Tuple, Union
 
 import torch
@@ -573,7 +574,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
+                    partial(decoder_layer.__call__, **flash_attn_kwargs),
                     hidden_states,
                     causal_mask_mapping[decoder_layer.attention_type],
                     position_ids,

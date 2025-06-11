@@ -4,6 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_gpt_neox.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+from functools import partial
 from typing import Callable, Optional, Tuple, Union
 
 import torch
@@ -417,7 +418,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 outputs = self._gradient_checkpointing_func(
-                    layer.__call__,
+                    partial(layer.__call__, **flash_attn_kwargs),
                     hidden_states,
                     causal_mask,
                     position_ids,
