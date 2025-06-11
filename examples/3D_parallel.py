@@ -81,7 +81,7 @@ def main():
     seq_len = 1024  # Sequence length
     num_train_steps = 10000  # Number of training steps
     LR = 1e-5
-    model_name = "/fsx/arthur/oai_hf"  # Path to the model directory or Hugging Face model name
+    model_name = "HuggingFaceTB/SmolLM2-1.7B"
     # model_name = "unsloth/Llama-3.2-1B"
 
     CHECKPOINT_DIR = f"checkpoint_tp{tp_size}_dp{dp_size}_cp{cp_size}"
@@ -109,27 +109,27 @@ def main():
             f"Distributed setup - Rank: {rank}, World size: {world_size}, Local rank: {local_rank}, DP: {dp_mesh.get_local_rank()}, TP: {tp_mesh.get_local_rank()}, CP: {cp_mesh.get_local_rank()}"
         )
 
-        # if dist.get_rank() == 0:
-        #     wandb.init(
-        #         project="tp_dp_test",
-        #         config={
-        #             "tp_size": tp_size,
-        #             "dp_size": dp_size,
-        #             "cp_size": cp_size,
-        #             "global_batch_size": global_batch_size,
-        #             "model_name": model_name,
-        #             "dataset": "roneneldan/TinyStories-1M",
-        #             "seq_len": seq_len,
-        #             "lr": LR,
-        #             "weight_decay": 0.1,
-        #         },
-        #         name=f"llama_tp{tp_size}_dp{dp_size}_cp{cp_size}"
-        #         if model_name == "unsloth/Llama-3.2-1B"
-        #         else f"tp{tp_size}_dp{dp_size}_cp{cp_size}",
-        #     )
-        #     logger.info("Wandb initialized.")
-        #     # Log the current file to wandb
-        #     wandb.save("test_train.py")
+        if dist.get_rank() == 0:
+            wandb.init(
+                project="tp_dp_test",
+                config={
+                    "tp_size": tp_size,
+                    "dp_size": dp_size,
+                    "cp_size": cp_size,
+                    "global_batch_size": global_batch_size,
+                    "model_name": model_name,
+                    "dataset": "roneneldan/TinyStories-1M",
+                    "seq_len": seq_len,
+                    "lr": LR,
+                    "weight_decay": 0.1,
+                },
+                name=f"llama_tp{tp_size}_dp{dp_size}_cp{cp_size}"
+                if model_name == "unsloth/Llama-3.2-1B"
+                else f"tp{tp_size}_dp{dp_size}_cp{cp_size}",
+            )
+            logger.info("Wandb initialized.")
+            # Log the current file to wandb
+            wandb.save("test_train.py")
 
     # Load model and tokenizer
     logger.info(f"Loading model and tokenizer from {model_name}")
@@ -137,7 +137,7 @@ def main():
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
         logger.info(f"Set pad_token to eos_token: {tokenizer.pad_token}")
-    print(f"TP MESH: {tp_mesh}")
+
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         device_mesh=tp_mesh if dist.is_initialized() else None,
@@ -200,7 +200,7 @@ def main():
         batched=True,
         remove_columns=tokenized_dataset.column_names,
         batch_size=1000,  # Process in batches for efficiency
-        # num_proc=60,
+        num_proc=60,
     )
     logger.info(f"Dataset packed. New size: {len(packed_dataset)}")
 
@@ -316,15 +316,15 @@ def main():
                     logger.info(
                         f"Step: {step} | GBS: {global_batch_size} | DP: {dp_mesh.size()} | TP: {tp_mesh.size()} | CP: {cp_mesh.size()} | Loss: {current_loss} | Gradnorm: {gradnorm} | lr: {LR}"
                     )
-                    # wandb.log(
-                    #     {
-                    #         "train/loss": current_loss,
-                    #         "train/gradnorm": gradnorm,
-                    #         "step": step,
-                    #         "lr": LR,
-                    #         "GBS": global_batch_size,
-                    #     }
-                    # )
+                    wandb.log(
+                        {
+                            "train/loss": current_loss,
+                            "train/gradnorm": gradnorm,
+                            "step": step,
+                            "lr": LR,
+                            "GBS": global_batch_size,
+                        }
+                    )
 
             step += 1  # Increment step count
 
@@ -349,7 +349,7 @@ def main():
     logger.info("Cleaned up distributed process group")
     # Finish wandb run on rank 0
     if dist.get_rank() == 0:
-        # wandb.finish()
+        wandb.finish()
         logger.info("Wandb run finished.")
 
 
