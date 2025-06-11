@@ -16,8 +16,6 @@ import torch.nn
 import torch.nn as nn
 from torch.nn import functional as F
 
-import abc
-
 import os
 from contextlib import nullcontext
 
@@ -40,6 +38,9 @@ from .configuration_blt import (
     PatchingModeEnum,
     InitStdFactor,
 )
+
+from ...modeling_utils import PreTrainedModel
+from ...utils import logging as transformers_logging
 
 flex_attention_comp = flex_attention
 
@@ -495,16 +496,12 @@ class TransformerLayer(nn.Module):
         self.ffn_norm.reset_parameters()
 
 
-class SequenceModelWithOutput(abc.ABC):
-    @abc.abstractmethod
-    def get_output_seq_len(self) -> int:
-        pass
+
 
 
 
 class LMTransformer(
     nn.Module,
-    SequenceModelWithOutput,
     PyTorchModelHubMixin,
     repo_url="https://github.com/facebookresearch/blt",
     # paper_url="https://arxiv.org/abs/2412.09871",
@@ -585,9 +582,6 @@ class LMTransformer(
 
         if self.weight_tying:
             self.output.weight = self.tok_embeddings.weight
-    
-    def get_output_seq_len(self):
-        return self.max_seqlen
 
     def push_to_hub(self, *args, **kwargs):
         raise ValueError(
@@ -1125,8 +1119,11 @@ def patch_ids_from_lengths(patch_lengths, seq_len):
 class LocalModelBase(nn.Module):
     def __init__(self, config: BLTConfig, component_type: str = "encoder"):
         super().__init__()
+        
+        # Store config for later use
+        self.config = config
 
-                # Use component-specific dimensions
+        # Use component-specific dimensions
         if component_type == "encoder":
             self.dim = config.dim_local_encoder
             self.n_layers = config.n_layers_local_encoder
@@ -1151,6 +1148,7 @@ class LocalModelBase(nn.Module):
         self.attn_impl = config.attn_impl
         self.use_rope = config.use_rope
         self.init_std_factor = config.init_std_factor
+        self.init_base_std = config.init_base_std
         self.cross_attn_encoder = getattr(config, "cross_attn_encoder", None)
         self.cross_attn_decoder = getattr(config, "cross_attn_decoder", None)
         self.cross_attn_k = getattr(config, "cross_attn_k", None)
@@ -1639,9 +1637,12 @@ class CrossAttention(nn.Module):
         self.cross_attn_norm_kv.reset_parameters()
 
 
-class GlobalTransformer(nn.Module, SequenceModelWithOutput):
+class GlobalTransformer(nn.Module):
     def __init__(self, config):
         super().__init__()
+        
+        # Store config for later use
+        self.config = config
         
         self.dim = config.dim
         self.init_base_std = config.init_base_std
@@ -1685,9 +1686,6 @@ class GlobalTransformer(nn.Module, SequenceModelWithOutput):
                 config.dim,
                 bias=False,
             )
-    
-    def get_output_seq_len(self):
-        return self.max_seqlen
 
     def forward(
         self,
@@ -1789,69 +1787,37 @@ def compute_hash_embeddings(
     return local_encoder_embeds
 
 
-class ByteLatentTransformer(
-    nn.Module,
-    SequenceModelWithOutput,
-    PyTorchModelHubMixin,
-    repo_url="https://github.com/facebookresearch/blt",
-    # paper_url="https://arxiv.org/abs/2412.09871",
-    pipeline_tag="text-generation",
-    license="other",
-    license_name="fair-noncommercial-research-license",
-    license_link="https://huggingface.co/facebook/blt/blob/main/LICENSE",
-    coders={
-        BLTConfig: (
-            lambda x: {"config": x.to_dict()},
-            lambda data: BLTConfig(**data),
-        )
-    },
-):
+class BLTPreTrainedModel(PreTrainedModel):
+    config_class = BLTConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["TransformerLayer", "LocalEncoder", "LocalDecoder", "GlobalTransformer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn_2 = False  # BLT uses its own attention implementation
+    _supports_sdpa = True
+    _supports_cache_class = False
+
+    def _init_weights(self, module):
+        """Initialize the weights - this is called by PreTrainedModel but we delegate to our custom init"""
+        # Don't do anything here - we use the custom init_weights method instead
+        pass
+
+
+class BLTModel(BLTPreTrainedModel):
     """
-    The ByteLatentTransformer (BLT) is a byte-level language model architecture that processes byte sequences
-    by dynamically segmenting them into patches. It uses a combination of local encoders, global transformers,
-    and local decoders to efficiently encode and decode byte sequences, leveraging patch-based processing for
+    The BLTModel (BLT) is a byte-level language model architecture that processes byte sequences
+    by dynamically segmenting them into patches. It uses a combination of local encoder/decoder and aglobal transformer
+    to efficiently encode and decode byte sequences, leveraging patch-based processing for
     improved performance and inference efficiency.
     """
 
     def __init__(self, config: BLTConfig):
-        super().__init__()
+        super().__init__(config)
 
         # Store config reference
         self.config = config
 
-        # General configuration
-        self.weight_tying = config.weight_tying
-        self.patch_size = config.patch_size
-        self.patching_mode = config.patching_mode
-        self.boe_id, self.bos_id, self.pad_id, self.eos_id = (
-            BOE_ID,
-            BOS_ID,
-            PAD_ID,
-            config.eos_token_id,
-        )
-        self.downsampling_by_pooling = config.downsampling_by_pooling
-        self.patching_threshold = config.patching_threshold
-        self.dim = config.dim
-        self.init_base_std = config.init_base_std
-        self.init_std_factor = config.init_std_factor
-        self.max_seqlen = config.max_seqlen
-
-        # Cross attention configuration
-        self.cross_attn_encoder = config.cross_attn_encoder
-        self.cross_attn_decoder = config.cross_attn_decoder
-        self.cross_attn_k = config.cross_attn_k
-        self.cross_attn_window_encoder = config.cross_attn_window_encoder
-        self.cross_attn_window_decoder = config.cross_attn_window_decoder
-        self.cross_attn_use_flex_attention = config.cross_attn_use_flex_attention
-
-        # Encoder hash configuration
-        self.encoder_hash_byte_group_size = config.encoder_hash_byte_group_size
-        self.encoder_hash_byte_group_vocab = config.encoder_hash_byte_group_vocab
-        self.encoder_hash_byte_group_nb_functions = (
-            config.encoder_hash_byte_group_nb_functions
-        )
-
-        # ByteLatent modules - pass the full config directly to local models
+        # Create main components - they will read their parameters from config
         self.local_encoder = LocalEncoder(config)
 
         # Create global-specific config by copying config and overriding dimensions
@@ -1863,47 +1829,17 @@ class ByteLatentTransformer(
         global_config.dim_token_emb = config.global_dim_patch_emb
 
         self.global_transformer = GlobalTransformer(global_config)
-
         self.local_decoder = LocalDecoder(config)
+        
+        # Initialize hash embeddings
         self.encoder_hash_tok_embedding = init_hash_embeddings(
             config,
             local_encoder_dim=self.local_encoder.dim,
-            encoder_hash_byte_group_size=self.encoder_hash_byte_group_size,
+            encoder_hash_byte_group_size=config.encoder_hash_byte_group_size,
         )
-        
-        # NOTE: Frequency-based n-gram embeddings were experimental and removed in final model
-        # See paper section 3.2.1: "we subsequently moved to hash-based n-gram embeddings"
-        # The code below is kept for backward compatibility but should not be used
-        if hasattr(config, 'encoder_enable_byte_ngrams') and config.encoder_enable_byte_ngrams:
-            import warnings
-            warnings.warn(
-                "Frequency-based n-gram embeddings (encoder_enable_byte_ngrams) are deprecated. "
-                "The final BLT model uses only hash-based n-gram embeddings. "
-                "Consider setting encoder_enable_byte_ngrams=False.",
-                DeprecationWarning
-            )
-            
-        # Remove the duplicate/unused ngram embedding initialization
-        # self.encoder_ngram_embedding = init_embeddings(...)  # Removed
-        # self.encoder_ngram_embedding = None  # Removed
-        # if config.encoder_enable_byte_ngrams: ...  # Removed
 
-        # Output layer
-        assert config.vocab_size > 0, "vocab_size must be greater than 0"
-
-        # Patcher configuration
-        self.patch_in_forward = config.patch_in_forward
+        # Initialize patcher if needed
         if config.patch_in_forward:
-            # Store patching parameters
-            self.patching_mode = config.patching_mode
-            self.patching_threshold = config.patching_threshold
-            self.patching_threshold_add = config.patching_threshold_add
-            self.monotonicity = config.monotonicity
-            self.max_patch_length = config.max_patch_length
-            self.patching_batch_size = config.patching_batch_size or 1
-            self.patching_device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #config.patching_device or "cuda"
-            
-            # Initialize entropy model (patcher) if realtime_patching is True
             if config.realtime_patching and config.entropy_model_checkpoint_dir is not None:
                 # Load entropy model directly
                 entropy_model_checkpoint_dir = config.entropy_model_checkpoint_dir
@@ -1939,32 +1875,30 @@ class ByteLatentTransformer(
                 
                 # LMTransformer will extract patcher_ parameters from config directly
                 self.patcher = LMTransformer(config)
-
-                # Load state dict
-                maybe_consolidated = os.path.join(
-                    entropy_model_checkpoint_dir,
-                    "consolidated/consolidated.pth",
-                )
-                if os.path.exists(maybe_consolidated):
-                    state_path = maybe_consolidated
-                else:
-                    state_path = os.path.join(
-                        entropy_model_checkpoint_dir, "consolidated.pth"
-                    )
                 
-                if not os.path.exists(state_path):
-                    raise FileNotFoundError(f"Model checkpoint not found at: {state_path}")
-
-                self.patcher.load_state_dict(
-                    torch.load(state_path, map_location=self.patching_device)["model"], strict=False
+                state_path = os.path.join(
+                    entropy_model_checkpoint_dir, "consolidated.pth"
                 )
-                self.patcher.to(self.patching_device)
+
+                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                self.patcher.load_state_dict(
+                    torch.load(state_path, map_location=device)["model"], strict=False
+                )
+                self.patcher.to(device)
                 self.patcher = self.patcher.eval()
                 # no grads for the model:
                 for param in self.patcher.parameters():
                     param.requires_grad = False
             else:
                 self.patcher = None
+        
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @property
+    def patch_in_forward(self):
+        """Backward compatibility property for accessing patch_in_forward from config."""
+        return self.config.patch_in_forward
 
     def patch(
         self,
@@ -2001,11 +1935,11 @@ class ByteLatentTransformer(
         seq_len_next_tok = seq_len + 1 if include_next_token else seq_len
         scores = None
         # STATIC
-        if self.patching_mode == PatchingModeEnum.byte:
+        if self.config.patching_mode == PatchingModeEnum.byte:
             patch_lengths = torch.ones(
                 (bs, seq_len_next_tok), dtype=tokens.dtype, device=tokens.device
             )
-        elif self.patching_mode == PatchingModeEnum.entropy:
+        elif self.config.patching_mode == PatchingModeEnum.entropy:
             if entropies is not None:
                 scores = entropies.to(dtype=torch.float32)
             elif preds is not None:
@@ -2014,28 +1948,28 @@ class ByteLatentTransformer(
                 scores, _ = calculate_entropies(
                     tokens,
                     self.patcher,
-                    self.patching_batch_size,
-                    self.patching_device,
+                    self.config.patching_batch_size,
+                    self.config.patching_device,
                 )
             patch_start_ids = find_entropy_patch_start_ids(
                 scores,
-                self.patch_size,
+                self.config.patch_size,
                 include_next_token=include_next_token,
-                threshold=threshold if threshold is not None else self.patching_threshold,
-                threshold_add=self.patching_threshold_add,
-                monotonicity=self.monotonicity,
+                threshold=threshold if threshold is not None else self.config.patching_threshold,
+                threshold_add=self.config.patching_threshold_add,
+                monotonicity=self.config.monotonicity,
             )
             patch_lengths = patch_lengths_from_start_ids(
                 patch_start_ids, seq_len_next_tok
             )
         else:
-            raise NotImplementedError(f"self.patching_mode {self.patching_mode}")
+            raise NotImplementedError(f"self.config.patching_mode {self.config.patching_mode}")
 
         # Apply any processing to patch lengths
-        if self.max_patch_length is not None:
+        if self.config.max_patch_length is not None:
             # TODO: avoid going back to a list here.
             patch_lengths = [
-                split_large_numbers(pl, self.max_patch_length)
+                split_large_numbers(pl, self.config.max_patch_length)
                 for pl in patch_lengths.tolist()
             ]
             max_len = max([len(pl) for pl in patch_lengths])
@@ -2058,14 +1992,6 @@ class ByteLatentTransformer(
         ), f"{torch.sum(patch_lengths)} != {tokens.numel() + include_next_token * tokens.shape[0]}"
         return patch_lengths, scores
 
-    def push_to_hub(self, *args, **kwargs):
-        raise ValueError(
-            "For meta authors: Do not push BLT weights with this, save weights with save_pretrained() then push them manually to HF hub to ensure the repository metadata is correct."
-        )
-
-    def get_output_seq_len(self):
-        return self.max_seqlen
-
     def forward(
         self,
         tokens: torch.Tensor,
@@ -2077,24 +2003,24 @@ class ByteLatentTransformer(
         bs, N = tokens.shape  # Batch size and sequence length
 
         # Get megabyte inputs
-        nb_boe = int(0 if self.patching_mode != "" else self.patch_size - 1)
+        nb_boe = int(0 if self.config.patching_mode != "" else self.config.patch_size - 1)
         local_encoder_tokens, _, local_decoder_tokens = get_blt_input(
             tokens=tokens,
             enforce_patch_size_multiple=False,
             nb_boe=nb_boe,
-            patch_size=self.patch_size,
-            boe_id=self.boe_id,
+            patch_size=self.config.patch_size,
+            boe_id=BOE_ID,
         )
 
         # Patching
         if patch_lengths is None:
             assert (
-                getattr(self, "patch_in_forward", None) is not None and self.patch_in_forward
+                getattr(self.config, "patch_in_forward", None) is not None and self.config.patch_in_forward
             ), "Patch in forward not enabled and no patch_lengths passed."
             patch_lengths, tok_scores = self.patch(
                 local_encoder_tokens,
                 include_next_token=True,
-                threshold=self.patching_threshold,
+                threshold=self.config.patching_threshold,
             )
         else:
             if nb_boe > 0:
@@ -2112,15 +2038,15 @@ class ByteLatentTransformer(
 
         cross_attn_mask_enc = None
         # Cross-attention encoder
-        if self.cross_attn_encoder:
+        if self.config.cross_attn_encoder:
             cross_attn_mask_enc = cross_attn_mask(
                 patch_ids,
                 patch_lengths,
                 N,
                 patches_as_queries=True,
-                cross_attn_k=self.cross_attn_k,
-                window=self.cross_attn_window_encoder,
-                block_mask=self.cross_attn_use_flex_attention,
+                cross_attn_k=self.config.cross_attn_k,
+                window=self.config.cross_attn_window_encoder,
+                block_mask=self.config.cross_attn_use_flex_attention,
             )
 
         # Hashing and embedding
@@ -2128,9 +2054,9 @@ class ByteLatentTransformer(
             local_encoder_tokens=local_encoder_tokens,
             local_encoder=self.local_encoder,
             encoder_hash_tok_embedding=self.encoder_hash_tok_embedding,
-            encoder_hash_byte_group_nb_functions=self.encoder_hash_byte_group_nb_functions,
-            encoder_hash_byte_group_size=self.encoder_hash_byte_group_size,
-            encoder_hash_byte_group_vocab=self.encoder_hash_byte_group_vocab,
+            encoder_hash_byte_group_nb_functions=self.config.encoder_hash_byte_group_nb_functions,
+            encoder_hash_byte_group_size=self.config.encoder_hash_byte_group_size,
+            encoder_hash_byte_group_vocab=self.config.encoder_hash_byte_group_vocab,
         )
 
         # NOTE: Frequency-based n-gram embeddings removed as per paper
@@ -2150,10 +2076,10 @@ class ByteLatentTransformer(
         h = h_cross.view(bs, patch_lengths.shape[1], -1)
 
         # Global transformer
-        global_tokens = tokens.new(h.shape[0], h.shape[1]).fill_(self.boe_id)
-        rows, cols = torch.where(local_encoder_tokens == self.eos_id)
+        global_tokens = tokens.new(h.shape[0], h.shape[1]).fill_(BOE_ID)
+        rows, cols = torch.where(local_encoder_tokens == self.config.eos_token_id)
         eos_patch_ids = patch_ids[rows, cols]
-        global_tokens[rows, eos_patch_ids] = self.eos_id
+        global_tokens[rows, eos_patch_ids] = self.config.eos_token_id
 
         h, _ = self.global_transformer(
             embeds=h,
@@ -2175,7 +2101,7 @@ class ByteLatentTransformer(
         ), f"{decoder_patch_ids.shape[1]} != {dec_embeds.shape[1]}"
 
         # Cross-attention decoder
-        if not self.cross_attn_decoder:
+        if not self.config.cross_attn_decoder:
             h = torch.gather(
                 h, 1, decoder_patch_ids.unsqueeze(-1).expand(-1, -1, h.shape[-1])
             )
@@ -2187,9 +2113,9 @@ class ByteLatentTransformer(
                 patch_lengths,
                 N,
                 patches_as_queries=False,
-                cross_attn_k=self.cross_attn_k,
-                window=self.cross_attn_window_decoder,
-                block_mask=self.cross_attn_use_flex_attention,
+                cross_attn_k=self.config.cross_attn_k,
+                window=self.config.cross_attn_window_decoder,
+                block_mask=self.config.cross_attn_use_flex_attention,
             )
 
         # Local decoder
@@ -2206,15 +2132,16 @@ class ByteLatentTransformer(
         self.global_transformer.init_weights()
         self.local_decoder.init_weights()
 
-        emb_std = self.local_encoder.dim ** (-0.5)
-        for emb in self.encoder_hash_tok_embedding:
-            nn.init.trunc_normal_(
-                emb.weight,
-                mean=0.0,
-                std=emb_std,
-                a=-3 * emb_std,
-                b=3 * emb_std,
-            )
+        if self.encoder_hash_tok_embedding is not None:
+            emb_std = self.local_encoder.dim ** (-0.5)
+            for emb in self.encoder_hash_tok_embedding:
+                nn.init.trunc_normal_(
+                    emb.weight,
+                    mean=0.0,
+                    std=emb_std,
+                    a=-3 * emb_std,
+                    b=3 * emb_std,
+                )
 
 def init_hash_embeddings(
     config,
@@ -2239,3 +2166,13 @@ def init_hash_embeddings(
             )
 
     return nn.ModuleList(embeddings)
+
+
+__all__ = [
+    "BLTPreTrainedModel",
+    "BLTModel",
+    "LMTransformer",
+    "LocalEncoder", 
+    "LocalDecoder",
+    "GlobalTransformer",
+]
