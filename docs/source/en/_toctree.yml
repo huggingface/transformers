@@ -595,8 +595,8 @@
         title: OLMoE
       - local: model_doc/open-llama
         title: Open-Llama
-      - local: model_doc/openai
-        title: openai
+      - local: model_doc/openai_moe
+        title: OpenAIMoe
       - local: model_doc/opt
         title: OPT
       - local: model_doc/pegasus
