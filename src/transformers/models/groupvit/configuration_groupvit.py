@@ -15,7 +15,8 @@
 """GroupViT model configuration"""
 
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
