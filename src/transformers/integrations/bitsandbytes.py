@@ -11,7 +11,6 @@ from ..utils import (
     is_accelerate_available,
     is_bitsandbytes_available,
     is_bitsandbytes_multi_backend_available,
-    is_ipex_available,
     is_torch_available,
     logging,
 )
@@ -488,29 +487,11 @@ def _validate_bnb_multi_backend_availability(raise_exception):
     bnb_supported_devices = getattr(bnb, "supported_torch_devices", set())
     available_devices = set(get_available_devices())
 
-    if available_devices == {"cpu"} and not is_ipex_available():
-        from importlib.util import find_spec
-
-        if find_spec("intel_extension_for_pytorch"):
-            logger.warning(
-                "You have Intel IPEX installed but if you're intending to use it for CPU, it might not have the right version. Be sure to double check that your PyTorch and IPEX installs are compatible."
-            )
-
-        available_devices = frozenset(
-            [device for device in available_devices if device != "cpu"]
-        )  # Only Intel CPU is supported by BNB at the moment
-
     if not available_devices.intersection(bnb_supported_devices):
         if raise_exception:
-            bnb_supported_devices_with_info = set(  # noqa: C401
-                '"cpu" (needs an Intel CPU and intel_extension_for_pytorch installed and compatible with the PyTorch version)'
-                if device == "cpu"
-                else device
-                for device in bnb_supported_devices
-            )
             err_msg = (
-                f"None of the available devices `available_devices = {available_devices or None}` are supported by the bitsandbytes version you have installed: `bnb_supported_devices = {bnb_supported_devices_with_info}`. "
-                "Please check the docs to see if the backend you intend to use is available and how to install it: https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend"
+                f"None of the available devices `available_devices = {available_devices or None}` are supported by the bitsandbytes version you have installed: `bnb_supported_devices = {bnb_supported_devices}`. "
+                "Please check the docs to see if the backend you intend to use is available and how to install it: https://huggingface.co/docs/bitsandbytes/main/en/installation"
             )
 
             logger.error(err_msg)
