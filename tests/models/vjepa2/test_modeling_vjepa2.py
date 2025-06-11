@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Dinov2 model."""
+"""Testing suite for the PyTorch V-JEPA2 model."""
 
 import unittest
 
@@ -48,8 +48,7 @@ if is_vision_available():
 
     from transformers import AutoVideoProcessor
 
-# VJEPA_HF_MODEL = "facebook/vjepa2-vith-256-fpc64"
-VJEPA_HF_MODEL = "/checkpoint/amaia/video/koustuvs/models/vjepa_v2/hf"
+VJEPA_HF_MODEL = "facebook/vjepa2-vitl-fpc64-256"
 
 
 class VJEPA2ModelTester:
@@ -216,8 +215,7 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = VJEPA_HF_MODEL
-        model = VJEPA2Model.from_pretrained(model_name)
+        model = VJEPA2Model.from_pretrained(VJEPA_HF_MODEL)
         self.assertIsNotNone(model)
 
 
