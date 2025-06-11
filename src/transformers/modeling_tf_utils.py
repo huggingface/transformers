@@ -2760,7 +2760,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
 
                 # At this stage we don't have a weight file so we will raise an error.
                 elif use_safetensors:
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Error no file named {SAFE_WEIGHTS_NAME} or {SAFE_WEIGHTS_INDEX_NAME} found in directory {pretrained_model_name_or_path}. "
                         f"Please make sure that the model has been saved with `safe_serialization=True` or do not "
                         f"set `use_safetensors=True`."
@@ -2768,13 +2768,13 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                 elif os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)) or os.path.isfile(
                     os.path.join(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME)
                 ):
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Error no file named {TF2_WEIGHTS_NAME} or {SAFE_WEIGHTS_NAME} found in directory {pretrained_model_name_or_path} "
                         "but there is a file for PyTorch weights. Use `from_pt=True` to load this model from those "
                         "weights."
                     )
                 else:
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Error no file named {TF2_WEIGHTS_NAME}, {SAFE_WEIGHTS_NAME} or {WEIGHTS_NAME} found in directory "
                         f"{pretrained_model_name_or_path}."
                     )
@@ -2850,25 +2850,25 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                         if has_file(pretrained_model_name_or_path, SAFE_WEIGHTS_INDEX_NAME, **has_file_kwargs):
                             is_sharded = True
                         elif has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {TF2_WEIGHTS_NAME} but there is a file for PyTorch weights. Use `from_pt=True` to"
                                 " load this model from those weights."
                             )
                         else:
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named {WEIGHTS_NAME},"
                                 f" {TF2_WEIGHTS_NAME} or {TF_WEIGHTS_NAME}"
                             )
 
-                except EnvironmentError:
+                except OSError:
                     # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
                     # to the original exception.
                     raise
                 except Exception:
                     # For any other exception, we throw a generic error.
 
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it"
                         " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                         f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
