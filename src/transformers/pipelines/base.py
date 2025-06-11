@@ -937,6 +937,11 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
     ):
         if framework is None:
             framework, model = infer_framework_load_model(model, config=model.config)
+        if framework in ("tf", "jax"):
+            logger.warning_once(
+                "TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We "
+                "recommend migrating to PyTorch classes or pinning your version of Transformers."
+            )
 
         self.task = task
         self.model = model
