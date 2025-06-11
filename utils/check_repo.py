@@ -683,7 +683,7 @@ def check_all_models_are_tested():
         test_file = [file for file in test_files if f"test_{module.__name__.split('.')[-1]}.py" in file]
         if len(test_file) == 0:
             # We do not test TF or Flax models anymore because they're deprecated.
-            if not (module.__name__.startswith("modeling_tf") or module.__name__.startswith("modeling_flax")):
+            if not ("modeling_tf" in module.__name__ or "modeling_flax" in module.__name__):
                 failures.append(f"{module.__name__} does not have its corresponding test file {test_file}.")
         elif len(test_file) > 1:
             failures.append(f"{module.__name__} has several test files: {test_file}.")
