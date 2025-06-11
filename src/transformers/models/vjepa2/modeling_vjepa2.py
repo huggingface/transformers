@@ -114,8 +114,8 @@ class VJEPA2PatchEmbeddings3D(nn.Module):
             * (config.crop_size // config.patch_size)
         )
 
-    def forward(self, x, **kwargs):
-        x = self.proj(x).flatten(2).transpose(1, 2)
+    def forward(self, pixel_values_videos: torch.Tensor) -> torch.Tensor:
+        x = self.proj(pixel_values_videos).flatten(2).transpose(1, 2)
         return x
 
 
