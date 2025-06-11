@@ -49,7 +49,12 @@ logger = logging.get_logger(__name__)
 
 
 class OpenaiRMSNorm(LlamaRMSNorm):
-    pass
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return (self.weight * hidden_states).to(input_dtype)  # main diff with Llama
 
 
 class OpenaiExperts(nn.Module):
