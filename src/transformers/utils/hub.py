@@ -570,7 +570,7 @@ def cached_files(
         msg = (
             f"a file named {missing_entries[0]}" if len(missing_entries) == 1 else f"files named {(*missing_entries,)}"
         )
-        raise EnvironmentError(
+        raise OSError(
             f"{path_or_repo_id} does not appear to have {msg}. Checkout 'https://huggingface.co/{path_or_repo_id}/tree/{revision_}'"
             " for available files."
         )

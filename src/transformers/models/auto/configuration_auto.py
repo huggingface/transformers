@@ -366,6 +366,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("vitpose_backbone", "VitPoseBackboneConfig"),
         ("vits", "VitsConfig"),
         ("vivit", "VivitConfig"),
+        ("vjepa2", "VJEPA2Config"),
         ("wav2vec2", "Wav2Vec2Config"),
         ("wav2vec2-bert", "Wav2Vec2BertConfig"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerConfig"),
@@ -752,6 +753,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("vitpose_backbone", "ViTPoseBackbone"),
         ("vits", "VITS"),
         ("vivit", "ViViT"),
+        ("vjepa2", "VJEPA2Model"),
         ("wav2vec2", "Wav2Vec2"),
         ("wav2vec2-bert", "Wav2Vec2-BERT"),
         ("wav2vec2-conformer", "Wav2Vec2-Conformer"),
@@ -1049,7 +1051,7 @@ class AutoConfig:
     """
 
     def __init__(self) -> None:
-        raise EnvironmentError(
+        raise OSError(
             "AutoConfig is designed to be instantiated "
             "using the `AutoConfig.from_pretrained(pretrained_model_name_or_path)` method."
         )
