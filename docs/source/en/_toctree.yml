@@ -907,6 +907,8 @@
         title: VideoMAE
       - local: model_doc/vivit
         title: ViViT
+      - local: model_doc/vjepa2
+        title: VJEPA2
       title: Video models
     - sections:
       - local: model_doc/align
