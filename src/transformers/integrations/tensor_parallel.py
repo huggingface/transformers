@@ -414,14 +414,12 @@ class IsolatedParallel(TensorParallelLayer):
         # TODO: figure out dynamo support for instance method and switch this to instance method
         return outputs
 
-
     def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
         param = param[...].to(param_casting_dtype)
         if to_contiguous:
             param = param.contiguous()
         param = param / device_mesh.size()  # TODO should be optionable
         return param
-
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         distribute_module(
@@ -807,7 +805,9 @@ def replace_state_dict_local_with_dtensor(
     return state_dict
 
 
-def add_tensor_parallel_hooks_to_module(model, module, tp_plan, layer_name, current_module_plan, device_mesh, parameter_name=None):
+def add_tensor_parallel_hooks_to_module(
+    model, module, tp_plan, layer_name, current_module_plan, device_mesh, parameter_name=None
+):
     """
     Add hooks to the module holding the layer. Meaning:
     ```
@@ -878,7 +878,9 @@ def shard_and_distribute_module(
     # Add hooks to the module if not done yet
     # add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_module_plan, device_mesh)
     if not getattr(module_to_tp, "_is_hooked", False):
-        add_tensor_parallel_hooks_to_module(model, module_to_tp, tp_plan, param_name, current_shard_plan, device_mesh, parameter_name)
+        add_tensor_parallel_hooks_to_module(
+            model, module_to_tp, tp_plan, param_name, current_shard_plan, device_mesh, parameter_name
+        )
         module_to_tp._is_hooked = True
 
     if current_shard_plan is not None:
