@@ -1944,10 +1944,9 @@ class GenerationMixin(ContinuousMixin):
     def _supports_default_dynamic_cache(self) -> bool:
         """
         Return `True` if current model can use a `DynamicCache` instance when initializing the `past_key_values`.
-        This is mostly the same as `_supports_cache_class` attribute, but add exception for `Jamba` model which
-        uses its own `HybridMambaAttentionDynamicCache` and do not need to initialize the Cache in advance in
-        order to save memory (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
-        for `HybridMambaAttentionDynamicCache`).
+        This adds exception for some models like `Jamba` model which uses its own `HybridMambaAttentionDynamicCache`
+        and do not need to initialize the Cache in advance in order to save memory (because no back and forth
+        `to_legacy_cache` and `from_legacy_cache` will be performed for `HybridMambaAttentionDynamicCache`).
         """
         return all(
             special_model_name not in self.__class__.__name__.lower()

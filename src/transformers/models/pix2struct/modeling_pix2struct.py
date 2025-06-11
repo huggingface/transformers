@@ -361,7 +361,7 @@ class Pix2StructVisionEncoder(nn.Module):
 @auto_docstring
 class Pix2StructPreTrainedModel(PreTrainedModel):
     config_class = Pix2StructConfig
-    _supports_cache_class = True
+
     _supports_static_cache = False
 
     @property

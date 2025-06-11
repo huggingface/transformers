@@ -497,7 +497,7 @@ class GitPreTrainedModel(PreTrainedModel):
     config_class = GitConfig
     base_model_prefix = "git"
     supports_gradient_checkpointing = True
-    _supports_cache_class = True
+
     _supports_quantized_cache = True
 
     def _init_weights(self, module):

@@ -561,7 +561,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_attention_backend = True
-    _supports_cache_class = True
+
     _supports_static_cache = True
 
     def __init__(self, *inputs, **kwargs):

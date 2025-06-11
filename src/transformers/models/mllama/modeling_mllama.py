@@ -855,7 +855,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
         "MllamaCrossAttentionDecoderLayer",
         "MllamaSelfAttentionDecoderLayer",
     ]
-    _supports_cache_class = True
+
     _supports_static_cache = False  # static cache cannot have different shapes for each layer
     _supports_sdpa = True
     _supports_flash_attn_2 = True

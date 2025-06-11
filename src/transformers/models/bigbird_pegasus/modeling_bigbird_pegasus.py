@@ -1559,7 +1559,7 @@ class BigBirdPegasusPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["BigBirdPegasusEncoderLayer", "BigBirdPegasusDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_param_buffer_assignment = False
-    _supports_cache_class = True
+
     _supports_static_cache = True
 
     def _init_weights(self, module):

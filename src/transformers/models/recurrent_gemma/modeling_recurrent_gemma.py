@@ -514,7 +514,7 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["cache"]
     _supports_flash_attn_2 = False
     _supports_sdpa = False  # we can't compare with eager for now
-    _supports_cache_class = True
+
     _supports_quantized_cache = True
 
     def _init_weights(self, module):

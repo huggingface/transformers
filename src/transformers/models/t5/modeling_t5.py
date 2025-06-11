@@ -774,7 +774,7 @@ class T5PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_quantized_cache = False  # enc-dec models don't support yet
     _supports_static_cache = True
-    _supports_cache_class = True
+
     _no_split_modules = ["T5Block"]
     _keep_in_fp32_modules = ["wo"]
 

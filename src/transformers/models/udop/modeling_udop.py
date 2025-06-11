@@ -250,7 +250,7 @@ class UdopPreTrainedModel(PreTrainedModel):
     config_class = UdopConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
-    _supports_cache_class = True
+
     _supports_static_cache = False
     _keep_in_fp32_modules = ["wo"]
 

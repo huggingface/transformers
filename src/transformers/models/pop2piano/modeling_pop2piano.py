@@ -577,7 +577,7 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     is_parallelizable = False
     supports_gradient_checkpointing = True
-    _supports_cache_class = True
+
     _supports_static_cache = False
     _no_split_modules = ["Pop2PianoBlock"]
     _keep_in_fp32_modules = ["wo"]

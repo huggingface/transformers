@@ -506,7 +506,7 @@ class UMT5PreTrainedModel(PreTrainedModel):
     config_class = UMT5Config
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
-    _supports_cache_class = True
+
     _supports_static_cache = True
     _no_split_modules = ["UMT5Block"]
     _keep_in_fp32_modules = ["wo"]

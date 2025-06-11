@@ -1139,7 +1139,7 @@ class Emu3PreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_quantized_cache = True
-    _supports_cache_class = True
+
     _supports_static_cache = True
     _supports_param_buffer_assignment = False
     _supports_flex_attn = True

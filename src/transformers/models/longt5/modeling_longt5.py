@@ -1251,7 +1251,7 @@ class LongT5PreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LongT5Block"]
-    _supports_cache_class = True
+
     _supports_static_cache = False  # TODO: @raushan more involved due to local/global attn
 
     @property

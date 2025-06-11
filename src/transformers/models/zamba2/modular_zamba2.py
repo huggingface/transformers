@@ -911,7 +911,7 @@ class Zamba2PreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_flex_attn = True
     _supports_sdpa = True
-    _supports_cache_class = True  # Note: only supports Zamba2HybridDynamicCache
+    # Note: only supports Zamba2HybridDynamicCache
     _is_stateful = True
 
     def _init_weights(self, module):
