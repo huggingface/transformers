@@ -1235,6 +1235,7 @@ class AttentivePooler(nn.Module):
 
     def __init__(
         self,
+        config,
         num_queries=1,
         embed_dim=768,
         num_heads=12,
@@ -1262,56 +1263,46 @@ class AttentivePooler(nn.Module):
         if depth > 1:
             self.blocks = nn.ModuleList(
                 [
-                    Block(
-                        dim=embed_dim,
-                        num_heads=num_heads,
-                        mlp_ratio=mlp_ratio,
-                        qkv_bias=qkv_bias,
-                        qk_scale=False,
-                        norm_layer=norm_layer,
-                    )
+                    SiglipEncoderLayer(config)
                     for i in range(depth - 1)
                 ]
             )
 
-        self.init_std = init_std
-        nn.init.trunc_normal_(self.query_tokens, std=self.init_std)
-        self.apply(self._init_weights)
-        self._rescale_blocks()
+        # self.init_std = init_std
+        # nn.init.trunc_normal_(self.query_tokens, std=self.init_std)
+        # self.apply(self._init_weights)
+        # self._rescale_blocks()
 
-    def _rescale_blocks(self):
-        def rescale(param, layer_id):
-            param.div_(math.sqrt(2.0 * layer_id))
+    # def _rescale_blocks(self):
+    #     def rescale(param, layer_id):
+    #         param.div_(math.sqrt(2.0 * layer_id))
 
-        layer_id = 0
-        if self.blocks is not None:
-            for layer_id, layer in enumerate(self.blocks):
-                rescale(layer.attn.proj.weight.data, layer_id + 1)
-                rescale(layer.mlp.fc2.weight.data, layer_id + 1)
+    #     layer_id = 0
+    #     if self.blocks is not None:
+    #         for layer_id, layer in enumerate(self.blocks):
+    #             rescale(layer.attn.proj.weight.data, layer_id + 1)
+    #             rescale(layer.mlp.fc2.weight.data, layer_id + 1)
 
-        if self.complete_block:
-            rescale(self.cross_attention_block.mlp.fc2.weight.data, layer_id + 1)
+    #     if self.complete_block:
+    #         rescale(self.cross_attention_block.mlp.fc2.weight.data, layer_id + 1)
 
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            nn.init.trunc_normal_(m.weight, std=self.init_std)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
-        elif isinstance(m, nn.Conv2d):
-            nn.init.trunc_normal_(m.weight, std=self.init_std)
-            if m.bias is not None:
-                nn.init.constant_(m.bias, 0)
+    # def _init_weights(self, m):
+    #     if isinstance(m, nn.Linear):
+    #         nn.init.trunc_normal_(m.weight, std=self.init_std)
+    #         if isinstance(m, nn.Linear) and m.bias is not None:
+    #             nn.init.constant_(m.bias, 0)
+    #     elif isinstance(m, nn.LayerNorm):
+    #         nn.init.constant_(m.bias, 0)
+    #         nn.init.constant_(m.weight, 1.0)
+    #     elif isinstance(m, nn.Conv2d):
+    #         nn.init.trunc_normal_(m.weight, std=self.init_std)
+    #         if m.bias is not None:
+    #             nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
         if self.blocks is not None:
             for blk in self.blocks:
-                if self.use_activation_checkpointing:
-                    x = torch.utils.checkpoint.checkpoint(blk, x, False, None, use_reentrant=False)
-                else:
-                    x = blk(x)
+                x = blk(x, attention_mask=None)[0]
         q = self.query_tokens.repeat(len(x), 1, 1)
         q = self.cross_attention_block(q, x)
         return q
@@ -1322,6 +1313,7 @@ class AttentiveClassifier(nn.Module):
 
     def __init__(
         self,
+        config,
         embed_dim=768,
         num_heads=12,
         mlp_ratio=4.0,
@@ -1335,6 +1327,7 @@ class AttentiveClassifier(nn.Module):
     ):
         super().__init__()
         self.pooler = AttentivePooler(
+            config=config,
             num_queries=1,
             embed_dim=embed_dim,
             num_heads=num_heads,
@@ -1370,6 +1363,7 @@ class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
 
         # Classifier head
         self.classifier = AttentiveClassifier(
+            config=config,
             embed_dim=config.hidden_size,
             num_heads=config.num_attention_heads,
             depth=4,
