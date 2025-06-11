@@ -70,7 +70,9 @@ class InformerFeatureEmbedder(nn.Module):
         super().__init__()
 
         self.num_features = len(cardinalities)
-        self.embedders = nn.ModuleList([nn.Embedding(c, d) for c, d in zip(cardinalities, embedding_dims)])
+        self.embedders = nn.ModuleList(
+            [nn.Embedding(c, d) for c, d in zip(cardinalities, embedding_dims)]
+        )
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         if self.num_features > 1:
@@ -99,7 +101,9 @@ class InformerStdScaler(nn.Module):
         super().__init__()
         self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
         self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
-        self.minimum_scale = config.minimum_scale if hasattr(config, "minimum_scale") else 1e-5
+        self.minimum_scale = (
+            config.minimum_scale if hasattr(config, "minimum_scale") else 1e-5
+        )
 
     def forward(
         self, data: torch.Tensor, observed_indicator: torch.Tensor
@@ -117,9 +121,13 @@ class InformerStdScaler(nn.Module):
         """
         denominator = observed_indicator.sum(self.dim, keepdim=self.keepdim)
         denominator = denominator.clamp_min(1.0)
-        loc = (data * observed_indicator).sum(self.dim, keepdim=self.keepdim) / denominator
+        loc = (data * observed_indicator).sum(
+            self.dim, keepdim=self.keepdim
+        ) / denominator
 
-        variance = (((data - loc) * observed_indicator) ** 2).sum(self.dim, keepdim=self.keepdim) / denominator
+        variance = (((data - loc) * observed_indicator) ** 2).sum(
+            self.dim, keepdim=self.keepdim
+        ) / denominator
         scale = torch.sqrt(variance + self.minimum_scale)
         return (data - loc) / scale, loc, scale
 
@@ -134,8 +142,12 @@ class InformerMeanScaler(nn.Module):
         super().__init__()
         self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
         self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
-        self.minimum_scale = config.minimum_scale if hasattr(config, "minimum_scale") else 1e-10
-        self.default_scale = config.default_scale if hasattr(config, "default_scale") else None
+        self.minimum_scale = (
+            config.minimum_scale if hasattr(config, "minimum_scale") else 1e-10
+        )
+        self.default_scale = (
+            config.default_scale if hasattr(config, "default_scale") else None
+        )
 
     def forward(
         self, data: torch.Tensor, observed_indicator: torch.Tensor
@@ -200,15 +212,21 @@ class InformerNOPScaler(nn.Module):
                 (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
                 `(batch_size, 1, num_input_channels)`)
         """
-        scale = torch.ones_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
-        loc = torch.zeros_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
+        scale = torch.ones_like(data, requires_grad=False).mean(
+            dim=self.dim, keepdim=self.keepdim
+        )
+        loc = torch.zeros_like(data, requires_grad=False).mean(
+            dim=self.dim, keepdim=self.keepdim
+        )
         return data, loc, scale
 
 
 class InformerSinusoidalPositionalEmbedding(nn.Embedding):
     """This module produces sinusoidal positional embeddings of any length."""
 
-    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None) -> None:
+    def __init__(
+        self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None
+    ) -> None:
         super().__init__(num_positions, embedding_dim)
 
     def _init_weight(self):
@@ -218,7 +236,10 @@ class InformerSinusoidalPositionalEmbedding(nn.Embedding):
         """
         n_pos, dim = self.weight.shape
         position_enc = np.array(
-            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
+            [
+                [pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)]
+                for pos in range(n_pos)
+            ]
         )
         out = torch.empty(n_pos, dim, dtype=self.weight.dtype, requires_grad=False)
         sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
@@ -228,13 +249,19 @@ class InformerSinusoidalPositionalEmbedding(nn.Embedding):
 
     @torch.no_grad()
     def forward(
-        self, input_ids_shape: torch.Size, past_key_values_length: int = 0, position_ids: Optional[torch.Tensor] = None
+        self,
+        input_ids_shape: torch.Size,
+        past_key_values_length: int = 0,
+        position_ids: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         if position_ids is None:
             bsz, seq_len = input_ids_shape[:2]
             position_ids = torch.arange(
-                past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+                past_key_values_length,
+                past_key_values_length + seq_len,
+                dtype=torch.long,
+                device=self.weight.device,
             )
         return super().forward(position_ids)
 
@@ -242,7 +269,9 @@ class InformerSinusoidalPositionalEmbedding(nn.Embedding):
 class InformerValueEmbedding(nn.Module):
     def __init__(self, feature_size, d_model):
         super().__init__()
-        self.value_projection = nn.Linear(in_features=feature_size, out_features=d_model, bias=False)
+        self.value_projection = nn.Linear(
+            in_features=feature_size, out_features=d_model, bias=False
+        )
 
     def forward(self, x):
         return self.value_projection(x)
@@ -281,13 +310,19 @@ class InformerPreTrainedModel(PreTrainedModel):
                 # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
                 # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
+                attention_mask = _prepare_4d_attention_mask_for_sdpa(
+                    attention_mask, inputs_embeds.dtype
+                )
             elif self.config._attn_implementation == "flex_attention":
                 if isinstance(attention_mask, torch.Tensor):
-                    attention_mask = make_flex_block_causal_mask(attention_mask, is_causal=False)
+                    attention_mask = make_flex_block_causal_mask(
+                        attention_mask, is_causal=False
+                    )
             else:
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+                attention_mask = _prepare_4d_attention_mask(
+                    attention_mask, inputs_embeds.dtype
+                )
 
         return attention_mask
 
@@ -301,7 +336,11 @@ class InformerPreTrainedModel(PreTrainedModel):
     ):
         if self.config._attn_implementation == "flash_attention_2":
             # 2d mask is passed through the layers
-            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+            attention_mask = (
+                attention_mask
+                if (attention_mask is not None and 0 in attention_mask)
+                else None
+            )
         elif self.config._attn_implementation == "sdpa":
             # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
             # the manual implementation that requires a 4D causal mask in all cases.
@@ -342,7 +381,9 @@ class InformerPreTrainedModel(PreTrainedModel):
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             if self.config._attn_implementation == "flash_attention_2":
-                encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
+                encoder_attention_mask = (
+                    encoder_attention_mask if 0 in encoder_attention_mask else None
+                )
             elif self.config._attn_implementation == "sdpa":
                 # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
                 # the manual implementation that requires a 4D causal mask in all cases.
@@ -391,7 +432,9 @@ def eager_attention_forward(
     if head_mask is not None:
         attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
 
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_weights = nn.functional.dropout(
+        attn_weights, p=dropout, training=module.training
+    )
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -495,7 +538,10 @@ class InformerAttention(nn.Module):
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
                 key_states, value_states = curr_past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                    key_states,
+                    value_states,
+                    self.layer_idx,
+                    {"cache_position": cache_position},
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention:
@@ -503,7 +549,9 @@ class InformerAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[
+                self.config._attn_implementation
+            ]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -561,7 +609,11 @@ class InformerProbSparseAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
     def forward(
         self,
@@ -612,7 +664,10 @@ class InformerProbSparseAttention(nn.Module):
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
                 key_states, value_states = curr_past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                    key_states,
+                    value_states,
+                    self.layer_idx,
+                    {"cache_position": cache_position},
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention:
@@ -624,12 +679,19 @@ class InformerProbSparseAttention(nn.Module):
         value_states = value_states.reshape(*proj_shape)
 
         key_states_time_length = key_states.size(1)  # L_K
-        log_key_states_time_length = np.ceil(np.log1p(key_states_time_length)).astype("int").item()  # log_L_K
+        log_key_states_time_length = (
+            np.ceil(np.log1p(key_states_time_length)).astype("int").item()
+        )  # log_L_K
 
         query_states_time_length = query_states.size(1)  # L_Q
-        log_query_states_time_length = np.ceil(np.log1p(query_states_time_length)).astype("int").item()  # log_L_Q
+        log_query_states_time_length = (
+            np.ceil(np.log1p(query_states_time_length)).astype("int").item()
+        )  # log_L_Q
 
-        u_part = min(self.factor * query_states_time_length * log_key_states_time_length, key_states_time_length)
+        u_part = min(
+            self.factor * query_states_time_length * log_key_states_time_length,
+            key_states_time_length,
+        )
         u = min(self.factor * log_query_states_time_length, query_states_time_length)
 
         if key_states_time_length > 0:
@@ -638,14 +700,18 @@ class InformerProbSparseAttention(nn.Module):
         else:
             k_sample = key_states
 
-        queries_keys_sample = torch.bmm(query_states, k_sample.transpose(1, 2))  # Q_K_sampled
+        queries_keys_sample = torch.bmm(
+            query_states, k_sample.transpose(1, 2)
+        )  # Q_K_sampled
 
         # find the Top_k query with sparsity measurement
         if u > 0:
             sparsity_measurement = queries_keys_sample.max(dim=-1)[0] - torch.div(
                 queries_keys_sample.sum(dim=-1), key_states_time_length
             )  # M
-            top_u_sparsity_measurement = sparsity_measurement.topk(u, sorted=False)[1]  # M_top
+            top_u_sparsity_measurement = sparsity_measurement.topk(u, sorted=False)[
+                1
+            ]  # M_top
 
             # calculate q_reduce: query_states[:, top_u_sparsity_measurement]
             dim_for_slice = torch.arange(query_states.size(0)).unsqueeze(-1)
@@ -669,17 +735,17 @@ class InformerProbSparseAttention(nn.Module):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
                 )
-            prob_mask = attention_mask.expand(bsz, self.num_heads, tgt_len, src_len).reshape(
-                bsz * self.num_heads, tgt_len, src_len
-            )
+            prob_mask = attention_mask.expand(
+                bsz, self.num_heads, tgt_len, src_len
+            ).reshape(bsz * self.num_heads, tgt_len, src_len)
 
             if top_u_sparsity_measurement is not None:
                 dim_for_slice = torch.arange(prob_mask.size(0)).unsqueeze(-1)
                 prob_mask = prob_mask[dim_for_slice, top_u_sparsity_measurement, :]
 
-            attn_weights = attn_weights.view(bsz, self.num_heads, u, src_len) + prob_mask.view(
+            attn_weights = attn_weights.view(
                 bsz, self.num_heads, u, src_len
-            )
+            ) + prob_mask.view(bsz, self.num_heads, u, src_len)
             attn_weights = attn_weights.view(bsz * self.num_heads, u, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -690,7 +756,9 @@ class InformerProbSparseAttention(nn.Module):
                     f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
                     f" {layer_head_mask.size()}"
                 )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, u, src_len)
+            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(
+                bsz, self.num_heads, u, src_len
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, u, src_len)
 
         if output_attentions:
@@ -703,19 +771,27 @@ class InformerProbSparseAttention(nn.Module):
         else:
             attn_weights_reshaped = None
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )
         attn_output = torch.bmm(attn_probs, value_states)
 
         # calculate context for updating the attn_output, based on:
         # https://github.com/zhouhaoyi/Informer2020/blob/ac59c7447135473fb2aafeafe94395f884d5c7a5/models/attn.py#L74
         if self.is_decoder:
             # cast to float32 before operation to avoid overflow
-            context = value_states.cumsum(dim=-2, dtype=torch.float32).to(value_states.dtype)
+            context = value_states.cumsum(dim=-2, dtype=torch.float32).to(
+                value_states.dtype
+            )
         else:
             v_mean_dim_time = value_states.mean(dim=-2)
             context = (
                 v_mean_dim_time.unsqueeze(dim=1)
-                .expand(bsz * self.num_heads, query_states_time_length, v_mean_dim_time.size(-1))
+                .expand(
+                    bsz * self.num_heads,
+                    query_states_time_length,
+                    v_mean_dim_time.size(-1),
+                )
                 .clone()
             )
 
@@ -819,15 +895,21 @@ class InformerEncoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.activation_dropout, training=self.training
+        )
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
@@ -835,7 +917,9 @@ class InformerEncoderLayer(nn.Module):
             torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
         ):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+            hidden_states = torch.clamp(
+                hidden_states, min=-clamp_value, max=clamp_value
+            )
 
         outputs = (hidden_states,)
 
@@ -898,7 +982,9 @@ class InformerDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> Tuple[
+        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
+    ]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -931,7 +1017,9 @@ class InformerDecoderLayer(nn.Module):
             output_attentions=output_attentions,
             cache_position=cache_position,
         )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
@@ -949,16 +1037,22 @@ class InformerDecoderLayer(nn.Module):
                 output_attentions=output_attentions,
                 cache_position=cache_position,
             )
-            hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+            hidden_states = nn.functional.dropout(
+                hidden_states, p=self.dropout, training=self.training
+            )
             hidden_states = residual + hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.activation_dropout, training=self.training
+        )
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
@@ -990,17 +1084,24 @@ class InformerEncoder(InformerPreTrainedModel):
         if config.prediction_length is None:
             raise ValueError("The `prediction_length` config needs to be specified.")
 
-        self.value_embedding = InformerValueEmbedding(feature_size=config.feature_size, d_model=config.d_model)
+        self.value_embedding = InformerValueEmbedding(
+            feature_size=config.feature_size, d_model=config.d_model
+        )
         self.embed_positions = InformerSinusoidalPositionalEmbedding(
             config.context_length + config.prediction_length, config.d_model
         )
-        self.layers = nn.ModuleList([InformerEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList(
+            [InformerEncoderLayer(config) for _ in range(config.encoder_layers)]
+        )
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
         self.gradient_checkpointing = False
 
         if config.distil:
             self.conv_layers = nn.ModuleList(
-                [InformerConvLayer(config.d_model) for _ in range(config.encoder_layers - 1)]
+                [
+                    InformerConvLayer(config.d_model)
+                    for _ in range(config.encoder_layers - 1)
+                ]
             )
             self.conv_layers.append(None)
         else:
@@ -1045,22 +1146,34 @@ class InformerEncoder(InformerPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         hidden_states = self.value_embedding(inputs_embeds)
         embed_pos = self.embed_positions(inputs_embeds.size())
 
         hidden_states = self.layernorm_embedding(hidden_states + embed_pos)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
 
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = _prepare_4d_attention_mask(
+                attention_mask, inputs_embeds.dtype
+            )
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1073,7 +1186,9 @@ class InformerEncoder(InformerPreTrainedModel):
                     f" {head_mask.size()[0]}."
                 )
 
-        for idx, (encoder_layer, conv_layer) in enumerate(zip(self.layers, self.conv_layers)):
+        for idx, (encoder_layer, conv_layer) in enumerate(
+            zip(self.layers, self.conv_layers)
+        ):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -1095,13 +1210,17 @@ class InformerEncoder(InformerPreTrainedModel):
                         output_attentions,
                     )
                     if conv_layer is not None:
-                        output = self._gradient_checkpointing_func(conv_layer, layer_outputs[0])
+                        output = self._gradient_checkpointing_func(
+                            conv_layer, layer_outputs[0]
+                        )
                         layer_outputs = (output,) + layer_outputs[1:]
                 else:
                     layer_outputs = encoder_layer(
                         hidden_states,
                         attention_mask,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                        layer_head_mask=(
+                            head_mask[idx] if head_mask is not None else None
+                        ),
                         output_attentions=output_attentions,
                     )
                     if conv_layer is not None:
@@ -1117,9 +1236,15 @@ class InformerEncoder(InformerPreTrainedModel):
             encoder_states = encoder_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, encoder_states, all_attentions]
+                if v is not None
+            )
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+            last_hidden_state=hidden_states,
+            hidden_states=encoder_states,
+            attentions=all_attentions,
         )
 
 
@@ -1139,11 +1264,18 @@ class InformerDecoder(InformerPreTrainedModel):
         if config.prediction_length is None:
             raise ValueError("The `prediction_length` config needs to be specified.")
 
-        self.value_embedding = InformerValueEmbedding(feature_size=config.feature_size, d_model=config.d_model)
+        self.value_embedding = InformerValueEmbedding(
+            feature_size=config.feature_size, d_model=config.d_model
+        )
         self.embed_positions = InformerSinusoidalPositionalEmbedding(
             config.context_length + config.prediction_length, config.d_model
         )
-        self.layers = nn.ModuleList([InformerDecoderLayer(config, layer_idx=i) for i in range(config.decoder_layers)])
+        self.layers = nn.ModuleList(
+            [
+                InformerDecoderLayer(config, layer_idx=i)
+                for i in range(config.decoder_layers)
+            ]
+        )
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
@@ -1225,12 +1357,20 @@ class InformerDecoder(InformerPreTrainedModel):
                 Indices depicting the position of the input sequence tokens in the sequence. It is used to update the
                 cache in the correct position and to infer the complete sequence length.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         input_shape = inputs_embeds.size()[:-1]
         # initialize `past_key_values`
@@ -1244,10 +1384,14 @@ class InformerDecoder(InformerPreTrainedModel):
             )
             past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
 
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_key_values_length = (
+            past_key_values.get_seq_length() if past_key_values is not None else 0
+        )
         if cache_position is None:
             cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + input_shape[1], device=inputs_embeds.device
+                past_key_values_length,
+                past_key_values_length + input_shape[1],
+                device=inputs_embeds.device,
             )
 
         attention_mask = self._update_causal_mask(
@@ -1264,9 +1408,13 @@ class InformerDecoder(InformerPreTrainedModel):
         )
 
         hidden_states = self.value_embedding(inputs_embeds)
-        embed_pos = self.embed_positions(inputs_embeds.size(), past_key_values_length=self.config.context_length)
+        embed_pos = self.embed_positions(
+            inputs_embeds.size(), past_key_values_length=self.config.context_length
+        )
         hidden_states = self.layernorm_embedding(hidden_states + embed_pos)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -1278,11 +1426,15 @@ class InformerDecoder(InformerPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
+        all_cross_attentions = (
+            () if (output_attentions and encoder_hidden_states is not None) else None
+        )
         next_decoder_cache = None
 
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
-        for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
+        for attn_mask, mask_name in zip(
+            [head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]
+        ):
             if attn_mask is not None:
                 if attn_mask.size()[0] != (len(self.layers)):
                     raise ValueError(
@@ -1307,7 +1459,11 @@ class InformerDecoder(InformerPreTrainedModel):
                     encoder_hidden_states,
                     encoder_attention_mask,
                     head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
+                    (
+                        cross_attn_head_mask[idx]
+                        if cross_attn_head_mask is not None
+                        else None
+                    ),
                     None,
                     output_attentions,
                     use_cache,
@@ -1321,7 +1477,9 @@ class InformerDecoder(InformerPreTrainedModel):
                     encoder_attention_mask=encoder_attention_mask,
                     layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                     cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
+                        cross_attn_head_mask[idx]
+                        if cross_attn_head_mask is not None
+                        else None
                     ),
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
@@ -1350,7 +1508,13 @@ class InformerDecoder(InformerPreTrainedModel):
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_cross_attentions]
+                for v in [
+                    hidden_states,
+                    next_cache,
+                    all_hidden_states,
+                    all_self_attns,
+                    all_cross_attentions,
+                ]
                 if v is not None
             )
         return BaseModelOutputWithPastAndCrossAttentions(
@@ -1437,13 +1601,17 @@ class InformerModel(InformerPreTrainedModel):
         time_feat = (
             torch.cat(
                 (
-                    past_time_features[:, self._past_length - self.config.context_length :, ...],
+                    past_time_features[
+                        :, self._past_length - self.config.context_length :, ...
+                    ],
                     future_time_features,
                 ),
                 dim=1,
             )
             if future_values is not None
-            else past_time_features[:, self._past_length - self.config.context_length :, ...]
+            else past_time_features[
+                :, self._past_length - self.config.context_length :, ...
+            ]
         )
 
         # target
@@ -1461,8 +1629,10 @@ class InformerModel(InformerPreTrainedModel):
         )
 
         # static features
-        log_abs_loc = loc.abs().log1p() if self.config.input_size == 1 else loc.squeeze(1).abs().log1p()
-        log_scale = scale.log() if self.config.input_size == 1 else scale.squeeze(1).log()
+        squeezed_loc = loc.squeeze(-1)
+        squeezed_scale = scale.squeeze(-1)
+        log_abs_loc = squeezed_loc.abs().log1p()
+        log_scale = squeezed_scale.log()
         static_feat = torch.cat((log_abs_loc, log_scale), dim=1)
 
         if static_real_features is not None:
@@ -1470,7 +1640,9 @@ class InformerModel(InformerPreTrainedModel):
         if static_categorical_features is not None:
             embedded_cat = self.embedder(static_categorical_features)
             static_feat = torch.cat((embedded_cat, static_feat), dim=1)
-        expanded_static_feat = static_feat.unsqueeze(1).expand(-1, time_feat.shape[1], -1)
+        expanded_static_feat = static_feat.unsqueeze(1).expand(
+            -1, time_feat.shape[1], -1
+        )
 
         # all features
         features = torch.cat((expanded_static_feat, time_feat), dim=-1)
@@ -1481,9 +1653,13 @@ class InformerModel(InformerPreTrainedModel):
             if future_values is not None
             else self.config.context_length
         )
-        lagged_sequence = self.get_lagged_subsequences(sequence=inputs, subsequences_length=subsequences_length)
+        lagged_sequence = self.get_lagged_subsequences(
+            sequence=inputs, subsequences_length=subsequences_length
+        )
         lags_shape = lagged_sequence.shape
-        reshaped_lagged_sequence = lagged_sequence.reshape(lags_shape[0], lags_shape[1], -1)
+        reshaped_lagged_sequence = lagged_sequence.reshape(
+            lags_shape[0], lags_shape[1], -1
+        )
 
         if reshaped_lagged_sequence.shape[1] != time_feat.shape[1]:
             raise ValueError(
@@ -1645,12 +1821,20 @@ class InformerModel(InformerPreTrainedModel):
 
         >>> last_hidden_state = outputs.last_hidden_state
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         transformer_inputs, loc, scale, static_feat = self.create_network_inputs(
             past_values=past_values,
@@ -1684,7 +1868,9 @@ class InformerModel(InformerPreTrainedModel):
         if self.config.context_length >= transformer_inputs.shape[1]:
             bsz, _, dim = transformer_inputs.shape
             dec_input = torch.zeros(
-                size=(bsz, 1, dim), device=transformer_inputs.device, dtype=transformer_inputs.dtype
+                size=(bsz, 1, dim),
+                device=transformer_inputs.device,
+                dtype=transformer_inputs.dtype,
             )
         else:
             dec_input = transformer_inputs[:, self.config.context_length :, ...]
@@ -1721,7 +1907,9 @@ class InformerModel(InformerPreTrainedModel):
         )
 
 
-def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
+def weighted_average(
+    input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None
+) -> torch.Tensor:
     """
     Computes the weighted average of a given tensor across a given `dim`, masking values associated with weight zero,
     meaning instead of `nan * 0 = nan` you will get `0 * 0 = 0`.
@@ -1738,9 +1926,15 @@ def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor]
         `torch.FloatTensor`: The tensor with values averaged along the specified `dim`.
     """
     if weights is not None:
-        weighted_tensor = torch.where(weights != 0, input_tensor * weights, torch.zeros_like(input_tensor))
-        sum_weights = torch.clamp(weights.sum(dim=dim) if dim else weights.sum(), min=1.0)
-        return (weighted_tensor.sum(dim=dim) if dim else weighted_tensor.sum()) / sum_weights
+        weighted_tensor = torch.where(
+            weights != 0, input_tensor * weights, torch.zeros_like(input_tensor)
+        )
+        sum_weights = torch.clamp(
+            weights.sum(dim=dim) if dim else weights.sum(), min=1.0
+        )
+        return (
+            weighted_tensor.sum(dim=dim) if dim else weighted_tensor.sum()
+        ) / sum_weights
     else:
         return input_tensor.mean(dim=dim)
 
@@ -1765,9 +1959,13 @@ class InformerForPrediction(InformerPreTrainedModel):
         elif config.distribution_output == "negative_binomial":
             self.distribution_output = NegativeBinomialOutput(dim=config.input_size)
         else:
-            raise ValueError(f"Unknown distribution output {config.distribution_output}")
+            raise ValueError(
+                f"Unknown distribution output {config.distribution_output}"
+            )
 
-        self.parameter_projection = self.distribution_output.get_parameter_projection(self.model.config.d_model)
+        self.parameter_projection = self.distribution_output.get_parameter_projection(
+            self.model.config.d_model
+        )
         self.target_shape = self.distribution_output.event_shape
 
         if config.loss == "nll":
@@ -1788,11 +1986,15 @@ class InformerForPrediction(InformerPreTrainedModel):
         return self.model.get_decoder()
 
     @torch.jit.ignore
-    def output_distribution(self, params, loc=None, scale=None, trailing_n=None) -> torch.distributions.Distribution:
+    def output_distribution(
+        self, params, loc=None, scale=None, trailing_n=None
+    ) -> torch.distributions.Distribution:
         sliced_params = params
         if trailing_n is not None:
             sliced_params = [p[:, -trailing_n:] for p in params]
-        return self.distribution_output.distribution(sliced_params, loc=loc, scale=scale)
+        return self.distribution_output.distribution(
+            sliced_params, loc=loc, scale=scale
+        )
 
     @auto_docstring
     def forward(
@@ -1965,7 +2167,9 @@ class InformerForPrediction(InformerPreTrainedModel):
         >>> mean_prediction = outputs.sequences.mean(dim=1)
         ```"""
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         if future_values is not None:
             use_cache = False
 
@@ -1995,7 +2199,9 @@ class InformerForPrediction(InformerPreTrainedModel):
         if future_values is not None:
             params = self.output_params(outputs[0])  # outputs.last_hidden_state
             # loc is 3rd last and scale is 2nd last output
-            distribution = self.output_distribution(params, loc=outputs[-3], scale=outputs[-2])
+            distribution = self.output_distribution(
+                params, loc=outputs[-3], scale=outputs[-2]
+            )
 
             loss = self.loss(distribution, future_values)
 
@@ -2011,7 +2217,11 @@ class InformerForPrediction(InformerPreTrainedModel):
 
         if not return_dict:
             outputs = ((params,) + outputs[1:]) if params is not None else outputs[1:]
-            return ((prediction_loss,) + outputs) if prediction_loss is not None else outputs
+            return (
+                ((prediction_loss,) + outputs)
+                if prediction_loss is not None
+                else outputs
+            )
 
         return Seq2SeqTSPredictionOutput(
             loss=prediction_loss,
@@ -2152,14 +2362,21 @@ class InformerForPrediction(InformerPreTrainedModel):
         repeated_scale = scale.repeat_interleave(repeats=num_parallel_samples, dim=0)
 
         repeated_past_values = (
-            past_values.repeat_interleave(repeats=num_parallel_samples, dim=0) - repeated_loc
+            past_values.repeat_interleave(repeats=num_parallel_samples, dim=0)
+            - repeated_loc
         ) / repeated_scale
 
-        expanded_static_feat = static_feat.unsqueeze(1).expand(-1, future_time_features.shape[1], -1)
+        expanded_static_feat = static_feat.unsqueeze(1).expand(
+            -1, future_time_features.shape[1], -1
+        )
         features = torch.cat((expanded_static_feat, future_time_features), dim=-1)
-        repeated_features = features.repeat_interleave(repeats=num_parallel_samples, dim=0)
+        repeated_features = features.repeat_interleave(
+            repeats=num_parallel_samples, dim=0
+        )
 
-        repeated_enc_last_hidden = enc_last_hidden.repeat_interleave(repeats=num_parallel_samples, dim=0)
+        repeated_enc_last_hidden = enc_last_hidden.repeat_interleave(
+            repeats=num_parallel_samples, dim=0
+        )
 
         future_samples = []
 
@@ -2172,19 +2389,29 @@ class InformerForPrediction(InformerPreTrainedModel):
             )
 
             lags_shape = lagged_sequence.shape
-            reshaped_lagged_sequence = lagged_sequence.reshape(lags_shape[0], lags_shape[1], -1)
+            reshaped_lagged_sequence = lagged_sequence.reshape(
+                lags_shape[0], lags_shape[1], -1
+            )
 
-            decoder_input = torch.cat((reshaped_lagged_sequence, repeated_features[:, : k + 1]), dim=-1)
+            decoder_input = torch.cat(
+                (reshaped_lagged_sequence, repeated_features[:, : k + 1]), dim=-1
+            )
 
-            dec_output = decoder(inputs_embeds=decoder_input, encoder_hidden_states=repeated_enc_last_hidden)
+            dec_output = decoder(
+                inputs_embeds=decoder_input,
+                encoder_hidden_states=repeated_enc_last_hidden,
+            )
             dec_last_hidden = dec_output.last_hidden_state
 
             params = self.parameter_projection(dec_last_hidden[:, -1:])
-            distr = self.output_distribution(params, loc=repeated_loc, scale=repeated_scale)
+            distr = self.output_distribution(
+                params, loc=repeated_loc, scale=repeated_scale
+            )
             next_sample = distr.sample()
 
             repeated_past_values = torch.cat(
-                (repeated_past_values, (next_sample - repeated_loc) / repeated_scale), dim=1
+                (repeated_past_values, (next_sample - repeated_loc) / repeated_scale),
+                dim=1,
             )
             future_samples.append(next_sample)
 
@@ -2192,7 +2419,8 @@ class InformerForPrediction(InformerPreTrainedModel):
 
         return SampleTSPredictionOutput(
             sequences=concat_future_samples.reshape(
-                (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
+                (-1, num_parallel_samples, self.config.prediction_length)
+                + self.target_shape,
             )
         )
 
