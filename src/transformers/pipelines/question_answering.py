@@ -535,7 +535,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         handle_impossible_answer=False,
         max_answer_len=15,
         align_to_words=True,
-        handle_duplicate_answers=True,
+        handle_duplicate_answers=False,
     ):
         min_null_score = 1000000  # large and positive
         answers = []
