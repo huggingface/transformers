@@ -279,7 +279,6 @@ class QAPipelineTests(unittest.TestCase):
         )
         self.assertEqual(nested_simplify(outputs), {"score": 0.988, "start": 0, "end": 0, "answer": ""})
 
-    @slow
     @require_torch
     def test_duplicate_handling(self):
         question_answerer = pipeline("question-answering", model="deepset/tinyroberta-squad2")
