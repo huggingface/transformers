@@ -18,7 +18,7 @@ from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
 from logging import getLevelNamesMapping
 from threading import Thread
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
 from transformers.utils.import_utils import is_fastapi_available, is_pydantic_available, is_uvicorn_available
 
@@ -52,12 +52,31 @@ if is_pydantic_available():
 
     class ChatCompletionInput(BaseModel):
         messages: list[Message]
+
         stream: Optional[bool] = False
         model: Optional[str] = None
-        generation_config: Optional[dict] = None
         request_id: Optional[str] = None
         extra_body: Optional[Dict] = None
-        tools: Any = None
+        frequency_penalty: Optional[float] = None
+        logit_bias: Optional[list[float]] = None
+        max_tokens: Optional[int] = None
+        stop: Optional[list[str]] = None
+        temperature: Optional[float] = None
+        top_p: Optional[float] = None
+        seed: Optional[int] = None
+
+        # Additional options supported by the HFH InferenceClient
+        # that aren't yet supported here.
+
+        # logprobs: Optional[bool] = None
+        # tools: Any = None
+        # n: Optional[int] = None
+        # presence_penalty: Optional[float] = None
+        # response_format: Optional[ChatCompletionInputGrammarType] = None
+        # stream_options: Optional[ChatCompletionInputStreamOptions] = None
+        # tool_choice: Optional[Union[ChatCompletionInputToolChoiceClass, "ChatCompletionInputToolChoiceEnum"]] = None
+        # tool_prompt: Optional[str] = None
+        # top_logprobs: Optional[int] = None
 
 
 logger = logging.get_logger(__name__)
@@ -70,6 +89,33 @@ def serve_command_factory(args: Namespace):
     Returns: ServeCommand
     """
     return ServeCommand(args)
+
+
+def create_generation_config_from_req(req: "ChatCompletionInput"):
+    if req.extra_body is not None and "generation_config" in req.extra_body:
+        for key in req.extra_body["generation_config"].keys():
+            if key in ChatCompletionInput.base_field_names.keys():
+                return {"error": "Duplicated key in the root request and in the passed generation config."}
+
+    if req.extra_body is not None and "generation_config" in req.extra_body:
+        generation_config = GenerationConfig(**(req.extra_body["generation_config"]))
+    else:
+        generation_config = GenerationConfig()
+
+    if req.frequency_penalty is not None:
+        generation_config.repetition_penalty = req.frequency_penalty
+    if req.logit_bias is not None:
+        generation_config.sequence_bias = req.logit_bias
+    if req.stop is not None:
+        generation_config.stop_strings = req.stop
+    if req.temperature is not None:
+        generation_config.temperature = req.temperature
+    if req.top_p is not None:
+        generation_config.top_p = req.top_p
+    if req.seed is not None:
+        torch.manual_seed(req.seed)
+
+    return generation_config
 
 
 @dataclass
@@ -207,11 +253,11 @@ class ServeCommand(BaseTransformersCLICommand):
 
             chat = req.messages
 
-            inputs = self.tokenizer.apply_chat_template(
-                chat, return_tensors="pt", add_generation_prompt=True, tools=req.tools
-            ).to(self.model.device)
+            inputs = self.tokenizer.apply_chat_template(chat, return_tensors="pt", add_generation_prompt=True).to(
+                self.model.device
+            )
 
-            generation_config = GenerationConfig(**(req.generation_config or {}))
+            generation_config = create_generation_config_from_req(req)
 
             def stream_response(_inputs):
                 max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 256
@@ -241,19 +287,14 @@ class ServeCommand(BaseTransformersCLICommand):
             if not req.stream:
                 return {"error": "Only streaming mode is supported."}
 
-            text = self.tokenizer.apply_chat_template(
-                req.messages, tools=req.tools, add_generation_prompt=True, tokenize=False
-            )
+            text = self.tokenizer.apply_chat_template(req.messages, add_generation_prompt=True, tokenize=False)
 
             inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)["input_ids"]
             request_id = req.request_id if req.request_id is not None else "req_0"
 
             generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
 
-            if req.generation_config is None:
-                req.generation_config = {}
-
-            generation_config = GenerationConfig(**req.generation_config)
+            generation_config = create_generation_config_from_req(req)
 
             generation_kwargs = {
                 "inputs": inputs,
