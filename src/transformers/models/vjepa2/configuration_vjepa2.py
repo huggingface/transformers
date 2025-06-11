@@ -22,8 +22,6 @@ class VJEPA2Config(PretrainedConfig):
             The number of frames the model has been pretrained with. Does not impact inference.
         tubelet_size (`int`, *optional*, defaults to 2):
             The number of temporal frames used for a single rastor, check paper for more information.
-        wide_SiLU (`bool`, *optional*, defaults to `True`):
-            Increases the hidden size for SwiGLUFFN
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers
         in_chans (`int`, *optional*, defaults to 3):
@@ -42,7 +40,6 @@ class VJEPA2Config(PretrainedConfig):
             Whether to add a bias to the queries, keys and values.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probability for attentions.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
@@ -85,7 +82,6 @@ class VJEPA2Config(PretrainedConfig):
         crop_size=256,
         frames_per_clip=64,
         tubelet_size=2,
-        wide_SiLU=True,
         hidden_size=1024,
         in_chans=3,
         num_attention_heads=12,
@@ -95,7 +91,6 @@ class VJEPA2Config(PretrainedConfig):
         layer_norm_eps=1e-6,
         qkv_bias=True,
         attention_probs_dropout_prob=0.0,
-        hidden_dropout_prob=0.0,
         hidden_act="gelu",
         initializer_range=0.02,
         # predictor params
@@ -113,7 +108,6 @@ class VJEPA2Config(PretrainedConfig):
         self.frames_per_clip = frames_per_clip
         self.patch_size = patch_size
         self.tubelet_size = tubelet_size
-        self.wide_SiLU = wide_SiLU
         self.hidden_size = hidden_size
         self.in_chans = in_chans
         self.num_attention_heads = num_attention_heads
@@ -123,7 +117,6 @@ class VJEPA2Config(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.qkv_bias = qkv_bias
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.hidden_dropout_prob = hidden_dropout_prob
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.image_size = crop_size

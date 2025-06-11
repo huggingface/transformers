@@ -68,7 +68,6 @@ class VJEPA2ModelTester:
         pred_hidden_size=32,
         pred_num_attention_heads=2,
         pred_num_hidden_layers=2,
-        pred_use_mask_tokens=True,
         pred_num_mask_tokens=10,
         is_training=False,
         attn_implementation="sdpa",
@@ -87,7 +86,6 @@ class VJEPA2ModelTester:
         self.pred_hidden_size = pred_hidden_size
         self.pred_num_attention_heads = pred_num_attention_heads
         self.pred_num_hidden_layers = pred_num_hidden_layers
-        self.pred_use_mask_tokens = pred_use_mask_tokens
         self.pred_num_mask_tokens = pred_num_mask_tokens
         self.attn_implementation = attn_implementation
         self.is_training = is_training
