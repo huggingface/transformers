@@ -26,9 +26,7 @@ logger = logging.get_logger(__name__)
 
 class InitStdFactor(str, Enum):
     DISABLED = "disabled"  # Init std is divided by 1.0
-    GLOBAL_DEPTH = "global_depth"  # Init std is divided by sqrt(2*n_layers)
     CURRENT_DEPTH = "current_depth"  # Init std is divided by sqrt(2*depth)
-    DIM_RATIO = "dim_ratio"  # Init std is divided by model_dim/4096
 
 
 class PatchingModeEnum(str, Enum):
@@ -217,6 +215,52 @@ class BLTConfig(PretrainedConfig):
             The id of the "end-of-sequence" token.
         pad_token_id (`int`, *optional*, defaults to -1):
             The id of the padding token.
+            
+        # Patcher/Entropy model configuration
+        patcher_vocab_size (`int`, *optional*, defaults to 256):
+            Vocabulary size for the entropy model used in patching.
+        patcher_dim (`int`, *optional*, defaults to 512):
+            Hidden dimension for the entropy model.
+        patcher_n_layers (`int`, *optional*, defaults to 8):
+            Number of layers in the entropy model.
+        patcher_n_heads (`int`, *optional*, defaults to 8):
+            Number of attention heads in the entropy model.
+        patcher_head_dim (`int`, *optional*):
+            Dimension of each attention head in the entropy model.
+        patcher_n_kv_heads (`int`, *optional*):
+            Number of key-value heads in the entropy model.
+        patcher_max_seqlen (`int`, *optional*, defaults to 1024):
+            Maximum sequence length for the entropy model.
+        patcher_norm_eps (`float`, *optional*, defaults to 1e-5):
+            Layer normalization epsilon for the entropy model.
+        patcher_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout probability for the entropy model.
+        patcher_sliding_window (`int`, *optional*):
+            Sliding window size for the entropy model attention.
+        patcher_ffn_dim_multiplier (`float`, *optional*):
+            Feedforward dimension multiplier for the entropy model.
+        patcher_multiple_of (`int`, *optional*, defaults to 256):
+            Make feedforward dimension multiple of this for the entropy model.
+        patcher_rope_theta (`float`, *optional*, defaults to 10000.0):
+            RoPE theta parameter for the entropy model.
+        patcher_rope_use_fp32_in_outer_product (`bool`, *optional*, defaults to False):
+            Whether to use fp32 in RoPE outer product for the entropy model.
+        patcher_attn_impl (`str`, *optional*, defaults to "sdpa"):
+            Attention implementation for the entropy model.
+        patcher_attn_bias_type (`str`, *optional*, defaults to "causal"):
+            Attention bias type for the entropy model.
+        patcher_init_base_std (`float`, *optional*):
+            Base initialization standard deviation for the entropy model.
+        patcher_init_std_factor (`str`, *optional*, defaults to "disabled"):
+            Initialization std factor for the entropy model.
+        patcher_dim_token_emb (`int`, *optional*):
+            Token embedding dimension for the entropy model.
+        patcher_weight_tying (`bool`, *optional*, defaults to False):
+            Whether to tie embeddings in the entropy model.
+        patcher_bos_token_id (`int`, *optional*, defaults to 1):
+            Beginning of sequence token id for the entropy model.
+        patcher_eos_token_id (`int`, *optional*, defaults to 2):
+            End of sequence token id for the entropy model.
 
     ```python
     >>> from transformers import ByteLatentTransformer, BLTConfig
@@ -335,6 +379,30 @@ class BLTConfig(PretrainedConfig):
         eos_token_id=2,
         pad_token_id=-1,
         
+        # Patcher/Entropy model configuration
+        patcher_vocab_size=256,
+        patcher_dim=512,
+        patcher_n_layers=8,
+        patcher_n_heads=8,
+        patcher_head_dim=None,
+        patcher_n_kv_heads=None,
+        patcher_max_seqlen=1024,
+        patcher_norm_eps=1e-5,
+        patcher_dropout=0.0,
+        patcher_sliding_window=None,
+        patcher_ffn_dim_multiplier=None,
+        patcher_multiple_of=256,
+        patcher_rope_theta=10000.0,
+        patcher_rope_use_fp32_in_outer_product=False,
+        patcher_attn_impl="sdpa",
+        patcher_attn_bias_type="causal",
+        patcher_init_base_std=None,
+        patcher_init_std_factor="disabled",
+        patcher_dim_token_emb=None,
+        patcher_weight_tying=False,
+        patcher_bos_token_id=1,
+        patcher_eos_token_id=2,
+        
         # Inherited
         **kwargs,
     ):
@@ -432,6 +500,30 @@ class BLTConfig(PretrainedConfig):
         
         # Parameter mixing
         self.pm_size = pm_size
+        
+        # Patcher/Entropy model configuration
+        self.patcher_vocab_size = patcher_vocab_size
+        self.patcher_dim = patcher_dim
+        self.patcher_n_layers = patcher_n_layers
+        self.patcher_n_heads = patcher_n_heads
+        self.patcher_head_dim = patcher_head_dim
+        self.patcher_n_kv_heads = patcher_n_kv_heads
+        self.patcher_max_seqlen = patcher_max_seqlen
+        self.patcher_norm_eps = patcher_norm_eps
+        self.patcher_dropout = patcher_dropout
+        self.patcher_sliding_window = patcher_sliding_window
+        self.patcher_ffn_dim_multiplier = patcher_ffn_dim_multiplier
+        self.patcher_multiple_of = patcher_multiple_of
+        self.patcher_rope_theta = patcher_rope_theta
+        self.patcher_rope_use_fp32_in_outer_product = patcher_rope_use_fp32_in_outer_product
+        self.patcher_attn_impl = patcher_attn_impl
+        self.patcher_attn_bias_type = patcher_attn_bias_type
+        self.patcher_init_base_std = patcher_init_base_std
+        self.patcher_init_std_factor = InitStdFactor(patcher_init_std_factor)
+        self.patcher_dim_token_emb = patcher_dim_token_emb
+        self.patcher_weight_tying = patcher_weight_tying
+        self.patcher_bos_token_id = patcher_bos_token_id
+        self.patcher_eos_token_id = patcher_eos_token_id
 
         # Handle hash byte group size validation
         if (
@@ -451,113 +543,75 @@ class BLTConfig(PretrainedConfig):
             **kwargs,
         )
 
+    @property
+    def encoder_dim_token_emb(self):
+        """Compute encoder token embedding dimension."""
+        if self.dim_token is not None:
+            return self.dim_token
+        elif self.use_local_encoder_transformer:
+            return self.dim_local_encoder
+        else:
+            # Use default patch_size of 8 if not set
+            patch_size = self.patch_size if self.patch_size is not None else 8
+            return self.dim_global // patch_size
 
-# Separate config for the LM Transformer (entropy model)
-class LMTransformerConfig(PretrainedConfig):
-    r"""
-    Configuration class for the LM Transformer used as entropy model in BLT patching.
-    
-    Args:
-        vocab_size (`int`, *optional*, defaults to 256):
-            Vocabulary size of the LM model.
-        dim (`int`, *optional*, defaults to 512):
-            Dimension of the hidden representations.
-        n_layers (`int`, *optional*, defaults to 8):
-            Number of hidden layers.
-        n_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads.
-        head_dim (`int`, *optional*):
-            Dimension of each attention head.
-        n_kv_heads (`int`, *optional*):
-            Number of key-value heads for grouped query attention.
-        max_seqlen (`int`, *optional*, defaults to 1024):
-            Maximum sequence length.
-        norm_eps (`float`, *optional*, defaults to 1e-5):
-            Epsilon for layer normalization.
-        dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability.
-        sliding_window (`int`, *optional*):
-            Sliding window size for attention.
-        ffn_dim_multiplier (`float`, *optional*):
-            Multiplier for feedforward dimension.
-        multiple_of (`int`, *optional*, defaults to 256):
-            Make feedforward dimension multiple of this.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            RoPE theta parameter.
-        rope_use_fp32_in_outer_product (`bool`, *optional*, defaults to False):
-            Whether to use fp32 in RoPE outer product.
-        attn_impl (`str`, *optional*, defaults to "sdpa"):
-            Attention implementation.
-        attn_bias_type (`str`, *optional*, defaults to "causal"):
-            Attention bias type.
-        init_base_std (`float`, *optional*):
-            Base initialization standard deviation.
-        init_std_factor (`str`, *optional*, defaults to "disabled"):
-            Initialization std factor.
-        dim_token_emb (`int`, *optional*):
-            Token embedding dimension.
-        weight_tying (`bool`, *optional*, defaults to False):
-            Whether to tie embeddings.
-        bos_token_id (`int`, *optional*, defaults to 1):
-            Beginning of sequence token id.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            End of sequence token id.
-    """
-    
-    model_type = "lm_transformer"
-    
-    def __init__(
-        self,
-        vocab_size=256,
-        dim=512,
-        n_layers=8,
-        n_heads=8,
-        head_dim=None,
-        n_kv_heads=None,
-        max_seqlen=1024,
-        norm_eps=1e-5,
-        dropout=0.0,
-        sliding_window=None,
-        ffn_dim_multiplier=None,
-        multiple_of=256,
-        rope_theta=10000.0,
-        rope_use_fp32_in_outer_product=False,
-        attn_impl="sdpa",
-        attn_bias_type="causal",
-        init_base_std=None,
-        init_std_factor="disabled",
-        dim_token_emb=None,
-        weight_tying=False,
-        bos_token_id=1,
-        eos_token_id=2,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.dim = dim
-        self.n_layers = n_layers
-        self.n_heads = n_heads
-        self.head_dim = head_dim
-        self.n_kv_heads = n_kv_heads
-        self.max_seqlen = max_seqlen
-        self.norm_eps = norm_eps
-        self.dropout = dropout
-        self.sliding_window = sliding_window
-        self.ffn_dim_multiplier = ffn_dim_multiplier
-        self.multiple_of = multiple_of
-        self.rope_theta = rope_theta
-        self.rope_use_fp32_in_outer_product = rope_use_fp32_in_outer_product
-        self.attn_impl = attn_impl
-        self.attn_bias_type = attn_bias_type
-        self.init_base_std = init_base_std
-        self.init_std_factor = InitStdFactor(init_std_factor)
-        self.dim_token_emb = dim_token_emb
-        self.weight_tying = weight_tying
+    @property
+    def encoder_dim_patch_emb(self):
+        """Compute encoder patch embedding dimension."""
+        if self.cross_attn_encoder:
+            if self.cross_attn_init_by_pooling:
+                return self.dim_local_encoder
+            else:
+                return self.dim_global
+        return None
 
-        super().__init__(
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
+    @property
+    def global_dim_patch_emb(self):
+        """Compute global patch embedding dimension."""
+        dim_token_emb = self.encoder_dim_token_emb
+        if self.cross_attn_encoder:
+            cross_attn_k = self.cross_attn_k if self.cross_attn_k is not None else 1
+            return dim_token_emb * cross_attn_k
+        elif (
+            self.downsampling_by_pooling is None
+            or not self.downsampling_by_pooling
+            or len(self.downsampling_by_pooling) == 0
+        ):
+            # Use default patch_size of 8 if not set
+            patch_size = self.patch_size if self.patch_size is not None else 8
+            return dim_token_emb * patch_size
+        else:
+            return dim_token_emb * sum(
+                [
+                    pooling in self.downsampling_by_pooling
+                    for pooling in ["avg", "min", "max"]
+                ]
+            )
+
+    @property
+    def decoder_dim_token_emb(self):
+        """Compute decoder token embedding dimension."""
+        if self.share_encoder_decoder_emb:
+            return self.encoder_dim_token_emb
+        elif self.dim_token is not None:
+            return self.dim_token
+        else:
+            return self.dim_local_decoder
+
+    def get_init_std_factor(self, depth: int) -> float:
+        """
+        Calculate the initialization standard deviation scaling factor for a given layer depth.
+        
+        Args:
+            depth: Current layer depth (0-indexed)
+            
+        Returns:
+            Scaling factor to divide the base initialization std by
+        """
+        if self.init_std_factor == InitStdFactor.CURRENT_DEPTH:
+            return (2 * (depth + 1)) ** 0.5
+        else:  # DISABLED
+            return 1.0
 
 
-__all__ = ["BLTConfig", "LMTransformerConfig", "InitStdFactor", "PatchingModeEnum"] 
+__all__ = ["BLTConfig", "InitStdFactor", "PatchingModeEnum"] 

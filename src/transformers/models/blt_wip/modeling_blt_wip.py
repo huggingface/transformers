@@ -1,6 +1,6 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
-from enum import Enum, auto
+from enum import Enum
 from typing import Any, List, Optional, Tuple, Union
 
 import torch
@@ -8,22 +8,18 @@ from huggingface_hub import PyTorchModelHubMixin
 from pydantic import model_validator
 from torch import nn
 from torch.nn.attention.flex_attention import create_block_mask, BlockMask, flex_attention
-from typing_extensions import Self
 import json
 import logging
 
 import torch
 import torch.nn
 import torch.nn as nn
-from pydantic import ConfigDict
 from torch.nn import functional as F
 
 import abc
 
 import os
 from contextlib import nullcontext
-
-from pydantic import BaseModel
 
 SEP = " "
 BOS_ID: int = 1
@@ -41,7 +37,6 @@ logger = logging.getLogger()
 
 from .configuration_blt import (
     BLTConfig,
-    LMTransformerConfig,
     PatchingModeEnum,
     InitStdFactor,
 )
@@ -80,13 +75,6 @@ def create_causal_mask(
         raise NotImplementedError(
             f"Attention {attn_impl} with {sliding_window} sliding window not implemented"
         )
-
-
-class InitStdFactor(str, Enum):
-    DISABLED = "disabled"  # Init std is divided by 1.0
-    GLOBAL_DEPTH = "global_depth"  # Init std is divided by sqrt(2*n_layers)
-    CURRENT_DEPTH = "current_depth"  # Init std is divided by sqrt(2*depth)
-    DIM_RATIO = "dim_ratio"  # Init std is divided by model_dim/4096
 
 def cross_entropy(pred, target, **kwargs):
     return F.nll_loss(
@@ -442,31 +430,41 @@ class TransformerLayer(nn.Module):
     def __init__(self, args):
         super().__init__()
 
-        assert (args.head_dim is not None) or (
-            args.n_heads is not None
-        ), "Should specify at least head_dim or n_heads"
-        self.head_dim = args.head_dim or args.dim // args.n_heads
-        self.n_heads = args.n_heads or args.dim // args.head_dim
-        self.n_kv_heads = args.n_kv_heads or self.n_heads
+        # Extract parameters from dictionary
+        dim = args['dim']
+        n_heads = args['n_heads']
+        head_dim = args['head_dim']
+        n_kv_heads = args['n_kv_heads']
+        rope_theta = args['rope_theta']
+        multiple_of = args['multiple_of']
+        ffn_dim_multiplier = args['ffn_dim_multiplier']
+        norm_eps = args['norm_eps']
 
-        assert args.n_heads % self.n_kv_heads == 0
-        assert args.dim % args.n_heads == 0
+        assert (head_dim is not None) or (
+            n_heads is not None
+        ), "Should specify at least head_dim or n_heads"
+        self.head_dim = head_dim or dim // n_heads
+        self.n_heads = n_heads or dim // head_dim
+        self.n_kv_heads = n_kv_heads or self.n_heads
+
+        assert n_heads % self.n_kv_heads == 0
+        assert dim % n_heads == 0
 
         self.attention = Attention(
-            dim=args.dim,
+            dim=dim,
             head_dim=self.head_dim,
             n_heads=self.n_heads,
             n_kv_heads=self.n_kv_heads,
-            rope_theta=args.rope_theta,
+            rope_theta=rope_theta,
         )
         self.feed_forward = FeedForward(
-            dim=args.dim,
-            hidden_dim=4 * args.dim,
-            multiple_of=args.multiple_of,
-            ffn_dim_multiplier=args.ffn_dim_multiplier,
+            dim=dim,
+            hidden_dim=4 * dim,
+            multiple_of=multiple_of,
+            ffn_dim_multiplier=ffn_dim_multiplier,
         )
-        self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
-        self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
+        self.attention_norm = RMSNorm(dim, eps=norm_eps)
+        self.ffn_norm = RMSNorm(dim, eps=norm_eps)
 
     def forward(
         self,
@@ -514,52 +512,78 @@ class LMTransformer(
     license="other",
     license_name="fair-noncommercial-research-license",
     license_link="https://huggingface.co/facebook/blt/blob/main/LICENSE",
-    coders={
-        LMTransformerConfig: (
-            lambda x: {"config": x.to_dict()},
-            lambda data: LMTransformerConfig(**data),
-        )
-    },
 ):
-    def __init__(self, config: LMTransformerConfig):
+    def __init__(self, config):
         super().__init__()
         
-        self.dim = config.dim
-        self.init_base_std = config.init_base_std
-        self.attn_impl = config.attn_impl
-        self.attn_bias_type = config.attn_bias_type
-        self.init_std_factor = config.init_std_factor
-        self.max_seqlen = config.max_seqlen
+        # Store config reference for later use
+        self.config = config
+        
+        # Extract patcher parameters from BLTConfig
+        self.dim = config.patcher_dim
+        self.init_base_std = config.patcher_init_base_std
+        self.attn_impl = config.patcher_attn_impl
+        self.attn_bias_type = config.patcher_attn_bias_type
+        self.init_std_factor = config.patcher_init_std_factor
+        self.max_seqlen = config.patcher_max_seqlen
+        n_layers = config.patcher_n_layers
+        n_heads = config.patcher_n_heads
+        head_dim = config.patcher_head_dim
+        rope_theta = config.patcher_rope_theta
+        rope_use_fp32_in_outer_product = config.patcher_rope_use_fp32_in_outer_product
+        norm_eps = config.patcher_norm_eps
+        vocab_size = config.patcher_vocab_size
+        weight_tying = config.patcher_weight_tying
+        sliding_window = config.patcher_sliding_window
+        eos_token_id = config.patcher_eos_token_id
+        
         self.rope_embeddings = RotaryEmbedding(
-            theta=config.rope_theta,
-            head_dim=config.head_dim or config.dim // config.n_heads,
-            max_seqlen=config.max_seqlen,
-            rope_use_fp32_in_outer_product=config.rope_use_fp32_in_outer_product,
+            theta=rope_theta,
+            head_dim=head_dim or self.dim // n_heads,
+            max_seqlen=self.max_seqlen,
+            rope_use_fp32_in_outer_product=rope_use_fp32_in_outer_product,
         )
         # Handle both eos_id and eos_token_id for compatibility
-        self.eos_id = getattr(config, 'eos_id', getattr(config, 'eos_token_id', 2))
+        self.eos_id = eos_token_id
+
+        # Extract additional parameters for TransformerLayer
+        n_kv_heads = getattr(config, 'patcher_n_kv_heads', None) if hasattr(config, 'patcher_dim') else getattr(config, 'n_kv_heads', None)
+        multiple_of = getattr(config, 'patcher_multiple_of', 256) if hasattr(config, 'patcher_dim') else getattr(config, 'multiple_of', 256)
+        ffn_dim_multiplier = getattr(config, 'patcher_ffn_dim_multiplier', None) if hasattr(config, 'patcher_dim') else getattr(config, 'ffn_dim_multiplier', None)
+
+        # Create a simple parameter dict for TransformerLayer
+        layer_params = {
+            'dim': self.dim,
+            'n_heads': n_heads,
+            'head_dim': head_dim,
+            'n_kv_heads': n_kv_heads,
+            'rope_theta': rope_theta,
+            'multiple_of': multiple_of,
+            'ffn_dim_multiplier': ffn_dim_multiplier,
+            'norm_eps': norm_eps,
+        }
 
         self.layers = nn.ModuleList()
-        for _ in range(config.n_layers):
-            self.layers.append(TransformerLayer(config))
+        for _ in range(n_layers):
+            self.layers.append(TransformerLayer(layer_params))
         
         # LMTransformer specific attributes
-        self.weight_tying = config.weight_tying
-        self.sliding_window = config.sliding_window
+        self.weight_tying = weight_tying
+        self.sliding_window = sliding_window
 
-        assert config.vocab_size > 0
+        assert vocab_size > 0
 
-        self.tok_embeddings = torch.nn.Embedding(config.vocab_size, config.dim)
+        self.tok_embeddings = torch.nn.Embedding(vocab_size, self.dim)
 
-        self.norm = RMSNorm(config.dim, eps=config.norm_eps)
+        self.norm = RMSNorm(self.dim, eps=norm_eps)
 
         self.output = nn.Linear(
-            config.dim,
-            config.vocab_size,
+            self.dim,
+            vocab_size,
             bias=False,
         )
 
-        if config.weight_tying:
+        if self.weight_tying:
             self.output.weight = self.tok_embeddings.weight
     
     def get_output_seq_len(self):
@@ -623,13 +647,7 @@ class LMTransformer(
         
         self.rope_embeddings.reset_parameters()
         for depth, layer in enumerate(self.layers):
-            factor = {
-                InitStdFactor.CURRENT_DEPTH: (2 * (depth + 1)) ** 0.5,
-                InitStdFactor.GLOBAL_DEPTH: (2 * (len(self.layers) + 1)) ** 0.5,
-                InitStdFactor.DIM_RATIO: self.dim / 4096,
-                InitStdFactor.DISABLED: 1.0,
-            }[self.init_std_factor]
-
+            factor = self.config.get_init_std_factor(depth)
             layer.init_weights(self.init_base_std, factor)
 
         if not self.weight_tying:
@@ -827,56 +845,6 @@ def split_large_numbers(lst, m):
     return new_lst
 
 
-def get_encoder_dim_token_emb(args):
-    if args.dim_token is not None:
-        dim_token_emb = args.dim_token
-    elif args.use_local_encoder_transformer:
-        dim_token_emb = args.dim_local_encoder
-    else:
-        dim_token_emb = args.dim_global // args.patch_size
-    return dim_token_emb
-
-
-def get_encoder_dim_patch_emb(args):
-    dim_patch_emb = None
-    if args.cross_attn_encoder:
-        if args.cross_attn_init_by_pooling:
-            dim_patch_emb = args.dim_local_encoder
-        else:
-            dim_patch_emb = args.dim_global
-    return dim_patch_emb
-
-
-def get_global_dim_patch_emb(args):
-    dim_token_emb = get_encoder_dim_token_emb(args)
-    if args.cross_attn_encoder:
-        dim_patch_emb = dim_token_emb * args.cross_attn_k
-    elif (
-        args.downsampling_by_pooling is None
-        or not args.downsampling_by_pooling
-        or len(args.downsampling_by_pooling) == 0
-    ):
-        dim_patch_emb = dim_token_emb * args.patch_size
-    else:
-        dim_patch_emb = dim_token_emb * sum(
-            [
-                pooling in args.downsampling_by_pooling
-                for pooling in ["avg", "min", "max"]
-            ]
-        )
-    return dim_patch_emb
-
-
-def get_decoder_dim_token_emb(args):
-    if args.share_encoder_decoder_emb:
-        dim_token_emb = get_encoder_dim_token_emb(args)
-    elif args.dim_token is not None:
-        dim_token_emb = args.dim_token
-    else:
-        dim_token_emb = args.dim_local_decoder
-    return dim_token_emb
-
-
 def fill_tokens(tokens, patch_size, fill_id):
     batch_size, seq_len = tokens.shape
     if seq_len % patch_size == 0:
@@ -941,14 +909,6 @@ def byte_group_hash_function(
     """
     with torch.no_grad():
         bs, seq_len = x.shape
-        # x_numpy = x.numpy()
-        # hash_values = torch.zeros(bs, seq_len, dtype=torch.int64, requires_grad=False)
-        # for i in range(bs):
-        #     for j in range(seq_len):
-        #         start = max(j, j-group_size+1)
-        #         end = j+1
-        #         hash_values[i, j] = hash_array(x_numpy[i, start:end], max_hash)
-
         prefix = torch.zeros(bs, group_size - 1, dtype=torch.int64, device=x.device)
         x = torch.cat([prefix, x], dim=1)
         windows = x.unfold(1, group_size, 1)
@@ -1201,18 +1161,20 @@ class LocalModelBase(nn.Module):
         # Initialize cross attention layers as None (will be set by subclasses if needed)
         self.cross_attn_layers = None
 
-        # Create component-specific config for TransformerLayers by copying config and overriding dimensions
-        component_config = type(config)(**config.to_dict())
-        component_config.dim = self.dim
-        component_config.n_layers = self.n_layers
-        component_config.n_heads = self.n_heads
-        if hasattr(config, 'attn_bias_type'):
-            component_config.attn_bias_type = self.attn_bias_type
-        if hasattr(config, 'max_seqlen'):
-            component_config.max_seqlen = self.max_seqlen
+        # Create parameter dict for TransformerLayers
+        layer_params = {
+            'dim': self.dim,
+            'n_heads': self.n_heads,
+            'head_dim': config.head_dim,
+            'n_kv_heads': getattr(config, 'n_kv_heads', None),
+            'rope_theta': config.rope_theta,
+            'multiple_of': getattr(config, 'multiple_of', 256),
+            'ffn_dim_multiplier': getattr(config, 'ffn_dim_multiplier', None),
+            'norm_eps': config.norm_eps,
+        }
 
         self.layers = nn.ModuleList(
-            [TransformerLayer(component_config) for _ in range(self.n_layers)]
+            [TransformerLayer(layer_params) for _ in range(self.n_layers)]
         )
 
         if not self.use_rope:
@@ -1228,10 +1190,10 @@ class LocalModelBase(nn.Module):
 
         # Set dimension-specific embedding dimensions
         if component_type == "encoder":
-            self.dim_token_emb = get_encoder_dim_token_emb(config)
-            self.dim_patch_emb = get_encoder_dim_patch_emb(config)
+            self.dim_token_emb = config.encoder_dim_token_emb
+            self.dim_patch_emb = config.encoder_dim_patch_emb
         elif component_type == "decoder":
-            self.dim_token_emb = get_decoder_dim_token_emb(config)
+            self.dim_token_emb = config.decoder_dim_token_emb
             self.dim_patch_emb = config.dim_global
 
         self.token_embedding_projection = (
@@ -1296,14 +1258,8 @@ class LocalModelBase(nn.Module):
             )
 
         for depth, layer in enumerate(self.layers):
-            factor = {
-                InitStdFactor.CURRENT_DEPTH: (2 * (depth + 1)) ** 0.5,
-                InitStdFactor.GLOBAL_DEPTH: (2 * (len(self.layers) + 1)) ** 0.5,
-                InitStdFactor.DIM_RATIO: self.dim / 4096,
-                InitStdFactor.DISABLED: 1.0,
-            }[self.init_std_factor]
-
-            layer.init_weights(None, factor)
+            factor = self.config.get_init_std_factor(depth)
+            layer.init_weights(self.init_base_std, factor)
 
         if hasattr(self, "output"):
             nn.init.trunc_normal_(
@@ -1335,13 +1291,7 @@ class LocalModelBase(nn.Module):
 
         if self.cross_attn_layers is not None:
             for depth, layer in enumerate(self.cross_attn_layers):
-                factor = {
-                    InitStdFactor.CURRENT_DEPTH: (2 * (depth + 1)) ** 0.5,
-                    InitStdFactor.GLOBAL_DEPTH: (2 * (len(self.layers) + 1)) ** 0.5,
-                    InitStdFactor.DIM_RATIO: self.dim / 4096,
-                    InitStdFactor.DISABLED: 1.0,
-                }[self.init_std_factor]
-
+                factor = self.config.get_init_std_factor(depth)
                 layer.init_weights(None, factor)
 
 
@@ -1708,9 +1658,21 @@ class GlobalTransformer(nn.Module, SequenceModelWithOutput):
         # Handle both eos_id and eos_token_id for compatibility
         self.eos_id = getattr(config, 'eos_id', getattr(config, 'eos_token_id', 2))
 
+        # Create parameter dict for TransformerLayers
+        layer_params = {
+            'dim': self.dim,
+            'n_heads': config.n_heads,
+            'head_dim': config.head_dim,
+            'n_kv_heads': getattr(config, 'n_kv_heads', None),
+            'rope_theta': config.rope_theta,
+            'multiple_of': getattr(config, 'multiple_of', 256),
+            'ffn_dim_multiplier': getattr(config, 'ffn_dim_multiplier', None),
+            'norm_eps': config.norm_eps,
+        }
+
         self.layers = nn.ModuleList()
         for _ in range(config.n_layers):
-            self.layers.append(TransformerLayer(config))
+            self.layers.append(TransformerLayer(layer_params))
         
         # GlobalTransformer specific attributes
         self.dropout = config.dropout
@@ -1766,13 +1728,7 @@ class GlobalTransformer(nn.Module, SequenceModelWithOutput):
     def init_weights(self):
         self.rope_embeddings.reset_parameters()
         for depth, layer in enumerate(self.layers):
-            factor = {
-                InitStdFactor.CURRENT_DEPTH: (2 * (depth + 1)) ** 0.5,
-                InitStdFactor.GLOBAL_DEPTH: (2 * (len(self.layers) + 1)) ** 0.5,
-                InitStdFactor.DIM_RATIO: self.dim / 4096,
-                InitStdFactor.DISABLED: 1.0,
-            }[self.init_std_factor]
-
+            factor = self.config.get_init_std_factor(depth)
             layer.init_weights(self.init_base_std, factor)
         
         # GlobalTransformer specific initialization
@@ -1904,7 +1860,7 @@ class ByteLatentTransformer(
         global_config.n_layers = config.n_layers_global
         global_config.n_heads = config.n_heads_global
         global_config.n_kv_heads = config.n_kv_heads_global
-        global_config.dim_token_emb = get_global_dim_patch_emb(config)
+        global_config.dim_token_emb = config.global_dim_patch_emb
 
         self.global_transformer = GlobalTransformer(global_config)
 
@@ -1968,18 +1924,21 @@ class ByteLatentTransformer(
                 logger.warning(
                     "Update checkpoint to load attn and sliding window args from checkpoint"
                 )
-                entropy_model_config = LMTransformerConfig(
-                    dim=model_params["dim"],
-                    n_layers=model_params["n_layers"],
-                    n_heads=model_params["n_heads"],
-                    max_seqlen=model_params["max_seqlen"],
-                    ffn_dim_multiplier=model_params["ffn_dim_multiplier"],
-                    vocab_size=model_params["vocab_size"],
-                    attn_bias_type="local_block_causal",
-                    attn_impl="sdpa",  # originally xformers
-                    sliding_window=512,
-                )
-                self.patcher = LMTransformer(entropy_model_config)
+                
+                # Override patcher configuration with actual entropy model parameters from checkpoint
+                config.patcher_dim = model_params["dim"]
+                config.patcher_n_layers = model_params["n_layers"]
+                config.patcher_n_heads = model_params["n_heads"]
+                config.patcher_max_seqlen = model_params["max_seqlen"]
+                config.patcher_ffn_dim_multiplier = model_params["ffn_dim_multiplier"]
+                config.patcher_vocab_size = model_params["vocab_size"]
+                # Use sensible defaults for parameters not in checkpoint
+                config.patcher_attn_bias_type = "local_block_causal"
+                config.patcher_attn_impl = "sdpa"  # originally xformers
+                config.patcher_sliding_window = 512
+                
+                # LMTransformer will extract patcher_ parameters from config directly
+                self.patcher = LMTransformer(config)
 
                 # Load state dict
                 maybe_consolidated = os.path.join(
