@@ -75,7 +75,7 @@ class BatchFeature(UserDict):
         super().__init__(data)
         self.convert_to_tensors(tensor_type=tensor_type)
 
-    def __getitem__(self, item: str) -> Union[Any]:
+    def __getitem__(self, item: str) -> Any:
         """
         If the key is a string, returns the value of the dict associated to `key` ('input_values', 'attention_mask',
         etc.).
@@ -98,18 +98,6 @@ class BatchFeature(UserDict):
         if "data" in state:
             self.data = state["data"]
 
-    # Copied from transformers.tokenization_utils_base.BatchEncoding.keys
-    def keys(self):
-        return self.data.keys()
-
-    # Copied from transformers.tokenization_utils_base.BatchEncoding.values
-    def values(self):
-        return self.data.values()
-
-    # Copied from transformers.tokenization_utils_base.BatchEncoding.items
-    def items(self):
-        return self.data.items()
-
     def _get_is_as_tensor_fns(self, tensor_type: Optional[Union[str, TensorType]] = None):
         if tensor_type is None:
             return None, None
@@ -120,6 +108,10 @@ class BatchFeature(UserDict):
 
         # Get a function reference for the correct framework
         if tensor_type == TensorType.TENSORFLOW:
+            logger.warning_once(
+                "TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We "
+                "recommend migrating to PyTorch classes or pinning your version of Transformers."
+            )
             if not is_tf_available():
                 raise ImportError(
                     "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
@@ -150,6 +142,10 @@ class BatchFeature(UserDict):
 
             is_tensor = torch.is_tensor
         elif tensor_type == TensorType.JAX:
+            logger.warning_once(
+                "TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We "
+                "recommend migrating to PyTorch classes or pinning your version of Transformers."
+            )
             if not is_flax_available():
                 raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
             import jax.numpy as jnp  # noqa: F811
@@ -218,7 +214,6 @@ class BatchFeature(UserDict):
         requires_backends(self, ["torch"])
         import torch  # noqa
 
-        new_data = {}
         device = kwargs.get("device")
         non_blocking = kwargs.get("non_blocking", False)
         # Check if the args are a device or a dtype
@@ -233,17 +228,19 @@ class BatchFeature(UserDict):
             else:
                 # it's something else
                 raise ValueError(f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported.")
+
         # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
-        for k, v in self.items():
+        def maybe_to(v):
             # check if v is a floating point
             if isinstance(v, torch.Tensor) and torch.is_floating_point(v):
                 # cast and send to device
-                new_data[k] = v.to(*args, **kwargs)
+                return v.to(*args, **kwargs)
             elif isinstance(v, torch.Tensor) and device is not None:
-                new_data[k] = v.to(device=device, non_blocking=non_blocking)
+                return v.to(device=device, non_blocking=non_blocking)
             else:
-                new_data[k] = v
-        self.data = new_data
+                return v
+
+        self.data = {k: maybe_to(v) for k, v in self.items()}
         return self
 
 
