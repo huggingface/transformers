@@ -39,6 +39,14 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] DiaConfig
 
+## DiaDecoderConfig
+
+[[autodoc]] DiaDecoderConfig
+
+## DiaEncoderConfig
+
+[[autodoc]] DiaEncoderConfig
+
 ## DiaTokenizer
 
 [[autodoc]] DiaTokenizer
@@ -56,7 +64,6 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] DiaModel
     - forward
-    - _mask_input_features
 
 ## DiaForConditionalGeneration
 
