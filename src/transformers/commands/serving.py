@@ -39,7 +39,7 @@ if is_torch_available():
     )
 
 
-if is_pydantic_available():
+if is_pydantic_available() and is_fastapi_available() and is_uvicorn_available():
     import uvicorn
     from fastapi import FastAPI
     from fastapi.responses import StreamingResponse
