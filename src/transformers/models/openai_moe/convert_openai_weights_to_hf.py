@@ -25,8 +25,8 @@ from safetensors.torch import load_file as safe_load
 
 from transformers import (
     GenerationConfig,
-    OpenaiConfig,
-    OpenaiForCausalLM,
+    OpenAIMoeConfig,
+    OpenAIMoeForCausalLM,
     PreTrainedTokenizerFast,
 )
 from transformers.convert_slow_tokenizer import TikTokenConverter
@@ -87,7 +87,7 @@ def write_model(
     eos_token_id = 199999 if not instruct else [199999, 200018]
     pad_token_id = 128004
 
-    config = OpenaiConfig()
+    config = OpenAIMoeConfig()
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}...")
     final_ = {}
@@ -127,9 +127,9 @@ def write_model(
     del final_
     gc.collect()
 
-    print("Loading the checkpoint in a OpenAI ")
+    print("Loading the checkpoint in a OpenAIMoe ")
     with torch.device("meta"):
-        model = OpenaiForCausalLM(config)
+        model = OpenAIMoeForCausalLM(config)
     model.load_state_dict(state_dict, strict=True, assign=True)
     print("Checkpoint loaded successfully.")
     del config._name_or_path
@@ -141,7 +141,7 @@ def write_model(
     # Safety check: reload the converted model
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
-    OpenaiForCausalLM.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
+    OpenAIMoeForCausalLM.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
     print("Model reloaded successfully.")
 
     # generation config
@@ -183,7 +183,7 @@ def bytes_to_unicode():
     return dict(zip(bs, cs))
 
 import tiktoken
-class OpenaiConverter(TikTokenConverter):
+class OpenAIMoeConverter(TikTokenConverter):
     def extract_vocab_merges_from_model(self, tiktoken_url: str):
         tokenizer = tiktoken.get_encoding(tiktoken_url)
         self.pattern = tokenizer._pat_str
@@ -266,7 +266,7 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
         "{% endif %}"
     )
 
-    converter = OpenaiConverter(
+    converter = OpenAIMoeConverter(
         vocab_file=tokenizer_path,
         model_max_length=None,
         chat_template=chat_template if instruct else None,

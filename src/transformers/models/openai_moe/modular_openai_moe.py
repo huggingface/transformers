@@ -42,13 +42,13 @@ from ..llama.modeling_llama import (
 )
 from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel
 from ..qwen2.modeling_qwen2 import Qwen2Attention
-from .configuration_openai_moe import OpenaiConfig
+from .configuration_openai_moe import OpenAIMoeConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class OpenaiRMSNorm(LlamaRMSNorm):
+class OpenAIMoeRMSNorm(LlamaRMSNorm):
     def forward(self, hidden_states):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
@@ -57,7 +57,7 @@ class OpenaiRMSNorm(LlamaRMSNorm):
         return (self.weight * hidden_states).to(input_dtype)  # main diff with Llama
 
 
-class OpenaiExperts(nn.Module):
+class OpenAIMoeExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.num_experts = config.num_local_experts
@@ -119,13 +119,13 @@ class OpenaiExperts(nn.Module):
         return next_states
 
 
-class OpenaiMLP(nn.Module):
+class OpenAIMoeMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.hidden_dim = config.hidden_size
         self.num_local_experts = config.num_local_experts
-        self.experts = OpenaiExperts(config)
+        self.experts = OpenAIMoeExperts(config)
         self.router = nn.Linear(config.hidden_size, config.num_local_experts, bias=True)
 
     def forward(self, hidden_states):
@@ -145,7 +145,7 @@ class OpenaiMLP(nn.Module):
         return output_states, router_scores
 
 
-class OpenaiRotaryEmbedding(LlamaRotaryEmbedding):
+class OpenAIMoeRotaryEmbedding(LlamaRotaryEmbedding):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
@@ -244,8 +244,8 @@ def openai_flex_attention_forward(
 ALL_ATTENTION_FUNCTIONS.register("openai_flex_attention", openai_flex_attention_forward)
 
 
-class OpenaiAttention(Qwen2Attention):
-    def __init__(self, config: OpenaiConfig, layer_idx: int):
+class OpenAIMoeAttention(Qwen2Attention):
+    def __init__(self, config: OpenAIMoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -262,14 +262,14 @@ class OpenaiAttention(Qwen2Attention):
         self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
 
 
-class OpenaiDecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: OpenaiConfig, layer_idx: int):
+class OpenAIMoeDecoderLayer(LlamaDecoderLayer):
+    def __init__(self, config: OpenAIMoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.hidden_size = config.hidden_size
-        self.self_attn = OpenaiAttention(config=config, layer_idx=layer_idx)
-        self.mlp = OpenaiMLP(config)
-        self.input_layernorm = OpenaiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = OpenaiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = OpenAIMoeAttention(config=config, layer_idx=layer_idx)
+        self.mlp = OpenAIMoeMLP(config)
+        self.input_layernorm = OpenAIMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = OpenAIMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attention_type = config.layer_types[layer_idx]
 
     def forward(
@@ -315,12 +315,12 @@ class OpenaiDecoderLayer(LlamaDecoderLayer):
         return outputs
 
 
-class OpenaiPreTrainedModel(LlamaPreTrainedModel):
+class OpenAIMoePreTrainedModel(LlamaPreTrainedModel):
     _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
 
 
-class OpenaiModel(MixtralModel):
-    _no_split_modules = ["OpenaiDecoderLayer"]
+class OpenAIMoeModel(MixtralModel):
+    _no_split_modules = ["OpenAIMoeDecoderLayer"]
 
     @can_return_tuple
     @auto_docstring
@@ -436,12 +436,12 @@ class OpenaiModel(MixtralModel):
         )
 
 
-class OpenaiForCausalLM(MixtralForCausalLM):
+class OpenAIMoeForCausalLM(MixtralForCausalLM):
     pass
 
 
 __all__ = [
-    "OpenaiForCausalLM",
-    "OpenaiModel",
-    "OpenaiPreTrainedModel",
+    "OpenAIMoeForCausalLM",
+    "OpenAIMoeModel",
+    "OpenAIMoePreTrainedModel",
 ]

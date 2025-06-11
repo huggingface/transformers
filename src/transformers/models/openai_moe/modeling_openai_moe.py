@@ -39,17 +39,17 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
-from .configuration_openai_moe import OpenaiConfig
+from .configuration_openai_moe import OpenAIMoeConfig
 
 
 logger = logging.get_logger(__name__)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
-class OpenaiRMSNorm(nn.Module):
+class OpenAIMoeRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        OpenaiRMSNorm is equivalent to T5LayerNorm
+        OpenAIMoeRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -66,7 +66,7 @@ class OpenaiRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class OpenaiExperts(nn.Module):
+class OpenAIMoeExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.num_experts = config.num_local_experts
@@ -128,13 +128,13 @@ class OpenaiExperts(nn.Module):
         return next_states
 
 
-class OpenaiMLP(nn.Module):
+class OpenAIMoeMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.hidden_dim = config.hidden_size
         self.num_local_experts = config.num_local_experts
-        self.experts = OpenaiExperts(config)
+        self.experts = OpenAIMoeExperts(config)
         self.router = nn.Linear(config.hidden_size, config.num_local_experts, bias=True)
 
     def forward(self, hidden_states):
@@ -154,8 +154,8 @@ class OpenaiMLP(nn.Module):
         return output_states, router_scores
 
 
-class OpenaiRotaryEmbedding(nn.Module):
-    def __init__(self, config: OpenaiConfig, device=None):
+class OpenAIMoeRotaryEmbedding(nn.Module):
+    def __init__(self, config: OpenAIMoeConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
@@ -248,10 +248,10 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class OpenaiAttention(nn.Module):
+class OpenAIMoeAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: OpenaiConfig, layer_idx: int):
+    def __init__(self, config: OpenAIMoeConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -320,14 +320,14 @@ class OpenaiAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class OpenaiDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: OpenaiConfig, layer_idx: int):
+class OpenAIMoeDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: OpenAIMoeConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = OpenaiAttention(config=config, layer_idx=layer_idx)
-        self.mlp = OpenaiMLP(config)
-        self.input_layernorm = OpenaiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = OpenaiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = OpenAIMoeAttention(config=config, layer_idx=layer_idx)
+        self.mlp = OpenAIMoeMLP(config)
+        self.input_layernorm = OpenAIMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = OpenAIMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attention_type = config.layer_types[layer_idx]
 
     def forward(
@@ -374,11 +374,11 @@ class OpenaiDecoderLayer(GradientCheckpointingLayer):
 
 
 @auto_docstring
-class OpenaiPreTrainedModel(PreTrainedModel):
-    config_class = OpenaiConfig
+class OpenAIMoePreTrainedModel(PreTrainedModel):
+    config_class = OpenAIMoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["OpenaiDecoderLayer"]
+    _no_split_modules = ["OpenAIMoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -399,25 +399,25 @@ class OpenaiPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, OpenaiRMSNorm):
+        elif isinstance(module, OpenAIMoeRMSNorm):
             module.weight.data.fill_(1.0)
 
 
 @auto_docstring
-class OpenaiModel(OpenaiPreTrainedModel):
-    _no_split_modules = ["OpenaiDecoderLayer"]
+class OpenAIMoeModel(OpenAIMoePreTrainedModel):
+    _no_split_modules = ["OpenAIMoeDecoderLayer"]
 
-    def __init__(self, config: OpenaiConfig):
+    def __init__(self, config: OpenAIMoeConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [OpenaiDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [OpenAIMoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = OpenaiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = OpenaiRotaryEmbedding(config=config)
+        self.norm = OpenAIMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = OpenAIMoeRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -629,14 +629,14 @@ def load_balancing_loss_func(
 
 
 @auto_docstring
-class OpenaiForCausalLM(OpenaiPreTrainedModel, GenerationMixin):
+class OpenAIMoeForCausalLM(OpenAIMoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = OpenaiModel(config)
+        self.model = OpenAIMoeModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.router_aux_loss_coef = config.router_aux_loss_coef
@@ -691,10 +691,10 @@ class OpenaiForCausalLM(OpenaiPreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, OpenaiForCausalLM
+        >>> from transformers import AutoTokenizer, OpenAIMoeForCausalLM
 
-        >>> model = OpenaiForCausalLM.from_pretrained("mistralai/Openai-8x7B-v0.1")
-        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Openai-8x7B-v0.1")
+        >>> model = OpenAIMoeForCausalLM.from_pretrained("mistralai/OpenAIMoe-8x7B-v0.1")
+        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/OpenAIMoe-8x7B-v0.1")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -760,4 +760,4 @@ class OpenaiForCausalLM(OpenaiPreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["OpenaiForCausalLM", "OpenaiModel", "OpenaiPreTrainedModel"]
+__all__ = ["OpenAIMoeForCausalLM", "OpenAIMoeModel", "OpenAIMoePreTrainedModel"]

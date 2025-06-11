@@ -407,7 +407,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
         ),
         ("oneformer", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             (
-                "openai-moe",
+                "openai_moe",
                 (
                     None,
                     "PreTrainedTokenizerFast" if is_tokenizers_available() else None,
