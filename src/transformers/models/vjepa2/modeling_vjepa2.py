@@ -900,33 +900,35 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         encoder_output = self.forward(pixel_values_videos)
         return encoder_output.last_hidden_state
 
-# class VJEPA2AttentionPoolingHead(nn.Module):
-#     def __init__(self, config: VJEPA2Config):
-#         super().__init__()
-#         self.query_tokens = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-#         self.norm1 = nn.LayerNorm(config.hidden_size)
-#         self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
-#         self.norm2 = nn.LayerNorm(config.hidden_size)
-#         self.mlp = VJEPA2MLP(config, hidden_size=config.hidden_size, mlp_ratio=config.mlp_ratio)
+        # class VJEPA2AttentionPoolingHead(nn.Module):
+        #     def __init__(self, config: VJEPA2Config):
+        #         super().__init__()
+        #         self.query_tokens = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        #         self.norm1 = nn.LayerNorm(config.hidden_size)
+        #         self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
+        #         self.norm2 = nn.LayerNorm(config.hidden_size)
+        #         self.mlp = VJEPA2MLP(config, hidden_size=config.hidden_size, mlp_ratio=config.mlp_ratio)
 
-#     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        #     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
 
-#         query_tokens = self.query_tokens.repeat(hidden_state.shape[0], 1, 1)
-        
-#         # Apply attention
-#         hidden_state = self.norm1(hidden_state)
-#         hidden_state, _ = self.attention(query_tokens, hidden_state, hidden_state)
-#         hidden_state = hidden_state + query_tokens
+        #         query_tokens = self.query_tokens.repeat(hidden_state.shape[0], 1, 1)
 
-#         # Apply MLP
-#         residual = hidden_state
-#         hidden_state = self.norm2(hidden_state)
-#         hidden_state = self.mlp(hidden_state)
-#         hidden_state = residual + hidden_state
+        #         # Apply attention
+        #         hidden_state = self.norm1(hidden_state)
+        #         hidden_state, _ = self.attention(query_tokens, hidden_state, hidden_state)
+        #         hidden_state = hidden_state + query_tokens
+
+        #         # Apply MLP
+        #         residual = hidden_state
+        #         hidden_state = self.norm2(hidden_state)
+        #         hidden_state = self.mlp(hidden_state)
+        #         hidden_state = residual + hidden_state
 
         return hidden_state
 
+
 # -----------------------------
+
 
 class VJEPA2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -1049,13 +1051,12 @@ class VJEPA2HeadLayer(GradientCheckpointingLayer):
 # -----------------------------
 
 
-import math
-import torch.nn.functional as F
 import torch.nn as nn
 
 
 class VJEPA2HeadCrossAttention(nn.Module):
     """It's different from other cross-attention layers, doesn't have output projection layer (o_proj)"""
+
     # in case of modular refactoring - o_proj can be replaces with nn.Identity()
 
     def __init__(self, config):
@@ -1142,12 +1143,15 @@ class VJEPA2HeadCrossAttentionLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, ...]:
-
         # Apply cross-attention
         residual = queries
         hidden_state = self.norm1(hidden_state)
         hidden_state, *attn_weights = self.xattn(
-            queries, hidden_state, hidden_state, attention_mask=attention_mask, output_attentions=output_attentions,
+            queries,
+            hidden_state,
+            hidden_state,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
         )
         hidden_state = residual + hidden_state
 
