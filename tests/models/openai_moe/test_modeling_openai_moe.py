@@ -196,6 +196,7 @@ class OpenAIMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             self.model_tester.create_and_check_model(*config_and_inputs)
 
 
+@unittest.skip(reason="No available checkpoint for integration tests yet")
 @require_torch_accelerator
 class OpenAIMoeIntegrationTest(unittest.TestCase):
     def tearDown(self):
