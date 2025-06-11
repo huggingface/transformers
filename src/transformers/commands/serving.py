@@ -16,7 +16,6 @@ import json
 import time
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
-from logging import getLevelNamesMapping
 from threading import Thread
 from typing import Dict, Optional
 
@@ -199,10 +198,10 @@ class ServeCommand(BaseTransformersCLICommand):
         self.use_continuous_batching = self.args.attn_implementation == "sdpa_paged"
 
         transformers_logger = logging.get_logger("transformers")
-        transformers_logger.setLevel(getLevelNamesMapping()[self.args.log_level.upper()])
+        transformers_logger.setLevel(logging.log_levels[self.args.log_level.lower()])
 
         cb_logger = logging.get_logger("transformers.generation.continuous_batching")
-        cb_logger.setLevel(getLevelNamesMapping()[self.args.log_level.upper()])
+        cb_logger.setLevel(logging.log_levels[self.args.log_level.lower()])
 
     def build_chunk(self, content: str, request_id: str, finish_reason: Optional[str] = None) -> str:
         payload = {
@@ -266,6 +265,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 try:
                     max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 256
                     request_id = manager.add_request(_inputs, request_id=req.request_id, max_new_tokens=max_new_tokens)
+                    print(request_id)
                     queue_is_flushed = False
 
                     for result in manager:
