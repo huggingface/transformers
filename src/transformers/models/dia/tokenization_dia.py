@@ -31,9 +31,9 @@ class DiaTokenizer(PreTrainedTokenizer):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        pad_token (`str`, *optional*, defaults to `<pad>`):
+        pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        unk_token (`str`, *optional*, defaults to `<pad>`):
+        unk_token (`str`, *optional*, defaults to `"<pad>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
         max_length (`int`, *optional*, defaults to 1024):

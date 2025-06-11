@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Dia model."""
 
+import copy
 import tempfile
 import unittest
 from typing import Tuple
@@ -36,6 +37,8 @@ if is_datasets_available():
     pass
 
 if is_torch_available():
+    import torch
+
     from transformers import (
         DiaForConditionalGeneration,
         DiaModel,
@@ -206,7 +209,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     all_model_classes = (DiaModel, DiaForConditionalGeneration) if is_torch_available() else ()
     # We only allow greedy search / sampling with one sequence; see `skip_non_greedy_generate`
     all_generative_model_classes = (DiaForConditionalGeneration,)
-    # TODO: needs processor for pipeline
+    # TODO: needs processor for pipeline / do we allow pipeline here (see csm?)
     # pipeline_model_mapping = {"text-to-audio": DiaForConditionalGeneration} if is_torch_available() else {}
     pipeline_model_mapping = {}
     test_pruning = False
@@ -241,6 +244,22 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             if self._testMethodName.startswith(test):
                 self.skipTest(reason="Dia only supports greedy search / sampling with one sequence.")
 
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        """Overwritten to account for the 2D flattened structure"""
+        inputs_dict = copy.deepcopy(inputs_dict)
+
+        if return_labels:
+            inputs_dict["labels"] = torch.ones(
+                (
+                    self.model_tester.batch_size * self.model_tester.num_channels,
+                    self.model_tester.seq_length,
+                ),
+                dtype=torch.long,
+                device=torch_device,
+            )
+
+        return inputs_dict
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -259,6 +278,16 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     # Overriding shape checks as Dia has different shapes on encoder/decoder using a composite config
     # + additional special cases where 3D x 2D meshes confuse the expected shape
+    def _check_logits(self, batch_size, logits, config):
+        batch_size *= len(config.delay_pattern)  # Account for flattening
+        vocab_size = config.decoder_config.vocab_size
+        self.assertIsInstance(logits, tuple)
+        self.assertListEqual([iter_logits.shape[0] for iter_logits in logits], [batch_size] * len(logits))
+        # vocabulary difference equal to one (imagegptmodel?) or zero (all other models)
+        vocab_diff = vocab_size - logits[0].shape[-1]
+        self.assertTrue(vocab_diff in [0, 1])
+        self.assertListEqual([vocab_size - score.shape[-1] for score in logits], [vocab_diff] * len(logits))
+
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
@@ -376,22 +405,10 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.assertEqual(len(scores), generated_length)
         self.assertListEqual([iter_scores.shape for iter_scores in scores], [expected_shape] * len(scores))
 
-    @unittest.skip(reason="Decoder preparation in Dia is currently not designed around cache continuation.")
-    def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @unittest.skip(reason="Indirectly checked in Dia through the generate methods.")
-    def test_past_key_values_format(self, custom_all_cache_shapes=None):
-        pass
-
-    @unittest.skip(reason="Indirectly checked in Dia through the generate methods.")
-    def test_hidden_states_output(self):
-        pass
-
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
-        Overriden as it relies on hardcoded namings atm
+        Overwritten as it relies on hardcoded namings atm - checking for our case here specifically
         """
         for model_class in self.all_model_classes:
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -422,6 +439,18 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                             sub_config = getattr(model_sdpa.config, key)
                             self.assertTrue(sub_config._attn_implementation == "sdpa")
 
+    @unittest.skip(reason="Decoder preparation in Dia is currently not designed around cache continuation.")
+    def test_generate_continue_from_past_key_values(self):
+        pass
+
+    @unittest.skip(reason="Indirectly checked in Dia through the generate methods.")
+    def test_past_key_values_format(self, custom_all_cache_shapes=None):
+        pass
+
+    @unittest.skip(reason="Indirectly checked in Dia through the generate methods.")
+    def test_hidden_states_output(self):
+        pass
+
     @unittest.skip(
         reason="Dia has too many mixed embedding types which would cause unintentional side effects, e.g. attempts at tying embeddings"
     )
@@ -436,4 +465,5 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_torchscript_simple(self):
         pass
 
-    # TODO: gradient / loss things
+
+# TODO: integration tests

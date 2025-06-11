@@ -24,7 +24,6 @@ from ...generation.logits_process import (
     DiaClassifierFreeGuidanceLogitsProcessor,
     DiaEOSChannelFilterLogitsProcessor,
     DiaEOSDelayPatternLogitsProcessor,
-    DiaFlattenLogitsProcessor,
     LogitsProcessorList,
 )
 from ...generation.stopping_criteria import StoppingCriteriaList
@@ -97,7 +96,6 @@ class DiaGenerationMixin(GenerationMixin):
         # We need to guarantee CFG to be at the first position (after flattening)
         if cfg_processor is not None:
             merged_processors.insert(0, cfg_processor)
-        merged_processors.insert(0, DiaFlattenLogitsProcessor())
 
         return merged_processors
 
@@ -226,9 +224,7 @@ class DiaGenerationMixin(GenerationMixin):
         )
 
         # 4. Overwrite and convert to 2D
-        decoder_input_ids = delayed_batch[
-            :, : max_audio_len + 1, :
-        ].long()  # .reshape(real_batch_size * num_channels, -1).long()
+        decoder_input_ids = delayed_batch[:, : max_audio_len + 1, :].long()
         model_kwargs["decoder_attention_mask"] = decoder_attention_mask[:, : max_audio_len + 1].long()
         model_kwargs["decoder_delay_mask"] = delayed_batch
 

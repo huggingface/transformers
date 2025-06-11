@@ -886,6 +886,7 @@ class DiaModel(DiaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[Tuple, Seq2SeqModelOutput]:
         if input_ids is None and encoder_outputs is None:
             raise ValueError(
@@ -925,6 +926,7 @@ class DiaModel(DiaPreTrainedModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
+                **kwargs,
             )
         # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
@@ -935,11 +937,13 @@ class DiaModel(DiaPreTrainedModel):
             )
 
         # On default we initialize the decoder with bos tokens if nothing has been provided
+        bsz, seq_len, channels = (encoder_outputs[0].shape[0], -1, self.config.decoder_config.num_channels)
         if decoder_input_ids is None:
-            bsz, seq_len, channels = (encoder_outputs[0].shape[0], 1, self.config.decoder_config.num_channels)
             decoder_input_ids = torch.full(
-                size=(bsz, seq_len, channels), fill_value=self.config.bos_token_id, device=self.device
+                size=(bsz, 1, channels), fill_value=self.config.bos_token_id, device=self.device
             )
+        # Ensure 3D
+        decoder_input_ids = decoder_input_ids.reshape(bsz, seq_len, channels)
 
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
@@ -953,6 +957,7 @@ class DiaModel(DiaPreTrainedModel):
             use_cache=use_cache,
             return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
         if not return_dict:
@@ -1029,15 +1034,15 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
 
         last_hidden_state = outputs[0]
         batch_size = last_hidden_state.shape[0]
-        audio_logits = self.logits_dense(last_hidden_state).view((batch_size, -1, self.num_channels, self.vocab_size))
+        audio_logits = self.logits_dense(last_hidden_state).view((batch_size * self.num_channels, -1, self.vocab_size))
 
-        # TODO: loss calculations here
         loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=audio_logits, labels=labels, vocab_size=self.vocab_size, **kwargs)
 
         if not return_dict:
             output = (audio_logits,) + outputs[1:]
-            # loss
-            return output
+            return ((loss,) + output) if loss is not None else output
 
         return Seq2SeqLMOutput(
             loss=loss,
