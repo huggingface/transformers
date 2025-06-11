@@ -62,14 +62,14 @@ class Owlv2Processor(ProcessorMixin):
     [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`Owlv2ImageProcessor`]):
+        image_processor ([`Owlv2ImageProcessor`, `Owlv2ImageProcessorFast`]):
             The image processor is a required input.
         tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
             The tokenizer is a required input.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Owlv2ImageProcessor"
+    image_processor_class = ("Owlv2ImageProcessor", "Owlv2ImageProcessorFast")
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
     # For backward compatibility. See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details.
     optional_call_args = ["query_images"]
