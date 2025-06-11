@@ -194,6 +194,12 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     )
     test_pruning = False
     test_head_masking = False
+    # MP works but offload doesn't work when the MultiheadAttention is offloaded
+    # TODO: One potential solution would be to add to set preload_module_classes = ["Siglip2MultiheadAttentionPoolingHead"]
+    # in the dispatch_model function
+    test_cpu_offload = False
+    test_disk_offload_safetensors = False
+    test_disk_offload_bin = False
     _is_composite = True
 
     def setUp(self):
