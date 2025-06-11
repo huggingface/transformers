@@ -776,6 +776,8 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
                     mean=0.0,
                     std=self.config.initializer_range,
                 ).to(module.mask_token.dtype)
+            else:
+                module.mask_tokens.data.zero_()
 
 
 def _convert_head_mask_to_5d(head_mask, num_hidden_layers):
