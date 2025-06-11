@@ -6,7 +6,7 @@ import os
 
 import torch
 
-from transformers.models.blt_wip.modeling_blt_wip import ByteLatentTransformer
+from transformers.models.blt_wip.modeling_blt_wip import BLTModel
 from transformers.models.blt_wip.configuration_blt import BLTConfig
 from transformers.models.blt_wip.tokenizers.blt_tokenizer import BltTokenizer
 
@@ -47,7 +47,7 @@ def sample_top_p(probs, p):
 def generate(
     prompts: list[str] | None,
     *,
-    model: ByteLatentTransformer,
+    model: BLTModel,
     tokenizer: BltTokenizer,
     max_prompt_len: int = 256,
     max_gen_len: int = 256,
@@ -114,8 +114,8 @@ def generate(
 
 
 
-def main(prompt: str = "hi", model_name: str = "blt-1b"):
-    device = "mps"
+def main(prompt: str = "my name is", model_name: str = "blt-1b"):
+    device = "cuda"
 
     #HF
     blt_repo = "facebook/blt-1b"
@@ -134,24 +134,35 @@ def main(prompt: str = "hi", model_name: str = "blt-1b"):
     
     config['args']['attn_bias_type'] = 'causal'
     config['args']['attn_impl'] = 'sdpa'
-
-    model_config = BLTConfig(**config["args"])
     
+    # Create model using normal constructor instead of from_pretrained
+    from transformers.models.blt_wip.configuration_blt import BLTConfig
+    model_config = BLTConfig(**config['args'])
+    
+    # Set entropy model parameters manually
     patcher_args = entropy_params["data"]["patcher_args"]
     model_config.patch_in_forward = True
-    model_config.realtime_patching = True  # Enable realtime patching
+    model_config.realtime_patching = True
     model_config.patch_size = patcher_args["patch_size"]
-    model_config.patching_mode = "entropy"  #patcher_args["patching_mode"] #TODO: we need to pass "entropy" to run through the Patcher / "entropy model", which is the LMTransformer
+    model_config.patching_mode = "entropy"
     model_config.patching_threshold = patcher_args["threshold"]
     model_config.patching_threshold_add = patcher_args["threshold_add"]
     model_config.max_patch_length = patcher_args["max_patch_length"]
     model_config.patching_batch_size = patcher_args["patching_batch_size"]
     model_config.patching_device = patcher_args["patching_device"]
     model_config.monotonicity = patcher_args["monotonicity"]
-    model_config.entropy_model_checkpoint_dir = entropy_dir #original config on the hub don't set this
-
-
-    model = ByteLatentTransformer.from_pretrained(blt_repo, config=model_config).to(device)
+    model_config.entropy_model_checkpoint_dir = entropy_dir
+    
+    # Use direct construction instead of from_pretrained to avoid meta tensor issues
+    print("Creating model...")
+    model = BLTModel(model_config).to(device)
+    
+    # Load model weights manually
+    print("Loading model weights...")
+    from safetensors.torch import load_file
+    checkpoint_path = hf_hub_download(repo_id=blt_repo, filename="model.safetensors")
+    state_dict = load_file(checkpoint_path)
+    model.load_state_dict(state_dict, strict=False)
 
     tokenizer = BltTokenizer(
         vocab_size_unit_1=model_config.vocab_size,
@@ -164,7 +175,7 @@ def main(prompt: str = "hi", model_name: str = "blt-1b"):
         prompts, 
         model=model, 
         tokenizer=tokenizer,
-        max_gen_len=4,
+        max_gen_len=200,
         device=device
     )
     
