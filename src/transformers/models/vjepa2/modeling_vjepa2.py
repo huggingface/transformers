@@ -1054,25 +1054,6 @@ import torch.nn.functional as F
 import torch.nn as nn
 
 
-class MLP(nn.Module):
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.0):
-        super().__init__()
-        out_features = out_features or in_features
-        hidden_features = hidden_features or in_features
-        self.fc1 = nn.Linear(in_features, hidden_features)
-        self.act = act_layer()
-        self.fc2 = nn.Linear(hidden_features, out_features)
-        self.drop = nn.Dropout(drop)
-
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.drop(x)
-        x = self.fc2(x)
-        x = self.drop(x)
-        return x
-
-
 class CrossAttention(nn.Module):
     def __init__(self, dim, num_heads=12, qkv_bias=False, use_sdpa=True):
         super().__init__()
@@ -1105,13 +1086,12 @@ class CrossAttention(nn.Module):
 
 
 class CrossAttentionBlock(nn.Module):
-    def __init__(self, dim, num_heads, mlp_ratio=4.0, qkv_bias=False, act_layer=nn.GELU, norm_layer=nn.LayerNorm):
+    def __init__(self, config, dim, num_heads, mlp_ratio=4.0, qkv_bias=False, act_layer=nn.GELU, norm_layer=nn.LayerNorm):
         super().__init__()
         self.norm1 = norm_layer(dim)
         self.xattn = CrossAttention(dim, num_heads=num_heads, qkv_bias=qkv_bias)
         self.norm2 = norm_layer(dim)
-        mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = MLP(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer)
+        self.mlp = VJEPA2MLP(config, hidden_size=dim)
 
     def forward(self, q, x):
         y = self.xattn(q, self.norm1(x))
@@ -1141,13 +1121,12 @@ class AttentivePooler(nn.Module):
         self.use_activation_checkpointing = use_activation_checkpointing
         self.query_tokens = nn.Parameter(torch.zeros(1, num_queries, embed_dim))
 
-        self.complete_block = complete_block
-        if complete_block:
-            self.cross_attention_block = CrossAttentionBlock(
-                dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, norm_layer=norm_layer
-            )
-        else:
-            self.cross_attention_block = CrossAttention(dim=embed_dim, num_heads=num_heads, qkv_bias=qkv_bias)
+
+        self.cross_attention_block = CrossAttentionBlock(
+            config=config,
+            dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, norm_layer=norm_layer
+        )
+
 
         self.blocks = None
         if depth > 1:
