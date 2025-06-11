@@ -932,29 +932,6 @@ import torch.nn as nn
 
 
 
-class SwiGLUFFN(nn.Module):
-    def __init__(
-        self, in_features, hidden_features=None, out_features=None, act_layer=nn.SiLU, drop=0.0, wide_silu=True
-    ):
-        super().__init__()
-        out_features = out_features or in_features
-        swiglu_hidden_features = hidden_features = hidden_features or in_features
-        if wide_silu:
-            swiglu_hidden_features = int(2 * hidden_features / 3)
-            align_as = 8
-            swiglu_hidden_features = (swiglu_hidden_features + align_as - 1) // align_as * align_as
-        self.fc1 = nn.Linear(in_features, swiglu_hidden_features)
-        self.fc2 = nn.Linear(in_features, swiglu_hidden_features)
-        self.act = act_layer()
-        self.fc3 = nn.Linear(swiglu_hidden_features, out_features)
-
-    def forward(self, x):
-        x1 = self.fc1(x)
-        x2 = self.fc2(x)
-        hidden = F.silu(x1) * x2
-        return self.fc3(hidden)
-
-
 class Attention(nn.Module):
     def __init__(
         self,
@@ -1057,12 +1034,7 @@ class Block(nn.Module):
         self.drop_path = VJEPA2DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
-        if act_layer is nn.SiLU:
-            self.mlp = SwiGLUFFN(
-                in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, wide_silu=wide_silu, drop=drop
-            )
-        else:
-            self.mlp = MLP(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
+        self.mlp = MLP(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
 
     def forward(self, x, mask=None, attn_mask=None, T=None, H_patches=None, W_patches=None):
         y = self.attn(self.norm1(x), mask=mask, attn_mask=attn_mask)
