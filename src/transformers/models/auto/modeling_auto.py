@@ -558,7 +558,6 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("data2vec-text", "Data2VecTextForCausalLM"),
         ("dbrx", "DbrxForCausalLM"),
         ("deepseek_v3", "DeepseekV3ForCausalLM"),
-        ("dia", "DiaForCausalLM"),
         ("diffllama", "DiffLlamaForCausalLM"),
         ("electra", "ElectraForCausalLM"),
         ("emu3", "Emu3ForCausalLM"),
@@ -1411,7 +1410,6 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Audio Classification mapping
         ("audio-spectrogram-transformer", "ASTForAudioClassification"),
         ("data2vec-audio", "Data2VecAudioForSequenceClassification"),
-        ("dia", "DiaForAudioClassification"),
         ("hubert", "HubertForSequenceClassification"),
         ("sew", "SEWForSequenceClassification"),
         ("sew-d", "SEWDForSequenceClassification"),

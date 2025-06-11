@@ -55,7 +55,6 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("deformable_detr", "DeformableDetrFeatureExtractor"),
         ("deit", "DeiTFeatureExtractor"),
         ("detr", "DetrFeatureExtractor"),
-        ("dia", "DiaAudioProcessor"),
         ("dinat", "ViTFeatureExtractor"),
         ("donut-swin", "DonutFeatureExtractor"),
         ("dpt", "DPTFeatureExtractor"),
