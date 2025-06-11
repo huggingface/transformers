@@ -48,8 +48,7 @@ if is_vision_available():
 
     from transformers import AutoVideoProcessor
 
-# VJEPA_HF_MODEL = "facebook/vjepa2-vith-256-fpc64"
-VJEPA_HF_MODEL = "/checkpoint/amaia/video/koustuvs/models/vjepa_v2/hf"
+VJEPA_HF_MODEL = "facebook/vjepa2-vitl-fpc64-256"
 
 
 class VJEPA2ModelTester:
@@ -216,8 +215,7 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = VJEPA_HF_MODEL
-        model = VJEPA2Model.from_pretrained(model_name)
+        model = VJEPA2Model.from_pretrained(VJEPA_HF_MODEL)
         self.assertIsNotNone(model)
 
 
