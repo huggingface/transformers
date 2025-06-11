@@ -16,7 +16,8 @@ import dataclasses
 import warnings
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple, Union
+from collections.abc import Iterable, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from packaging import version
