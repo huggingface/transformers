@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import re
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -213,7 +213,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         self,
         image: Union["Image.Image", str],
         question: Optional[str] = None,
-        word_boxes: Optional[Tuple[str, List[float]]] = None,
+        word_boxes: Optional[tuple[str, list[float]]] = None,
         **kwargs,
     ):
         """
@@ -241,7 +241,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                 broadcasted to multiple questions.
             question (`str`):
                 A question to ask of the document.
-            word_boxes (`List[str, Tuple[float, float, float, float]]`, *optional*):
+            word_boxes (`list[str, tuple[float, float, float, float]]`, *optional*):
                 A list of words and bounding boxes (normalized 0->1000). If you provide this optional input, then the
                 pipeline will use these words and boxes instead of running OCR on the image to derive them for models
                 that need them (e.g. LayoutLM). This allows you to reuse OCR'd results across many invocations of the
@@ -294,7 +294,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         padding="do_not_pad",
         doc_stride=None,
         max_seq_len=None,
-        word_boxes: Optional[Tuple[str, List[float]]] = None,
+        word_boxes: Optional[tuple[str, list[float]]] = None,
         lang=None,
         tesseract_config="",
         timeout=None,

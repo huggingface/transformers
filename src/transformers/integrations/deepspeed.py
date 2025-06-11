@@ -67,7 +67,7 @@ class HfDeepSpeedConfig(DeepSpeedConfig):
     the DeepSpeed configuration is not modified in any way.
 
     Args:
-        config_file_or_dict (`Union[str, Dict]`): path to DeepSpeed config file or dict.
+        config_file_or_dict (`Union[str, dict]`): path to DeepSpeed config file or dict.
 
     """
 

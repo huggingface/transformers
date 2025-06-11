@@ -1,7 +1,6 @@
 import enum
 import itertools
 import types
-from typing import Dict
 
 from ..generation import GenerationConfig
 from ..utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available
@@ -31,7 +30,7 @@ class Chat:
     to this format because the rest of the pipeline code tends to assume that lists of messages are
     actually a batch of samples rather than messages in the same conversation."""
 
-    def __init__(self, messages: Dict):
+    def __init__(self, messages: dict):
         for message in messages:
             if not ("role" in message and "content" in message):
                 raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
@@ -236,7 +235,7 @@ class TextGenerationPipeline(Pipeline):
         Complete the prompt(s) given as inputs.
 
         Args:
-            text_inputs (`str`, `List[str]`, List[Dict[str, str]], or `List[List[Dict[str, str]]]`):
+            text_inputs (`str`, `list[str]`, list[dict[str, str]], or `list[list[dict[str, str]]]`):
                 One or several prompts (or one list of prompts) to complete. If strings or a list of string are
                 passed, this pipeline will continue each prompt. Alternatively, a "chat", in the form of a list
                 of dicts with "role" and "content" keys, can be passed, or a list of such chats. When chats are passed,
