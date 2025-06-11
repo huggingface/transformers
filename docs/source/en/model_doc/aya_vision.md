@@ -14,82 +14,30 @@ rendered properly in your Markdown viewer.
 
 -->
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
+
 # AyaVision
 
-## Overview
+[AyaVision](https://huggingface.co/papers/2505.08751) is a family of open-weight multimodal vision-language models from Cohere Labs. Each model integrates a Command R7B–based multilingual transformer that has been post-trained with a synthetic multimodal instruction pipeline, together with a SigLIP2-patched vision encoder connected via lightweight adapter layers. The system processes images as tiled 364 × 364 patches plus a low-resolution thumbnail and supports up to 16 K tokens of text. It performs OCR, image captioning, visual reasoning, multilingual question answering in 23 languages, and code-comment generation without compromising text-only tasks.
 
-The Aya Vision 8B and 32B models is a state-of-the-art multilingual multimodal models developed by Cohere For AI. They build on the Aya Expanse recipe to handle both visual and textual information without compromising on the strong multilingual textual performance of the original model.
+You can find all the original AyaVision checkpoints under the [AyaVision](https://huggingface.co/collections/CohereLabs/cohere-labs-aya-vision-67c4ccd395ca064308ee1484) collection.
 
-Aya Vision 8B combines the `Siglip2-so400-384-14` vision encoder with the Cohere CommandR-7B language model further post-trained with the Aya Expanse recipe, creating a powerful vision-language model capable of understanding images and generating text across 23 languages. Whereas, Aya Vision 32B uses Aya Expanse 32B as the language model.
+> [!TIP]
+> Click on the AyaVision models in the right sidebar for more examples of how to apply AyaVision to different image-to-text tasks.
 
-Key features of Aya Vision include:
-- Multimodal capabilities in 23 languages
-- Strong text-only multilingual capabilities inherited from CommandR-7B post-trained with the Aya Expanse recipe and Aya Expanse 32B
-- High-quality visual understanding using the Siglip2-so400-384-14 vision encoder
-- Seamless integration of visual and textual information in 23 languages.
+The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
-<!-- <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/aya_vision_architecture.webp"
-alt="drawing" width="600"/>
-
-<small> Aya Vision architecture. </small> -->
-
-Tips:
-
-- Aya Vision is a multimodal model that takes images and text as input and produces text as output.
-- Images are represented using the `<image>` tag in the templated input.
-- For best results, use the `apply_chat_template` method of the processor to format your inputs correctly.
-- The model can process multiple images in a single conversation.
-- Aya Vision can understand and generate text in 23 languages, making it suitable for multilingual multimodal applications.
-
-This model was contributed by [saurabhdash](https://huggingface.co/saurabhdash) and [yonigozlan](https://huggingface.co/yonigozlan).
-
-
-## Usage
-
-Here's how to use Aya Vision for inference:
-
-```python
-from transformers import AutoProcessor, AutoModelForImageTextToText
-import torch
-
-model_id = "CohereForAI/aya-vision-8b"
-torch_device = "cuda:0"
-
-# Use fast image processor
-processor = AutoProcessor.from_pretrained(model_id, use_fast=True)
-model = AutoModelForImageTextToText.from_pretrained(
-    model_id, device_map=torch_device, torch_dtype=torch.float16
-)
-
-# Format message with the aya-vision chat template
-messages = [
-    {"role": "user",
-     "content": [
-       {"type": "image", "url": "https://pbs.twimg.com/media/Fx7YvfQWYAIp6rZ?format=jpg&name=medium"},
-        {"type": "text", "text": "चित्र में लिखा पाठ क्या कहता है?"},
-    ]},
-    ]
-
-# Process image on CUDA
-inputs = processor.apply_chat_template(
-    messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt", device=torch_device
-).to(model.device)
-
-gen_tokens = model.generate(
-    **inputs, 
-    max_new_tokens=300, 
-    do_sample=True, 
-    temperature=0.3,
-)
-
-gen_text = print(processor.tokenizer.decode(gen_tokens[0][inputs.input_ids.shape[1]:], skip_special_tokens=True))
-```
-### Pipeline
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
 ```python
 from transformers import pipeline
 
-pipe = pipeline(model="CohereForAI/aya-vision-8b", task="image-text-to-text", device_map="auto")
+pipe = pipeline(model="CohereLabs/aya-vision-8b", task="image-text-to-text", device_map="auto")
 
 # Format message with the aya-vision chat template
 messages = [
@@ -102,132 +50,61 @@ messages = [
 outputs = pipe(text=messages, max_new_tokens=300, return_full_text=False)
 
 print(outputs)
+
 ```
 
-### Multiple Images and Batched Inputs
-
-Aya Vision can process multiple images in a single conversation. Here's how to use it with multiple images:
+</hfoption>
+<hfoption id="AutoModel">
 
 ```python
+# pip install 'git+https://github.com/huggingface/transformers.git@v4.49.0-AyaVision'
 from transformers import AutoProcessor, AutoModelForImageTextToText
 import torch
 
-model_id = "CohereForAI/aya-vision-8b"
+model_id = "CohereLabs/aya-vision-8b"
 
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForImageTextToText.from_pretrained(
-    model_id, device_map="cuda:0", torch_dtype=torch.float16
+    model_id, device_map="auto", torch_dtype=torch.float16
 )
 
-# Example with multiple images in a single message
+# Format message with the aya-vision chat template
 messages = [
-    {
-        "role": "user",
-        "content": [
-            {
-                "type": "image",
-                "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
-            },
-            {
-                "type": "image",
-                "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
-            },
-            {
-                "type": "text",
-                "text": "These images depict two different landmarks. Can you identify them?",
-            },
-        ],
-    },
-]
+    {"role": "user",
+     "content": [
+       {"type": "image", "url": "https://pbs.twimg.com/media/Fx7YvfQWYAIp6rZ?format=jpg&name=medium"},
+        {"type": "text", "text": "चित्र में लिखा पाठ क्या कहता है?"},
+    ]},
+    ]
 
 inputs = processor.apply_chat_template(
     messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
 ).to(model.device)
 
 gen_tokens = model.generate(
-    **inputs, 
-    max_new_tokens=300, 
-    do_sample=True, 
-    temperature=0.3,
-)
-
-gen_text = processor.tokenizer.decode(gen_tokens[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
-print(gen_text)
-```
-
-For processing batched inputs (multiple conversations at once):
-
-```python
-from transformers import AutoProcessor, AutoModelForImageTextToText
-import torch
-
-model_id = "CohereForAI/aya-vision-8b"
-
-processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForImageTextToText.from_pretrained(
-    model_id, device_map="cuda:0", torch_dtype=torch.float16
-)
-
-# Prepare two different conversations
-batch_messages = [
-    # First conversation with a single image
-    [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image", "url": "https://llava-vl.github.io/static/images/view.jpg"},
-                {"type": "text", "text": "Write a haiku for this image"},
-            ],
-        },
-    ],
-    # Second conversation with multiple images
-    [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "image",
-                    "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
-                },
-                {
-                    "type": "image",
-                    "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
-                },
-                {
-                    "type": "text",
-                    "text": "These images depict two different landmarks. Can you identify them?",
-                },
-            ],
-        },
-    ],
-]
-
-# Process each conversation separately and combine into a batch
-batch_inputs = processor.apply_chat_template(
-    batch_messages, 
-    padding=True, 
-    add_generation_prompt=True, 
-    tokenize=True, 
-    return_dict=True, 
-    return_tensors="pt"
-).to(model.device)
-
-# Generate responses for the batch
-batch_outputs = model.generate(
-    **batch_inputs,
+    **inputs,
     max_new_tokens=300,
     do_sample=True,
     temperature=0.3,
 )
 
-# Decode the generated responses
-for i, output in enumerate(batch_outputs):
-    response = processor.tokenizer.decode(
-        output[batch_inputs.input_ids.shape[1]:], 
-        skip_special_tokens=True
-    )
-    print(f"Response {i+1}:\n{response}\n")
+print(processor.tokenizer.decode(gen_tokens[0][inputs.input_ids.shape[1]:], skip_special_tokens=True))
+
 ```
+
+</hfoption>
+
+</hfoptions>
+
+Quantization reduces the memory footprint of large models by representing weights at lower precision. Refer to the [Quantization](https://huggingface.co/docs/transformers/main/en/main_classes/quantization) overview for supported backends.
+
+## Notes
+
+- Use explicit language tokens (e.g. `<en>`, `<fr>`, `<hi>`) in prompts to reliably set the output language—otherwise it infers from input, which may be less precise.
+
+- You can pass a list of messages to the `pipeline` or manually format them via `apply_chat_template`, allowing multiple images or prompts in a single forward pass.
+
+- The model uses `use_cache=True` by default, so repeated `generate(...)` calls retain past key/value states and speed up decoding for long outputs.
 
 ## AyaVisionProcessor
 
@@ -243,5 +120,5 @@ for i, output in enumerate(batch_outputs):
 
 ## AyaVisionForConditionalGeneration
 
-[[autodoc]] AyaVisionForConditionalGeneration
+[[autodoc]] AyaVisionForConditionalGeneration 
     - forward
