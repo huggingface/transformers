@@ -1183,7 +1183,6 @@ class VJEPA2AttentivePooler(nn.Module):
     states of all tokens) e.g. for ImageNet.
     """
 )
-# Modified from transformers.models.videomae.modeling_videomae.VideoMAEForVideoClassification with VideoMAE->VJEPA2, videomae->vjepa2
 class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
     def __init__(self, config: VJEPA2Config):
         super().__init__(config)
@@ -1203,32 +1202,11 @@ class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
     def forward(
         self,
         pixel_values_videos: torch.Tensor,
-        context_head_mask: Optional[torch.Tensor] = None,
-        context_mask: Optional[List[torch.Tensor]] = None,
-        target_head_mask: Optional[torch.Tensor] = None,
-        target_mask: Optional[List[torch.Tensor]] = None,
         labels: Optional[torch.Tensor] = None,
-        skip_predictor: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> Union[Tuple, ImageClassifierOutput]:
         r"""
-        pixel_values_videos (`torch.Tensor` with shape `[batch size x num_frames x num_channels x height x width]`):
-            The input video pixels which is processed by VJEPA2VideoProcessor.
-        context_head_mask (`torch.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
-            The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard) for the context.
-        target_head_mask (`torch.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
-            The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard) for the target.
-        context_mask (`torch.Tensor` with shape `[batch_size, patch_size, 1]`, *optional*):
-            The mask position ids indicating which encoder output patches are going to be exposed to the predictor.
-            By default, this mask is created as torch.arange(N).unsqueeze(0).repeat(B,1), indicating full context
-            available to the predictor.
-        target_mask (`torch.Tensor` with shape `[batch_size, patch_size, 1]`, *optional*):
-            The mask position ids indicating which encoder output patches are going to be used as a prediction target
-            for the predictor. By default, this mask is created as torch.arange(N).unsqueeze(0).repeat(B,1), indicating
-            that the predictor should predict all encoder patches.
-        skip_predictor (`bool`):
-            Flag to skip the predictor forward, useful if you just need the encoder outputs. Defaults to `False`.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -1244,7 +1222,7 @@ class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
         >>> device = "cuda"
 
         >>> video_processor = AutoVideoProcessor.from_pretrained("facebook/vjepa2-vitl-fpc64-256")
-        >>> model = VJEPA2ForVideoClassification.from_pretrained("facebook/vjepa2-vitl-fpc64-256", num_labels=400).to(device)
+        >>> model = VJEPA2ForVideoClassification.from_pretrained("facebook/vjepa2-vitl-fpc64-256").to(device)
 
         >>> video = np.ones((64, 256, 256, 3))  # 64 frames, 256x256 RGB
         >>> inputs = video_processor(video, return_tensors="pt").to(device)
@@ -1265,11 +1243,7 @@ class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
 
         outputs = self.vjepa2(
             pixel_values_videos=pixel_values_videos,
-            context_head_mask=context_head_mask,
-            context_mask=context_mask,
-            target_head_mask=target_head_mask,
-            target_mask=target_mask,
-            skip_predictor=skip_predictor,
+            skip_predictor=True,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
