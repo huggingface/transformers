@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -793,14 +793,6 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
 
     def get_input_embeddings(self) -> VJEPA2PatchEmbeddings3D:
         return self.encoder.embeddings.patch_embeddings
-
-    def _prune_heads(self, heads_to_prune: Dict[int, List[int]]):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @can_return_tuple
     @auto_docstring
