@@ -557,10 +557,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         model = LlavaForConditionalGeneration.from_pretrained(model_id, torch_dtype="float16", device_map=torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
-        # check processing with expansion of inputs (w/o expansion should work with any backbone)
-        processor.vision_feature_select_strategy = "default"
-        processor.patch_size = 14
-
         image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
         inputs = processor(
