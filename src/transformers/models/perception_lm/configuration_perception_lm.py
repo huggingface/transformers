@@ -75,13 +75,13 @@ class PerceptionEncoderConfig(PretrainedConfig):
         use_cls_token=True,
         architecture="vit_pe_core_large_patch14_336",
         width=1024,
-        img_size=(448, 448),
+        img_size=[448, 448],
         depth=23,
         num_classes=0,
         global_pool="",
         use_post_transformer_norm=False,
         init_values=0.1,
-        ref_feat_shape=(32, 32),
+        ref_feat_shape=[32, 32],
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -112,7 +112,7 @@ class PerceptionLMConfig(PretrainedConfig):
             The config object or dictionary of the vision backbone.
         text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
             The config object or dictionary of the text backbone.
-        image_token_index (`int`, *optional*, defaults to 32000):
+        image_token_id (`int`, *optional*, defaults to 32000):
             The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.

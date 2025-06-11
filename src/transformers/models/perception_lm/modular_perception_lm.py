@@ -73,6 +73,7 @@ class PerceptionEncoder(PreTrainedModel):
             use_post_transformer_norm=config.use_post_transformer_norm,
             init_values=config.init_values,
             ref_feat_shape=config.ref_feat_shape,
+            embed_dim=config.width,
         )
         self.eva_pe._initialize_weights = lambda x: x  # disable weight initialization
 
@@ -93,7 +94,9 @@ class AdaptiveAvgPooling(nn.Module):
         b, num_tokens, c = x.shape
         h = int(math.sqrt(num_tokens))
         if h * h != num_tokens:
-            raise ValueError(f"num_tokens {num_tokens} is expected to be a square number")
+            raise ValueError(
+                f"num_tokens {num_tokens} is expected to be a square number"
+            )
 
         shape = (h // self.pooling_ratio, h // self.pooling_ratio)
         x = x.permute(0, 2, 1).reshape(b, -1, h, h)
@@ -141,6 +144,7 @@ class PerceptionLMMultiModalProjector(nn.Module):
 class PerceptionLMPreTrainedModel(LlavaPreTrainedModel):
     base_model_prefix = ""
 
+
 @auto_docstring
 class PerceptionLMModel(LlavaModel):
     def __init__(self, config: PerceptionLMConfig):
@@ -167,6 +171,14 @@ class PerceptionLMModel(LlavaModel):
         image_outputs = self.vision_tower(pixel_values.flatten(0, 1))
         image_features = self.multi_modal_projector(image_outputs)
         return image_features
+
+    def check_mask_feature_size_match(self, media_mask, media_features):
+        media_token_count = media_mask.sum()
+        media_feature_size = media_features.size()[:-1].numel()
+        if media_token_count != media_feature_size:
+            raise ValueError(
+                f"The number of tokens in the media mask ({media_token_count}) does not match the number of features in the media features ({media_feature_size}. Features shape: {media_features.shape})"
+            )
 
     def forward(
         self,
@@ -254,6 +266,7 @@ class PerceptionLMModel(LlavaModel):
                 pixel_values=pixel_values.to(inputs_embeds),
             )
             special_image_mask = (input_ids == self.config.image_token_id).unsqueeze(-1)
+            self.check_mask_feature_size_match(special_image_mask, image_features)
             special_image_mask = special_image_mask.expand_as(inputs_embeds).to(
                 inputs_embeds.device
             )
@@ -267,6 +280,7 @@ class PerceptionLMModel(LlavaModel):
                 pixel_values=pixel_values_videos.to(inputs_embeds),
             )
             special_video_mask = (input_ids == self.config.video_token_id).unsqueeze(-1)
+            self.check_mask_feature_size_match(special_video_mask, video_features)
             special_video_mask = special_video_mask.expand_as(inputs_embeds).to(
                 inputs_embeds.device
             )
@@ -300,7 +314,9 @@ class PerceptionLMForConditionalGeneration(
     def __init__(self, config: PerceptionLMConfig, **super_kwargs):
         super().__init__(config, **super_kwargs)
         self.model = PerceptionLMModel(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(
+            config.text_config.hidden_size, config.text_config.vocab_size, bias=False
+        )
         self.post_init()
 
     def get_input_embeddings(self):
@@ -409,13 +425,20 @@ class PerceptionLMForConditionalGeneration(
 
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        slice_indices = (
+            slice(-logits_to_keep, None)
+            if isinstance(logits_to_keep, int)
+            else logits_to_keep
+        )
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **lm_kwargs
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.text_config.vocab_size,
+                **lm_kwargs,
             )
 
         return PerceptionLMCausalLMOutputWithPast(
@@ -428,4 +451,8 @@ class PerceptionLMForConditionalGeneration(
         )
 
 
-__all__ = ["PerceptionLMForConditionalGeneration", "PerceptionLMPreTrainedModel", "PerceptionEncoder"]
+__all__ = [
+    "PerceptionLMForConditionalGeneration",
+    "PerceptionLMPreTrainedModel",
+    "PerceptionEncoder",
+]
