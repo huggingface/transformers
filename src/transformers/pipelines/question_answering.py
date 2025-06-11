@@ -616,6 +616,15 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                                     "answer": example.context_text[start_index:end_index],
                                 }
                             )
+                    else:
+                        answers.append(
+                            {
+                                "score": score.item(),
+                                "start": start_index,
+                                "end": end_index,
+                                "answer": example.context_text[start_index:end_index],
+                            }
+                        )
 
         if handle_impossible_answer:
             answers.append({"score": min_null_score, "start": 0, "end": 0, "answer": ""})
