@@ -52,6 +52,7 @@ if TYPE_CHECKING:
     from .camembert import *
     from .canine import *
     from .chameleon import *
+    from .chatterbox import *
     from .chinese_clip import *
     from .clap import *
     from .clip import *
@@ -141,7 +142,6 @@ if TYPE_CHECKING:
     from .herbert import *
     from .hgnet_v2 import *
     from .hiera import *
-    from .hiftnet import *
     from .hubert import *
     from .ibert import *
     from .idefics import *
