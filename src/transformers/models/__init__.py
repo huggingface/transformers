@@ -139,6 +139,7 @@ if TYPE_CHECKING:
     from .herbert import *
     from .hgnet_v2 import *
     from .hiera import *
+    from .hiftnet import *
     from .hubert import *
     from .ibert import *
     from .idefics import *
