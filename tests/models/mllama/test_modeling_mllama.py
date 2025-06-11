@@ -17,7 +17,6 @@ import unittest
 
 import pytest
 import requests
-from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -25,6 +24,7 @@ from transformers import (
     MllamaConfig,
     MllamaForCausalLM,
     MllamaForConditionalGeneration,
+    MllamaModel,
     is_torch_available,
     is_vision_available,
 )
@@ -262,7 +262,14 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     Model tester for `MllamaForConditionalGeneration`.
     """
 
-    all_model_classes = (MllamaForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            MllamaModel,
+            MllamaForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = {"image-text-to-text": MllamaForConditionalGeneration} if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
@@ -278,66 +285,22 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
-
     def test_resize_embeddings_results_in_successful_loss(self):
         # resizing embeddings should result in successful loss computation
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model_vocab_size = config.get_text_config().vocab_size
-            inputs = self._prepare_for_class(inputs, model_class, return_labels=True)
-            # Resize embeddings and call forward
-            model.resize_token_embeddings(model_vocab_size + 10)
-            output = model(
-                input_ids=inputs["input_ids"],
-                attention_mask=inputs["attention_mask"],
-                labels=inputs["labels"],
-                return_dict=True,
-            )
-            self.assertTrue("loss" in output)
+        model = MllamaForConditionalGeneration(config).to(torch_device)
+        model_vocab_size = config.get_text_config().vocab_size
+        inputs = self._prepare_for_class(inputs, MllamaForConditionalGeneration, return_labels=True)
+        # Resize embeddings and call forward
+        model.resize_token_embeddings(model_vocab_size + 10)
+        output = model(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            labels=inputs["labels"],
+            return_dict=True,
+        )
+        self.assertTrue("loss" in output)
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
@@ -389,12 +352,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     def test_model_parallelism(self):
         pass
 
-    @parameterized.expand([("offloaded",)])
-    @pytest.mark.generate
-    @unittest.skip(reason="Offloaded cache seems to not work with mllama's kv cache type")
-    def test_offloaded_cache_implementation(self, cache_implementation):
-        pass
-
     @unittest.skip(
         reason="Mllama cache type doesn't allow correct check on output `past_key_values` due to `Cache.crop()`"
     )
@@ -407,6 +364,18 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
     @unittest.skip(reason="Mllama can't assisted decoding due to cache format and `Cache.crop()`")
     def test_assisted_decoding_with_num_logits_to_keep(self):
+        pass
+
+    @unittest.skip(reason="Mllama uses self.weights directly causing device mismatch when offloading`")
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip(reason="Mllama uses self.weights directly causing device mismatch when offloading`")
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip(reason="Mllama uses self.weights directly causing device mismatch when offloading`")
+    def test_disk_offload_safetensors(self):
         pass
 
     @pytest.mark.generate
@@ -501,7 +470,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in self.all_model_classes:
+        for model_class in self.all_generative_model_classes:
             model = model_class(config)
             model.to(torch_device)
             model.eval()

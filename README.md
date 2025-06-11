@@ -88,7 +88,6 @@ Create and activate a virtual environment with [venv](https://docs.python.org/3/
 # venv
 python -m venv .my-env
 source .my-env/bin/activate
-
 # uv
 uv venv .my-env
 source .my-env/bin/activate
@@ -98,10 +97,10 @@ Install Transformers in your virtual environment.
 
 ```py
 # pip
-pip install transformers
+pip install "transformers[torch]"
 
 # uv
-uv pip install transformers
+uv pip install "transformers[torch]"
 ```
 
 Install Transformers from source if you want the latest changes in the library or are interested in contributing. However, the *latest* version may not be stable. Feel free to open an [issue](https://github.com/huggingface/transformers/issues) if you encounter an error.
@@ -109,7 +108,12 @@ Install Transformers from source if you want the latest changes in the library o
 ```shell
 git clone https://github.com/huggingface/transformers.git
 cd transformers
-pip install .
+
+# pip
+pip install .[torch]
+
+# uv
+uv pip install .[torch]
 ```
 
 ## Quickstart
@@ -131,7 +135,7 @@ To chat with a model, the usage pattern is the same. The only difference is you 
 > [!TIP]
 > You can also chat with a model directly from the command line.
 > ```shell
-> transformers chat --model_name_or_path Qwen/Qwen2.5-0.5B-Instruct
+> transformers chat Qwen/Qwen2.5-0.5B-Instruct
 > ```
 
 ```py

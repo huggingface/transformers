@@ -105,6 +105,7 @@ BEiT の使用を開始するのに役立つ公式 Hugging Face およびコミ�
 
 [[autodoc]] BeitImageProcessor
     - preprocess
+    - post_process_semantic_segmentation
 
 ## BeitImageProcessorFast
 

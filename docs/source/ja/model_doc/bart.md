@@ -129,7 +129,7 @@ BART を始めるのに役立つ公式 Hugging Face およびコミュニティ 
 - [翻訳タスクガイド](../tasks/translation)
 
 以下も参照してください。
-- [テキスト分類タスクガイド](../tasks/sequence_classification)
+- [テキスト分類タスクガイド(英語版)](../../en/tasks/sequence_classification)
 - [質問回答タスク ガイド](../tasks/question_answering)
 - [因果言語モデリング タスク ガイド](../tasks/language_modeling)
 - [抽出されたチェックポイント](https://huggingface.co/models?search=distilbart) は、この [論文](https://arxiv.org/abs/2010.13002) で説明されています。

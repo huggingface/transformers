@@ -57,7 +57,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.52.0.dev0")
+check_min_version("4.53.0.dev0")
 
 require_version("datasets>=2.14.0", "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt")
 
@@ -521,7 +521,7 @@ def main():
 
     # Get the factor by which the embedding layer should be padded based on the device
     pad_factor = 1
-    if torch.cuda.is_availble():
+    if torch.cuda.is_available():
         pad_factor = 8
 
     elif is_torch_xla_available(check_is_tpu=True):

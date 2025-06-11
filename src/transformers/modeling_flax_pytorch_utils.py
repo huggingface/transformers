@@ -66,7 +66,7 @@ def load_pytorch_checkpoint_in_flax_state_dict(
             except (ImportError, ModuleNotFoundError):
                 logger.error(
                     "Loading a PyTorch model in Flax, requires both PyTorch and Flax to be installed. Please see"
-                    " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation"
+                    " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/index.html#installation for installation"
                     " instructions."
                 )
                 raise
@@ -347,7 +347,7 @@ def load_flax_checkpoint_in_pytorch_model(model, flax_checkpoint_path):
             try:
                 flax_state_dict = from_bytes(flax_cls, state_f.read())
             except UnpicklingError:
-                raise EnvironmentError(f"Unable to convert {flax_checkpoint_path} to Flax deserializable object. ")
+                raise OSError(f"Unable to convert {flax_checkpoint_path} to Flax deserializable object. ")
 
     return load_flax_weights_in_pytorch_model(model, flax_state_dict)
 
@@ -360,7 +360,7 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
     except (ImportError, ModuleNotFoundError):
         logger.error(
             "Loading a Flax weights in PyTorch, requires both PyTorch and Flax to be installed. Please see"
-            " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation"
+            " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/index.html#installation for installation"
             " instructions."
         )
         raise

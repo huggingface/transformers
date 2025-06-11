@@ -15,7 +15,8 @@
 """Longformer configuration"""
 
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, List, Mapping, Optional, Union
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, List, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig

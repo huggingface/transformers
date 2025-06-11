@@ -1490,14 +1490,14 @@ class TFGenerationMixin:
                 if (input_ids_seq_length > 1 or generation_config.forced_bos_token_id is None)
                 else begin_index + 1
             )
-            if generation_config.forced_decoder_ids is not None:
+            if getattr(generation_config, "forced_decoder_ids", None) is not None:
                 begin_index += generation_config.forced_decoder_ids[-1][
                     0
                 ]  # generation starts after the last token that is forced
             processors.append(
                 TFSuppressTokensAtBeginLogitsProcessor(generation_config.begin_suppress_tokens, begin_index)
             )
-        if generation_config.forced_decoder_ids is not None:
+        if getattr(generation_config, "forced_decoder_ids", None) is not None:
             processors.append(TFForceTokensLogitsProcessor(generation_config.forced_decoder_ids))
 
         processors = self._merge_criteria_processor_list(processors, logits_processor)
