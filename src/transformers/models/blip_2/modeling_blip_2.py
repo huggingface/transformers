@@ -1876,7 +1876,6 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
     main_input_name = "pixel_values"
 
     _supports_static_cache = True
-    _supports_quantized_cache = False  # not all LM bacbones support (e.g. T5)
     _keep_in_fp32_modules = ["query_tokens", "qformer"]
 
     def __init__(self, config: Blip2Config):

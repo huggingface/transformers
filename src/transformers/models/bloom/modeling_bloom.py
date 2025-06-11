@@ -448,7 +448,6 @@ class BloomPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
 
     _supports_static_cache = True
-    _supports_quantized_cache = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)

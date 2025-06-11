@@ -498,8 +498,6 @@ class GitPreTrainedModel(PreTrainedModel):
     base_model_prefix = "git"
     supports_gradient_checkpointing = True
 
-    _supports_quantized_cache = True
-
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, GitVisionEmbeddings):

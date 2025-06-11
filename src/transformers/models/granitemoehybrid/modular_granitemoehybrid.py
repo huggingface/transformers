@@ -381,14 +381,5 @@ class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
         )
         return model_inputs
 
-    def _supports_default_dynamic_cache(self) -> bool:
-        """
-        Function overwritten as this class uses its own `HybridMambaAttentionDynamicCache`
-        and do not need to initialize the Cache in advance in order to save memory
-        (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
-        for `HybridMambaAttentionDynamicCache`).
-        """
-        return False
-
 
 __all__ = ["GraniteMoeHybridForCausalLM", "GraniteMoeHybridModel", "GraniteMoeHybridPreTrainedModel"]

@@ -859,7 +859,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
     _supports_static_cache = False  # static cache cannot have different shapes for each layer
     _supports_sdpa = True
     _supports_flash_attn_2 = True
-    _supports_quantized_cache = True
+
     _supports_flex_attn = True
     _supports_attention_backend = True
 
@@ -1616,7 +1616,6 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
 )
 class MllamaModel(MllamaPreTrainedModel):
     _checkpoint_conversion_mapping = {"language_model.model": "language_model"}
-    _supports_quantized_cache = False  # quant cache not supported in encoder-decoder setting
 
     def __init__(self, config: MllamaConfig):
         super().__init__(config)
@@ -1770,7 +1769,6 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         "^multi_modal_projector": "model.multi_modal_projector",
         "^language_model.lm_head": "lm_head",
     }
-    _supports_quantized_cache = False  # quant cache not supported in encoder-decoder setting
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: MllamaConfig):

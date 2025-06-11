@@ -1941,16 +1941,22 @@ class GenerationMixin(ContinuousMixin):
             self._cache.reset()
         return self._cache
 
-    def _supports_default_dynamic_cache(self) -> bool:
+    @classmethod
+    def _supports_default_dynamic_cache(cls) -> bool:
         """
         Return `True` if current model can use a `DynamicCache` instance when initializing the `past_key_values`.
         This adds exception for some models like `Jamba` model which uses its own `HybridMambaAttentionDynamicCache`
         and do not need to initialize the Cache in advance in order to save memory (because no back and forth
         `to_legacy_cache` and `from_legacy_cache` will be performed for `HybridMambaAttentionDynamicCache`).
         """
-        return all(
-            special_model_name not in self.__class__.__name__.lower()
-            for special_model_name in ["jamba", "zamba", "mamba", "bamba", "reformer", "minimax"]
+        # NOTE: remove xlnet/reformer when the models is deprecated, it uses `mems` as cache name
+        return not cls._is_stateful and all(
+            special_model_name not in cls.__name__.lower()
+            for special_model_name in [
+                "reformer",
+                "minimax",
+                "xlnet",
+            ]
         )
 
     def _prepare_cache_for_generation(
@@ -2037,7 +2043,7 @@ class GenerationMixin(ContinuousMixin):
                     model_kwargs=model_kwargs,
                 )
             elif generation_config.cache_implementation == "quantized":
-                if not self._supports_quantized_cache:
+                if self.config.is_encoder_decoder or not self._supports_default_dynamic_cache():
                     raise ValueError(
                         "This model does not support the quantized cache. If you want your model to support quantized "
                         "cache, please open an issue and tag @zucchini-nlp."

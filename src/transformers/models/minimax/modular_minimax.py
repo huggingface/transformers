@@ -474,7 +474,6 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
 class MiniMaxPreTrainedModel(MixtralPreTrainedModel):
     # Note: only supports MiniMaxCache
     _supports_static_cache = False
-    _supports_quantized_cache = False
 
 
 class MiniMaxModel(MixtralModel):

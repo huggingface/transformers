@@ -48,7 +48,6 @@ class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
     _no_split_modules = ["GPTNeoXJapaneseLayer"]
     _skip_keys_device_placement = "past_key_values"
 
-    _supports_quantized_cache = True
     _supports_static_cache = True
 
     def _init_weights(self, module):

@@ -2038,12 +2038,15 @@ class GenerationTesterMixin:
     @pytest.mark.generate
     def test_generate_with_quant_cache(self):
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_quantized_cache:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+
+            if (
+                config.get_text_config(decoder=True).is_encoder_decoder
+                or not model_class._supports_default_dynamic_cache()
+            ):
                 self.skipTest(reason="This model does not support the quantized cache format")
 
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             config.is_decoder = True
-
             model = model_class(config).to(torch_device).eval()
             generation_kwargs = {
                 "max_new_tokens": 5,

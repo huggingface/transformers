@@ -338,7 +338,6 @@ class Cohere2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
 

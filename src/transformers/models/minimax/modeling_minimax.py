@@ -593,7 +593,6 @@ class MiniMaxPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     # Note: only supports MiniMaxCache
-    _supports_quantized_cache = False
     _supports_static_cache = False
     _supports_attention_backend = True
 

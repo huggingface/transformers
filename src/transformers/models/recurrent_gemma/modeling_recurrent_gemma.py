@@ -515,8 +515,6 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = False
     _supports_sdpa = False  # we can't compare with eager for now
 
-    _supports_quantized_cache = True
-
     def _init_weights(self, module):
         std = math.sqrt(self.config.w_init_variance_scale / self.config.conv1d_width)
         if isinstance(module, nn.Conv1d):
