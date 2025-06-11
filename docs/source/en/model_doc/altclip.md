@@ -131,12 +131,16 @@ attn = outputs.vision_model_output.attentions  # list[num_layers] of (B,H,S,S)
 
 ### Configuration
 [[autodoc]] AltCLIPConfig
+
 [[autodoc]] AltCLIPTextConfig
+
 [[autodoc]] AltCLIPVisionConfig
 
 ### Models
 [[autodoc]] AltCLIPModel
+
 [[autodoc]] AltCLIPTextModel
+
 [[autodoc]] AltCLIPVisionModel
 
 ### Processor
