@@ -61,14 +61,14 @@ class Owlv2Processor(ProcessorMixin):
     [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`Owlv2ImageProcessor`]):
+        image_processor ([`Owlv2ImageProcessor`, `Owlv2ImageProcessorFast`]):
             The image processor is a required input.
         tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
             The tokenizer is a required input.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Owlv2ImageProcessor"
+    image_processor_class = ("Owlv2ImageProcessor", "Owlv2ImageProcessorFast")
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
     def __init__(self, image_processor, tokenizer, **kwargs):
