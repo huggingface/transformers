@@ -108,7 +108,7 @@ class BatchFeature(UserDict):
 
         # Get a function reference for the correct framework
         if tensor_type == TensorType.TENSORFLOW:
-            logging.warning_once(
+            logger.warning_once(
                 "TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We "
                 "recommend migrating to PyTorch classes or pinning your version of Transformers."
             )
@@ -142,7 +142,7 @@ class BatchFeature(UserDict):
 
             is_tensor = torch.is_tensor
         elif tensor_type == TensorType.JAX:
-            logging.warning_once(
+            logger.warning_once(
                 "TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We "
                 "recommend migrating to PyTorch classes or pinning your version of Transformers."
             )

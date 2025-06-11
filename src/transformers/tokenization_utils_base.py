@@ -2840,7 +2840,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         }
 
         if return_tensors in ("tf", "jax"):
-            logging.warning_once(
+            logger.warning_once(
                 "TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We "
                 "recommend migrating to PyTorch classes or pinning your version of Transformers."
             )
