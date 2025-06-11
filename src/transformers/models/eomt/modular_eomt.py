@@ -40,10 +40,161 @@ from ..dinov2.modeling_dinov2 import (
 )
 from ..mask2former.modeling_mask2former import Mask2FormerForUniversalSegmentation, Mask2FormerLoss
 from ..siglip.modeling_siglip import SiglipAttention
-from .configuration_eomt import EoMTConfig
+from ..vit.configuration_vit import ViTConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+class EoMTConfig(ViTConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`EoMTModel`]. It is used to instantiate an EoMT model
+    according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the EoMT
+    [tue-mps/coco_panoptic_eomt_large_640](https://huggingface.co/tue-mps/coco_panoptic_eomt_large_640)
+    architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 1024):
+            Dimensionality of the hidden representations.
+        num_hidden_layers (`int`, *optional*, defaults to 24):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads in each attention layer.
+        mlp_ratio (`int`, *optional*, defaults to 4):
+            Ratio of the MLP hidden dimensionality to the hidden size.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings and encoder.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
+        image_size (`int`, *optional*, defaults to 640):
+            The size (resolution) of each input image.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
+        layerscale_value (`float`, *optional*, defaults to 1.0):
+            Initial value for the LayerScale parameter.
+        drop_path_rate (`float`, *optional*, defaults to 0.0):
+            The stochastic depth rate (drop path) used during training.
+        num_upscale_blocks (`int`, *optional*, defaults to 2):
+            Number of upsampling blocks used in the decoder or segmentation head.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout probability applied after attention projection.
+        use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
+            Whether to use the SwiGLU feedforward neural network.
+        num_blocks (`int`, *optional*, defaults to 4):
+            Number of feature blocks or stages in the architecture.
+        no_object_weight (`float`, *optional*, defaults to 0.1):
+            Loss weight for the 'no object' class in panoptic/instance segmentation.
+        class_weight (`float`, *optional*, defaults to 2.0):
+            Loss weight for classification targets.
+        mask_weight (`float`, *optional*, defaults to 5.0):
+            Loss weight for mask prediction.
+        dice_weight (`float`, *optional*, defaults to 5.0):
+            Loss weight for the dice loss component.
+        train_num_points (`int`, *optional*, defaults to 12544):
+            Number of points to sample for mask loss computation during training.
+        oversample_ratio (`float`, *optional*, defaults to 3.0):
+            Oversampling ratio used in point sampling for mask training.
+        importance_sample_ratio (`float`, *optional*, defaults to 0.75):
+            Ratio of points to sample based on importance during training.
+        num_queries (`int`, *optional*, defaults to 200):
+            Number of object queries in the Transformer.
+        num_register_tokens (`int`, *optional*, defaults to 4):
+            Number of learnable register tokens added to the transformer input.
+
+    Example:
+
+    ```python
+    >>> from transformers import EoMTConfig, EoMTForUniversalSegmentation
+
+    >>> # Initialize configuration
+    >>> config = EoMTConfig()
+
+    >>> # Initialize model
+    >>> model = EoMTForUniversalSegmentation(config)
+
+    >>> # Access config
+    >>> config = model.config
+    ```"""
+
+    model_type = "eomt"
+
+    def __init__(
+        self,
+        hidden_size=1024,
+        num_hidden_layers=24,
+        num_attention_heads=16,
+        mlp_ratio=4,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.0,
+        initializer_range=0.02,
+        layer_norm_eps=1e-6,
+        image_size=640,
+        patch_size=16,
+        num_channels=3,
+        layerscale_value=1.0,
+        drop_path_rate=0.0,
+        num_upscale_blocks=2,
+        attention_dropout=0.0,
+        use_swiglu_ffn=False,
+        num_blocks=4,
+        no_object_weight: float = 0.1,
+        class_weight: float = 2.0,
+        mask_weight: float = 5.0,
+        dice_weight: float = 5.0,
+        train_num_points: int = 12544,
+        oversample_ratio: float = 3.0,
+        importance_sample_ratio: float = 0.75,
+        num_queries=200,
+        num_register_tokens=4,
+        **kwargs,
+    ):
+        super().__init__(
+            hidden_size=hidden_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            hidden_dropout_prob=hidden_dropout_prob,
+            hidden_act=hidden_act,
+            initializer_range=initializer_range,
+            layer_norm_eps=layer_norm_eps,
+            image_size=image_size,
+            patch_size=patch_size,
+            num_channels=num_channels,
+            **kwargs,
+        )
+
+        del self.intermediate_size
+        del self.qkv_bias
+        del self.pooler_act
+        del self.pooler_output_size
+        del self.encoder_stride
+        del self.attention_probs_dropout_prob
+
+        self.mlp_ratio = mlp_ratio
+        self.attention_dropout = attention_dropout
+        self.layerscale_value = layerscale_value
+        self.drop_path_rate = drop_path_rate
+        self.num_upscale_blocks = num_upscale_blocks
+        self.use_swiglu_ffn = use_swiglu_ffn
+        self.num_blocks = num_blocks
+        self.no_object_weight = no_object_weight
+        self.class_weight = class_weight
+        self.mask_weight = mask_weight
+        self.dice_weight = dice_weight
+        self.train_num_points = train_num_points
+        self.oversample_ratio = oversample_ratio
+        self.importance_sample_ratio = importance_sample_ratio
+        self.num_queries = num_queries
+        self.num_register_tokens = num_register_tokens
 
 
 @dataclass
@@ -430,4 +581,4 @@ class EoMTForUniversalSegmentation(Mask2FormerForUniversalSegmentation, nn.Modul
         )
 
 
-__all__ = ["EoMTPreTrainedModel", "EoMTForUniversalSegmentation"]
+__all__ = ["EoMTConfig", "EoMTPreTrainedModel", "EoMTForUniversalSegmentation"]
