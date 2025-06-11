@@ -34,7 +34,7 @@ This model was contributed by [koustuvs](https://huggingface.co/koustuvs) and [y
 
 ## Usage example
 
-The snippet below shows how to load the VJEPA 2 model using `AutoModel` class.
+The snippet below shows how to load the VJEPA 2 model using the `AutoModel` class.
 
 ```py
 import torch
