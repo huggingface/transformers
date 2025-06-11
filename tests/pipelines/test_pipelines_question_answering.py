@@ -289,7 +289,7 @@ class QAPipelineTests(unittest.TestCase):
             top_k=10,
         )
 
-        answers = [output['answer'] for output in outputs]
+        answers = [output["answer"] for output in outputs]
         self.assertEqual(len(answers), len(set(answers)), "There are duplicate answers in the outputs.")
 
     @require_tf
