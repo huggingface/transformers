@@ -999,13 +999,13 @@ class VJEPA2Attention(nn.Module):
         return attn_output, attn_weights
 
 
+# Modified from SiglipEncoderLayer, but we have to propagate proper hidden_size to VJEPA2MLP
 class VJEPA2HeadLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
-        self.embed_dim = config.hidden_size
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.self_attn = VJEPA2Attention(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = VJEPA2MLP(config, hidden_size=config.hidden_size)
 
     def forward(
@@ -1013,7 +1013,7 @@ class VJEPA2HeadLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor, ...]:
+    ) -> Tuple[torch.Tensor, ...]:
         """
         Args:
             hidden_states (`torch.FloatTensor`):
@@ -1025,7 +1025,6 @@ class VJEPA2HeadLayer(GradientCheckpointingLayer):
                 returned tensors for more detail.
         """
         residual = hidden_states
-
         hidden_states = self.layer_norm1(hidden_states)
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
