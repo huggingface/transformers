@@ -415,14 +415,14 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
+        image_sizes: torch.Tensor,
         vision_feature_layer: Optional[Union[int, List[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
         **kwargs,
     ):
         return self.model.get_image_features(
             pixel_values=pixel_values,
+            image_sizes=image_sizes,
             vision_feature_layer=vision_feature_layer,
-            vision_feature_select_strategy=vision_feature_select_strategy,
             **kwargs,
         )
 
