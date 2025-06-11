@@ -535,6 +535,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         handle_impossible_answer=False,
         max_answer_len=15,
         align_to_words=True,
+        handle_duplicate_answers=True
     ):
         min_null_score = 1000000  # large and positive
         answers = []
@@ -595,20 +596,26 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 # - we start by finding the right word containing the token with `token_to_word`
                 # - then we convert this word in a character span with `word_to_chars`
                 sequence_index = 1 if question_first else 0
+                answers_history = [] if handle_duplicate_answers else None
+
                 for s, e, score in zip(starts, ends, scores):
                     s = s - offset
                     e = e - offset
 
                     start_index, end_index = self.get_indices(enc, s, e, sequence_index, align_to_words)
 
-                    answers.append(
-                        {
-                            "score": score.item(),
-                            "start": start_index,
-                            "end": end_index,
-                            "answer": example.context_text[start_index:end_index],
-                        }
-                    )
+                    if handle_duplicate_answers:
+                        if (start_index, end_index) not in answers_history:
+                            answers_history.append((start_index, end_index))
+
+                            answers.append(
+                                {
+                                    "score": score.item(),
+                                    "start": start_index,
+                                    "end": end_index,
+                                    "answer": example.context_text[start_index:end_index],
+                                }
+                            )
 
         if handle_impossible_answer:
             answers.append({"score": min_null_score, "start": 0, "end": 0, "answer": ""})
