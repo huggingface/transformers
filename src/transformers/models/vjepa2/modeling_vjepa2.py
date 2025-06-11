@@ -885,6 +885,65 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         return encoder_output.last_hidden_state
 
 
+        # self.init_std = init_std
+        # trunc_normal_(self.query_tokens, std=self.init_std)
+        # self.apply(self._init_weights)
+        # self._rescale_blocks()
+
+    # def _rescale_blocks(self):
+    #     def rescale(param, layer_id):
+    #         param.div_(math.sqrt(2.0 * layer_id))
+
+    #     if self.complete_block:
+    #         rescale(self.cross_attention_block.xattn.proj.weight.data, 1)
+    #         rescale(self.cross_attention_block.mlp.fc2.weight.data, 1)
+    #     else:
+    #         rescale(self.cross_attention_block.proj.weight.data, 1)
+    #     if self.blocks is not None:
+    #         for layer_id, layer in enumerate(self.blocks, 1):
+    #             rescale(layer.attn.proj.weight.data, layer_id + 1)
+    #             rescale(layer.mlp.fc2.weight.data, layer_id + 1)
+
+    # def _init_weights(self, m):
+    #     if isinstance(m, nn.Linear):
+    #         trunc_normal_(m.weight, std=self.init_std)
+    #         if isinstance(m, nn.Linear) and m.bias is not None:
+    #             nn.init.constant_(m.bias, 0)
+    #     elif isinstance(m, nn.LayerNorm):
+    #         nn.init.constant_(m.bias, 0)
+    #         nn.init.constant_(m.weight, 1.0)
+    #     elif isinstance(m, nn.Conv2d):
+    #         trunc_normal_(m.weight, std=self.init_std)
+    #         if m.bias is not None:
+    #             nn.init.constant_(m.bias, 0)
+
+
+class VJEPA2AttentionPoolingHead(nn.Module):
+    def __init__(self, config: VJEPA2Config):
+        super().__init__()
+        self.query_tokens = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.norm1 = nn.LayerNorm(config.hidden_size)
+        self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
+        self.norm2 = nn.LayerNorm(config.hidden_size)
+        self.mlp = VJEPA2MLP(config, hidden_size=config.hidden_size, mlp_ratio=config.mlp_ratio)
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+
+        query_tokens = self.query_tokens.repeat(hidden_state.shape[0], 1, 1)
+        
+        # Apply attention
+        hidden_state = self.norm1(hidden_state)
+        hidden_state, _ = self.attention(query_tokens, hidden_state, hidden_state)
+        hidden_state = hidden_state + query_tokens
+
+        # Apply MLP
+        residual = hidden_state
+        hidden_state = self.norm2(hidden_state)
+        hidden_state = self.mlp(hidden_state)
+        hidden_state = residual + hidden_state
+
+        return hidden_state
+
 @auto_docstring(
     custom_intro="""
     VJEPA2 Model transformer with a video classification head on top (a linear layer on top of the average pooled hidden
@@ -900,8 +959,8 @@ class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
         self.vjepa2 = VJEPA2Model(config)
 
         # Classifier head
-        self.fc_norm = nn.LayerNorm(config.hidden_size)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+        self.pooling_head = VJEPA2AttentionPoolingHead(config)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels, bias=True)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -983,9 +1042,8 @@ class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
         )
 
         last_hidden_state = outputs.last_hidden_state
-        last_hidden_state = last_hidden_state.mean(1)  # average across tokens
-        normalized_last_hidden_state = self.fc_norm(last_hidden_state)
-        logits = self.classifier(normalized_last_hidden_state)
+        pooled_output = self.pooling_head(last_hidden_state)
+        logits = self.classifier(pooled_output)
 
         loss = None
         if labels is not None:
