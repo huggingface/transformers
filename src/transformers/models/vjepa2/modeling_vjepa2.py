@@ -1164,34 +1164,14 @@ class VJEPA2HeadCrossAttentionLayer(nn.Module):
         return outputs
 
 
-class AttentivePooler(nn.Module):
+class VJEPA2AttentivePooler(nn.Module):
     """Attentive Pooler"""
 
-    def __init__(
-        self,
-        config,
-        num_queries=1,
-        embed_dim=768,
-        num_heads=12,
-        mlp_ratio=4.0,
-        depth=1,
-        norm_layer=nn.LayerNorm,
-        init_std=0.02,
-        qkv_bias=True,
-        complete_block=True,
-        use_activation_checkpointing=False,
-    ):
+    def __init__(self, config, depth=1):
         super().__init__()
-        self.query_tokens = nn.Parameter(torch.zeros(1, num_queries, embed_dim))
+        self.query_tokens = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.cross_attention_block = VJEPA2HeadCrossAttentionLayer(config)
-        self.blocks = None
-        if depth > 1:
-            self.blocks = nn.ModuleList(
-                [
-                    VJEPA2HeadLayer(config)
-                    for i in range(depth - 1)
-                ]
-            )
+        self.blocks = nn.ModuleList([VJEPA2HeadLayer(config) for _ in range(depth - 1)])
 
         # self.init_std = init_std
         # nn.init.trunc_normal_(self.query_tokens, std=self.init_std)
@@ -1224,13 +1204,13 @@ class AttentivePooler(nn.Module):
     #         if m.bias is not None:
     #             nn.init.constant_(m.bias, 0)
 
-    def forward(self, x):
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         if self.blocks is not None:
             for blk in self.blocks:
-                x = blk(x, attention_mask=None)[0]
-        q = self.query_tokens.repeat(len(x), 1, 1)
-        q = self.cross_attention_block(q, x)[0]
-        return q
+                hidden_state = blk(hidden_state, attention_mask=None)[0]
+        queries = self.query_tokens.repeat(hidden_state.shape[0], 1, 1)
+        hidden_state = self.cross_attention_block(queries, hidden_state)[0]
+        return hidden_state
 
 
 class AttentiveClassifier(nn.Module):
@@ -1251,19 +1231,7 @@ class AttentiveClassifier(nn.Module):
         use_activation_checkpointing=False,
     ):
         super().__init__()
-        self.pooler = AttentivePooler(
-            config=config,
-            num_queries=1,
-            embed_dim=embed_dim,
-            num_heads=num_heads,
-            mlp_ratio=mlp_ratio,
-            depth=depth,
-            norm_layer=norm_layer,
-            init_std=init_std,
-            qkv_bias=qkv_bias,
-            complete_block=complete_block,
-            use_activation_checkpointing=use_activation_checkpointing,
-        )
+        self.pooler = VJEPA2AttentivePooler(config=config, depth=depth)
         self.linear = nn.Linear(embed_dim, num_classes, bias=True)
 
     def forward(self, x):
