@@ -897,7 +897,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         return encoder_output
 
 
-class VJEPA2Attention(nn.Module):
+class VJEPA2PoolerSelfAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config):
@@ -968,54 +968,7 @@ class VJEPA2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-# Modified from SiglipEncoderLayer, but we have to propagate proper hidden_size to VJEPA2MLP
-class VJEPA2HeadLayer(GradientCheckpointingLayer):
-    def __init__(self, config):
-        super().__init__()
-        self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.self_attn = VJEPA2Attention(config)
-        self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = VJEPA2MLP(config, hidden_size=config.hidden_size)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, ...]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`):
-                Input to the layer of shape `(batch, seq_len, embed_dim)`.
-            attention_mask (`torch.FloatTensor`):
-                Attention mask of shape `(batch, 1, q_len, k_v_seq_len)` where padding elements are indicated by very large negative values.
-            output_attentions (`bool`, *optional*, defaults to `False`):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
-        residual = hidden_states
-        hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-        )
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
-
-
-class VJEPA2HeadCrossAttention(nn.Module):
+class VJEPA2PoolerCrossAttention(nn.Module):
     """It's different from other cross-attention layers, doesn't have output projection layer (o_proj)"""
 
     # in case of modular refactoring - o_proj can be replaces with nn.Identity()
@@ -1089,11 +1042,58 @@ class VJEPA2HeadCrossAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class VJEPA2HeadCrossAttentionLayer(nn.Module):
+# Modified from SiglipEncoderLayer, but we have to propagate proper hidden_size to VJEPA2MLP
+class VJEPA2PoolerSelfAttentionLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.cross_attn = VJEPA2HeadCrossAttention(config)
+        self.self_attn = VJEPA2PoolerSelfAttention(config)
+        self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.mlp = VJEPA2MLP(config, hidden_size=config.hidden_size)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor, ...]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`):
+                Input to the layer of shape `(batch, seq_len, embed_dim)`.
+            attention_mask (`torch.FloatTensor`):
+                Attention mask of shape `(batch, 1, q_len, k_v_seq_len)` where padding elements are indicated by very large negative values.
+            output_attentions (`bool`, *optional*, defaults to `False`):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+        """
+        residual = hidden_states
+        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states, attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+        )
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
+
+
+class VJEPA2PoolerCrossAttentionLayer(GradientCheckpointingLayer):
+    def __init__(self, config):
+        super().__init__()
+        self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.cross_attn = VJEPA2PoolerCrossAttention(config)
         self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = VJEPA2MLP(config, hidden_size=config.hidden_size)
 
@@ -1135,8 +1135,10 @@ class VJEPA2AttentivePooler(nn.Module):
     def __init__(self, config: VJEPA2Config):
         super().__init__()
         self.query_tokens = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.cross_attention_layer = VJEPA2HeadCrossAttentionLayer(config)
-        self.self_attention_layers = nn.ModuleList([VJEPA2HeadLayer(config) for _ in range(config.num_pooler_layers)])
+        self.cross_attention_layer = VJEPA2PoolerCrossAttentionLayer(config)
+        self.self_attention_layers = nn.ModuleList(
+            [VJEPA2PoolerSelfAttentionLayer(config) for _ in range(config.num_pooler_layers)]
+        )
 
         # self.init_std = init_std
         # nn.init.trunc_normal_(self.query_tokens, std=self.init_std)
