@@ -14,17 +14,19 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Qwen2MoE
-
-
 <div style="float: right;">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
 
+# Qwen2MoE
+
+
 [Qwen2MoE]((https://huggingface.co/papers/2407.10671) ) is a Mixture-of-Experts (MoE) variant of [Qwen2](./qwen2), available as a base model and an aligned chat model. It uses SwiGLU activation, group query attention and a mixture of sliding window attention and full attention. The tokenizer can also be adapted to multiple languages and codes.
+
 The MoE architecture uses upcyled models from the dense language models. For example, Qwen1.5-MoE-A2.7B is upcycled from Qwen-1.8B. It has 14.3B parameters but only 2.7B parameters are activated during runtime.
+
 You can find all the original checkpoints in the [Qwen1.5](https://huggingface.co/collections/Qwen/qwen15-65c0a2f577b1ecb76d786524) collection.
 
 > [!TIP]
@@ -55,6 +57,7 @@ print(outputs[0]["generated_text"][-1]['content'])
 ```
 </hfoption>
 <hfoption id="AutoModel">
+
 ```py
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -97,8 +100,9 @@ print(response)
 ```
 </hfoption> 
 <hfoption id="transformers CLI">
-
+```bash
 transformers chat Qwen/Qwen1.5-MoE-A2.7B-Chat --torch_dtype auto --attn_implementation flash_attention_2
+```
 </hfoption>
  </hfoptions> 
 
