@@ -728,6 +728,35 @@ def _infer_parameter_dtype(
     return old_param is not None and old_param.is_contiguous(), casting_dtype
 
 
+def _add_prefix_to_device(param_device,param_name): 
+
+    """
+    Takes an integer device and adds the correct hardware prefix ( e.g., 'npu:') to it. 
+    logic is similar to 'infer_auto_device_map' in 'accelerate library' 
+    """ 
+    if isinstance(param_device, int):
+        if torch.npu.is_available(): 
+            device_type_str  = 'npu'
+        elif torch.cuda.is_available(): 
+            device_type_str  = 'cuda'
+        elif torch.mlu.is_available(): 
+            device_type_str  = 'mlu'
+        elif torch.xpu.is_available(): 
+            device_type_str  = 'xpu'
+        elif torch.sdaa.is_available(): 
+            device_type_str  = 'sdaa'
+        elif torch.musa.is_available(): 
+            device_type_str  = 'musa'
+        elif torch.hpu.is_available(): 
+            device_type_str  = 'hpu'
+        else:
+            raise ValueError(
+                f"Invalid integer device_map '{param_device}' for parameter '{param_name}'. "
+                f"Cannot find a matching device type (NPU, CUDA, CPU) for this ID."
+            )
+        return(f'{device_type_str}:{param_device}')
+    return param_device
+    
 def _load_parameter_into_model(model: "PreTrainedModel", param_name: str, tensor: torch.Tensor):
     """Cast a single parameter `param_name` into the `model`, with value `tensor`."""
     module, param_type = get_module_from_name(model, param_name)
@@ -821,27 +850,7 @@ def _load_state_dict_into_meta_model(
                     raise ValueError(f"{param_name} doesn't have any device set.")
                 else:
                     param_device = device_map[module_layer.group()]
-
-                    if isinstance(param_device, int):  # Check if the fetched device is an integer
-                        device_id = param_device  # Use device_id for clarity in this block
-                        if hasattr(torch, "npu") and torch.npu.is_available() and device_id < torch.npu.device_count():
-                            device_type_str = "npu"
-                        elif torch.cuda.is_available() and device_id < torch.cuda.device_count():
-                            device_type_str = "cuda"
-                        elif device_id == -1 or device_id == 0:
-                            device_type_str = "cpu"
-                        else:
-                            raise ValueError(
-                                f"Invalid integer device_map '{device_id}' for parameter '{param_name}'. "
-                                f"Cannot find a matching device type (NPU, CUDA, CPU) for this ID."
-                            )
-
-                        if device_type_str == "cpu":
-                            final_param_device = "cpu"
-                        else:
-                            final_param_device = f"{device_type_str}:{device_id}"
-                        # Update param_device with the correct string
-                        param_device = final_param_device
+                    param_device = _add_prefix_to_device(param_device, param_name) 
 
             if param_device == "disk":
                 if not is_safetensors:
