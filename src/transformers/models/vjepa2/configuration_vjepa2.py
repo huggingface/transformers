@@ -60,6 +60,10 @@ class VJEPA2Config(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability for attentions.
+        num_pooler_layers (`int`, *optional*, defaults to 3):
+            The number of self-attention layers in the pooler.
         pred_hidden_size (`int`, *optional*, defaults to 384):
             Dimensionality of the predictor layers
         pred_num_attention_heads (`int`, *optional*, defaults to 12):
@@ -107,6 +111,8 @@ class VJEPA2Config(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         hidden_act="gelu",
         initializer_range=0.02,
+        attention_dropout=0.0,
+        num_pooler_layers=3,
         # predictor params
         pred_hidden_size=384,
         pred_num_attention_heads=12,
@@ -134,6 +140,8 @@ class VJEPA2Config(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.image_size = crop_size
+        self.attention_dropout = attention_dropout
+        self.num_pooler_layers = num_pooler_layers
         # predictor params
         self.pred_hidden_size = pred_hidden_size
         self.pred_num_attention_heads = pred_num_attention_heads
