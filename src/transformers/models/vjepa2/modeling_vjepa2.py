@@ -1054,47 +1054,87 @@ import torch.nn.functional as F
 import torch.nn as nn
 
 
-class CrossAttention(nn.Module):
-    def __init__(self, dim, num_heads=12, qkv_bias=False, use_sdpa=True):
+class VJEPA2HeadCrossAttention(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        self.num_heads = num_heads
-        head_dim = dim // num_heads
-        self.scale = head_dim**-0.5
-        self.q = nn.Linear(dim, dim, bias=qkv_bias)
-        self.kv = nn.Linear(dim, int(dim * 2), bias=qkv_bias)
-        # self.proj = nn.Linear(dim, dim)
-        self.use_sdpa = use_sdpa
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
+            )
+        self.scale = self.head_dim**-0.5
+        self.dropout = config.attention_dropout
+        self.is_causal = False
 
-    def forward(self, q, x):
-        B, n, C = q.shape
-        q = self.q(q).reshape(B, n, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
-        B, N, C = x.shape
-        kv = self.kv(x).reshape(B, N, 2, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
-        k, v = kv[0], kv[1]  # (batch_size, num_heads, seq_len, feature_dim_per_head)
+    def forward(
+        self,
+        queries: torch.Tensor,
+        keys: torch.Tensor,
+        values: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        """Input shape: Batch x Time x Channel"""
 
-        if self.use_sdpa:
-            with torch.backends.cuda.sdp_kernel():
-                q = F.scaled_dot_product_attention(q, k, v)
-        else:
-            xattn = (q @ k.transpose(-2, -1)) * self.scale
-            xattn = xattn.softmax(dim=-1)  # (batch_size, num_heads, query_len, seq_len)
-            q = xattn @ v
+        batch_size, q_seq_length, embed_dim = queries.shape
+        kv_seq_length = keys.shape[1]
 
-        q = q.transpose(1, 2).reshape(B, n, C)
-        return q
+        queries = self.q_proj(queries)
+        keys = self.k_proj(keys)
+        values = self.v_proj(values)
+
+        queries = queries.view(batch_size, q_seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, kv_seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, kv_seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
+            attention_mask,
+            is_causal=self.is_causal,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
+        )
+
+        attn_output = attn_output.reshape(batch_size, q_seq_length, embed_dim).contiguous()
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights
 
 
 class CrossAttentionBlock(nn.Module):
     def __init__(self, config, dim, num_heads, mlp_ratio=4.0, qkv_bias=False, act_layer=nn.GELU, norm_layer=nn.LayerNorm):
         super().__init__()
         self.norm1 = norm_layer(dim)
-        self.xattn = CrossAttention(dim, num_heads=num_heads, qkv_bias=qkv_bias)
+        self.xattn = VJEPA2HeadCrossAttention(config)
         self.norm2 = norm_layer(dim)
         self.mlp = VJEPA2MLP(config, hidden_size=dim)
 
     def forward(self, q, x):
-        y = self.xattn(q, self.norm1(x))
+        normed_x = self.norm1(x)
+        y = self.xattn(q, normed_x, normed_x)[0]
         q = q + y
         q = q + self.mlp(self.norm2(q))
         return q
