@@ -305,13 +305,21 @@ class ServeCommand(BaseTransformersCLICommand):
 
             def stream_response(streamer, _request_id):
                 thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
-                thread.start()
 
-                for result in streamer:
-                    yield self.build_chunk(result, _request_id)
-                yield "data: [DONE]\n\n"
+                try:
+                    thread.start()
 
-                thread.join()
+                    for result in streamer:
+                        yield self.build_chunk(result, _request_id)
+                    yield "data: [DONE]\n\n"
+
+                    thread.join()
+                except Exception as e:
+                    logger.error(str(e))
+                    yield f'data: {{"error": "{str(e)}"}}'
+
+                finally:
+                    thread.join()
 
             return StreamingResponse(stream_response(generation_streamer, request_id), media_type="text/event-stream")
 

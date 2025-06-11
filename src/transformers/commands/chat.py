@@ -782,6 +782,6 @@ class ChatCommand(BaseTransformersCLICommand):
 if __name__ == "__main__":
     args = ChatArguments()
     args.model_name_or_path_or_address = "meta-llama/Llama-3.2-3b-Instruct"
-    # args.model_name_or_path_or_address = "http://localhost:8000"
+    args.model_name_or_path_or_address = "http://localhost:8000"
     chat = ChatCommand(args)
     chat.run()
