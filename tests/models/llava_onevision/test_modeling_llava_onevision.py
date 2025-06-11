@@ -538,7 +538,10 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=50)
-        EXPECTED_DECODED_TEXT = ['user\n\nWhat do you see in this image?\nassistant\nThe image shows a scene from a wildlife camera, likely a security camera, capturing a moment in a natural setting. It features two deer, one larger and one smaller, grazing on the grass. The environment is foggy, suggesting early morning or late', 'user\n\nWhat do you see in this image?\nassistant\nIn the tranquil setting of this image, two cats are enjoying a peaceful nap on a vibrant pink blanket. The cat on the left, with its gray and black striped fur, is lying on its side, its head comfortably resting on the blanket. Its']  # fmt: skip
+        EXPECTED_DECODED_TEXT = [
+            'user\n\nWhat do you see in this image?\nassistant\nThe image shows a scene of two deer in a grassy area with trees in the background. The weather appears to be foggy, giving the scene a misty and somewhat mysterious atmosphere. The deer are standing close to each other, possibly grazing or',
+            'user\n\nWhat do you see in this image?\nassistant\nIn the tranquil setting of this image, two cats are enjoying a peaceful nap on a vibrant pink blanket. The cat on the left, with its gray and black striped fur, is lying on its side, its head comfortably resting on the blanket. Its',
+        ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
