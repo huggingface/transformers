@@ -205,38 +205,37 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def openai_flex_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    sinks = module.sinks.view(1, -1, 1, 1).expand(-1, -1, key.shape[-2], -1)
+# def openai_flex_attention_forward(
+#     module: nn.Module,
+#     query: torch.Tensor,
+#     key: torch.Tensor,
+#     value: torch.Tensor,
+#     attention_mask: Optional[torch.Tensor],
+#     scaling: float,
+#     dropout: float = 0.0,
+#     **kwargs,
+# ):
+#     sinks = module.sinks.view(1, -1, 1, 1).expand(-1, -1, key.shape[-2], -1)
 
-    def attention_sink(score, b, h, q_idx, kv_idx):
-        score = torch.cat([score, sinks], dim=-1)
-        return score
+#     def attention_sink(score, b, h, q_idx, kv_idx):
+#         score = torch.cat([score, sinks], dim=-1)
+#         return score
 
-    # TODO I need to remove the -1 sinks
-    return flex_attention_forward(
-        module,
-        query,
-        key,
-        value,
-        attention_mask,
-        scaling=scaling,
-        dropout=dropout,
-        attention_sink=attention_sink,
-        score_mod=attention_sink,
-        **kwargs,
-    )
+#     # TODO I need to remove the -1 sinks
+#     return flex_attention_forward(
+#         module,
+#         query,
+#         key,
+#         value,
+#         attention_mask,
+#         scaling=scaling,
+#         dropout=dropout,
+#         attention_sink=attention_sink,
+#         score_mod=attention_sink,
+#         **kwargs,
+#     )
 
-
-ALL_ATTENTION_FUNCTIONS.register("openai_flex_attention", openai_flex_attention_forward)
+# ALL_ATTENTION_FUNCTIONS.register("openai_flex_attention", openai_flex_attention_forward)
 
 
 class OpenAIMoeAttention(Qwen2Attention):
@@ -313,6 +312,25 @@ class OpenAIMoeDecoderLayer(LlamaDecoderLayer):
 class OpenAIMoePreTrainedModel(LlamaPreTrainedModel):
     _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
 
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, OpenAIMoeRMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, OpenAIMoeExperts):
+            module.gate_up_proj.data.normal_(mean=0.0, std=std)
+            module.gate_up_proj_bias.data.zero_()
+            module.down_proj.data.normal_(mean=0.0, std=std)
+            module.down_proj_bias.data.zero_()
+        elif isinstance(module, OpenAIMoeAttention):
+            module.sinks.data.normal_(mean=0.0, std=std)
 
 class OpenAIMoeModel(MixtralModel):
     _no_split_modules = ["OpenAIMoeDecoderLayer"]

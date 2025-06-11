@@ -396,6 +396,13 @@ class OpenAIMoePreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, OpenAIMoeRMSNorm):
             module.weight.data.fill_(1.0)
+        elif isinstance(module, OpenAIMoeExperts):
+            module.gate_up_proj.data.normal_(mean=0.0, std=std)
+            module.gate_up_proj_bias.data.zero_()
+            module.down_proj.data.normal_(mean=0.0, std=std)
+            module.down_proj_bias.data.zero_()
+        elif isinstance(module, OpenAIMoeAttention):
+            module.sinks.data.normal_(mean=0.0, std=std)
 
 
 @auto_docstring
