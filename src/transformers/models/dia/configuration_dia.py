@@ -33,7 +33,7 @@ class DiaEncoderConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        max_length (`int`, *optional*, defaults to 1024):
+        max_position_embeddings (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
@@ -102,7 +102,7 @@ class DiaEncoderConfig(PretrainedConfig):
 
     def __init__(
         self,
-        max_length: int = 1024,
+        max_position_embeddings: int = 1024,
         num_hidden_layers: int = 12,
         hidden_size: int = 1024,
         num_attention_heads: int = 16,
@@ -117,8 +117,7 @@ class DiaEncoderConfig(PretrainedConfig):
         initializer_range: float = 0.02,
         **kwargs,
     ):
-        self.max_length = max_length
-        self.max_position_embeddings = max_length
+        self.max_position_embeddings = max_position_embeddings
         self.num_hidden_layers = num_hidden_layers
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
@@ -148,7 +147,7 @@ class DiaDecoderConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        max_length (`int`, *optional*, defaults to 3072):
+        max_position_embeddings (`int`, *optional*, defaults to 3072):
             The maximum sequence length that this model might ever be used with.
         num_hidden_layers (`int`, *optional*, defaults to 18):
             Number of hidden layers in the Transformer decoder.
@@ -231,7 +230,7 @@ class DiaDecoderConfig(PretrainedConfig):
 
     def __init__(
         self,
-        max_length: int = 3072,
+        max_position_embeddings: int = 3072,
         num_hidden_layers: int = 18,
         hidden_size: int = 2048,
         intermediate_size: int = 8192,
@@ -253,8 +252,7 @@ class DiaDecoderConfig(PretrainedConfig):
         is_encoder_decoder: bool = True,
         **kwargs,
     ):
-        self.max_length = max_length
-        self.max_position_embeddings = max_length
+        self.max_position_embeddings = max_position_embeddings
         self.num_hidden_layers = num_hidden_layers
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
