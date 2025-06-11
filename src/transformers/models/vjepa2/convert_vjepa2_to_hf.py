@@ -15,8 +15,8 @@ from transformers import VJEPA2Config, VJEPA2Model, VJEPA2VideoProcessor
 from transformers.models.vjepa2.modeling_vjepa2 import apply_masks
 
 
-HUB_REPO = "/home/koustuvs/mlp/jepa-oss"
-HUB_SOURCE = "local"
+HUB_REPO = "https://github.com/facebookresearch/vjepa2"
+HUB_SOURCE = "github"
 
 HUB_MODELS = {
     "vit_large": "facebook/vjepa2-vitl-fpc64-256",
