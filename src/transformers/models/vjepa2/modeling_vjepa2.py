@@ -1092,9 +1092,9 @@ class VJEPA2HeadCrossAttention(nn.Module):
 class VJEPA2HeadCrossAttentionLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.xattn = VJEPA2HeadCrossAttention(config)
-        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.cross_attn = VJEPA2HeadCrossAttention(config)
+        self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = VJEPA2MLP(config, hidden_size=config.hidden_size)
 
     def forward(
@@ -1106,8 +1106,8 @@ class VJEPA2HeadCrossAttentionLayer(nn.Module):
     ) -> Tuple[torch.Tensor, ...]:
         # Apply cross-attention
         residual = queries
-        hidden_state = self.norm1(hidden_state)
-        hidden_state, *attn_weights = self.xattn(
+        hidden_state = self.layer_norm1(hidden_state)
+        hidden_state, *attn_weights = self.cross_attn(
             queries,
             hidden_state,
             hidden_state,
@@ -1118,7 +1118,7 @@ class VJEPA2HeadCrossAttentionLayer(nn.Module):
 
         # Apply MLP
         residual = hidden_state
-        hidden_state = self.norm2(hidden_state)
+        hidden_state = self.layer_norm2(hidden_state)
         hidden_state = self.mlp(hidden_state)
         hidden_state = residual + hidden_state
 
@@ -1135,8 +1135,8 @@ class VJEPA2AttentivePooler(nn.Module):
     def __init__(self, config: VJEPA2Config):
         super().__init__()
         self.query_tokens = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.cross_attention_block = VJEPA2HeadCrossAttentionLayer(config)
-        self.blocks = nn.ModuleList([VJEPA2HeadLayer(config) for _ in range(config.num_pooler_layers)])
+        self.cross_attention_layer = VJEPA2HeadCrossAttentionLayer(config)
+        self.self_attention_layers = nn.ModuleList([VJEPA2HeadLayer(config) for _ in range(config.num_pooler_layers)])
 
         # self.init_std = init_std
         # nn.init.trunc_normal_(self.query_tokens, std=self.init_std)
@@ -1170,39 +1170,11 @@ class VJEPA2AttentivePooler(nn.Module):
     #             nn.init.constant_(m.bias, 0)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        if self.blocks is not None:
-            for blk in self.blocks:
-                hidden_state = blk(hidden_state, attention_mask=None)[0]
+        for layer in self.self_attention_layers:
+            hidden_state = layer(hidden_state, attention_mask=None)[0]
         queries = self.query_tokens.repeat(hidden_state.shape[0], 1, 1)
-        hidden_state = self.cross_attention_block(queries, hidden_state)[0]
-        return hidden_state
-
-
-class AttentiveClassifier(nn.Module):
-    """Attentive Classifier"""
-
-    def __init__(
-        self,
-        config,
-        embed_dim=768,
-        num_heads=12,
-        mlp_ratio=4.0,
-        depth=1,
-        norm_layer=nn.LayerNorm,
-        init_std=0.02,
-        qkv_bias=True,
-        num_classes=1000,
-        complete_block=True,
-        use_activation_checkpointing=False,
-    ):
-        super().__init__()
-        self.pooler = VJEPA2AttentivePooler(config=config)
-        self.linear = nn.Linear(embed_dim, num_classes, bias=True)
-
-    def forward(self, x):
-        x = self.pooler(x).squeeze(1)
-        x = self.linear(x)
-        return x
+        hidden_state = self.cross_attention_layer(queries, hidden_state)[0]
+        return hidden_state.squeeze(1)
 
 
 @auto_docstring(
@@ -1220,13 +1192,8 @@ class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
         self.vjepa2 = VJEPA2Model(config)
 
         # Classifier head
-        self.classifier = AttentiveClassifier(
-            config=config,
-            embed_dim=config.hidden_size,
-            num_heads=config.num_attention_heads,
-            depth=4,
-            num_classes=config.num_labels,
-        )
+        self.pooler = VJEPA2AttentivePooler(config)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels, bias=True)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1308,7 +1275,8 @@ class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
         )
 
         last_hidden_state = outputs.last_hidden_state
-        logits = self.classifier(last_hidden_state)
+        pooler_output = self.pooler(last_hidden_state)
+        logits = self.classifier(pooler_output)
 
         loss = None
         if labels is not None:
