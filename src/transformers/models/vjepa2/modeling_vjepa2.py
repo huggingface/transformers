@@ -1132,11 +1132,11 @@ class VJEPA2HeadCrossAttentionLayer(nn.Module):
 class VJEPA2AttentivePooler(nn.Module):
     """Attentive Pooler"""
 
-    def __init__(self, config, depth=1):
+    def __init__(self, config: VJEPA2Config):
         super().__init__()
         self.query_tokens = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.cross_attention_block = VJEPA2HeadCrossAttentionLayer(config)
-        self.blocks = nn.ModuleList([VJEPA2HeadLayer(config) for _ in range(depth - 1)])
+        self.blocks = nn.ModuleList([VJEPA2HeadLayer(config) for _ in range(config.num_pooler_layers)])
 
         # self.init_std = init_std
         # nn.init.trunc_normal_(self.query_tokens, std=self.init_std)
@@ -1196,7 +1196,7 @@ class AttentiveClassifier(nn.Module):
         use_activation_checkpointing=False,
     ):
         super().__init__()
-        self.pooler = VJEPA2AttentivePooler(config=config, depth=depth)
+        self.pooler = VJEPA2AttentivePooler(config=config)
         self.linear = nn.Linear(embed_dim, num_classes, bias=True)
 
     def forward(self, x):
@@ -1213,7 +1213,7 @@ class AttentiveClassifier(nn.Module):
 )
 # Modified from transformers.models.videomae.modeling_videomae.VideoMAEForVideoClassification with VideoMAE->VJEPA2, videomae->vjepa2
 class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VJEPA2Config):
         super().__init__(config)
 
         self.num_labels = config.num_labels
