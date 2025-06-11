@@ -2584,7 +2584,7 @@ class GenerationTesterMixin:
 
             expected_shape = (
                 batch_size,
-                config.get_text_config(decoder=True).num_attention_heads,
+                config.num_attention_heads,
                 model_input_length,
                 query_length,
             )
@@ -2594,12 +2594,7 @@ class GenerationTesterMixin:
             )
 
     def _check_encoder_attention_for_generate(self, attentions, batch_size, config, prompt_length):
-        encoder_expected_shape = (
-            batch_size,
-            config.get_text_config(decoder=False).num_attention_heads,
-            prompt_length,
-            prompt_length,
-        )
+        encoder_expected_shape = (batch_size, config.num_attention_heads, prompt_length, prompt_length)
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [layer_attentions.shape for layer_attentions in attentions],
@@ -2626,23 +2621,15 @@ class GenerationTesterMixin:
                 model_input_length = 1
             else:
                 model_input_length = prompt_length + generated_length
-
+            expected_shape = (batch_size, model_input_length, config.hidden_size)
             # check hidden size
-            expected_shape_encoder = (
-                batch_size,
-                model_input_length,
-                config.get_text_config(decoder=False).hidden_size,
-            )
-            expected_shape_decoder = (batch_size, model_input_length, config.get_text_config(decoder=True).hidden_size)
-            self.assertTrue(
-                [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states]
-                == [expected_shape_decoder] * len(iter_hidden_states)
-                or [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states]
-                == [expected_shape_encoder] * len(iter_hidden_states)
+            self.assertListEqual(
+                [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
+                [expected_shape] * len(iter_hidden_states),
             )
 
     def _check_encoder_hidden_states_for_generate(self, hidden_states, batch_size, config, prompt_length):
-        encoder_expected_shape = (batch_size, prompt_length, config.get_text_config(decoder=False).hidden_size)
+        encoder_expected_shape = (batch_size, prompt_length, config.hidden_size)
         self.assertIsInstance(hidden_states, tuple)
         self.assertListEqual(
             [layer_hidden_states.shape for layer_hidden_states in hidden_states],
@@ -2653,16 +2640,11 @@ class GenerationTesterMixin:
         self.assertIsInstance(decoder_past_key_values, (tuple, Cache))
 
         # (batch, head, seq_length, head_features)
-        decoder_config = config.get_text_config(decoder=True)
         expected_shape = (
             batch_size,
-            decoder_config.num_key_value_heads
-            if hasattr(decoder_config, "num_key_value_heads")
-            else decoder_config.num_attention_heads,
+            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
             cache_length,
-            decoder_config.head_dim
-            if hasattr(decoder_config, "head_dim")
-            else decoder_config.hidden_size // decoder_config.num_attention_heads,
+            config.hidden_size // config.num_attention_heads,
         )
 
         if isinstance(decoder_past_key_values, Cache):

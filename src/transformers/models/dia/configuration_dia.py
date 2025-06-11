@@ -94,6 +94,8 @@ class DiaEncoderConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     """
 
     model_type = "dia_encoder"
@@ -112,6 +114,7 @@ class DiaEncoderConfig(PretrainedConfig):
         hidden_act: str = "silu",
         rope_theta: float = 10000.0,
         rope_scaling: Optional[Dict] = None,
+        initializer_range=0.02,
         **kwargs,
     ):
         self.max_length = max_length
@@ -132,6 +135,7 @@ class DiaEncoderConfig(PretrainedConfig):
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
+        self.initializer_range = initializer_range
         super().__init__(**kwargs)
 
 
@@ -215,6 +219,8 @@ class DiaDecoderConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     """
 
     model_type = "dia_decoder"
@@ -238,6 +244,7 @@ class DiaDecoderConfig(PretrainedConfig):
         num_channels: int = 9,
         rope_theta: float = 10000.0,
         rope_scaling: Optional[Dict] = None,
+        initializer_range=0.02,
         **kwargs,
     ):
         self.max_length = max_length
@@ -263,6 +270,7 @@ class DiaDecoderConfig(PretrainedConfig):
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
+        self.initializer_range = initializer_range
         super().__init__(**kwargs)
 
 
@@ -293,6 +301,8 @@ class DiaConfig(PretrainedConfig):
             Beginning of stream token id.
         delay_pattern (`List[int]`, *optional*, defaults to `[0, 8, 9, 10, 11, 12, 13, 14, 15]`):
             The delay pattern for the decoder. The length of this list must match `decoder_config.num_channels`.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Example:
 
@@ -324,6 +334,7 @@ class DiaConfig(PretrainedConfig):
         eos_token_id: int = 1024,
         bos_token_id: int = 1026,
         delay_pattern: Optional[List[int]] = None,
+        initializer_range=0.02,
         **kwargs,
     ):
         if isinstance(encoder_config, dict):
@@ -334,6 +345,7 @@ class DiaConfig(PretrainedConfig):
         self.decoder_config = decoder_config if decoder_config is not None else DiaDecoderConfig()
         self.norm_eps = norm_eps
         self.delay_pattern = delay_pattern if delay_pattern is not None else [0, 8, 9, 10, 11, 12, 13, 14, 15]
+        self.initializer_range = initializer_range
 
         assert self.decoder_config.num_channels == len(self.delay_pattern), (
             "Number of channels must match delay pattern length."
@@ -348,10 +360,8 @@ class DiaConfig(PretrainedConfig):
         )
 
     def get_text_config(self, decoder=False):
-        if decoder:
-            return self.decoder_config.get_text_config()
-        else:
-            return self.encoder_config.get_text_config()
+        """Defaulting to audio config as it's the decoder in this case which is usually the text backbone"""
+        return self.decoder_config
 
 
 __all__ = ["DiaConfig", "DiaEncoderConfig", "DiaDecoderConfig"]

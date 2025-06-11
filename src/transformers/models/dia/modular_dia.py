@@ -56,7 +56,7 @@ class DiaPreTrainedModel(PegasusPreTrainedModel):
     _no_split_modules = ["DiaEncoderLayer", "DiaDecoderLayer"]
 
     def _init_weights(self, module):
-        std = getattr(self.config, "init_std", 0.2)
+        std = self.config.initializer_range
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
@@ -397,7 +397,7 @@ class DiaDecoder(DiaPreTrainedModel):
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         if cache_position is None:
             cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_length, device=self.device
+                past_key_values_length, past_key_values_length + seq_length, device=input_ids.device
             )
         if position_ids is None:
             position_ids = cache_position[None, :]

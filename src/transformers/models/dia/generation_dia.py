@@ -171,6 +171,11 @@ class DiaGenerationMixin(GenerationMixin):
 
         # Get all audio and padding lengths
         if decoder_attention_mask is not None:
+            # Add one for BOS
+            decoder_attention_mask = torch.cat(
+                (torch.ones_like(decoder_attention_mask)[:, :1], decoder_attention_mask),
+                dim=-1,
+            )
             # DAC in hf only works with right padding, we already know that this needs to be flipped
             decoder_attention_mask = decoder_attention_mask.flip(dims=[1])
             padding_lens = decoder_attention_mask.shape[-1] - decoder_attention_mask.sum(dim=-1)
@@ -221,7 +226,9 @@ class DiaGenerationMixin(GenerationMixin):
         )
 
         # 4. Overwrite and convert to 2D
-        decoder_input_ids = delayed_batch[:, : max_audio_len + 1, :].reshape(real_batch_size * num_channels, -1).long()
+        decoder_input_ids = delayed_batch[
+            :, : max_audio_len + 1, :
+        ].long()  # .reshape(real_batch_size * num_channels, -1).long()
         model_kwargs["decoder_attention_mask"] = decoder_attention_mask[:, : max_audio_len + 1].long()
         model_kwargs["decoder_delay_mask"] = delayed_batch
 
@@ -234,22 +241,20 @@ class DiaGenerationMixin(GenerationMixin):
         decoder_delay_mask=None,
         **kwargs,
     ):
+        # Reshape decoder input_ids to 3D to be compile friendly and to fit the expected model input shape
+        batch_size = encoder_outputs[0].shape[0] // 2 if self._uses_cfg else encoder_outputs[0].shape[0]
+        input_ids = input_ids.reshape(batch_size, -1, self.config.decoder_config.num_channels)
+
         # Base method handles most things except CFG and the delay pattern mask
         model_inputs = super().prepare_inputs_for_generation(input_ids, encoder_outputs=encoder_outputs, **kwargs)
 
         # Post processing for CFG and overwriting via delay pattern mask
-        # 1. Reshape (bsz * channels, seq_len) to (bsz, seq_len, channels)
-        batch_size = encoder_outputs[0].shape[0] // 2 if self._uses_cfg else encoder_outputs[0].shape[0]
-        model_inputs["decoder_input_ids"] = model_inputs["decoder_input_ids"].reshape(
-            batch_size, -1, self.config.decoder_config.num_channels
-        )
-
-        # 2. Delay pattern mask -- force tokens if not allowed to predict (!= -1 in mask)
+        # 1. Delay pattern mask -- force tokens if not allowed to predict (!= -1 in mask)
         model_inputs["decoder_input_ids"] = self.apply_delay_mask(
             model_inputs["decoder_input_ids"], decoder_delay_mask
         )
 
-        # 3. Apply CFG duplication if needed
+        # 2. Apply CFG duplication if needed
         if self._uses_cfg:
             for key in ["decoder_input_ids", "decoder_attention_mask", "decoder_position_ids"]:
                 if model_inputs.get(key, None) is not None:
@@ -434,6 +439,9 @@ class DiaGenerationMixin(GenerationMixin):
         # Set model_kwargs `use_cache` so we can use it later in forward runs
         model_kwargs["use_cache"] = generation_config.use_cache
         # ******************* taken from main generate function up to calling the different methods *******************
+
+        # Prepare inner 2D logic in generation loop
+        input_ids = input_ids.reshape(-1, input_ids.shape[1])
 
         # 10. go into different generation modes
         if generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):

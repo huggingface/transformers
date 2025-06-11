@@ -20,6 +20,7 @@ from typing import Tuple
 from transformers.models.dia import DiaConfig, DiaDecoderConfig, DiaEncoderConfig
 from transformers.testing_utils import (
     require_torch,
+    require_torch_sdpa,
     torch_device,
 )
 from transformers.utils import is_torch_available, is_torchaudio_available
@@ -38,6 +39,12 @@ if is_torch_available():
     from transformers import (
         DiaForConditionalGeneration,
         DiaModel,
+        PretrainedConfig,
+        PreTrainedModel,
+    )
+    from transformers.cache_utils import (
+        Cache,
+        StaticCache,
     )
     from transformers.models.dia.modeling_dia import DiaDecoder, DiaEncoder
 
@@ -54,7 +61,7 @@ class DiaModelTester:
         batch_size=3,  # need batch_size != num_hidden_layers
         seq_length=7,
         max_length=50,
-        is_training=False,
+        is_training=True,
         vocab_size=100,
         hidden_size=16,
         intermediate_size=37,
@@ -202,9 +209,9 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     # TODO: needs processor for pipeline
     # pipeline_model_mapping = {"text-to-audio": DiaForConditionalGeneration} if is_torch_available() else {}
     pipeline_model_mapping = {}
-    fx_compatible = False
     test_pruning = False
     test_head_masking = False
+    test_resize_embeddings = False
     is_encoder_decoder = True
     # Indicates VLMs usually but there are many audio models which are also composite
     _is_composite = True
@@ -250,38 +257,183 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
+    # Overriding shape checks as Dia has different shapes on encoder/decoder using a composite config
+    # + additional special cases where 3D x 2D meshes confuse the expected shape
+    def _check_attentions_for_generate(
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
+    ):
+        self.assertIsInstance(attentions, tuple)
+        self.assertListEqual(
+            [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
+        )
+        self.assertEqual(len(attentions), (output_length - prompt_length))
+
+        use_cache = decoder_past_key_values is not None
+        has_static_cache = isinstance(decoder_past_key_values, StaticCache)
+
+        # When `output_attentions=True`, each iteration of generate appends the attentions corresponding to the new
+        # token(s)
+        for generated_length, iter_attentions in enumerate(attentions):
+            # regardless of using cache, the first forward pass will have the full prompt as input
+            if use_cache and generated_length > 0:
+                model_input_length = 1
+            else:
+                model_input_length = prompt_length + generated_length
+            query_length = (
+                prompt_length + generated_length
+                if not has_static_cache
+                else decoder_past_key_values.get_max_cache_shape()
+            )
+
+            expected_shape = (
+                batch_size,
+                config.decoder_config.num_attention_heads,  # Decoder config
+                model_input_length,
+                query_length,
+            )
+            # check attn size
+            self.assertListEqual(
+                [layer_attention.shape for layer_attention in iter_attentions], [expected_shape] * len(iter_attentions)
+            )
+
+    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, prompt_length):
+        # Encoder config
+        encoder_expected_shape = (batch_size, config.encoder_config.num_attention_heads, prompt_length, prompt_length)
+        self.assertIsInstance(attentions, tuple)
+        self.assertListEqual(
+            [layer_attentions.shape for layer_attentions in attentions],
+            [encoder_expected_shape] * len(attentions),
+        )
+
+    def _check_hidden_states_for_generate(
+        self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
+    ):
+        self.assertIsInstance(hidden_states, tuple)
+        self.assertListEqual(
+            [isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states],
+            [True] * len(hidden_states),
+        )
+        self.assertEqual(len(hidden_states), (output_length - prompt_length))
+
+        # When `output_hidden_states=True`, each iteration of generate appends the hidden states corresponding to the
+        # new token(s)
+        for generated_length, iter_hidden_states in enumerate(hidden_states):
+            # regardless of using cache, the first forward pass will have the full prompt as input
+            if use_cache and generated_length > 0:
+                model_input_length = 1
+            else:
+                model_input_length = prompt_length + generated_length
+
+            # check hidden size
+            # we can have different hidden sizes between encoder and decoder --> check both
+            expected_shape_encoder = (batch_size, model_input_length, config.encoder_config.hidden_size)
+            expected_shape_decoder = (batch_size, model_input_length, config.decoder_config.hidden_size)
+            self.assertTrue(
+                [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states]
+                == [expected_shape_encoder] * len(iter_hidden_states)
+                or [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states]
+                == [expected_shape_decoder] * len(iter_hidden_states)
+            )
+
+    def _check_encoder_hidden_states_for_generate(self, hidden_states, batch_size, config, prompt_length):
+        # Encoder config
+        encoder_expected_shape = (batch_size, prompt_length, config.encoder_config.hidden_size)
+        self.assertIsInstance(hidden_states, tuple)
+        self.assertListEqual(
+            [layer_hidden_states.shape for layer_hidden_states in hidden_states],
+            [encoder_expected_shape] * len(hidden_states),
+        )
+
+    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
+        self.assertIsInstance(decoder_past_key_values, (tuple, Cache))
+
+        # we need the decoder config here
+        config = config.decoder_config
+
+        # (batch, head, seq_length, head_features)
+        expected_shape = (
+            batch_size,
+            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
+            cache_length,
+            config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads,
+        )
+
+        if isinstance(decoder_past_key_values, Cache):
+            self.assertListEqual(
+                [key_tensor.shape for key_tensor in decoder_past_key_values.key_cache],
+                [expected_shape] * len(decoder_past_key_values.key_cache),
+            )
+            self.assertListEqual(
+                [value_tensor.shape for value_tensor in decoder_past_key_values.value_cache],
+                [expected_shape] * len(decoder_past_key_values.value_cache),
+            )
+
     def _check_scores(self, batch_size, scores, generated_length, config):
-        # -- Overriden as Dia internally meshes 3D with 2D
-        # Special case where Dia keeps score in a 2D mesh of (bsz * channels)
-        vocab_size = config.get_text_config(decoder=True).vocab_size
+        # Special case where Dia keeps score in a 2D mesh of (bsz * channels, vocab)
+        vocab_size = config.decoder_config.vocab_size
         expected_shape = (batch_size * len(config.delay_pattern), vocab_size)
         self.assertIsInstance(scores, tuple)
         self.assertEqual(len(scores), generated_length)
         self.assertListEqual([iter_scores.shape for iter_scores in scores], [expected_shape] * len(scores))
 
-    # training is not supported yet
-    """@unittest.skip(reason="Training is not supported yet")
-    def test_training(self):
+    @unittest.skip(reason="Decoder preparation in Dia is currently not designed around cache continuation.")
+    def test_generate_continue_from_past_key_values(self):
         pass
 
-    @unittest.skip(reason="Training is not supported yet")
-    def test_training_gradient_checkpointing(self):
+    @unittest.skip(reason="Indirectly checked in Dia through the generate methods.")
+    def test_past_key_values_format(self, custom_all_cache_shapes=None):
         pass
+
+    @unittest.skip(reason="Indirectly checked in Dia through the generate methods.")
+    def test_hidden_states_output(self):
+        pass
+
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        """
+        Overriden as it relies on hardcoded namings atm
+        """
+        for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname)
+
+                sub_models_supporting_sdpa = [
+                    (module._supports_sdpa or module._supports_attention_backend)
+                    for name, module in model.named_modules()
+                    if isinstance(module, PreTrainedModel) and name != ""
+                ]
+                supports_sdpa_all_modules = (
+                    all(sub_models_supporting_sdpa)
+                    if len(sub_models_supporting_sdpa) > 0
+                    else (model._supports_sdpa or model._supports_attention_backend)
+                )
+
+                if not supports_sdpa_all_modules:
+                    with self.assertRaises(ValueError):
+                        model_sdpa = model_class.from_pretrained(tmpdirname, attn_implementation="sdpa")
+                else:
+                    model_sdpa = model_class.from_pretrained(tmpdirname, attn_implementation="sdpa")
+                    for key in model_sdpa.config:
+                        if isinstance(getattr(model_sdpa.config, key), PretrainedConfig):
+                            sub_config = getattr(model_sdpa.config, key)
+                            self.assertTrue(sub_config._attn_implementation == "sdpa")
 
     @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="Dia has too many mixed embedding types which would cause unintentional side effects, e.g. attempts at tying embeddings"
     )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="Theoretically works but kernel library causes issues.")
+    def test_torchscript_output_hidden_state(self):
         pass
 
-    @parameterized.expand([("offloaded",)])
-    @pytest.mark.generate
-    @unittest.skip(reason="Dia doesnt work with offloaded cache implementation yet")
-    def test_offloaded_cache_implementation(self, cache_implementation):
-        pass"""
+    @unittest.skip(reason="Theoretically works but kernel library causes issues.")
+    def test_torchscript_simple(self):
+        pass
+
+    # TODO: gradient / loss things
