@@ -26,6 +26,7 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -357,7 +358,7 @@ class Blip2MLP(nn.Module):
 
 
 # Copied from transformers.models.blip.modeling_blip.BlipEncoderLayer with Blip->Blip2
-class Blip2EncoderLayer(nn.Module):
+class Blip2EncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Blip2Config):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -511,19 +512,12 @@ class Blip2Encoder(nn.Module):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    attention_mask,
-                    output_attentions,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    output_attentions=output_attentions,
-                )
+
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -831,7 +825,7 @@ class Blip2QFormerOutput(nn.Module):
         return hidden_states
 
 
-class Blip2QFormerLayer(nn.Module):
+class Blip2QFormerLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -972,31 +966,22 @@ class Blip2QFormerEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
-                layer_outputs = self._gradient_checkpointing_func(
-                    layer_module.__call__,
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
+            if getattr(self.config, "gradient_checkpointing", False) and self.training and use_cache:
+                logger.warning(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                 )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
-                    query_length,
-                )
+                use_cache = False
+
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask,
+                layer_head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                past_key_value,
+                output_attentions,
+                query_length,
+            )
 
             hidden_states = layer_outputs[0]
             if use_cache:
@@ -1195,6 +1180,8 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
             query_length if query_length is not None else query_embeds.shape[1] if query_embeds is not None else 0
         )
 
+        # `Blip2QFormerModel` is kept as fp32
+        query_embeds = query_embeds.to(self.layernorm.weight.dtype)
         embedding_output = self.layernorm(query_embeds)
         embedding_output = self.dropout(embedding_output)
 
@@ -1736,6 +1723,7 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
         )
 
         pooled_output = text_outputs[0] if not return_dict else text_outputs.last_hidden_state
+        pooled_output = pooled_output.to(dtype=self.text_projection.weight.dtype)
 
         text_embeds = self.text_projection(pooled_output)
         text_embeds = nn.functional.normalize(text_embeds, dim=-1)
@@ -1836,6 +1824,7 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
         )
 
         embeds = query_outputs[0] if not return_dict else query_outputs.last_hidden_state
+        embeds = embeds.to(dtype=self.vision_projection.weight.dtype)
         image_embeds = self.vision_projection(embeds)
         image_embeds = nn.functional.normalize(image_embeds, dim=-1)
 
@@ -2394,6 +2383,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
                 return_dict=return_dict,
             )
             text_embeds = text_outputs[0] if not return_dict else text_outputs.last_hidden_state
+            text_embeds = text_embeds.to(dtype=self.itm_head.weight.dtype)
 
             output = self.itm_head(text_embeds[:, : query_tokens.size(1), :])
             logits_per_image = output.mean(dim=1)
@@ -2407,6 +2397,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
                 return_dict=return_dict,
             )
             image_embeds = query_outputs[0] if not return_dict else query_outputs.last_hidden_state
+            image_embeds = image_embeds.to(dtype=self.vision_projection.weight.dtype)
 
             query_embeds = self.embeddings(
                 input_ids=input_ids,
@@ -2418,6 +2409,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
                 return_dict=return_dict,
             )
             question_embeds = text_outputs[0] if not return_dict else text_outputs.last_hidden_state
+            question_embeds = question_embeds.to(dtype=self.text_projection.weight.dtype)
 
             # normalized features
             image_embeds = nn.functional.normalize(self.vision_projection(image_embeds), dim=-1)

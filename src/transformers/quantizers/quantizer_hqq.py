@@ -135,7 +135,11 @@ class HqqHfQuantizer(HfQuantizer):
 
             # Append new expected layers based on _ref_keys
             _ref_keys = HQQLinear(
-                linear_layer=None, quant_config=None, compute_dtype=torch.float16, device="cpu"
+                linear_layer=None,
+                quant_config=None,
+                compute_dtype=torch.float16,
+                device="cpu",
+                del_orig=False,
             ).state_dict_keys() - {"bias"}
 
             # Clean-up
@@ -224,6 +228,7 @@ class HqqHfQuantizer(HfQuantizer):
                     quant_config=None,
                     compute_dtype=self.torch_dtype,
                     device=target_device,
+                    del_orig=False,
                 )
 
             hqq_layer.load_state_dict(module_state_dict)

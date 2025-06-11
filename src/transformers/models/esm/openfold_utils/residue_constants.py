@@ -18,8 +18,9 @@
 import collections
 import copy
 import functools
+from collections.abc import Mapping, Sequence
 from importlib import resources
-from typing import Dict, List, Mapping, Sequence, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 

@@ -17,14 +17,15 @@ Processor class for LLaVa-Onevision.
 """
 
 import math
-from typing import Iterable, List, Union
+from collections.abc import Iterable
+from typing import List, Union
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import select_best_resolution
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 from ...video_utils import VideoInput
@@ -38,6 +39,7 @@ class LlavaOnevisionProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_mm_token_type_ids": False,
         },
         "image_kwargs": {},
         "videos_kwargs": {},
@@ -74,14 +76,6 @@ class LlavaOnevisionProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer", "video_processor"]
-    valid_kwargs = [
-        "chat_template",
-        "num_image_tokens",
-        "vision_feature_select_strategy",
-        "image_token",
-        "video_token",
-        "vision_aspect_ratio",
-    ]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
     video_processor_class = "AutoVideoProcessor"
@@ -170,12 +164,15 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         if images is not None:
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 
+            batch_num_images = iter(image_inputs["batch_num_images"])
             image_sizes = iter(image_inputs["image_sizes"])
             height, width = get_image_size(
                 to_numpy_array(image_inputs["pixel_values"][0][0]),
                 channel_dim=output_kwargs["images_kwargs"].get("data_format"),
             )
-            text, num_image_tokens = self._expand_image_tokens(text, image_sizes, height, width, self.image_token)
+            text, num_image_tokens = self._expand_image_tokens(
+                text, image_sizes, height, width, self.image_token, batch_num_images
+            )
 
         if videos is not None:
             video_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
@@ -193,8 +190,15 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             text = [sample.replace(self.video_token, self.video_token * num_video_tokens) for sample in text]
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
 
         return BatchFeature(data={**text_inputs, **image_inputs, **video_inputs}, tensor_type=return_tensors)
 
@@ -205,23 +209,29 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         height: int,
         width: int,
         special_token: str,
-        num_frames: int = 1,
+        batch_num_images: Iterable[int],
     ):
         prompt_strings = []
         max_num_vision_tokens = 0
         for sample in text:
+            if special_token in sample:
+                is_multi_image = next(batch_num_images) != 1
+            else:
+                is_multi_image = False
             while special_token in sample:
-                image_size_list = next(image_sizes)
-                original_size = image_size_list[0] if num_frames != 1 else image_size_list
-                if not isinstance(original_size, (list, tuple)):
-                    # cast to list to avoid numerical precision errors when calculating unpadding
-                    original_size = original_size.tolist()
-                orig_height, orig_width = original_size
-                num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
+                if is_multi_image:
+                    num_image_tokens = self.num_image_tokens + 1  # one for image_newline
+                else:
+                    original_size = next(image_sizes)
+                    if not isinstance(original_size, (list, tuple)):
+                        # cast to list to avoid numerical precision errors when calculating unpadding
+                        original_size = original_size.tolist()
+                    orig_height, orig_width = original_size
+                    num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
                 max_num_vision_tokens = max(max_num_vision_tokens, num_image_tokens)
                 if self.vision_feature_select_strategy == "default":
                     num_image_tokens -= 1
-                sample = sample.replace(special_token, "<placeholder>" * num_image_tokens * num_frames, 1)
+                sample = sample.replace(special_token, "<placeholder>" * num_image_tokens, 1)
             prompt_strings.append(sample)
         text = [sample.replace("<placeholder>", special_token) for sample in prompt_strings]
         return text, max_num_vision_tokens
@@ -275,6 +285,48 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             newline_features = int(current_height // ratio)
 
         return (unpadded_features, newline_features)
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+        Args:
+            image_sizes (List[List[str]], *optional*):
+                The input sizes formatted as (height, width) per each image.
+            video_sizes (List[List[str]], *optional*):
+                The input sizes formatted as (num_frames, height, width) per each video.
+            audio_lengths (List[int], *optional*):
+                The input length formatted as per each audio.
+        Returns:
+            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
+            to a list containing the number of placeholder tokens required. If the model doesn't accept
+            a certain modality or no input sizes are provided, the dict value is set to an empty list.
+        """
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = LlavaOnevisionProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+
+            size = images_kwargs.get("size", None) or self.image_processor.size
+            size = (
+                (size["shortest_edge"], size["shortest_edge"])
+                if "shortest_edge" in size
+                else (min(size["height"], size["width"]), min(size["height"], size["width"]))
+            )
+            processed_height, processed_width = size
+
+            batch_num_image_tokens = []
+            num_image_patches = [1] * len(image_sizes)  # llava-ov doesn't batch pixels as Idefics, thus `1` patch`
+            for image_size in image_sizes:
+                orig_height, orig_width = image_size
+                num_image_tokens = self._get_number_of_features(
+                    orig_height, orig_width, processed_height, processed_width
+                )
+                if self.vision_feature_select_strategy == "default":
+                    num_image_tokens -= 1
+                batch_num_image_tokens.append(num_image_tokens)
+            vision_data.update({"num_image_tokens": batch_num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

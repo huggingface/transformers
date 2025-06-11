@@ -22,6 +22,7 @@ from transformers.generation.configuration_utils import ALL_CACHE_IMPLEMENTATION
 from transformers.testing_utils import (
     CaptureStderr,
     backend_device_count,
+    backend_torch_accelerator_module,
     cleanup,
     get_gpu_count,
     is_torch_available,
@@ -55,6 +56,7 @@ if is_torch_available():
         convert_and_export_with_cache,
         pipeline,
     )
+    from transformers.integrations.executorch import export_with_dynamic_cache
 
 
 TEST_CACHE_IMPLEMENTATIONS = [
@@ -429,11 +431,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
         original = GenerationConfig(**common)
         offloaded = GenerationConfig(cache_implementation="offloaded", **common)
 
-        torch_accelerator_module = None
-        if device.type == "cuda":
-            torch_accelerator_module = torch.cuda
-        elif device.type == "xpu":
-            torch_accelerator_module = torch.xpu
+        torch_accelerator_module = backend_torch_accelerator_module(device.type)
 
         torch_accelerator_module.reset_peak_memory_stats(device)
         model.generate(generation_config=original, **inputs)
@@ -593,22 +591,11 @@ class CacheExportIntegrationTest(unittest.TestCase):
         attention_mask = inputs.attention_mask
         input_ids = inputs.input_ids
 
-        past_key_values = DynamicCache()
-        ep = torch.export.export(
-            model,
-            (),
-            {
-                "input_ids": input_ids,
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "use_cache": True,
-            },
-            strict=False,
-        )
+        ep = export_with_dynamic_cache(model, input_ids, attention_mask)
         res = ep.module()(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            past_key_values=past_key_values,
+            past_key_values=DynamicCache(),
             use_cache=True,
         )
         self.assertTrue(len(res.past_key_values.key_cache) == model.config.num_hidden_layers)

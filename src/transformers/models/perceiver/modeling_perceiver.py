@@ -16,10 +16,11 @@
 
 import abc
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import reduce
 from operator import __add__
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch

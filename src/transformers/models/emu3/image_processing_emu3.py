@@ -15,7 +15,8 @@
 # limitations under the License.
 
 import math
-from typing import Dict, Iterable, List, Optional, Union
+from collections.abc import Iterable
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
@@ -80,9 +81,7 @@ def smart_resize(
     3. The aspect ratio of the image is maintained as closely as possible.
 
     """
-    if height < factor or width < factor:
-        raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
-    elif max(height, width) / min(height, width) > 200:
+    if max(height, width) / min(height, width) > 200:
         raise ValueError(
             f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
         )
@@ -90,8 +89,8 @@ def smart_resize(
     w_bar = round(width / factor) * factor
     if h_bar * w_bar > max_pixels:
         beta = math.sqrt((height * width) / max_pixels)
-        h_bar = math.floor(height / beta / factor) * factor
-        w_bar = math.floor(width / beta / factor) * factor
+        h_bar = max(factor, math.floor(height / beta / factor) * factor)
+        w_bar = max(factor, math.floor(width / beta / factor) * factor)
     elif h_bar * w_bar < min_pixels:
         beta = math.sqrt(min_pixels / (height * width))
         h_bar = math.ceil(height * beta / factor) * factor

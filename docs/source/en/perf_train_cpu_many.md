@@ -75,8 +75,7 @@ python3 run_qa.py \
  --doc_stride 128  \
  --output_dir /tmp/debug_squad/ \
  --no_cuda \
- --ddp_backend ccl \
- --use_ipex
+ --ddp_backend ccl
 ```
 
 </hfoption>
@@ -115,7 +114,6 @@ python3 run_qa.py \
  --output_dir /tmp/debug_squad/ \
  --no_cuda \
  --ddp_backend ccl \
- --use_ipex \
  --bf16
 ```
 
@@ -201,8 +199,7 @@ spec:
                     --output_dir /tmp/pvc-mount/output_$(date +%Y%m%d_%H%M%S) \
                     --no_cuda \
                     --ddp_backend ccl \
-                    --bf16 \
-                    --use_ipex;
+                    --bf16;
               env:
               - name: LD_PRELOAD
                 value: "/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4.5.9:/usr/local/lib/libiomp5.so"

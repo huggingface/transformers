@@ -20,11 +20,11 @@
 # limitations under the License.
 
 
-from typing import ClassVar, List, Optional, Union
+from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, make_flat_list_of_images
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import is_torch_available
 
@@ -87,23 +87,25 @@ class ColPaliProcessor(ProcessorMixin):
             The tokenizer is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
+        visual_prompt_prefix (`str`, *optional*, defaults to `"Describe the image."`):
+            A string that gets tokenized and prepended to the image tokens.
+        query_prefix (`str`, *optional*, defaults to `"Question: "`):
+            A prefix to be used for the query.
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
     image_processor_class = ("SiglipImageProcessor", "SiglipImageProcessorFast")
     tokenizer_class = ("GemmaTokenizer", "GemmaTokenizerFast")
-
-    visual_prompt_prefix: ClassVar[str] = "Describe the image."
-    query_prefix: ClassVar[str] = "Question: "
 
     def __init__(
         self,
         image_processor=None,
         tokenizer=None,
         chat_template=None,
-        **kwargs,
+        visual_prompt_prefix: str = "Describe the image.",
+        query_prefix: str = "Question: ",
     ):
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
@@ -126,8 +128,8 @@ class ColPaliProcessor(ProcessorMixin):
         tokenizer.add_tokens(EXTRA_TOKENS)
         tokenizer.add_bos_token = False
         tokenizer.add_eos_token = False
-
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        self.visual_prompt_prefix = visual_prompt_prefix
+        self.query_prefix = query_prefix
 
     def __call__(
         self,
@@ -138,7 +140,7 @@ class ColPaliProcessor(ProcessorMixin):
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """
-        Main method to prepare for the model either (1) one or several texts, either (2) one or several image(s). This method is custom
+        Main method to prepare for the model either (1) one or several texts, either (2) one or several image(s). This method is a custom
         wrapper around the PaliGemmaProcessor's [`~PaliGemmaProcessor.__call__`] method adapted for the ColPali model. It cannot process
         both text and images at the same time.
 
@@ -238,12 +240,10 @@ class ColPaliProcessor(ProcessorMixin):
 
             if suffix is None:
                 suffix = self.query_augmentation_token * 10
-            texts_query: List[str] = []
 
+            texts_query: List[str] = []
             for query in text:
-                query = self.tokenizer.bos_token + self.query_prefix + query
-                query += suffix  # add suffix (pad tokens)
-                query += "\n"  # make input ISO to PaliGemma's processor
+                query = self.tokenizer.bos_token + self.query_prefix + query + suffix + "\n"
                 texts_query.append(query)
 
             output_kwargs["text_kwargs"]["max_length"] = output_kwargs["text_kwargs"].get("max_length", 50)
@@ -255,6 +255,25 @@ class ColPaliProcessor(ProcessorMixin):
             )
 
             return batch_query
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+
+        Args:
+            image_sizes (List[List[str]], *optional*):
+                The input sizes formatted as (height, width) per each image.
+        Returns:
+            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
+            to a list containing the number of placeholder tokens required. If the model doesn't accept
+            a certain modality or no input sizes are provided, the dict value is set to an empty list.
+        """
+        vision_data = {}
+        if image_sizes is not None:
+            num_image_tokens = [self.image_seq_length] * len(image_sizes)
+            num_image_patches = [1] * len(image_sizes)
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+        return MultiModalData(**vision_data)
 
     def batch_decode(self, *args, **kwargs):
         """
@@ -294,7 +313,7 @@ class ColPaliProcessor(ProcessorMixin):
         Prepare for the model one or several image(s). This method is a wrapper around the `__call__` method of the ColPaliProcessor's
         [`ColPaliProcessor.__call__`].
 
-        This method forwards the `images` and `kwargs` arguments to SiglipImageProcessor's [`~SiglipImageProcessor.__call__`].
+        This method forwards the `images` and `kwargs` arguments to the image processor.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -329,7 +348,7 @@ class ColPaliProcessor(ProcessorMixin):
         Prepare for the model one or several texts. This method is a wrapper around the `__call__` method of the ColPaliProcessor's
         [`ColPaliProcessor.__call__`].
 
-        This method forwards the `text` and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`].
+        This method forwards the `text` and `kwargs` arguments to the tokenizer.
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):

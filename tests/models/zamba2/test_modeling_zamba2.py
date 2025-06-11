@@ -422,7 +422,8 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
 
@@ -576,6 +577,28 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     @parameterized.expand([(1, False), (1, True), (4, False)])
     def test_new_cache_format(self, num_beams, do_sample):
         pass
+
+    @require_torch_gpu
+    def test_flex_attention_with_grads(self):
+        """
+        Overwriting as the base hidden size is big enough for compile.
+        Manipulation of dims causes issues due to other constraints not being satisfied anymore.
+        """
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config._attn_implementation = "flex_attention"
+
+            model = model_class(config).to(device=torch_device)
+            self.assertTrue(model.config._attn_implementation == "flex_attention")
+
+            # Elaborate workaround for encoder-decoder models as some do not specify their main input
+            dummy_inputs = {model.main_input_name: inputs_dict[model.main_input_name].to(torch_device)}
+            if config.is_encoder_decoder:
+                dummy_inputs["decoder_input_ids"] = inputs_dict["decoder_input_ids"].to(torch_device)
+                dummy_inputs["decoder_attention_mask"] = inputs_dict["decoder_attention_mask"].to(torch_device)
+
+            # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
+            _ = model(**dummy_inputs)
 
 
 @require_torch

@@ -14,7 +14,8 @@
 # limitations under the License.
 """Image processor class for BridgeTower."""
 
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 

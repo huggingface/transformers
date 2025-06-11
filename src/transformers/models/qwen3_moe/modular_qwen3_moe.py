@@ -42,7 +42,9 @@ logger = logging.get_logger(__name__)
 
 
 class Qwen3MoeAttention(Qwen3Attention):  # This is the main diff with qwen2Moe!
-    pass
+    def __init__(self, config: Qwen3MoeConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.sliding_window = getattr(config, "sliding_window", None)
 
 
 class Qwen3MoeMLP(nn.Module):
@@ -187,6 +189,7 @@ class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer, nn.Module):
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 

@@ -19,7 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 
@@ -89,6 +89,15 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
 
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionFastImageProcessorKwargs]) -> BatchFeature:
+        if isinstance(images, (tuple, list)) and isinstance(images[0], (tuple, list)):
+            # if the first element is a list, we assume that all elements are lists
+            batch_num_images = [len(x) for x in images]
+        elif isinstance(images, (tuple, list)):
+            # treat this as a single-image case for backward compatibility
+            batch_num_images = [1] * len(images)
+        else:
+            batch_num_images = [1]
+        kwargs["batch_num_images"] = batch_num_images
         return super().preprocess(images, **kwargs)
 
     def _prepare_images_structure(
@@ -137,19 +146,23 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
 
         return resized_image
 
+    def _get_padding_size(self, original_resolution: tuple, target_resolution: tuple):
+        original_height, original_width = original_resolution
+        target_height, target_width = target_resolution
+        paste_x, r_x = divmod(target_width - original_width, 2)
+        paste_y, r_y = divmod(target_height - original_height, 2)
+        return [paste_x, paste_y, paste_x + r_x, paste_y + r_y]
+
     def _pad_for_patching(
         self, image: "torch.Tensor", target_resolution: tuple, input_data_format: ChannelDimension
     ) -> "torch.Tensor":
         """
         Pad an image to a target resolution while maintaining aspect ratio.
         """
-        target_height, target_width = target_resolution
-        new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format)
+        new_resolution = get_patch_output_size(image, target_resolution, input_data_format)
+        padding = self._get_padding_size(new_resolution, target_resolution)
 
-        paste_x, r_x = divmod(target_width - new_width, 2)
-        paste_y, r_y = divmod(target_height - new_height, 2)
-
-        padded_image = F.pad(image, padding=[paste_x, paste_y, paste_x + r_x, paste_y + r_y])
+        padded_image = F.pad(image, padding=padding)
 
         return padded_image
 
@@ -234,10 +247,15 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
         do_pad: bool,
+        batch_num_images: List[int],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:
         processed_images = []
         image_sizes = []
+
+        # only single image patching is supported
+        need_patching = [n == 1 for n in batch_num_images for _ in range(n)]
+
         # Determine the size tuple
         if size and size.height and size.width:
             size_tuple = (size.height, size.width)
@@ -252,14 +270,20 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         else:
             patch_size = size.shortest_edge
 
-        for image in images:
-            image_patches = self._get_image_patches(
-                image,
-                image_grid_pinpoints,
-                size=size_tuple,
-                patch_size=patch_size,
-                interpolation=interpolation,
-            )
+        for i, image in enumerate(images):
+            if need_patching[i]:
+                image_patches = self._get_image_patches(
+                    image,
+                    image_grid_pinpoints,
+                    size=size_tuple,
+                    patch_size=patch_size,
+                    interpolation=interpolation,
+                )
+            else:
+                padded_image = self.pad_to_square(
+                    images=image, background_color=tuple(int(x * 255) for x in self.image_mean)
+                )
+                image_patches = [padded_image]
 
             # Group images by size for batched processing
             processed_image_patches_grouped = {}
@@ -289,8 +313,52 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
             processed_images = self._pad_for_batching(processed_images)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return BatchFeature(
-            data={"pixel_values": processed_images, "image_sizes": image_sizes}, tensor_type=return_tensors
+            data={"pixel_values": processed_images, "image_sizes": image_sizes, "batch_num_images": batch_num_images},
+            tensor_type=return_tensors,
         )
+
+    # Copied from transformers.models.llava.image_processing_llava_fast.LlavaImageProcessorFast.pad_to_square
+    def pad_to_square(
+        self,
+        images: "torch.Tensor",
+        background_color: Union[int, Tuple[int, int, int]] = 0,
+    ) -> "torch.Tensor":
+        """
+        Pads an image to a square based on the longest edge.
+
+        Args:
+            images (`np.ndarray`):
+                The images to pad.
+            background_color (`int` or `Tuple[int, int, int]`, *optional*, defaults to 0):
+                The color to use for the padding. Can be an integer for single channel or a
+                tuple of integers representing for multi-channel images. If passed as integer
+                in mutli-channel mode, it will default to `0` in subsequent channels.
+        Returns:
+            `torch.Tensor`: The padded images.
+        """
+        height, width = get_image_size(images, ChannelDimension.FIRST)
+
+        if height == width:
+            return images
+
+        num_channels = images.shape[1] if len(images.shape) == 4 else images.shape[0]
+        if isinstance(background_color, int):
+            background_color = [background_color] + [0] * (num_channels - 1)
+        elif len(background_color) != num_channels:
+            raise ValueError(
+                f"background_color must have no more than {num_channels} elements to match the number of channels"
+            )
+
+        max_dim = max(height, width)
+        paste_x_left = (max_dim - width) // 2
+        paste_y_left = (max_dim - height) // 2
+        paste_x_right = max_dim - width - paste_x_left
+        paste_y_right = max_dim - height - paste_y_left
+        padded_images = F.pad(
+            images, padding=[paste_x_left, paste_y_left, paste_x_right, paste_y_right], fill=background_color
+        )
+
+        return padded_images
 
 
 __all__ = ["LlavaOnevisionImageProcessorFast"]
