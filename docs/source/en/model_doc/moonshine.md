@@ -88,12 +88,9 @@ transcription[0]
 </hfoption>
 </hfoptions>
 
+## Resources
 
-- Moonshine improves upon Whisper's architecture:
-  1. It uses SwiGLU activation instead of GELU in the decoder layers
-  2. Most importantly, it replaces absolute position embeddings with Rotary Position Embeddings (RoPE). This allows Moonshine to handle audio inputs of any length, unlike Whisper which is restricted to fixed 30-second windows.
-
--- A guide for automatic speech recognition can be found [here](../tasks/asr)
+- [Automatic speech recognition task guide](../tasks/asr)
 
 ## MoonshineConfig
 
