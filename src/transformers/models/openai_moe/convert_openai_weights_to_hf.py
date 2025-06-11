@@ -19,8 +19,8 @@ import os
 from typing import List, Optional
 
 import regex as re
+import tiktoken
 import torch
-from tqdm import tqdm
 from safetensors.torch import load_file as safe_load
 
 from transformers import (
@@ -56,7 +56,6 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 # fmt: on
 
 
-
 def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
@@ -73,7 +72,6 @@ def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
             new_text = re.sub(pattern, replacement, new_text)
         output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
     return output_dict
-
 
 
 def write_model(
@@ -93,7 +91,7 @@ def write_model(
     final_ = {}
     for file in list(os.listdir(input_base_path)):
         if file.endswith(".safetensors"):
-            final_.update(safe_load(os.path.join(input_base_path,file)) )
+            final_.update(safe_load(os.path.join(input_base_path, file)))
 
     print("Converting ..")
     all_keys = final_.keys()
@@ -109,7 +107,11 @@ def write_model(
         if re.search("qkv_proj", new_key):
             q_len = config.head_dim * config.num_attention_heads
             k_len = config.head_dim * config.num_key_value_heads
-            q, k, v = final_[key][:q_len, ...], final_[key][q_len:k_len+q_len, ...], final_[key][k_len+q_len:, ...]
+            q, k, v = (
+                final_[key][:q_len, ...],
+                final_[key][q_len : k_len + q_len, ...],
+                final_[key][k_len + q_len :, ...],
+            )
             q_key = re.sub(r"qkv_proj", "q_proj", new_key)
             k_key = re.sub(r"qkv_proj", "k_proj", new_key)
             v_key = re.sub(r"qkv_proj", "v_proj", new_key)
@@ -117,11 +119,11 @@ def write_model(
             state_dict[k_key] = k.contiguous().to(torch.bfloat16)
             state_dict[v_key] = v.contiguous().to(torch.bfloat16)
         elif re.search("gate_up_proj|down_proj", new_key) and "bias" not in new_key:
-            state_dict[new_key] = final_[key].permute(0,2,1).contiguous() # einsum in orignal, I use bmm
+            state_dict[new_key] = final_[key].permute(0, 2, 1).contiguous()  # einsum in orignal, I use bmm
         else:
             weight = final_[key]
             if not re.search("norm", new_key):
-                weight = weight.to(torch.bfloat16) # norms are the only ones in float32
+                weight = weight.to(torch.bfloat16)  # norms are the only ones in float32
             state_dict[new_key] = weight
 
     del final_
@@ -182,7 +184,7 @@ def bytes_to_unicode():
     cs = [chr(n) for n in cs]
     return dict(zip(bs, cs))
 
-import tiktoken
+
 class OpenAIMoeConverter(TikTokenConverter):
     def extract_vocab_merges_from_model(self, tiktoken_url: str):
         tokenizer = tiktoken.get_encoding(tiktoken_url)
@@ -224,7 +226,7 @@ class OpenAIMoeConverter(TikTokenConverter):
         self.additional_special_tokens = {}
         # 199998 is not defined either
         self.additional_special_tokens["<|reserved_199998|>"] = 199998
-        self.additional_special_tokens = {'<|endoftext|>': 199999, '<|endofprompt|>': 200018}
+        self.additional_special_tokens = {"<|endoftext|>": 199999, "<|endofprompt|>": 200018}
         for k in range(199999, 200018):
             self.additional_special_tokens[f"<|reserved_{k}|>"] = k
         sorted_list = sorted(self.additional_special_tokens.items(), key=lambda x: x[1])

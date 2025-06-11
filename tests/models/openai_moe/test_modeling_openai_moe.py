@@ -15,11 +15,16 @@
 
 import unittest
 
+import torch
 from packaging import version
-from parameterized import parameterized
 
-from transformers import AutoTokenizer, OpenaiConfig, StaticCache, is_torch_available, set_seed
-from transformers.generation.configuration_utils import GenerationConfig
+from transformers import (
+    AutoTokenizer,
+    OpenAIMoeConfig,
+    OpenAIMoeForCausalLM,
+    OpenAIMoeModel,
+    is_torch_available,
+)
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -36,21 +41,7 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
-if is_torch_available():
-    import torch
-
-    from transformers import (
-        LlamaTokenizer,
-        OpenaiForCausalLM,
-        OpenaiForQuestionAnswering,
-        OpenaiForSequenceClassification,
-        OpenaiForTokenClassification,
-        OpenaiModel,
-    )
-    from transformers.models.openai.modeling_openai import OpenaiRotaryEmbedding
-
-
-class OpenaiModelTester:
+class OpenAIMoeModelTester:
     def __init__(
         self,
         parent,
@@ -125,7 +116,7 @@ class OpenaiModelTester:
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return OpenaiConfig(
+        return OpenAIMoeConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -144,7 +135,7 @@ class OpenaiModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = OpenaiModel(config=config)
+        model = OpenAIMoeModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -167,14 +158,11 @@ class OpenaiModelTester:
 
 
 @require_torch
-class OpenaiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class OpenAIMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            OpenaiModel,
-            OpenaiForCausalLM,
-            OpenaiForSequenceClassification,
-            OpenaiForQuestionAnswering,
-            OpenaiForTokenClassification,
+            OpenAIMoeModel,
+            OpenAIMoeForCausalLM,
         )
         if is_torch_available()
         else ()
@@ -188,11 +176,11 @@ class OpenaiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     model_split_percents = [0.5, 0.7, 0.8]
 
     # used in `test_torch_compile_for_training`
-    _torch_compile_train_cls = OpenaiForCausalLM if is_torch_available() else None
+    _torch_compile_train_cls = OpenAIMoeForCausalLM if is_torch_available() else None
 
     def setUp(self):
-        self.model_tester = OpenaiModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=OpenaiConfig, hidden_size=37)
+        self.model_tester = OpenAIMoeModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=OpenAIMoeConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -207,216 +195,9 @@ class OpenaiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_openai_sequence_classification_model(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = OpenaiForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    def test_openai_sequence_classification_model_for_single_label(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.problem_type = "single_label_classification"
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = OpenaiForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    def test_openai_sequence_classification_model_for_multi_label(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        config.problem_type = "multi_label_classification"
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        sequence_labels = ids_tensor(
-            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
-        ).to(torch.float)
-        model = OpenaiForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
-        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    def test_openai_token_classification_model(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.num_labels = 3
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
-        model = OpenaiForTokenClassification(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
-        self.assertEqual(
-            result.logits.shape,
-            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
-        )
-
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    def test_model_rope_scaling_from_config(self, scaling_type):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = OpenaiModel(config)
-        original_model.to(torch_device)
-        original_model.eval()
-        original_short_output = original_model(short_input).last_hidden_state
-        original_long_output = original_model(long_input).last_hidden_state
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
-        scaled_model = OpenaiModel(config)
-        scaled_model.to(torch_device)
-        scaled_model.eval()
-        scaled_short_output = scaled_model(short_input).last_hidden_state
-        scaled_long_output = scaled_model(long_input).last_hidden_state
-
-        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
-        # maximum sequence length, so the outputs for the short input should match.
-        if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
-        else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
-
-        # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
-
-    def test_model_rope_scaling(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        scaling_factor = 10
-        short_input_length = 10
-        long_input_length = int(config.max_position_embeddings * 1.5)
-
-        # Inputs
-        x = torch.randn(
-            1, dtype=torch.float32, device=torch_device
-        )  # used exclusively to get the dtype and the device
-        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
-        position_ids_short = position_ids_short.unsqueeze(0)
-        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
-        position_ids_long = position_ids_long.unsqueeze(0)
-
-        # Sanity check original RoPE
-        original_rope = OpenaiRotaryEmbedding(config=config).to(torch_device)
-        original_cos_short, original_sin_short = original_rope(x, position_ids_short)
-        original_cos_long, original_sin_long = original_rope(x, position_ids_long)
-        torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
-
-        # Sanity check linear RoPE scaling
-        # New position "x" should match original position with index "x/scaling_factor"
-        config.rope_scaling = {"type": "linear", "factor": scaling_factor}
-        linear_scaling_rope = OpenaiRotaryEmbedding(config=config).to(torch_device)
-        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
-        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
-        for new_position in range(0, long_input_length, scaling_factor):
-            original_position = int(new_position // scaling_factor)
-            torch.testing.assert_close(linear_cos_long[:, new_position, :], original_cos_long[:, original_position, :])
-            torch.testing.assert_close(linear_sin_long[:, new_position, :], original_sin_long[:, original_position, :])
-
-        # Sanity check Dynamic NTK RoPE scaling
-        # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
-        # with scaling_factor (or that `inv_freq` decreases)
-        config.rope_scaling = {"type": "dynamic", "factor": scaling_factor}
-        ntk_scaling_rope = OpenaiRotaryEmbedding(config=config).to(torch_device)
-        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
-        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(ntk_cos_short, original_cos_short)
-        torch.testing.assert_close(ntk_sin_short, original_sin_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(ntk_cos_long, original_cos_long)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(ntk_sin_long, original_sin_long)
-        self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
-
-        # Sanity check Yarn RoPE scaling
-        # Scaling should be over the entire input
-        config.rope_scaling = {"type": "yarn", "factor": scaling_factor}
-        yarn_scaling_rope = OpenaiRotaryEmbedding(config=config).to(torch_device)
-        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short)
-        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(yarn_sin_short, yarn_sin_long[:, :short_input_length, :])
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_cos_short, original_cos_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_sin_short, original_sin_short)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_cos_long, original_cos_long)
-        with self.assertRaises(AssertionError):
-            torch.testing.assert_close(yarn_sin_long, original_sin_long)
-
-    def test_model_loading_old_rope_configs(self):
-        def _reinitialize_config(base_config, new_kwargs):
-            # Reinitialize the config with the new kwargs, forcing the config to go through its __init__ validation
-            # steps.
-            base_config_dict = base_config.to_dict()
-            new_config = OpenaiConfig.from_dict(config_dict={**base_config_dict, **new_kwargs})
-            return new_config
-
-        # from untouched config -> ✅
-        base_config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        original_model = OpenaiForCausalLM(base_config).to(torch_device)
-        original_model(**model_inputs)
-
-        # from a config with the expected rope configuration -> ✅
-        config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear", "factor": 10.0}})
-        original_model = OpenaiForCausalLM(config).to(torch_device)
-        original_model(**model_inputs)
-
-        # from a config with the old rope configuration ('type' instead of 'rope_type')  -> ✅ we gracefully handle BC
-        config = _reinitialize_config(base_config, {"rope_scaling": {"type": "linear", "factor": 10.0}})
-        original_model = OpenaiForCausalLM(config).to(torch_device)
-        original_model(**model_inputs)
-
-        # from a config with both 'type' and 'rope_type'  -> ✅ they can coexist (and both are present in the config)
-        config = _reinitialize_config(
-            base_config, {"rope_scaling": {"type": "linear", "rope_type": "linear", "factor": 10.0}}
-        )
-        self.assertTrue(config.rope_scaling["type"] == "linear")
-        self.assertTrue(config.rope_scaling["rope_type"] == "linear")
-        original_model = OpenaiForCausalLM(config).to(torch_device)
-        original_model(**model_inputs)
-
-        # from a config with parameters in a bad range ('factor' should be >= 1.0) -> ⚠️ throws a warning
-        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
-            config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear", "factor": -999.0}})
-            original_model = OpenaiForCausalLM(config).to(torch_device)
-            original_model(**model_inputs)
-            self.assertEqual(len(logs.output), 1)
-            self.assertIn("factor field", logs.output[0])
-
-        # from a config with unknown parameters ('foo' isn't a rope option) -> ⚠️ throws a warning
-        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
-            config = _reinitialize_config(
-                base_config, {"rope_scaling": {"rope_type": "linear", "factor": 10.0, "foo": "bar"}}
-            )
-            original_model = OpenaiForCausalLM(config).to(torch_device)
-            original_model(**model_inputs)
-            self.assertEqual(len(logs.output), 1)
-            self.assertIn("Unrecognized keys", logs.output[0])
-
-        # from a config with specific rope type but missing one of its mandatory parameters -> ❌ throws exception
-        with self.assertRaises(KeyError):
-            config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear"}})  # missing "factor"
-
 
 @require_torch_accelerator
-class OpenaiIntegrationTest(unittest.TestCase):
+class OpenAIMoeIntegrationTest(unittest.TestCase):
     def tearDown(self):
         # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
         # some memory allocated in the cache, which means some object is not being released properly. This causes some
@@ -444,7 +225,7 @@ class OpenaiIntegrationTest(unittest.TestCase):
         )
 
         tokenizer = AutoTokenizer.from_pretrained("meta-openai/Meta-Openai-3.1-8B-Instruct")
-        model = OpenaiForCausalLM.from_pretrained(
+        model = OpenAIMoeForCausalLM.from_pretrained(
             "meta-openai/Meta-Openai-3.1-8B-Instruct", device_map="auto", torch_dtype=torch.bfloat16
         )
         input_text = ["Tell me about the french revolution."]
@@ -459,7 +240,7 @@ class OpenaiIntegrationTest(unittest.TestCase):
     def test_model_7b_logits_bf16(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
-        model = OpenaiForCausalLM.from_pretrained(
+        model = OpenAIMoeForCausalLM.from_pretrained(
             "meta-openai/Openai-2-7b-hf", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="eager"
         )
 
@@ -508,7 +289,7 @@ class OpenaiIntegrationTest(unittest.TestCase):
     def test_model_7b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
-        model = OpenaiForCausalLM.from_pretrained(
+        model = OpenAIMoeForCausalLM.from_pretrained(
             "meta-openai/Openai-2-7b-hf", device_map="auto", torch_dtype=torch.float16
         )
 
@@ -563,8 +344,8 @@ class OpenaiIntegrationTest(unittest.TestCase):
             "understanding of space and time."
         )
         prompt = "Simply put, the theory of relativity states that "
-        tokenizer = LlamaTokenizer.from_pretrained("meta-openai/Openai-2-7b-chat-hf")
-        model = OpenaiForCausalLM.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained("meta-openai/Openai-2-7b-chat-hf")
+        model = OpenAIMoeForCausalLM.from_pretrained(
             "meta-openai/Openai-2-7b-chat-hf", device_map="sequential", torch_dtype=torch.float16
         )
         model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
@@ -600,10 +381,8 @@ class OpenaiIntegrationTest(unittest.TestCase):
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
-        tokenizer = LlamaTokenizer.from_pretrained(
-            "meta-openai/Openai-2-7b-hf", pad_token="</s>", padding_side="right"
-        )
-        model = OpenaiForCausalLM.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained("meta-openai/Openai-2-7b-hf", pad_token="</s>", padding_side="right")
+        model = OpenAIMoeForCausalLM.from_pretrained(
             "meta-openai/Openai-2-7b-hf", device_map=torch_device, torch_dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
@@ -619,314 +398,3 @@ class OpenaiIntegrationTest(unittest.TestCase):
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
-
-    @slow
-    @require_read_token
-    def test_export_static_cache(self):
-        if version.parse(torch.__version__) < version.parse("2.4.0"):
-            self.skipTest(reason="This test requires torch >= 2.4 to run.")
-
-        from transformers.integrations.executorch import (
-            TorchExportableModuleWithStaticCache,
-            convert_and_export_with_cache,
-        )
-
-        openai_models = {
-            "meta-openai/Openai-3.2-1B": [
-                "Simply put, the theory of relativity states that 1) the speed of light is the same for all "
-                "observers, regardless of their location, and 2) the laws of physics are the same for all observers"
-            ],
-        }
-
-        for openai_model_ckp, EXPECTED_TEXT_COMPLETION in openai_models.items():
-            # Load tokenizer
-            tokenizer = AutoTokenizer.from_pretrained(openai_model_ckp, pad_token="</s>", padding_side="right")
-            max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
-                "input_ids"
-            ].shape[-1]
-
-            # Load model
-            device = "cpu"
-            dtype = torch.bfloat16
-            cache_implementation = "static"
-            attn_implementation = "sdpa"
-            batch_size = 1
-            model = OpenaiForCausalLM.from_pretrained(
-                openai_model_ckp,
-                device_map=device,
-                torch_dtype=dtype,
-                attn_implementation=attn_implementation,
-                generation_config=GenerationConfig(
-                    use_cache=True,
-                    cache_implementation=cache_implementation,
-                    max_length=max_generation_length,
-                    cache_config={
-                        "batch_size": batch_size,
-                        "max_cache_len": max_generation_length,
-                        "device": device,
-                    },
-                ),
-            )
-
-            prompts = ["Simply put, the theory of relativity states that "]
-            prompt_tokens = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
-            prompt_token_ids = prompt_tokens["input_ids"]
-            max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
-
-            # Static Cache + export
-            exported_program = convert_and_export_with_cache(model)
-            ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
-                exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
-            )
-            ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
-            self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
-
-
-@slow
-@require_torch_accelerator
-class Mask4DTestHard(unittest.TestCase):
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def setUp(self):
-        cleanup(torch_device, gc_collect=True)
-        model_name = "TinyOpenai/TinyOpenai-1.1B-Chat-v1.0"
-        self.model_dtype = torch.float32
-        self.tokenizer = LlamaTokenizer.from_pretrained(model_name)
-        self.model = OpenaiForCausalLM.from_pretrained(model_name, torch_dtype=self.model_dtype).to(torch_device)
-
-    def get_test_data(self):
-        template = "my favorite {}"
-        items = ("pet is a", "artist plays a", "name is L")  # same number of tokens in each item
-
-        batch_separate = [template.format(x) for x in items]  # 3 separate lines
-        batch_shared_prefix = template.format(" ".join(items))  # 1 line with options concatenated
-
-        input_ids = self.tokenizer(batch_separate, return_tensors="pt").input_ids.to(torch_device)
-        input_ids_shared_prefix = self.tokenizer(batch_shared_prefix, return_tensors="pt").input_ids.to(torch_device)
-
-        mask_shared_prefix = torch.tensor(
-            [
-                [
-                    [
-                        [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                        [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                        [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                        [1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-                        [1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-                        [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
-                        [1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-                        [1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0],
-                        [1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0],
-                        [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0],
-                        [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0],
-                        [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1],
-                    ]
-                ]
-            ],
-            device=torch_device,
-        )
-
-        position_ids = torch.arange(input_ids.shape[1]).tile(input_ids.shape[0], 1).to(torch_device)
-
-        # building custom positions ids based on custom mask
-        position_ids_shared_prefix = (mask_shared_prefix.sum(dim=-1) - 1).reshape(1, -1)
-        # effectively: position_ids_shared_prefix = torch.tensor([[0, 1, 2, 3, 4, 5, 3, 4, 5, 3, 4, 5]]).to(device)
-
-        # inverting the mask
-        min_dtype = torch.finfo(self.model_dtype).min
-        mask_shared_prefix = (mask_shared_prefix.eq(0.0)).to(dtype=self.model_dtype) * min_dtype
-
-        return input_ids, position_ids, input_ids_shared_prefix, mask_shared_prefix, position_ids_shared_prefix
-
-    def test_stacked_causal_mask(self):
-        (
-            input_ids,
-            position_ids,
-            input_ids_shared_prefix,
-            mask_shared_prefix,
-            position_ids_shared_prefix,
-        ) = self.get_test_data()
-
-        # regular batch
-        logits = self.model.forward(input_ids, position_ids=position_ids).logits
-        logits_last = logits[:, -1, :]  # last tokens in each batch line
-        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
-
-        # single forward run with 4D custom mask
-        logits_shared_prefix = self.model.forward(
-            input_ids_shared_prefix, attention_mask=mask_shared_prefix, position_ids=position_ids_shared_prefix
-        ).logits
-        logits_shared_prefix_last = logits_shared_prefix[
-            0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1], :
-        ]  # last three tokens
-        decoded_shared_prefix = [self.tokenizer.decode(t) for t in logits_shared_prefix_last.argmax(dim=-1)]
-
-        self.assertEqual(decoded, decoded_shared_prefix)
-
-    def test_partial_stacked_causal_mask(self):
-        # Same as the test above, but the input is passed in two groups. It tests that we can pass partial 4D attention masks
-
-        (
-            input_ids,
-            position_ids,
-            input_ids_shared_prefix,
-            mask_shared_prefix,
-            position_ids_shared_prefix,
-        ) = self.get_test_data()
-
-        # regular batch
-        logits = self.model.forward(input_ids, position_ids=position_ids).logits
-        logits_last = logits[:, -1, :]  # last tokens in each batch line
-        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
-
-        # 2 forward runs with custom 4D masks
-        part_a = 3  # split point
-
-        input_1a = input_ids_shared_prefix[:, :part_a]
-        position_ids_1a = position_ids_shared_prefix[:, :part_a]
-        mask_1a = mask_shared_prefix[:, :, :part_a, :part_a]
-
-        outs_1a = self.model.forward(input_1a, attention_mask=mask_1a, position_ids=position_ids_1a)
-        past_key_values_a = outs_1a["past_key_values"]
-
-        # Case 1: we pass a 4D attention mask regarding the current sequence length (i.e. [..., seq_len, full_len])
-        input_1b = input_ids_shared_prefix[:, part_a:]
-        position_ids_1b = position_ids_shared_prefix[:, part_a:]
-        mask_1b = mask_shared_prefix[:, :, part_a:, :]
-        outs_1b = self.model.forward(
-            input_1b,
-            attention_mask=mask_1b,
-            position_ids=position_ids_1b,
-            past_key_values=past_key_values_a,
-        )
-        decoded_1b = [
-            self.tokenizer.decode(t)
-            for t in outs_1b.logits.argmax(-1)[
-                0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1] - part_a
-            ]
-        ]
-        self.assertEqual(decoded, decoded_1b)
-
-    def test_stacked_causal_mask_static_cache(self):
-        """same as above but with StaticCache"""
-        (
-            input_ids,
-            position_ids,
-            input_ids_shared_prefix,
-            mask_shared_prefix,
-            position_ids_shared_prefix,
-        ) = self.get_test_data()
-
-        # regular batch
-        logits = self.model.forward(input_ids, position_ids=position_ids).logits
-        logits_last = logits[:, -1, :]  # last tokens in each batch line
-        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
-
-        # upgrade the model with StaticCache
-        max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
-        past_key_values = StaticCache(
-            config=self.model.config,
-            max_batch_size=1,
-            max_cache_len=max_cache_len,
-            device=torch_device,
-            dtype=self.model.dtype,
-        )
-
-        padded_attention_mask = torch.nn.functional.pad(
-            input=mask_shared_prefix,
-            pad=(0, max_cache_len - mask_shared_prefix.shape[-1]),
-            mode="constant",
-            value=torch.finfo(self.model_dtype).min,
-        )
-
-        # single forward run with 4D custom mask
-        logits_shared_prefix = self.model.forward(
-            input_ids_shared_prefix,
-            attention_mask=padded_attention_mask,
-            position_ids=position_ids_shared_prefix,
-            cache_position=torch.arange(input_ids_shared_prefix.shape[-1], device=torch_device),
-            past_key_values=past_key_values,
-        ).logits
-        logits_shared_prefix_last = logits_shared_prefix[
-            0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1], :
-        ]  # last three tokens
-        decoded_shared_prefix = [self.tokenizer.decode(t) for t in logits_shared_prefix_last.argmax(dim=-1)]
-
-        self.assertEqual(decoded, decoded_shared_prefix)
-
-    def test_partial_stacked_causal_mask_static_cache(self):
-        # Same as the test above, but the input is passed in two groups. It tests that we can pass partial 4D attention masks
-        # we pass a 4D attention mask shaped [..., seq_len, full_static_cache_len])
-        (
-            input_ids,
-            position_ids,
-            input_ids_shared_prefix,
-            mask_shared_prefix,
-            position_ids_shared_prefix,
-        ) = self.get_test_data()
-
-        # regular batch
-        logits = self.model.forward(input_ids, position_ids=position_ids).logits
-        logits_last = logits[:, -1, :]  # last tokens in each batch line
-        decoded = [self.tokenizer.decode(t) for t in logits_last.argmax(dim=-1)]
-
-        # upgrade the model with StaticCache
-        max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
-        past_key_values = StaticCache(
-            config=self.model.config,
-            max_batch_size=1,
-            max_cache_len=max_cache_len,
-            device=torch_device,
-            dtype=self.model.dtype,
-        )
-
-        # forward run for the first part of input
-        part_a = 3  # split point
-
-        input_1a = input_ids_shared_prefix[:, :part_a]
-        position_ids_1a = position_ids_shared_prefix[:, :part_a]
-        mask_1a = mask_shared_prefix[:, :, :part_a, :part_a]
-
-        padded_mask_1a = torch.nn.functional.pad(
-            input=mask_1a,
-            pad=(0, max_cache_len - mask_1a.shape[-1]),
-            mode="constant",
-            value=torch.finfo(self.model_dtype).min,
-        )
-
-        _ = self.model.forward(
-            input_1a,
-            attention_mask=padded_mask_1a,
-            position_ids=position_ids_1a,
-            cache_position=torch.arange(part_a, device=torch_device),
-            past_key_values=past_key_values,
-        )
-
-        # forward run for the second part of input
-        input_1b = input_ids_shared_prefix[:, part_a:]
-        position_ids_1b = position_ids_shared_prefix[:, part_a:]
-        mask_1b = mask_shared_prefix[:, :, part_a:, :]
-
-        padded_mask_1b = torch.nn.functional.pad(
-            input=mask_1b, pad=(0, max_cache_len - mask_1b.shape[-1]), mode="constant", value=0
-        )
-
-        outs_1b = self.model.forward(
-            input_1b,
-            attention_mask=padded_mask_1b,
-            position_ids=position_ids_1b,
-            cache_position=torch.arange(
-                part_a,
-                input_ids_shared_prefix.shape[-1],
-                device=torch_device,
-            ),
-            past_key_values=past_key_values,
-        )
-        decoded_1b = [
-            self.tokenizer.decode(t)
-            for t in outs_1b.logits.argmax(-1)[
-                0, torch.where(position_ids_shared_prefix == position_ids_shared_prefix.max())[1] - part_a
-            ]
-        ]
-        self.assertEqual(decoded, decoded_1b)

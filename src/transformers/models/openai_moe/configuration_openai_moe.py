@@ -29,6 +29,7 @@ class OpenAIMoeConfig(PretrainedConfig):
     [google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased) architecture.
 
     """
+
     model_type = "openai_moe"
     # Default tensor parallel plan for base model `OpenaiModel`
     # a bit special, but this seems to work alright
@@ -111,8 +112,8 @@ class OpenAIMoeConfig(PretrainedConfig):
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
-        
-        self.attention_bias = True 
+
+        self.attention_bias = True
         self.mlp_bias = False
         self.max_position_embeddings = max_position_embeddings
         self.router_aux_loss_coef = router_aux_loss_coef

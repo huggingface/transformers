@@ -406,17 +406,11 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
             ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None),
         ),
         ("oneformer", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
-            (
-                "openai_moe",
-                (
-                    None,
-                    "PreTrainedTokenizerFast" if is_tokenizers_available() else None,
-                ),
-            ),
         (
             "openai-gpt",
             ("OpenAIGPTTokenizer", "OpenAIGPTTokenizerFast" if is_tokenizers_available() else None),
         ),
+        ("openai_moe", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
         ("opt", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
         ("owlv2", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
         ("owlvit", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
