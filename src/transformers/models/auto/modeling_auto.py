@@ -607,7 +607,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("olmo2", "Olmo2ForCausalLM"),
         ("olmoe", "OlmoeForCausalLM"),
         ("open-llama", "OpenLlamaForCausalLM"),
-        ("openai_moe", "OpenAiMoeForCausalLM"),
+        ("openai_moe", "OpenAIMoeForCausalLM"),
         ("openai-gpt", "OpenAIGPTLMHeadModel"),
         ("opt", "OPTForCausalLM"),
         ("pegasus", "PegasusForCausalLM"),
