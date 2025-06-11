@@ -221,6 +221,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mt5", "MT5Model"),
         ("musicgen", "MusicgenModel"),
         ("musicgen_melody", "MusicgenMelodyModel"),
+        ("mvitv2", "MViTV2Model"),
         ("mvp", "MvpModel"),
         ("nat", "NatModel"),
         ("nemotron", "NemotronModel"),
@@ -685,6 +686,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("mobilenet_v2", "MobileNetV2Model"),
         ("mobilevit", "MobileViTModel"),
         ("mobilevitv2", "MobileViTV2Model"),
+        ("mvitv2", "MViTV2Model"),
         ("nat", "NatModel"),
         ("poolformer", "PoolFormerModel"),
         ("pvt", "PvtModel"),
@@ -769,6 +771,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("mobilenet_v2", "MobileNetV2ForImageClassification"),
         ("mobilevit", "MobileViTForImageClassification"),
         ("mobilevitv2", "MobileViTV2ForImageClassification"),
+        ("mvitv2", "MViTV2ForImageClassification"),
         ("nat", "NatForImageClassification"),
         (
             "perceiver",

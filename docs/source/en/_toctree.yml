@@ -765,6 +765,8 @@
         title: MobileViT
       - local: model_doc/mobilevitv2
         title: MobileViTV2
+      - local: model_doc/mvitv2
+        title: MViTV2
       - local: model_doc/nat
         title: NAT
       - local: model_doc/poolformer

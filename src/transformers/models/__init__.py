@@ -207,6 +207,7 @@ if TYPE_CHECKING:
     from .mt5 import *
     from .musicgen import *
     from .musicgen_melody import *
+    from .mvitv2 import *
     from .mvp import *
     from .myt5 import *
     from .nemotron import *
