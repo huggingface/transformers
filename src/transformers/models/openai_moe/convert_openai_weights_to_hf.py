@@ -129,14 +129,14 @@ def write_model(
     del final_
     gc.collect()
 
-    print("Loading the checkpoint in a OpenAIMoe ")
+    print("Loading the checkpoint in a OpenAIMoe model")
     with torch.device("meta"):
         model = OpenAIMoeForCausalLM(config)
     model.load_state_dict(state_dict, strict=True, assign=True)
     print("Checkpoint loaded successfully.")
     del config._name_or_path
 
-    print("Saving the ")
+    print("Saving the model")
     model.save_pretrained(model_path, safe_serialization=safe_serialization)
     del state_dict, model
 
