@@ -125,3 +125,26 @@ attn = outputs.vision_model_output.attentions  # list[num_layers] of (B,H,S,S)
 - AltCLIP uses bidirectional attention instead of causal attention and it uses the `[CLS]` token in XLM-R to represent a text embedding.
 - Use [`CLIPImageProcessor`] to resize (or rescale) and normalize images for the model.
 - [`AltCLIPProcessor`] combines [`CLIPImageProcessor`] and [`XLMRobertaTokenizer`] into a single instance to encode text and prepare images.
+
+## API
+
+### Configuration
+
+::: transformers.AltCLIPConfig
+
+::: transformers.AltCLIPTextConfig
+
+::: transformers.AltCLIPVisionConfig
+
+### Models
+
+::: transformers.AltCLIPModel
+
+::: transformers.AltCLIPTextModel
+
+::: transformers.AltCLIPVisionModel
+
+### Processor
+
+::: transformers.AltCLIPProcessor
+
