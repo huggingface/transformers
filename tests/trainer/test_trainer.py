@@ -5368,23 +5368,19 @@ if is_torch_available():
             )
         )
     if is_torchao_available():
-        import torchao
-
-        has_torchao_optim = version.parse(importlib.metadata.version("torchao")) >= version.parse("0.11.0")
-        AdamW4bitModule = torchao.optim.AdamW4bit if has_torchao_optim else torchao.prototype.low_bit_optim.AdamW4bit
-        AdamW8bitModule = torchao.optim.AdamW8bit if has_torchao_optim else torchao.prototype.low_bit_optim.AdamW8bit
+        from torchao.optim import AdamW4bit, AdamW8bit
 
         optim_test_params.append(
             (
                 OptimizerNames.ADAMW_TORCH_4BIT,
-                AdamW4bitModule,
+                AdamW4bit,
                 default_adam_kwargs,
             )
         )
         optim_test_params.append(
             (
                 TrainingArguments(optim=OptimizerNames.ADAMW_TORCH_8BIT, output_dir="None"),
-                AdamW8bitModule,
+                AdamW8bit,
                 default_adam_kwargs,
             )
         )
