@@ -574,6 +574,14 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
     def get_decoder(self):
         return self.model
 
+    def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
+        return self.model.pack_image_features(
+            image_features=image_features,
+            image_sizes=image_sizes,
+            vision_feature_select_strategy=vision_feature_select_strategy,
+            image_newline=image_newline,
+        )
+
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
