@@ -4072,8 +4072,8 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         talker_text_bos_token = speaker_params["bos_token"]
         talker_input_text_ids = torch.cat(
             [
-                input_ids.to(talker_device),
-                torch.tensor([[talker_text_bos_token]], dtype=torch.long),
+                input_ids,
+                torch.tensor([[talker_text_bos_token]], dtype=torch.long, device=input_ids.device),
                 thinker_generate_ids[:, :1],
             ],
             dim=-1,
@@ -4082,8 +4082,8 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         talker_input_ids = torch.cat(
             [
                 torch.full_like(input_ids, fill_value=self.talker.codec_mask_token),
-                torch.tensor([[self.talker.codec_pad_token]], dtype=torch.long),
-                torch.tensor([[self.talker.codec_bos_token]], dtype=torch.long),
+                torch.tensor([[self.talker.codec_pad_token]], dtype=torch.long, device=input_ids.device),
+                torch.tensor([[self.talker.codec_bos_token]], dtype=torch.long, device=input_ids.device),
             ],
             dim=1,
         )
@@ -4091,7 +4091,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         thinker_embed_tokens = self.thinker.get_input_embeddings()
         thinker_reply_part = torch.cat(thinker_hidden_states[1:], dim=1) + torch.cat(thinker_token_embeds[1:], dim=1)
         talker_inputs_embeds = thinker_hidden_states[0] + thinker_token_embeds[0]
-        talker_text_bos_token = torch.tensor([[talker_text_bos_token]], dtype=torch.long, device=self.thinker.device)
+        talker_text_bos_token = torch.tensor([[talker_text_bos_token]], dtype=torch.long, device=talker_inputs_embeds.device)
         talker_text_bos_embed = thinker_embed_tokens(talker_text_bos_token)
         talker_inputs_embeds = torch.cat(
             [
@@ -4103,11 +4103,11 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         )
 
         eos_embedding = thinker_embed_tokens(
-            torch.tensor([[self.talker.text_eos_token]], dtype=torch.long, device=self.thinker.device)
+            torch.tensor([[self.talker.text_eos_token]], dtype=torch.long, device=thinker_reply_part.device)
         )
 
         pad_embedding = thinker_embed_tokens(
-            torch.tensor([[self.talker.text_pad_token]], dtype=torch.long, device=self.thinker.device)
+            torch.tensor([[self.talker.text_pad_token]], dtype=torch.long, device=thinker_reply_part.device)
         )
 
         thinker_reply_part = torch.cat(
