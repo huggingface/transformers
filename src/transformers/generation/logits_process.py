@@ -15,7 +15,8 @@
 
 import inspect
 import math
-from typing import TYPE_CHECKING, Callable, Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -2050,6 +2051,10 @@ class WhisperNoSpeechDetection(LogitsProcessor):
     def set_inputs(self, inputs):
         self.inputs = {**self.model.prepare_inputs_for_generation(**inputs), **inputs}
         self.inputs["input_features"] = self.inputs.pop("inputs")
+
+        # Whisper encoder-decoder does not accept the input_ids as input
+        if "input_ids" not in inspect.signature(self.model.forward).parameters:
+            self.inputs.pop("input_ids", None)
 
     @property
     def no_speech_prob(self):

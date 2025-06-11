@@ -146,7 +146,6 @@ class SmolVLMProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer", "video_processor"]
-    valid_kwargs = ["image_seq_len", "chat_template"]
     image_processor_class = "SmolVLMImageProcessor"
     video_processor_class = "SmolVLMVideoProcessor"  # NOTE: uses different interpolation than slow processors
     tokenizer_class = "AutoTokenizer"

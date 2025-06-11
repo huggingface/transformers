@@ -97,7 +97,6 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
     video_processor_class = "Qwen2VLVideoProcessor"
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
-    valid_kwargs = ["chat_template"]
 
     def __init__(
         self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None

@@ -31,8 +31,9 @@ ocalhost:29504 test_train.py
 
 import logging
 import os
+from collections.abc import Iterable
 from contextlib import nullcontext
-from typing import Dict, Iterable, Optional
+from typing import Dict, Optional
 
 import torch
 import torch.distributed as dist

@@ -1019,6 +1019,9 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    def get_image_features(self, pixel_values):
+        return self.model.get_image_features(pixel_values)
+
     # Make modules available throught conditional class for BC
     @property
     def language_model(self):
