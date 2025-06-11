@@ -247,6 +247,9 @@ class EoMTImageProcessorFast(BaseImageProcessorFast):
         kwargs["do_rescale"] = False
         kwargs["input_data_format"] = ChannelDimension.FIRST
 
+        # Nearest interpolation is used for segmentation maps instead of BILINEAR.
+        kwargs["interpolation"] = pil_torch_interpolation_mapping[PILImageResampling.NEAREST]
+
         processed_segmentation_maps, _ = self._preprocess(images=processed_segmentation_maps, **kwargs)
         processed_segmentation_maps = processed_segmentation_maps.squeeze(1)
         processed_segmentation_maps = processed_segmentation_maps.to(torch.int64)
@@ -540,8 +543,9 @@ class EoMTImageProcessorFast(BaseImageProcessorFast):
 
         mask_probs_batch = self.unpad_image(masks_queries_logits, original_image_sizes, size)
 
+        device = masks_queries_logits.device
         batch_size = class_queries_logits.shape[0]
-        num_labels = class_queries_logits.shape[-1] - 1
+        num_queries = class_queries_logits.shape[-2]
 
         results = []
 
@@ -559,11 +563,11 @@ class EoMTImageProcessorFast(BaseImageProcessorFast):
             )
             pred_scores = scores * mask_scores
 
-            segmentation = torch.zeros(original_image_sizes[i]) - 1
+            segmentation = torch.zeros(original_image_sizes[i], device=device) - 1
 
             instance_maps, segments = [], []
             current_segment_id = 0
-            for j in range(num_labels):
+            for j in range(num_queries):
                 score = pred_scores[j].item()
 
                 if not torch.all(pred_masks[j] == 0) and score >= threshold:

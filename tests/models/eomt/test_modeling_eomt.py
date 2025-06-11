@@ -349,10 +349,10 @@ class EoMTForUniversalSegmentationIntegrationTest(unittest.TestCase):
         self.assertTrue(outputs.masks_queries_logits.shape == (2, 100, 128, 128))
 
         preds = processor.post_process_semantic_segmentation(
-            outputs, original_image_sizes=[image.size], patch_offsets=patch_offsets
+            outputs, original_image_sizes=[(image.size[1], image.size[0])], patch_offsets=patch_offsets
         )
 
-        self.assertTrue(preds.shape[1:] == (image.size[0], image.size[1]))
+        self.assertTrue(preds.shape[1:] == (image.size[1], image.size[0]))
 
         # fmt: off
         EXPECTED_SLICE = torch.tensor([
@@ -387,7 +387,9 @@ class EoMTForUniversalSegmentationIntegrationTest(unittest.TestCase):
         self.assertTrue(outputs.class_queries_logits.shape == (1, 200, 134))
         self.assertTrue(outputs.masks_queries_logits.shape == (1, 200, 160, 160))
 
-        preds = processor.post_process_panoptic_segmentation(outputs, original_image_sizes=[image.size])[0]
+        preds = processor.post_process_panoptic_segmentation(
+            outputs, original_image_sizes=[(image.size[1], image.size[0])]
+        )[0]
         segmentation, segments_info = preds["segmentation"], preds["segments_info"]
 
         # fmt: off
@@ -410,6 +412,58 @@ class EoMTForUniversalSegmentationIntegrationTest(unittest.TestCase):
             {"id": 2, "label_id": 57, "score": 0.954325},
             {"id": 3, "label_id": 65, "score": 0.997285},
             {"id": 4, "label_id": 65, "score": 0.99711}
+        ]
+        # fmt: on
+
+        output_slice = segmentation[:10, :10]
+        torch.testing.assert_close(output_slice, EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
+        for actual, expected in zip(segments_info, EXPECTED_SEGMENTS_INFO):
+            self.assertEqual(actual["id"], expected["id"])
+            self.assertEqual(actual["label_id"], expected["label_id"])
+            self.assertAlmostEqual(actual["score"], expected["score"], delta=1e-3)
+
+    @slow
+    def test_instance_segmentation_inference(self):
+        model_id = "yaswanthgali/coco_instance_eomt_large_640-hf"
+        model = EoMTForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
+        processor = AutoImageProcessor.from_pretrained(model_id)
+
+        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+
+        inputs = processor(images=image, return_tensors="pt").to(model.device)
+
+        with torch.inference_mode():
+            outputs = model(**inputs)
+
+        self.assertTrue(outputs.class_queries_logits.shape == (1, 200, 81))
+        self.assertTrue(outputs.masks_queries_logits.shape == (1, 200, 160, 160))
+
+        preds = processor.post_process_instance_segmentation(
+            outputs, original_image_sizes=[(image.size[1], image.size[0])]
+        )[0]
+        segmentation, segments_info = preds["segmentation"], preds["segments_info"]
+
+        # fmt: off
+        EXPECTED_SLICE = torch.tensor([
+            [-1., -1., -1., -1., -1., -1., -1., -1., -1., -1.],
+            [-1., -1., -1., -1., -1., -1., -1., -1., -1., -1.],
+            [-1., -1., -1., -1., -1., -1., -1., -1., -1., -1.],
+            [-1., -1., -1.,  0.,  0.,  1.,  1.,  1.,  1.,  1.],
+            [ 0.,  0.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.],
+            [ 1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.],
+            [ 1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.],
+            [ 1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.],
+            [ 1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.],
+            [ 1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.,  1.]
+        ], device=model.device)
+
+        EXPECTED_SEGMENTS_INFO = [
+            {'id': 0, 'label_id': 57, 'score': 0.871247},
+            {'id': 1, 'label_id': 57, 'score': 0.821225},
+            {'id': 2, 'label_id': 15, 'score': 0.976252},
+            {'id': 3, 'label_id': 65, 'score': 0.972960},
+            {'id': 4, 'label_id': 65, 'score': 0.981109},
+            {'id': 5, 'label_id': 15, 'score': 0.972689}
         ]
         # fmt: on
 

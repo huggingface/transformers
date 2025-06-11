@@ -623,7 +623,7 @@ class EoMTImageProcessor(BaseImageProcessor):
                     do_resize=do_resize,
                     do_pad=do_pad,
                     size=size,
-                    resample=resample,
+                    resample=PILImageResampling.NEAREST,
                     data_format=data_format,
                     input_data_format=input_data_format,
                 )
@@ -907,7 +907,7 @@ class EoMTImageProcessor(BaseImageProcessor):
         self,
         outputs,
         original_image_sizes: List[Tuple[int, int]],
-        threshold: float = 0.8,
+        threshold: float = 0.5,
         size: Optional[Dict[str, int]] = None,
     ):
         """Post-processes model outputs into Instance Segmentation Predictions."""
@@ -926,8 +926,9 @@ class EoMTImageProcessor(BaseImageProcessor):
 
         mask_probs_batch = self.unpad_image(masks_queries_logits, original_image_sizes, size)
 
+        device = masks_queries_logits.device
         batch_size = class_queries_logits.shape[0]
-        num_labels = class_queries_logits.shape[-1] - 1
+        num_queries = class_queries_logits.shape[-2]
 
         results = []
 
@@ -945,11 +946,11 @@ class EoMTImageProcessor(BaseImageProcessor):
             )
             pred_scores = scores * mask_scores
 
-            segmentation = torch.zeros(original_image_sizes[i]) - 1
+            segmentation = torch.zeros(original_image_sizes[i], device=device) - 1
 
             instance_maps, segments = [], []
             current_segment_id = 0
-            for j in range(num_labels):
+            for j in range(num_queries):
                 score = pred_scores[j].item()
 
                 if not torch.all(pred_masks[j] == 0) and score >= threshold:
