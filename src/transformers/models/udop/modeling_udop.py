@@ -19,9 +19,10 @@ import logging
 import math
 import random
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
 from torch import Tensor, nn

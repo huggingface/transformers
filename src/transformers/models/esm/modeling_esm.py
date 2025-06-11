@@ -944,6 +944,8 @@ class EsmForMaskedLM(EsmPreTrainedModel):
 
         self.init_weights()
 
+        self.post_init()
+
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
@@ -1044,6 +1046,8 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
         self.classifier = EsmClassificationHead(config)
 
         self.init_weights()
+    
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring
@@ -1124,6 +1128,8 @@ class EsmForTokenClassification(EsmPreTrainedModel):
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
+
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring

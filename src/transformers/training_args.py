@@ -1581,6 +1581,12 @@ class TrainingArguments:
                 FutureWarning,
             )
             self.use_cpu = self.no_cuda
+        if self.use_ipex:
+            warnings.warn(
+                "using `use_ipex` is deprecated and will be removed in version 4.54 of 🤗 Transformers. "
+                "You only need PyTorch for the needed optimizations on Intel CPU and XPU.",
+                FutureWarning,
+            )
 
         self.eval_strategy = IntervalStrategy(self.eval_strategy)
         self.logging_strategy = IntervalStrategy(self.logging_strategy)
@@ -1686,7 +1692,7 @@ class TrainingArguments:
                     # cpu
                     raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")
                 elif not self.use_cpu:
-                    if not is_torch_bf16_gpu_available():
+                    if not is_torch_bf16_gpu_available() and not is_torch_xla_available():  # added for tpu support
                         error_message = "Your setup doesn't support bf16/gpu."
                         if is_torch_cuda_available():
                             error_message += " You need Ampere+ GPU with cuda>=11.0"

@@ -248,7 +248,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
                     "{{ message['content'] }}<|im_end|>\n"
                 "{% else %}"
                     "{% for content in message['content'] %}"
-                        "{% if 'audio' in content or 'audio_url' in content or message['type'] == 'audio' %}"
+                        "{% if 'audio' in content or 'audio_url' in content or message['type'] == 'audio' or content['type'] == 'audio' %}"
                             "{% set audio_count.value = audio_count.value + 1 %}"
                             "Audio {{ audio_count.value }}: <|audio_bos|><|AUDIO|><|audio_eos|>\n"
                         "{% elif 'text' in content %}"

@@ -110,7 +110,6 @@ class CircleCIJob:
             print(f"Using {self.docker_image} docker image")
         if self.install_steps is None:
             self.install_steps = ["uv venv && uv pip install ."]
-        self.install_steps.append("uv venv && uv pip install git+https://github.com/ydshieh/pytest.git@8.3.5-ydshieh git+https://github.com/ydshieh/pluggy.git@1.5.0-ydshieh")
         if self.pytest_options is None:
             self.pytest_options = {}
         if isinstance(self.tests_to_run, str):
@@ -214,7 +213,7 @@ generate_job = CircleCIJob(
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     # networkx==3.3 (after #36957) cause some issues
     # TODO: remove this once it works directly
-    install_steps=["uv venv && uv pip install . && uv pip install networkx==3.2.1"],
+    install_steps=["uv venv && uv pip install ."],
     marker="generate",
     parallelism=6,
 )
@@ -310,7 +309,7 @@ onnx_job = CircleCIJob(
     docker_image=[{"image":"huggingface/transformers-torch-tf-light"}],
     install_steps=[
         "uv venv",
-        "uv pip install .[torch,tf,testing,sentencepiece,onnxruntime,vision,rjieba]",
+        "uv pip install .[testing,sentencepiece,onnxruntime,vision,rjieba]",
     ],
     pytest_options={"k onnx": None},
     pytest_num_workers=1,
@@ -339,7 +338,7 @@ non_model_job = CircleCIJob(
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
     # networkx==3.3 (after #36957) cause some issues
     # TODO: remove this once it works directly
-    install_steps=["uv venv && uv pip install . && uv pip install networkx==3.2.1"],
+    install_steps=["uv venv && uv pip install ."],
     marker="not generate",
     parallelism=6,
 )

@@ -693,7 +693,7 @@ class TransfoXLCorpus:
         # redirect to the cache, if necessary
         try:
             resolved_corpus_file = cached_file(pretrained_model_name_or_path, CORPUS_NAME, cache_dir=cache_dir)
-        except EnvironmentError:
+        except OSError:
             logger.error(
                 f"Corpus '{pretrained_model_name_or_path}' was not found in corpus list"
                 f" ({', '.join(PRETRAINED_CORPUS_ARCHIVE_MAP.keys())}. We assumed '{pretrained_model_name_or_path}'"

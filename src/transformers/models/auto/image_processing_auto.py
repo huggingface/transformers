@@ -170,7 +170,7 @@ else:
             ("vitmatte", ("VitMatteImageProcessor", "VitMatteImageProcessorFast")),
             ("xclip", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("yolos", ("YolosImageProcessor", "YolosImageProcessorFast")),
-            ("zoedepth", ("ZoeDepthImageProcessor",)),
+            ("zoedepth", ("ZoeDepthImageProcessor", "ZoeDepthImageProcessorFast")),
         ]
     )
 
@@ -338,7 +338,7 @@ class AutoImageProcessor:
     """
 
     def __init__(self):
-        raise EnvironmentError(
+        raise OSError(
             "AutoImageProcessor is designed to be instantiated "
             "using the `AutoImageProcessor.from_pretrained(pretrained_model_name_or_path)` method."
         )

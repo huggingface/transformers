@@ -238,7 +238,7 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
+            by meanpooling all the original heads within that group. For more details, check out [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
@@ -584,7 +584,7 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
+            by meanpooling all the original heads within that group. For more details, check out [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
@@ -658,6 +658,8 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         spatial_merge_size (`int`, *optional*, defaults to 2):
             The size used for merging spatial dimensions.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
 
     Example:
 
@@ -726,6 +728,7 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
         audio_end_token_id=151648,
         initializer_range=0.02,
         spatial_merge_size=2,
+        layer_types=None,
         **kwargs,
     ):
         self.audio_token_index = audio_token_index
@@ -753,7 +756,7 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window
+        self.sliding_window = sliding_window if self.use_sliding_window else None
         self.max_window_layers = max_window_layers
 
         # for backward compatibility
@@ -774,6 +777,16 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
 
         self.initializer_range = initializer_range
         self.spatial_merge_size = spatial_merge_size
+
+        self.layer_types = layer_types
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention"
+                if self.sliding_window is not None and i >= self.max_window_layers
+                else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types)
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 

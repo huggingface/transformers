@@ -746,7 +746,7 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
         torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=1e-4, atol=1e-4)
 
     @require_torch_accelerator
-    def test_inference_object_detection_head_equivalence_cpu_gpu(self):
+    def test_inference_object_detection_head_equivalence_cpu_accelerator(self):
         image_processor = self.default_image_processor
         image = prepare_img()
         encoding = image_processor(images=image, return_tensors="pt")
@@ -759,7 +759,7 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             cpu_outputs = model(pixel_values, pixel_mask)
 
-        # 2. run model on GPU
+        # 2. run model on accelerator
         model.to(torch_device)
 
         with torch.no_grad():

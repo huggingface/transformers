@@ -747,6 +747,28 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
     def get_decoder(self):
         return self.model
 
+    def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
+        return self.model.pack_image_features(
+            image_features=image_features,
+            image_sizes=image_sizes,
+            vision_feature_select_strategy=vision_feature_select_strategy,
+            image_newline=image_newline,
+        )
+
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_sizes: torch.Tensor,
+        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_select_strategy: Optional[str] = None,
+    ):
+        return self.model.get_image_features(
+            pixel_values=pixel_values,
+            image_sizes=image_sizes,
+            vision_feature_layer=vision_feature_layer,
+            vision_feature_select_strategy=vision_feature_select_strategy,
+        )
+
     # Make modules available throught conditional class for BC
     @property
     def language_model(self):
@@ -987,6 +1009,18 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
                 )
 
         return causal_mask
+
+    def get_video_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_select_strategy: Optional[str] = None,
+    ):
+        return self.model.get_video_features(
+            pixel_values=pixel_values,
+            vision_feature_layer=vision_feature_layer,
+            vision_feature_select_strategy=vision_feature_select_strategy,
+        )
 
 
 __all__ = ["LlavaOnevisionModel", "LlavaOnevisionForConditionalGeneration", "LlavaOnevisionPreTrainedModel"]

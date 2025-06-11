@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch ColQwen2 model."""
 
-import gc
 import unittest
 from typing import ClassVar
 
@@ -27,7 +26,15 @@ from transformers import is_torch_available
 from transformers.models.colqwen2.configuration_colqwen2 import ColQwen2Config
 from transformers.models.colqwen2.modeling_colqwen2 import ColQwen2ForRetrieval, ColQwen2ForRetrievalOutput
 from transformers.models.colqwen2.processing_colqwen2 import ColQwen2Processor
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    Expectations,
+    cleanup,
+    require_bitsandbytes,
+    require_torch,
+    require_vision,
+    slow,
+    torch_device,
+)
 
 
 if is_torch_available():
@@ -282,9 +289,9 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         self.processor = ColQwen2Processor.from_pretrained(self.model_name)
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
+    @require_bitsandbytes
     @slow
     def test_model_integration_test(self):
         """
@@ -292,8 +299,8 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         """
         model = ColQwen2ForRetrieval.from_pretrained(
             self.model_name,
-            torch_dtype=torch.bfloat16,
-            device_map=torch_device,
+            torch_dtype=torch.float16,
+            load_in_8bit=True,
         ).eval()
 
         # Load the test dataset
@@ -321,13 +328,20 @@ class ColQwen2ModelIntegrationTest(unittest.TestCase):
         self.assertTrue((scores.argmax(axis=1) == torch.arange(len(ds), device=scores.device)).all())
 
         # Further validation: fine-grained check, with a hardcoded score from the original Hf implementation.
-        expected_scores = torch.tensor(
-            [
-                [16.2500, 7.8750, 14.6875],
-                [9.5000, 17.1250, 10.5000],
-                [14.9375, 10.9375, 20.0000],
-            ],
-            dtype=scores.dtype,
+        expectations = Expectations(
+            {
+                ("cuda", 7): [
+                    [15.0938, 8.3203, 15.0391],
+                    [9.6328, 16.9062, 10.5312],
+                    [15.6562, 12.2656, 20.2969],
+                ],
+                ("cuda", 8): [
+                    [15.0703, 8.7422, 15.0312],
+                    [9.5078, 16.8906, 10.6250],
+                    [15.6484, 12.3984, 20.4688],
+                ],
+            }
         )
+        expected_scores = torch.tensor(expectations.get_expectation(), dtype=scores.dtype)
 
         assert torch.allclose(scores, expected_scores, atol=1e-3), f"Expected scores {expected_scores}, got {scores}"

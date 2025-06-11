@@ -16,7 +16,8 @@
 
 import json
 import os
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
+from collections.abc import Iterable
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 from huggingface_hub import hf_hub_download

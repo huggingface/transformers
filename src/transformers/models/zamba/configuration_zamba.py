@@ -59,7 +59,7 @@ class ZambaConfig(PretrainedConfig):
             `num_key_value_heads=None`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
+            by meanpooling all the original heads within that group. For more details, check out [this
             paper](https://arxiv.org/pdf/2305.13245.pdf).
         n_mamba_heads (`int`, *optional*, defaults to 2):
             Number of mamba heads for each mamba layer.

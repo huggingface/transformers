@@ -528,7 +528,7 @@ def main():
     parser.add_argument(
         "--model_size",
         default=None,
-        help="'f' Deprecated in favor of `num_shards`: models correspond to the finetuned versions, and are specific to the Llama2 official release. For more details on Llama2, checkout the original repo: https://huggingface.co/meta-llama",
+        help="'f' Deprecated in favor of `num_shards`: models correspond to the finetuned versions, and are specific to the Llama2 official release. For more details on Llama2, check out the original repo: https://huggingface.co/meta-llama",
     )
     parser.add_argument(
         "--output_dir",

@@ -14,7 +14,7 @@
 # limitations under the License.
 """UMT5 model configuration"""
 
-from typing import Mapping
+from collections.abc import Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxSeq2SeqConfigWithPast

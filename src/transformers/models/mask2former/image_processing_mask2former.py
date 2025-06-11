@@ -15,7 +15,8 @@
 """Image processor class for Mask2Former."""
 
 import math
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
+from collections.abc import Iterable
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 

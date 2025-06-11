@@ -18,7 +18,8 @@
 import dataclasses
 import re
 import string
-from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence, Tuple
+from collections.abc import Iterator, Mapping, Sequence
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 

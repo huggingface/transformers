@@ -579,7 +579,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                     revision=revision,
                     subfolder=subfolder,
                 )
-            except EnvironmentError:
+            except OSError:
                 video_processor_file = "preprocessor_config.json"
                 resolved_video_processor_file = cached_file(
                     pretrained_model_name_or_path,
@@ -600,13 +600,13 @@ class BaseVideoProcessor(BaseImageProcessorFast):
                     "the file or load and save the processor back which renames it automatically. "
                     "Loading from `preprocessor.json` will be removed in v5.0."
                 )
-            except EnvironmentError:
+            except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
                 raise
             except Exception:
                 # For any other exception, we throw a generic error.
-                raise EnvironmentError(
+                raise OSError(
                     f"Can't load video processor for '{pretrained_model_name_or_path}'. If you were trying to load"
                     " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                     f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
@@ -620,7 +620,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
             video_processor_dict = json.loads(text)
 
         except json.JSONDecodeError:
-            raise EnvironmentError(
+            raise OSError(
                 f"It looks like the config file at '{resolved_video_processor_file}' is not a valid JSON file."
             )
 

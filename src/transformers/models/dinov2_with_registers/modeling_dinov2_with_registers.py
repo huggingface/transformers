@@ -509,7 +509,7 @@ class Dinov2WithRegistersPreTrainedModel(PreTrainedModel):
     base_model_prefix = "dinov2_with_registers"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Dinov2WithRegistersSwiGLUFFN"]
+    _no_split_modules = ["Dinov2WithRegistersLayer"]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
     _supports_flex_attn = True

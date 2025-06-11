@@ -15,7 +15,7 @@
 """MobileViT model configuration"""
 
 from collections import OrderedDict
-from typing import Mapping
+from collections.abc import Mapping
 
 from packaging import version
 

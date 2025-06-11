@@ -15,7 +15,8 @@
 """EfficientNet model configuration"""
 
 from collections import OrderedDict
-from typing import List, Mapping
+from collections.abc import Mapping
+from typing import List
 
 from packaging import version
 

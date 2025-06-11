@@ -669,7 +669,7 @@ class FeaturesManager:
             elif is_tf_available():
                 framework = "tf"
             else:
-                raise EnvironmentError("Neither PyTorch nor TensorFlow found in environment. Cannot export to ONNX.")
+                raise OSError("Neither PyTorch nor TensorFlow found in environment. Cannot export to ONNX.")
 
         logger.info(f"Framework not requested. Using {exporter_map[framework]} to export to ONNX.")
 

@@ -15,7 +15,8 @@
 """OWL-ViT model configuration"""
 
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 
 if TYPE_CHECKING:

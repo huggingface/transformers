@@ -17,7 +17,8 @@
 import os
 import pickle
 import time
-from typing import Iterable, List, Optional, Tuple
+from collections.abc import Iterable
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -103,6 +104,7 @@ class LegacyIndex(Index):
     PASSAGE_FILENAME = "psgs_w100.tsv.pkl"
 
     def __init__(self, vector_size, index_path):
+        requires_backends(self, ["faiss"])
         self.index_id_to_db_id = []
         self.index_path = index_path
         self.passages = self._load_passages()
@@ -115,13 +117,13 @@ class LegacyIndex(Index):
         try:
             # Load from URL or cache if already cached
             resolved_archive_file = cached_file(index_path, filename)
-        except EnvironmentError:
+        except OSError:
             msg = (
                 f"Can't load '{filename}'. Make sure that:\n\n"
                 f"- '{index_path}' is a correct remote path to a directory containing a file named {filename}\n\n"
                 f"- or '{index_path}' is the correct path to a directory containing a file named {filename}.\n\n"
             )
-            raise EnvironmentError(msg)
+            raise OSError(msg)
         if is_local:
             logger.info(f"loading file {resolved_archive_file}")
         else:
@@ -196,6 +198,7 @@ class LegacyIndex(Index):
 
 class HFIndexBase(Index):
     def __init__(self, vector_size, dataset, index_initialized=False):
+        requires_backends(self, ["faiss"])
         self.vector_size = vector_size
         self.dataset = dataset
         self._index_initialized = index_initialized
@@ -268,6 +271,7 @@ class CanonicalHFIndex(HFIndexBase):
         use_dummy_dataset=False,
         dataset_revision=None,
     ):
+        requires_backends(self, ["faiss"])
         if int(index_path is None) + int(index_name is None) != 1:
             raise ValueError("Please provide `index_name` or `index_path`.")
         self.dataset_name = dataset_name
@@ -320,6 +324,7 @@ class CustomHFIndex(HFIndexBase):
     """
 
     def __init__(self, vector_size: int, dataset, index_path=None):
+        requires_backends(self, ["faiss"])
         super().__init__(vector_size, dataset, index_initialized=index_path is None)
         self.index_path = index_path
 
@@ -374,14 +379,14 @@ class RagRetriever:
 
     >>> dataset = (
     ...     ...
-    ... )  # dataset must be a datasets.Datasets object with columns "title", "text" and "embeddings", and it must have a faiss index
+    ... )  # dataset must be a datasets.Datasets object with columns "title", "text" and "embeddings", and it must have a supported index (e.g., Faiss or other index types depending on your setup)
     >>> retriever = RagRetriever.from_pretrained("facebook/dpr-ctx_encoder-single-nq-base", indexed_dataset=dataset)
 
     >>> # To load your own indexed dataset built with the datasets library that was saved on disk. More info in examples/rag/use_own_knowledge_dataset.py
     >>> from transformers import RagRetriever
 
     >>> dataset_path = "path/to/my/dataset"  # dataset saved via *dataset.save_to_disk(...)*
-    >>> index_path = "path/to/my/index.faiss"  # faiss index saved via *dataset.get_index("embeddings").save(...)*
+    >>> index_path = "path/to/my/index"  # index saved via *dataset.get_index("embeddings").save(...)*
     >>> retriever = RagRetriever.from_pretrained(
     ...     "facebook/dpr-ctx_encoder-single-nq-base",
     ...     index_name="custom",
@@ -397,7 +402,7 @@ class RagRetriever:
 
     def __init__(self, config, question_encoder_tokenizer, generator_tokenizer, index=None, init_retrieval=True):
         self._init_retrieval = init_retrieval
-        requires_backends(self, ["datasets", "faiss"])
+        requires_backends(self, ["datasets"])
         super().__init__()
         self.index = index or self._build_index(config)
         self.generator_tokenizer = generator_tokenizer
@@ -439,7 +444,7 @@ class RagRetriever:
 
     @classmethod
     def from_pretrained(cls, retriever_name_or_path, indexed_dataset=None, **kwargs):
-        requires_backends(cls, ["datasets", "faiss"])
+        requires_backends(cls, ["datasets"])
         config = kwargs.pop("config", None) or RagConfig.from_pretrained(retriever_name_or_path, **kwargs)
         rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path, config=config)
         question_encoder_tokenizer = rag_tokenizer.question_encoder
@@ -556,7 +561,7 @@ class RagRetriever:
             np.array(vectors_batched),
         )  # shapes (batch_size, n_docs) and (batch_size, n_docs, d)
 
-    def retrieve(self, question_hidden_states: np.ndarray, n_docs: int) -> Tuple[np.ndarray, List[dict]]:
+    def retrieve(self, question_hidden_states: np.ndarray, n_docs: int) -> Tuple[np.ndarray, np.ndarray, List[dict]]:
         """
         Retrieves documents for specified `question_hidden_states`.
 

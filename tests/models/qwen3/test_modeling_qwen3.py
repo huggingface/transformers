@@ -248,7 +248,7 @@ class Qwen3IntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(qwen_model, pad_token="</s>", padding_side="right")
         if is_torch_greater_or_equal("2.7.0"):
             strict = False  # Due to https://github.com/pytorch/pytorch/issues/150994
-            EXPECTED_TEXT_COMPLETION = ["My favourite condiment is 100% plain, unsalted, unsweetened, and unflavored."]
+            EXPECTED_TEXT_COMPLETION = ["My favourite condiment is 100% plain, unflavoured, and unadulterated."]
         else:
             strict = True
             EXPECTED_TEXT_COMPLETION = ["My favourite condiment is 100% plain, unflavoured, and unadulterated. It is"]
