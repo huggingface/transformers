@@ -1046,7 +1046,7 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
         self.classifier = EsmClassificationHead(config)
 
         self.init_weights()
-    
+
         self.post_init()
 
     @can_return_tuple
