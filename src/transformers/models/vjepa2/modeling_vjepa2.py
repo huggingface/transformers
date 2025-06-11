@@ -1209,6 +1209,8 @@ class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
     ) -> Union[Tuple, ImageClassifierOutput]:
         r"""
+        pixel_values_videos (`torch.Tensor` with shape `[batch size x num_frames x num_channels x height x width]`):
+            The input video pixels which is processed by VJEPA2VideoProcessor.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
