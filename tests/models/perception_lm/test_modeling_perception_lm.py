@@ -15,6 +15,7 @@
 
 import unittest
 
+import numpy as np
 import requests
 from parameterized import parameterized
 
@@ -52,12 +53,11 @@ class PerceptionLMVisionText2TextModelTester:
     def __init__(
         self,
         parent,
-        ignore_index=-100,
-        image_token_index=0,
-        projector_hidden_act="gelu",
+        image_token_id=0,
+        video_token_id=2,
         seq_length=7,
-        vision_feature_select_strategy="default",
-        vision_feature_layer=-1,
+        tie_word_embeddings=True,
+        projector_pooling_ratio=1,
         text_config={
             "model_type": "llama",
             "seq_length": 7,
@@ -83,26 +83,21 @@ class PerceptionLMVisionText2TextModelTester:
         },
         is_training=True,
         vision_config={
-            "image_size": 8,
-            "patch_size": 2,
-            "num_channels": 3,
-            "is_training": True,
-            "hidden_size": 32,
-            "projection_dim": 32,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "intermediate_size": 37,
-            "dropout": 0.1,
-            "attention_dropout": 0.1,
-            "initializer_range": 0.02,
+            "use_cls_token": True,
+            "architecture": "vit_pe_core_large_patch14_336",
+            "width": 64,
+            "img_size": (14, 14),
+            "depth": 2,
+            "num_classes": 0,
+            "global_pool": "",
+            "use_post_transformer_norm": False,
+            "init_values": 0.1,
+            "ref_feat_shape": (1, 1),
         },
     ):
         self.parent = parent
-        self.ignore_index = ignore_index
-        self.image_token_index = image_token_index
-        self.projector_hidden_act = projector_hidden_act
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
+        self.image_token_id = image_token_id
+        self.video_token_id = video_token_id
         self.text_config = text_config
         self.vision_config = vision_config
         self.pad_token_id = text_config["pad_token_id"]
@@ -112,11 +107,16 @@ class PerceptionLMVisionText2TextModelTester:
         self.hidden_size = text_config["hidden_size"]
         self.num_attention_heads = text_config["num_attention_heads"]
         self.is_training = is_training
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.batch_size = 3
+        self.num_tiles = 1
+        self.num_frames = 1
         self.num_channels = 3
-        self.image_size = 336
-        self.num_image_tokens = (self.vision_config["image_size"] // self.vision_config["patch_size"]) ** 2
+        self.image_size =  self.vision_config["img_size"][0]
+        self.num_image_tokens = (
+            self.vision_config["img_size"][0] // 14
+        ) ** 2
         self.seq_length = seq_length + self.num_image_tokens
         self.encoder_seq_length = self.seq_length
 
@@ -124,36 +124,53 @@ class PerceptionLMVisionText2TextModelTester:
         return PerceptionLMConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
-            ignore_index=self.ignore_index,
-            image_token_index=self.image_token_index,
-            projector_hidden_act=self.projector_hidden_act,
-            vision_feature_select_strategy=self.vision_feature_select_strategy,
-            vision_feature_layer=self.vision_feature_layer,
-            image_seq_length=self.num_image_tokens,
+            image_token_id=self.image_token_id,
+            video_token_id=self.video_token_id,
+            tie_word_embeddings=self.tie_word_embeddings,
         )
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
             [
                 self.batch_size,
-                self.vision_config["num_channels"],
-                self.vision_config["image_size"],
-                self.vision_config["image_size"],
+                self.num_tiles,
+                self.num_channels,
+                self.vision_config["img_size"][0],
+                self.vision_config["img_size"][1],
+            ]
+        )
+        pixel_values_videos = floats_tensor(
+            [
+                self.batch_size,
+                self.num_frames,
+                self.num_channels,
+                self.vision_config["img_size"][0],
+                self.vision_config["img_size"][1],
             ]
         )
         config = self.get_config()
 
-        return config, pixel_values
+        return config, pixel_values, pixel_values_videos
 
     def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(1).to(torch_device)
-        input_ids[input_ids == config.image_token_index] = self.pad_token_id
-        input_ids[:, : self.num_image_tokens] = config.image_token_index
+        config, pixel_values, pixel_values_videos = self.prepare_config_and_inputs()
+        input_ids = (
+            ids_tensor(
+                [self.batch_size, self.seq_length], config.text_config.vocab_size - 2
+            )
+            + 2
+        )
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
+        input_ids[input_ids == config.image_token_id] = self.pad_token_id
+        input_ids[input_ids == config.video_token_id] = self.pad_token_id
+        input_ids[:, : self.num_image_tokens] = config.image_token_id
+        # input_ids[
+        #     :, self.num_image_tokens : self.num_video_tokens + self.num_image_tokens
+        # ] = config.video_token_id
+
         inputs_dict = {
             "pixel_values": pixel_values,
+            # "pixel_values_videos": pixel_values_videos,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
@@ -161,21 +178,31 @@ class PerceptionLMVisionText2TextModelTester:
 
 
 @require_torch
-class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class PerceptionLMForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
+):
     """
     Model tester for `PerceptionLMForConditionalGeneration`.
     """
 
-    all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (
+        (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
+    )
     test_pruning = False
     test_head_masking = False
     _is_composite = True
 
     def setUp(self):
         self.model_tester = PerceptionLMVisionText2TextModelTester(self)
-        common_properties = ["image_token_index", "vision_feature_layer", "image_seq_length"]
+        common_properties = [
+            "image_token_id",
+            "video_token_id",
+        ]
         self.config_tester = ConfigTester(
-            self, config_class=PerceptionLMConfig, has_text_modality=False, common_properties=common_properties
+            self,
+            config_class=PerceptionLMConfig,
+            has_text_modality=False,
+            common_properties=common_properties,
         )
 
     def test_config(self):
@@ -253,31 +280,6 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values)
 
-    @parameterized.expand(
-        [
-            (-1,),
-            ([-1],),
-            ([-1, -2],),
-        ],
-    )
-    def test_vision_feature_layers(self, vision_feature_layer):
-        """
-        Test that we can use either one vision feature layer, or a list of
-        vision feature layers.
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.vision_feature_layer = vision_feature_layer
-
-        num_feature_layers = 1 if isinstance(vision_feature_layer, int) else len(vision_feature_layer)
-        hidden_size = config.vision_config.hidden_size
-        expected_features = hidden_size * num_feature_layers
-
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            # We should have the right number of input features,
-            # and should be able to run a forward pass without exploding
-            assert model.multi_modal_projector.linear_1.in_features == expected_features
-            model(**input_dict)
 
     @unittest.skip(
         reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
@@ -304,10 +306,44 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
         pass
 
 
+TEST_MODEL_PATH = "/checkpoint/vision_encoder/smhu/debug/plm_hf_1b"
+
+
 @require_torch
 class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("perception_lm-hf/bakPerceptionLM-v1-hf")
+        self.processor = AutoProcessor.from_pretrained(TEST_MODEL_PATH)
+        # image_file = hf_hub_download(
+        #     repo_id="raushan-testing-hf/images_test", filename="llava_v1_5_radar.jpg", repo_type="dataset"
+        # )
+        # video_file = hf_hub_download(
+        #     repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
+        # )
+        self.image_file = (
+            "/home/smhu/code/occhi/apps/plm/dummy_datasets/image/images/14496_0.PNG"
+        )
+        self.video_file = "/home/smhu/code/occhi/apps/plm/dummy_datasets/video/videos/GUWR5TyiY-M_000012_000022.mp4"
+        self.conversation1 = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": self.image_file},
+                    {"type": "text", "text": "Describe the bar plot in the image."},
+                ],
+            }
+        ]
+        self.conversation2 = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                        "url": self.video_file,
+                    },
+                    {"type": "text", "text": "Can you describe the video in detail?"},
+                ],
+            }
+        ]
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -315,190 +351,75 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test(self):
-        # Let's make sure we test the preprocessing to replace what is used
-        model = PerceptionLMForConditionalGeneration.from_pretrained("perception_lm-hf/bakPerceptionLM-v1-hf", load_in_4bit=True)
-
-        prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
-        image_file = "https://perception_lm-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=20)
-        EXPECTED_DECODED_TEXT = "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. Firstly,"  # fmt: skip
-
-        self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    @require_bitsandbytes
-    def test_small_model_integration_test_llama_single(self):
-        # Let's make sure we test the preprocessing to replace what is used
-        model_id = "facebook/Perception-LM-1B"
-
-        model = PerceptionLMForConditionalGeneration.from_pretrained("facebook/Perception-LM-1B", load_in_4bit=True)
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place? ASSISTANT:"
-        image_file = "https://perception_lm-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
-
-        output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
-        EXPECTED_DECODED_TEXT = "USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Finally, be respectful of the environment and other visitors, and follow any posted rules or guidelines for the area."  # fmt: skip
-
-        self.assertEqual(
-            processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    @require_bitsandbytes
-    def test_small_model_integration_test_llama_batched(self):
-        # Let's make sure we test the preprocessing to replace what is used
-        model_id = "facebook/Perception-LM-1B"
-
-        model = PerceptionLMForConditionalGeneration.from_pretrained("facebook/Perception-LM-1B", load_in_4bit=True)
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        prompts = [
-            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT:",
-            "USER: <image>\nWhat is this? ASSISTANT:",
-        ]
-        image1 = Image.open(requests.get("https://perception_lm-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-
-        inputs = processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=20)
-
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, you', 'USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat is located on']  # fmt: skip
-
-        self.assertEqual(
-            processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    @require_bitsandbytes
-    def test_small_model_integration_test_batch(self):
-        # Let's make sure we test the preprocessing to replace what is used
-        model = PerceptionLMForConditionalGeneration.from_pretrained("perception_lm-hf/bakPerceptionLM-v1-hf", load_in_4bit=True)
-        # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
-        prompts = [
-            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
-            "USER: <image>\nWhat is this?\nASSISTANT:",
-        ]
-        image1 = Image.open(requests.get("https://perception_lm-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-
-        inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(
-            torch_device
-        )
-
-        output = model.generate(**inputs, max_new_tokens=20)
-
-        EXPECTED_DECODED_TEXT = [
-            'USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, there are a few things to be cautious about and items to bring.',
-            'USER:  \nWhat is this?\nASSISTANT: Cats'
-        ]  # fmt: skip
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    @require_bitsandbytes
-    def test_small_model_integration_test_llama_batched_regression(self):
-        # Let's make sure we test the preprocessing to replace what is used
-        model_id = "facebook/Perception-LM-1B"
-
-        # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
         model = PerceptionLMForConditionalGeneration.from_pretrained(
-            "facebook/Perception-LM-1B", load_in_4bit=True, attn_implementation="eager"
-        )
-        processor = AutoProcessor.from_pretrained(model_id, pad_token="<pad>")
-
-        prompts = [
-            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
-            "USER: <image>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <image>\nAnd this?\nASSISTANT:",
-        ]
-        image1 = Image.open(requests.get("https://perception_lm-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-
-        inputs = processor(images=[image1, image2, image1], text=prompts, return_tensors="pt", padding=True).to(
-            torch_device
+            TEST_MODEL_PATH, load_in_4bit=True, cache_dir="./"
         )
 
-        output = model.generate(**inputs, max_new_tokens=20)
-
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a body of water', 'USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.']  # fmt: skip
-
-        self.assertEqual(
-            processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    @require_torch
-    @require_vision
-    def test_batched_generation(self):
-        model = PerceptionLMForConditionalGeneration.from_pretrained("facebook/Perception-LM-1B", load_in_4bit=True)
-
-        processor = AutoProcessor.from_pretrained("facebook/Perception-LM-1B")
-
-        prompt1 = "<image>\n<image>\nUSER: What's the difference of two images?\nASSISTANT:"
-        prompt2 = "<image>\nUSER: Describe the image.\nASSISTANT:"
-        prompt3 = "<image>\nUSER: Describe the image.\nASSISTANT:"
-        url1 = "https://images.unsplash.com/photo-1552053831-71594a27632d?q=80&w=3062&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-        url2 = "https://images.unsplash.com/photo-1617258683320-61900b281ced?q=80&w=3087&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
-        image1 = Image.open(requests.get(url1, stream=True).raw)
-        image2 = Image.open(requests.get(url2, stream=True).raw)
-
-        inputs = processor(
-            images=[image1, image2, image1, image2],
-            text=[prompt1, prompt2, prompt3],
+        inputs = self.processor.apply_chat_template(
+            [self.conversation1],
+            num_frames=32,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
             return_tensors="pt",
+            video_load_backend="decord",
             padding=True,
+            padding_side="left",
         ).to(torch_device)
 
-        model = model.eval()
+        generate_ids = model.generate(**inputs, max_new_tokens=18)
+        input_length = inputs["input_ids"].shape[1]
+        generate_ids_without_inputs = generate_ids[:, input_length:]
 
-        EXPECTED_OUTPUT = [
-            "\n \nUSER: What's the difference of two images?\nASSISTANT: The difference between the two images is that one shows a dog standing on a grassy field, while",
-            "\nUSER: Describe the image.\nASSISTANT: The image features a brown and white dog sitting on a sidewalk. The dog is holding a small",
-            "\nUSER: Describe the image.\nASSISTANT: The image features a lone llama standing on a grassy hill. The llama is the",
-        ]
+        EXPECTED_DECODED_TEXT = "The bar plot displays the values of four categories: step, horror, mood, and lumber"  # fmt: skip
 
-        generate_ids = model.generate(**inputs, max_new_tokens=20)
-        outputs = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-        self.assertEqual(outputs, EXPECTED_OUTPUT)
-
-    def test_tokenizer_integration(self):
-        slow_tokenizer = AutoTokenizer.from_pretrained("liuhaotian/perception_lm-v1.6-34b", use_fast=False)
-        slow_tokenizer.add_tokens("<image>", True)
-
-        fast_tokenizer = AutoTokenizer.from_pretrained(
-            "liuhaotian/perception_lm-v1.6-34b",
-            bos_token="<|startoftext|>",
-            eos_token="<|endoftext|>",
-            from_slow=True,
-            legacy=False,
+        self.assertEqual(
+            self.processor.decode(
+                generate_ids_without_inputs[0], skip_special_tokens=True
+            ),
+            EXPECTED_DECODED_TEXT,
         )
-        fast_tokenizer.add_tokens("<image>", True)
 
-        prompt = "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
-        EXPECTED_OUTPUT = ['<|im_start|>', 'system', '\n', 'Answer', '▁the', '▁questions', '.', '<|im_end|>', '<|im_start|>', 'user', '\n', '<image>', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<|im_end|>', '<|im_start|>', 'ass', 'istant', '\n']  # fmt: skip
-        self.assertEqual(slow_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
-        self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
+    @slow
+    @require_bitsandbytes
+    def test_small_model_integration_test_batched(self):
+        model = PerceptionLMForConditionalGeneration.from_pretrained(
+            TEST_MODEL_PATH, load_in_4bit=True
+        )
+        processor = AutoProcessor.from_pretrained(TEST_MODEL_PATH)
+        inputs = processor.apply_chat_template(
+            [self.conversation1, self.conversation2],
+            num_frames=32,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            video_load_backend="decord",
+            padding=True,
+            padding_side="left",
+        ).to(torch_device)
+
+        generate_ids = model.generate(**inputs, max_new_tokens=18)
+        input_length = inputs["input_ids"].shape[1]
+        generate_ids_without_inputs = generate_ids[:, input_length:]
+
+        EXPECTED_DECODED_TEXT = ['The bar plot displays the values of four categories: step, horror, mood, and lumber', 'The video shows a group of people in green shirts and white shorts performing a dance routine on']  # fmt: skip
+
+        self.assertEqual(
+            processor.batch_decode(
+                generate_ids_without_inputs, skip_special_tokens=True
+            ),
+            EXPECTED_DECODED_TEXT,
+        )
 
     @slow
     @require_bitsandbytes
     def test_generation_no_images(self):
-        model_id = "facebook/Perception-LM-1B"
-        model = PerceptionLMForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
-        processor = AutoProcessor.from_pretrained(model_id)
+        # model_id = "facebook/Perception-LM-1B"
+        model = PerceptionLMForConditionalGeneration.from_pretrained(
+            TEST_MODEL_PATH, load_in_4bit=True
+        )
+        processor = AutoProcessor.from_pretrained(TEST_MODEL_PATH)
 
         # Prepare inputs with no images
         inputs = processor(text="Hello, I am", return_tensors="pt").to(torch_device)
@@ -506,120 +427,3 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Make sure that `generate` works
         _ = model.generate(**inputs, max_new_tokens=20)
 
-    @slow
-    @require_bitsandbytes
-    def test_generation_siglip_backbone(self):
-        model_id = "perception_lm-hf/perception_lm-interleave-qwen-0.5b-hf"
-        model = PerceptionLMForConditionalGeneration.from_pretrained(model_id, torch_dtype="float16", device_map=torch_device)
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        # check processing with expansion of inputs (w/o expansion should work with any backbone)
-        processor.vision_feature_select_strategy = "default"
-        processor.patch_size = 14
-
-        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = processor(
-            text="<|im_start|>user\n<image>\nWhat are these?<|im_end|>\n<|im_start|>assistant",
-            images=raw_image,
-            return_tensors="pt",
-        ).to(torch_device, torch.float16)
-
-        # Make sure that `generate` works
-        output = model.generate(**inputs, max_new_tokens=30)
-
-        EXPECTED_DECODED_TEXT = "user\n\nWhat are these?\nassistant The image shows two cats, one on the left and one on the right. They appear to be resting or sleeping on a pink blanket. The cat"
-        self.assertTrue(processor.batch_decode(output, skip_special_tokens=True)[0] == EXPECTED_DECODED_TEXT)
-
-    @slow
-    def test_pixtral(self):
-        model_id = "mistral-community/pixtral-12b"
-        model = PerceptionLMForConditionalGeneration.from_pretrained(model_id)
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        IMG_URLS = [
-            Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
-            Image.open(requests.get("https://picsum.photos/id/231/200/300", stream=True).raw),
-            Image.open(requests.get("https://picsum.photos/id/27/500/500", stream=True).raw),
-            Image.open(requests.get("https://picsum.photos/id/17/150/600", stream=True).raw),
-        ]
-        PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][IMG][IMG][/INST]"
-
-        # image = Image.open(requests.get(url, stream=True).raw)
-        inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(model.device)
-        generate_ids = model.generate(**inputs, max_new_tokens=500)
-        ouptut = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        print(ouptut)
-
-        # fmt: off
-        EXPECTED_GENERATION = """
-Describe the images.
-Certainly! Here are the descriptions of the images:
-
-1. **Image 1**: This image features a black dog with a glossy coat sitting on a wooden surface. The dog has a calm and attentive expression, looking directly at the camera. The wooden background has a rustic appearance with visible grain and texture.
-
-2. **Image 2**: This image captures a breathtaking view of a mountainous landscape. The mountains are rugged and covered with patches of green vegetation. The sky above is clear, and the scene conveys a sense of tranquility and natural beauty.
-
-3. **Image 3**: This image shows a beach scene during sunset. The waves are gently rolling onto the shore, and several people can be seen in the water, possibly surfing or swimming. The sky is painted with warm hues of orange and yellow, creating a serene and picturesque atmosphere.
-
-4. **Image 4**: This image depicts a narrow, winding path that cuts through a lush, green landscape. On either side of the path, there is dense grass and various trees, including a prominent tree with white blossoms. The sky is clear and blue, adding to the peaceful and inviting ambiance of the scene.
-
-These descriptions provide a detailed overview of the content and atmosphere of each image.
-"""
-        # fmt: on
-        # check that both inputs are handled correctly and generate the same output
-        self.assertEqual(ouptut, EXPECTED_GENERATION)
-
-    @slow
-    @require_bitsandbytes
-    def test_pixtral_4bit(self):
-        model_id = "mistral-community/pixtral-12b"
-        model = PerceptionLMForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        IMG_URLS = [
-            Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
-            Image.open(requests.get("https://picsum.photos/id/231/200/300", stream=True).raw),
-        ]
-        PROMPT = "<s>[INST][IMG][IMG]Describe the images.[/INST]"
-
-        inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(torch_device, torch.float16)
-        generate_ids = model.generate(**inputs, max_new_tokens=50)
-        output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-
-        EXPECTED_GENERATION = [
-            # CUDA output
-            "Describe the images. The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a black Labrador",
-            # XPU output
-            "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which covers the entire background. The dog appears to be the main focus",
-        ]  # fmt: skip
-        self.assertTrue(output in EXPECTED_GENERATION)
-
-    @slow
-    @require_bitsandbytes
-    def test_pixtral_batched(self):
-        model_id = "mistral-community/pixtral-12b"
-        model = PerceptionLMForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
-        processor = AutoProcessor.from_pretrained(model_id)
-        processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
-
-        IMG_URLS = [
-            Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
-            Image.open(requests.get("https://picsum.photos/id/17/150/500", stream=True).raw),
-        ]
-        PROMPT = [
-            "<s>[INST][IMG]What breed is the dog?[/INST]",
-            "<s>[INST][IMG]What is shown in this image?[/INST]",
-        ]
-
-        inputs = processor(text=PROMPT, images=IMG_URLS, padding=True, return_tensors="pt").to(
-            torch_device, torch.float16
-        )
-        generate_ids = model.generate(**inputs, max_new_tokens=50)
-        output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
-
-        EXPECTED_GENERATION = [
-            'What breed is the dog?The dog in the image is a black Labrador Retriever.',
-            'What is shown in this image?The image depicts a narrow, winding dirt path surrounded by lush greenery. The path is flanked by grass and shrubs on both sides. On the left side, there are tall trees and dense foliage, while on the right side, there'
-        ]  # fmt: skip
-        self.assertEqual(output, EXPECTED_GENERATION)
