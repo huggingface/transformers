@@ -1070,55 +1070,6 @@ import math
 import torch.nn.functional as F
 import torch.nn as nn
 
-
-
-class Attention(nn.Module):
-    def __init__(
-        self,
-        dim,
-        num_heads=8,
-        qkv_bias=False,
-        qk_scale=None,
-        attn_drop=0.0,
-        proj_drop=0.0,
-        use_sdpa=True,
-        is_causal=False,
-    ):
-        super().__init__()
-        self.num_heads = num_heads
-        head_dim = dim // num_heads
-        self.scale = qk_scale or head_dim**-0.5
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.attn_drop = nn.Dropout(attn_drop)
-        self.proj = nn.Linear(dim, dim)
-        self.proj_drop_prob = proj_drop
-        self.proj_drop = nn.Dropout(proj_drop)
-        self.use_sdpa = use_sdpa
-        self.is_causal = is_causal
-
-    def forward(self, x, mask=None, attn_mask=None):
-        B, N, C = x.shape
-        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv[0], qkv[1], qkv[2]  # [B, num_heads, N, D]
-
-        if attn_mask is not None or self.use_sdpa:
-            with torch.backends.cuda.sdp_kernel():
-                x = F.scaled_dot_product_attention(
-                    q, k, v, dropout_p=self.proj_drop_prob, is_causal=self.is_causal, attn_mask=attn_mask
-                )
-                attn = None
-        else:
-            attn = (q @ k.transpose(-2, -1)) * self.scale  # [B, num_heads, D, D]
-            attn = attn.softmax(dim=-1)
-            attn = self.attn_drop(attn)
-            x = attn @ v
-
-        x = x.transpose(1, 2).reshape(B, N, C)
-        x = self.proj(x)
-        x = self.proj_drop(x)
-        return x
-
-
 class MLP(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.0):
         super().__init__()
@@ -1135,51 +1086,6 @@ class MLP(nn.Module):
         x = self.drop(x)
         x = self.fc2(x)
         x = self.drop(x)
-        return x
-
-
-class Block(nn.Module):
-    def __init__(
-        self,
-        dim,
-        num_heads,
-        mlp_ratio=4.0,
-        qkv_bias=False,
-        qk_scale=None,
-        drop=0.0,
-        attn_drop=0.0,
-        drop_path=0.0,
-        act_layer=nn.GELU,
-        wide_silu=True,
-        norm_layer=nn.LayerNorm,
-        use_sdpa=True,
-        is_causal=False,
-        grid_size=16,
-        use_rope=False,
-        **kwargs,
-    ):
-        super().__init__()
-        self.norm1 = norm_layer(dim)
-        self.attn = Attention(
-            dim,
-            num_heads=num_heads,
-            qkv_bias=qkv_bias,
-            qk_scale=qk_scale,
-            attn_drop=attn_drop,
-            use_sdpa=use_sdpa,
-            is_causal=is_causal,
-            proj_drop=drop,
-        )
-
-        self.drop_path = VJEPA2DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
-        self.norm2 = norm_layer(dim)
-        mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = MLP(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
-
-    def forward(self, x, mask=None, attn_mask=None, T=None, H_patches=None, W_patches=None):
-        y = self.attn(self.norm1(x), mask=mask, attn_mask=attn_mask)
-        x = x + self.drop_path(y)
-        x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
 
 
