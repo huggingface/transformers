@@ -1441,10 +1441,12 @@ class ReformerAttention(nn.Module):
                 else hidden_states
             )
             buckets = (
-                buckets[:, :orig_sequence_length]
-                if len(past_buckets_states.buckets_cache) <= self.layer_id
-                and buckets is not None
-                and orig_sequence_length > 1
+                buckets[:, :, :, :orig_sequence_length]
+                if (
+                    len(past_buckets_states.buckets_cache) <= self.layer_id
+                    and buckets is not None
+                    and orig_sequence_length > 1
+                )
                 else buckets
             )
             buckets, hidden_states = past_buckets_states.update(
