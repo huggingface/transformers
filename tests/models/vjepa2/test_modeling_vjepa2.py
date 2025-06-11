@@ -16,6 +16,8 @@
 
 import unittest
 
+import numpy as np
+
 from transformers import VJEPA2Config
 from transformers.testing_utils import (
     is_flaky,
@@ -54,7 +56,6 @@ class VJEPA2ModelTester:
     def __init__(
         self,
         parent,
-        model_name="vit_large",
         batch_size=2,
         image_size=16,
         patch_size=16,
@@ -67,14 +68,12 @@ class VJEPA2ModelTester:
         pred_hidden_size=32,
         pred_num_attention_heads=2,
         pred_num_hidden_layers=2,
-        pred_use_mask_tokens=True,
         pred_num_mask_tokens=10,
         is_training=False,
         attn_implementation="sdpa",
         mask_ratio=0.5,
     ):
         self.parent = parent
-        self.model_name = model_name
         self.batch_size = batch_size
         self.image_size = image_size
         self.patch_size = patch_size
@@ -87,7 +86,6 @@ class VJEPA2ModelTester:
         self.pred_hidden_size = pred_hidden_size
         self.pred_num_attention_heads = pred_num_attention_heads
         self.pred_num_hidden_layers = pred_num_hidden_layers
-        self.pred_use_mask_tokens = pred_use_mask_tokens
         self.pred_num_mask_tokens = pred_num_mask_tokens
         self.attn_implementation = attn_implementation
         self.is_training = is_training
@@ -115,19 +113,15 @@ class VJEPA2ModelTester:
 
     def get_config(self):
         return VJEPA2Config(
-            model_name=self.model_name,
             crop_size=self.image_size,
             frames_per_clip=self.num_frames,
-            uniform_power=True,
             hidden_size=self.hidden_size,
             num_attention_heads=self.num_attention_heads,
             num_hidden_layers=self.num_hidden_layers,
-            use_rope=True,
             mlp_ratio=self.mlp_ratio,
             pred_hidden_size=self.pred_hidden_size,
             pred_num_attention_heads=self.pred_num_attention_heads,
             pred_num_hidden_layers=self.pred_num_hidden_layers,
-            pred_use_mask_tokens=self.pred_use_mask_tokens,
             pred_num_mask_tokens=self.pred_num_mask_tokens,
         )
 
@@ -226,14 +220,6 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model = VJEPA2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    # @unittest.skip(reason="Permuting pixel_values_videos within VJEPA2Embedding breaks this test.")
-    # def test_torch_fx(self):
-    #     pass
-
-    # @unittest.skip(reason="Permuting pixel_values_videos within VJEPA2Embedding breaks this test.")
-    # def test_torch_fx_output_loss(self):
-    #     pass
-
 
 # We will verify our results on an image of cute cats
 def prepare_img():
@@ -267,7 +253,7 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
 
         video_processor = self.default_video_processor
         image = prepare_img()
-        inputs = video_processor(image, return_tensors="pt").to(torch_device)
+        inputs = video_processor(torch.Tensor(np.array(image)), return_tensors="pt").to(torch_device)
         pixel_values_videos = inputs.pixel_values_videos
         pixel_values_videos = pixel_values_videos.repeat(1, model.config.frames_per_clip, 1, 1, 1)
 
@@ -280,11 +266,7 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [
-                [0.6824, 2.1494, -0.3479],
-                [0.8301, 0.6597, 0.0575],
-                [0.7389, 1.1650, -0.0138],
-            ],
+            [[-0.0061, -1.8365, 2.7343], [-2.5938, -2.7181, -0.1663], [-1.7993, -2.2430, -1.1388]],
             device=torch_device,
         )
         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)

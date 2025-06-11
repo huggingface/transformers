@@ -5,6 +5,7 @@ import os
 import tempfile
 from pathlib import Path
 
+import numpy as np
 import requests
 import torch
 from huggingface_hub import HfApi
@@ -38,70 +39,54 @@ def get_vjepa2_config(model_name):
     # size of the architecture
     if model_name == "vit_large":
         return VJEPA2Config(
-            model_name="vit_large",
             crop_size=256,
             frames_per_clip=64,
-            uniform_power=True,
             hidden_size=1024,
             num_attention_heads=16,
             num_hidden_layers=24,
-            use_rope=True,
             mlp_ratio=4,
             pred_hidden_size=384,
             pred_num_attention_heads=12,
             pred_num_hidden_layers=12,
-            pred_use_mask_tokens=True,
             pred_num_mask_tokens=10,
         )
     elif model_name == "vit_huge":
         return VJEPA2Config(
-            model_name="vit_huge",
             crop_size=256,
             frames_per_clip=64,
-            uniform_power=True,
             hidden_size=1280,
             num_attention_heads=16,
             num_hidden_layers=32,
-            use_rope=True,
             mlp_ratio=4,
             pred_hidden_size=384,
             pred_num_attention_heads=12,
             pred_num_hidden_layers=12,
-            pred_use_mask_tokens=True,
             pred_num_mask_tokens=10,
         )
     elif model_name == "vit_giant":
         return VJEPA2Config(
-            model_name="vit_giant",
             crop_size=256,
             frames_per_clip=64,
-            uniform_power=True,
             hidden_size=1408,
             num_attention_heads=22,
             num_hidden_layers=40,
-            use_rope=True,
             mlp_ratio=48 / 11,
             pred_hidden_size=384,
             pred_num_attention_heads=12,
             pred_num_hidden_layers=12,
-            pred_use_mask_tokens=True,
             pred_num_mask_tokens=10,
         )
     elif model_name == "vit_giant_384":
         return VJEPA2Config(
-            model_name="vit_giant_384",
             crop_size=384,
             frames_per_clip=64,
-            uniform_power=True,
             hidden_size=1408,
             num_attention_heads=22,
             num_hidden_layers=40,
-            use_rope=True,
             mlp_ratio=48 / 11,
             pred_hidden_size=384,
             pred_num_attention_heads=12,
             pred_num_hidden_layers=12,
-            pred_use_mask_tokens=True,
             pred_num_mask_tokens=10,
         )
     else:
@@ -116,7 +101,7 @@ def convert_encoder_keys(model_state_dict, og_encoder_state_dict, config):
         if key.startswith("blocks."):
             key = key.replace("blocks.", "encoder.layer.")
         if "attn." in key:
-            key = key.replace("attn.", "attention.attention.")
+            key = key.replace("attn.", "attention.")
         if key == "pos_embed":
             key = "encoder.embeddings.position_embeddings"
         if "patch_embed." in key:
@@ -147,9 +132,8 @@ def convert_encoder_keys(model_state_dict, og_encoder_state_dict, config):
 
 def convert_predictor_keys(model_state_dict, og_predictor_state_dict, config):
     emb_dim = config.pred_hidden_size
-    if config.use_rope:
-        if "predictor_pos_embed" in og_predictor_state_dict:
-            del og_predictor_state_dict["predictor_pos_embed"]
+    if "predictor_pos_embed" in og_predictor_state_dict:
+        del og_predictor_state_dict["predictor_pos_embed"]
     # update predictor weights
     mask_tokens = {}
     mask_token_keys_to_delete = []
@@ -159,7 +143,7 @@ def convert_predictor_keys(model_state_dict, og_predictor_state_dict, config):
         if key.startswith("predictor_blocks."):
             key = key.replace("predictor_blocks.", "predictor.layer.")
         if "attn." in key:
-            key = key.replace("attn.", "attention.attention.")
+            key = key.replace("attn.", "attention.")
         if key == "predictor_pos_embed":
             key = "predictor.embeddings.position_embeddings"
         if "predictor_embed." in key:
@@ -233,6 +217,9 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
     original_encoder, original_predictor = torch.hub.load(HUB_REPO, "vjepa2_" + model_name, source=HUB_SOURCE)
     original_encoder.eval()
     original_predictor.eval()
+    original_preprocessor = torch.hub.load(
+        HUB_REPO, "vjepa2_preprocessor", source=HUB_SOURCE, crop_size=config.crop_size
+    )
 
     # load state_dict of original model, remove and rename some keys
     encoder_state_dict = original_encoder.state_dict()
@@ -250,11 +237,17 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
 
     # load image
     image = prepare_img()
+    image = torch.Tensor(np.array(image)).unsqueeze(0).permute(0, 3, 1, 2)
+    print("Input shape: ", image.shape)
 
     crop_size = config.crop_size
     processor = VJEPA2VideoProcessor(crop_size=crop_size)
     pr_out = processor(image, return_tensors="pt")
     pixel_values_videos = pr_out.pixel_values_videos
+    # run original preprocessor
+    original_pixel_values = original_preprocessor(image)
+    assert original_pixel_values[0].permute(1, 0, 2, 3).shape == pixel_values_videos[0].shape
+    assert torch.allclose(original_pixel_values[0].permute(1, 0, 2, 3), pixel_values_videos[0], atol=1e-3)
 
     with torch.no_grad():
         # reshape and move to gpu
@@ -301,15 +294,9 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
         processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        model_name_to_hf_name = {
-            "vit_large": "vjepa2-vitl-fpc64-256",
-            "vit_huge": "vjepa2-vith-fpc64-256",
-            "vit_giant": "vjepa2-vitg-fpc64-256",
-            "vit_giant_384": "vjepa2-vith-fpc64-384",
-        }
-        name = model_name_to_hf_name[model_name]
-        model.push_to_hub(f"facebook/{name}")
-        processor.push_to_hub(f"facebook/{name}")
+        name = HUB_MODELS[model_name]
+        model.push_to_hub(name, private=True)
+        processor.push_to_hub(name, private=True)
 
 
 if __name__ == "__main__":

@@ -26,16 +26,22 @@ class VJEPA2VideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
+    size = {"shortest_edge": int(256 * 256 / 224)}
     crop_size = 256
     do_resize = True
-    do_rescale = False
+    do_rescale = True
+    do_center_crop = True
     do_normalize = True
-    do_convert_rgb = True
     valid_kwargs = VJEPA2VideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos"]
 
     def __init__(self, **kwargs: Unpack[VJEPA2VideoProcessorInitKwargs]):
-        self.size = {"height": self.crop_size, "width": self.crop_size}
+        crop_size = kwargs.get("crop_size", 256)
+        if not isinstance(crop_size, int):
+            assert isinstance(crop_size, dict) and "height" in crop_size
+            crop_size = crop_size["height"]
+        resize_size = int(crop_size * 256 / 224)
+        kwargs["size"] = {"shortest_edge": resize_size}
         super().__init__(**kwargs)
 
 

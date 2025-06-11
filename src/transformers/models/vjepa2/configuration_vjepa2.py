@@ -22,12 +22,6 @@ class VJEPA2Config(PretrainedConfig):
             The number of frames the model has been pretrained with. Does not impact inference.
         tubelet_size (`int`, *optional*, defaults to 2):
             The number of temporal frames used for a single rastor, check paper for more information.
-        use_SiLU (`bool`, *optional*, defaults to `False`):
-            Use SwiGLUFFN for MLP
-        wide_SiLU (`bool`, *optional*, defaults to `True`):
-            Increases the hidden size for SwiGLUFFN
-        uniform_power (`bool`, *optional*, defaults to `False`):
-            If not using RoPE, setting this flag enables uniform power on grid height, width and depth in 3d positional encodings.
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers
         in_chans (`int`, *optional*, defaults to 3):
@@ -46,23 +40,18 @@ class VJEPA2Config(PretrainedConfig):
             Whether to add a bias to the queries, keys and values.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probability for attentions.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        use_rope (`bool`, *optional*, defaults to `False`):
-            If set, we use RoPE positional encoding instead of learned position encodings
         pred_hidden_size (`int`, *optional*, defaults to 384):
             Dimensionality of the predictor layers
         pred_num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Predictor
         pred_num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Predictor
-        pred_use_mask_tokens (`bool`, *optional*, defaults to `False`):
-            Use mask tokens in the Predictor
         pred_num_mask_tokens (`int`, *optional*, defaults to 10):
             Define the number of mask tokens to use in the Predictor
         pred_zero_init_mask_tokens (`bool`, *optional*, defaults to `True`):
@@ -79,7 +68,7 @@ class VJEPA2Config(PretrainedConfig):
     >>> configuration = VJEPA2Config()
 
     >>> # Initializing a model (with random weights) from the vjepa2-vitl-fpc64-256  style configuration
-    >>> model = Dinov2Model(configuration)
+    >>> model = VJEPA2Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -93,9 +82,6 @@ class VJEPA2Config(PretrainedConfig):
         crop_size=256,
         frames_per_clip=64,
         tubelet_size=2,
-        use_SiLU=False,
-        wide_SiLU=True,
-        uniform_power=False,
         hidden_size=1024,
         in_chans=3,
         num_attention_heads=12,
@@ -105,15 +91,12 @@ class VJEPA2Config(PretrainedConfig):
         layer_norm_eps=1e-6,
         qkv_bias=True,
         attention_probs_dropout_prob=0.0,
-        hidden_dropout_prob=0.0,
         hidden_act="gelu",
         initializer_range=0.02,
-        use_rope=False,
         # predictor params
         pred_hidden_size=384,
         pred_num_attention_heads=12,
         pred_num_hidden_layers=12,
-        pred_use_mask_tokens=False,
         pred_num_mask_tokens=10,
         pred_zero_init_mask_tokens=True,
         pred_mlp_ratio=4.0,
@@ -122,15 +105,9 @@ class VJEPA2Config(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.crop_size = crop_size
-        self.img_height = crop_size
-        self.img_width = crop_size
         self.frames_per_clip = frames_per_clip
         self.patch_size = patch_size
-        self.num_frames = frames_per_clip
         self.tubelet_size = tubelet_size
-        self.uniform_power = uniform_power
-        self.use_SiLU = use_SiLU
-        self.wide_SiLU = wide_SiLU
         self.hidden_size = hidden_size
         self.in_chans = in_chans
         self.num_attention_heads = num_attention_heads
@@ -140,16 +117,13 @@ class VJEPA2Config(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.qkv_bias = qkv_bias
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.hidden_dropout_prob = hidden_dropout_prob
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.image_size = crop_size
-        self.use_rope = use_rope
         # predictor params
         self.pred_hidden_size = pred_hidden_size
         self.pred_num_attention_heads = pred_num_attention_heads
         self.pred_num_hidden_layers = pred_num_hidden_layers
-        self.pred_use_mask_tokens = pred_use_mask_tokens
         self.pred_num_mask_tokens = pred_num_mask_tokens
         self.pred_zero_init_mask_tokens = pred_zero_init_mask_tokens
         self.pred_mlp_ratio = pred_mlp_ratio
