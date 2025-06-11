@@ -344,7 +344,7 @@ class DiaDecoderLayer(GradientCheckpointingLayer):
         cross_states, cross_attn_weights = self.cross_attention(
             hidden_states,
             encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
+            attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             **kwargs,
         )
