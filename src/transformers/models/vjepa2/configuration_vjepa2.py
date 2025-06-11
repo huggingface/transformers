@@ -26,9 +26,9 @@ class VJEPA2Config(PretrainedConfig):
             Dimensionality of the encoder layers
         in_chans (`int`, *optional*, defaults to 3):
             The number of input channels
-        num_attention_heads (`int`, *optional*, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Encoder
-        num_hidden_layers (`int`, *optional*, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 24):
             The number of hidden layers
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             Stochastic depth rate per sample (when applied in the main path of residual layers).
@@ -84,8 +84,8 @@ class VJEPA2Config(PretrainedConfig):
         tubelet_size=2,
         hidden_size=1024,
         in_chans=3,
-        num_attention_heads=12,
-        num_hidden_layers=12,
+        num_attention_heads=16,
+        num_hidden_layers=24,
         drop_path_rate=0.0,
         mlp_ratio=4.0,
         layer_norm_eps=1e-6,

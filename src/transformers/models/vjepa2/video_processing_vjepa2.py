@@ -5,13 +5,9 @@ from ...image_utils import (
     IMAGENET_DEFAULT_STD,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import (
-    is_vision_available,
-)
+from ...utils import is_vision_available
 from ...utils.import_utils import requires
-from ...video_processing_utils import (
-    BaseVideoProcessor,
-)
+from ...video_processing_utils import BaseVideoProcessor
 
 
 if is_vision_available():
@@ -38,7 +34,8 @@ class VJEPA2VideoProcessor(BaseVideoProcessor):
     def __init__(self, **kwargs: Unpack[VJEPA2VideoProcessorInitKwargs]):
         crop_size = kwargs.get("crop_size", 256)
         if not isinstance(crop_size, int):
-            assert isinstance(crop_size, dict) and "height" in crop_size
+            if not isinstance(crop_size, dict) or "height" not in crop_size:
+                raise ValueError("crop_size must be an integer or a dictionary with a 'height' key")
             crop_size = crop_size["height"]
         resize_size = int(crop_size * 256 / 224)
         kwargs["size"] = {"shortest_edge": resize_size}

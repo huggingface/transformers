@@ -1229,6 +1229,12 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
     def get_decoder(self):
         return self.model
 
+    def get_image_tokens(self, pixel_values):
+        return self.model.get_image_tokens(pixel_values)
+
+    def get_image_features(self, pixel_values):
+        return self.model.get_image_features(pixel_values)
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1243,7 +1249,6 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, CausalLMOutputWithPast]:
@@ -1277,7 +1282,6 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
@@ -1290,7 +1294,7 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             cache_position=cache_position,
             **kwargs,
         )
