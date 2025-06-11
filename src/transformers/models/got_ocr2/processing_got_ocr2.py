@@ -95,7 +95,6 @@ class GotOcr2Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "PreTrainedTokenizerFast"
 

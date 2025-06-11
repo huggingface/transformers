@@ -216,12 +216,12 @@ processor.batch_decode(generate_ids, skip_special_tokens=True)
 
 ## Note regarding reproducing original implementation
 
-In order to match the logits of the [original implementation](https://github.com/haotian-liu/LLaVA/tree/main), one needs to additionally specify `do_pad=True` when instantiating `LLavaImageProcessor`:
+In order to match the logits of the [original implementation](https://github.com/haotian-liu/LLaVA/tree/main), one needs to additionally specify `do_pad=True` when instantiating `LlavaImageProcessor`:
 
 ```python
-from transformers import LLavaImageProcessor
+from transformers import LlavaImageProcessor
 
-image_processor = LLavaImageProcessor.from_pretrained("https://huggingface.co/llava-hf/llava-1.5-7b-hf", do_pad=True)
+image_processor = LlavaImageProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf", do_pad=True)
 ```
 
 ### Using Flash Attention 2

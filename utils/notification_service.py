@@ -615,7 +615,10 @@ class Message:
                         pattern = r"<(https://github.com/huggingface/transformers/actions/runs/.+?/job/.+?)\|(.+?)>"
                         items = re.findall(pattern, line)
                     elif "tests/" in line:
-                        if "tests/models/" in line or "tests/quantization/" in line:
+                        # TODO: Improve the condition here.
+                        if "tests/models/" in line or (
+                            "tests/quantization/" in line and job_name == "run_quantization_torch_gpu"
+                        ):
                             model = line.split("/")[2]
                         else:
                             model = line.split("/")[1]
@@ -1364,8 +1367,8 @@ if __name__ == "__main__":
 
     nvidia_daily_ci_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml"
     amd_daily_ci_workflows = (
-        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi210-caller.yml",
         "huggingface/transformers/.github/workflows/self-scheduled-amd-mi250-caller.yml",
+        "huggingface/transformers/.github/workflows/self-scheduled-amd-mi300-caller.yml",
     )
     is_nvidia_daily_ci_workflow = os.environ.get("GITHUB_WORKFLOW_REF").startswith(nvidia_daily_ci_workflow)
     is_amd_daily_ci_workflow = os.environ.get("GITHUB_WORKFLOW_REF").startswith(amd_daily_ci_workflows)
