@@ -446,7 +446,6 @@ args = SFTConfig(
     max_steps=100,
     optim="galore_adamw_layerwise",
     optim_target_modules=[r".*.attn.*", r".*.mlp.*"],
-    optim_args="rank=64, update_proj_gap=100, scale=0.10",
     gradient_checkpointing=True,
 )
 trainer = SFTTrainer(
