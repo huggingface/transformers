@@ -18,14 +18,12 @@ import torch
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
-from ...integrations.flex_attention import flex_attention_forward
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
 from ..llama.modeling_llama import (
@@ -331,6 +329,7 @@ class OpenAIMoePreTrainedModel(LlamaPreTrainedModel):
             module.down_proj_bias.data.zero_()
         elif isinstance(module, OpenAIMoeAttention):
             module.sinks.data.normal_(mean=0.0, std=std)
+
 
 class OpenAIMoeModel(MixtralModel):
     _no_split_modules = ["OpenAIMoeDecoderLayer"]

@@ -24,13 +24,11 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-# openai
-
-# openai
+# OpenAIMoE
 
 ## Overview
 
-The openai model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
+The OpenAIMoE model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
 <INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
@@ -45,31 +43,16 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface
 The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 
-## OpenaiConfig
+## OpenAIMoeConfig
 
-[[autodoc]] OpenaiConfig
+[[autodoc]] OpenAIMoeConfig
 
-## OpenaiModel
+## OpenAIMoeModel
 
-[[autodoc]] OpenaiModel
+[[autodoc]] OpenAIMoeModel
     - forward
 
-## OpenaiForCausalLM
+## OpenAIMoeForCausalLM
 
-[[autodoc]] OpenaiForCausalLM
-    - forward
-
-## OpenaiForSequenceClassification
-
-[[autodoc]] OpenaiForSequenceClassification
-    - forward
-
-## OpenaiForQuestionAnswering
-
-[[autodoc]] OpenaiForQuestionAnswering
-    - forward
-
-## OpenaiForTokenClassification
-
-[[autodoc]] OpenaiForTokenClassification
+[[autodoc]] OpenAIMoeForCausalLM
     - forward
