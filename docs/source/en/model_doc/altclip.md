@@ -70,6 +70,7 @@ AltCLIP does **not** require `transformers-cli` at inference time, but the tool 
 </hfoptions>
 
 
+## Quantization
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](https://huggingface.co/docs/transformers/main/en/quantization/overview) overview for more available quantization backends.
 
