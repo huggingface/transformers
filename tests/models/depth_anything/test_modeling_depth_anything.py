@@ -146,7 +146,7 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     test_resize_embeddings = False
     test_head_masking = False
     test_torch_exportable = True
-    test_torch_exportable_strictly = not is_torch_greater_or_equal("2.7.0")
+    test_torch_exportable_strictly = not is_torch_greater_or_equal("2.7.0") or is_torch_greater_or_equal("2.8.0")
 
     def setUp(self):
         self.model_tester = DepthAnythingModelTester(self)
