@@ -117,6 +117,7 @@ class LayoutLMEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
         return embeddings
 
+
 # Copied from transformers.models.align.modeling_align.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,

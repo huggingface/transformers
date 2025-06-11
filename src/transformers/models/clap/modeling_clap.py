@@ -1115,6 +1115,7 @@ class ClapTextEmbeddings(nn.Module):
         )
         return position_ids.unsqueeze(0).expand(input_shape)
 
+
 # Copied from transformers.models.align.modeling_align.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
