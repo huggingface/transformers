@@ -1172,7 +1172,6 @@ class AltRobertaModel(AltCLIPPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @auto_docstring
-    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
