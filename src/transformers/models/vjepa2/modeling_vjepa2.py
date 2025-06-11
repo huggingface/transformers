@@ -928,7 +928,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
 
 # -----------------------------
 
-class SiglipAttention(nn.Module):
+class VJEPA2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config):
@@ -1015,21 +1015,21 @@ class SiglipMLP(nn.Module):
         return hidden_states
 
 
-class SiglipEncoderLayer(GradientCheckpointingLayer):
+class VJEPA2HeadLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.self_attn = SiglipAttention(config)
+        self.self_attn = VJEPA2Attention(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.mlp = SiglipMLP(config)
+        self.mlp = VJEPA2MLP(config, hidden_size=config.hidden_size)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> Tuple[torch.FloatTensor, ...]:
         """
         Args:
             hidden_states (`torch.FloatTensor`):
@@ -1263,7 +1263,7 @@ class AttentivePooler(nn.Module):
         if depth > 1:
             self.blocks = nn.ModuleList(
                 [
-                    SiglipEncoderLayer(config)
+                    VJEPA2HeadLayer(config)
                     for i in range(depth - 1)
                 ]
             )
