@@ -68,7 +68,7 @@ class VJEPA2Config(PretrainedConfig):
     >>> configuration = VJEPA2Config()
 
     >>> # Initializing a model (with random weights) from the vjepa2-vitl-fpc64-256  style configuration
-    >>> model = Dinov2Model(configuration)
+    >>> model = VJEPA2Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
