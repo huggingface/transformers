@@ -287,6 +287,7 @@ class QAPipelineTests(unittest.TestCase):
             question="Who is the chancellor of Germany?",
             context="Angela Merkel was the chancellor of Germany.",
             top_k=10,
+            handle_duplicate_answers=True,
         )
 
         answers = [output["answer"] for output in outputs]
