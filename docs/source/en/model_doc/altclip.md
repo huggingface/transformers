@@ -130,14 +130,14 @@ attn = outputs.vision_model_output.attentions  # list[num_layers] of (B,H,S,S)
 ## API
 
 ### Configuration
-::: transformers.AltCLIPConfig
-::: transformers.AltCLIPTextConfig
-::: transformers.AltCLIPVisionConfig
+[[autodoc]] AltCLIPConfig
+[[autodoc]] AltCLIPTextConfig
+[[autodoc]] AltCLIPVisionConfig
 
 ### Models
-::: transformers.AltCLIPModel
-::: transformers.AltCLIPTextModel
-::: transformers.AltCLIPVisionModel
+[[autodoc]] AltCLIPModel
+[[autodoc]] AltCLIPTextModel
+[[autodoc]] AltCLIPVisionModel
 
 ### Processor
-::: transformers.AltCLIPProcessor
+[[autodoc]] AltCLIPProcessor
