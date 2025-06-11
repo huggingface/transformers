@@ -279,6 +279,20 @@ class QAPipelineTests(unittest.TestCase):
         )
         self.assertEqual(nested_simplify(outputs), {"score": 0.988, "start": 0, "end": 0, "answer": ""})
 
+    @slow
+    @require_torch
+    def test_duplicate_handling(self):
+        question_answerer = pipeline("question-answering", model="deepset/tinyroberta-squad2")
+
+        outputs = question_answerer(
+            question="Who is the chancellor of Germany?",
+            context="Angela Merkel was the chancellor of Germany.",
+            top_k=10,
+        )
+
+        answers = [output['answer'] for output in outputs]
+        self.assertEqual(len(answers), len(set(answers)), "There are duplicate answers in the outputs.")
+
     @require_tf
     def test_small_model_tf(self):
         question_answerer = pipeline(
