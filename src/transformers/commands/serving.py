@@ -201,6 +201,9 @@ class ServeCommand(BaseTransformersCLICommand):
         transformers_logger = logging.get_logger("transformers")
         transformers_logger.setLevel(getLevelNamesMapping()[self.args.log_level.upper()])
 
+        cb_logger = logging.get_logger("transformers.generation.continuous_batching")
+        cb_logger.setLevel(getLevelNamesMapping()[self.args.log_level.upper()])
+
     def build_chunk(self, content: str, request_id: str, finish_reason: Optional[str] = None) -> str:
         payload = {
             "object": "chat.completion.chunk",
@@ -260,24 +263,28 @@ class ServeCommand(BaseTransformersCLICommand):
             generation_config = create_generation_config_from_req(req)
 
             def stream_response(_inputs):
-                max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 256
-                request_id = manager.add_request(_inputs, request_id=req.request_id, max_new_tokens=max_new_tokens)
-                queue_is_flushed = False
+                try:
+                    max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 256
+                    request_id = manager.add_request(_inputs, request_id=req.request_id, max_new_tokens=max_new_tokens)
+                    queue_is_flushed = False
 
-                for result in manager:
-                    if req.request_id is not None and not queue_is_flushed:
+                    for result in manager:
+                        if req.request_id is not None and not queue_is_flushed:
+                            if result.status == RequestStatus.FINISHED:
+                                continue
+                            else:
+                                queue_is_flushed = True
+
+                        finish_reason = "stop" if result.status == RequestStatus.FINISHED else None
+                        yield self.build_chunk(result.next_token, request_id=request_id, finish_reason=finish_reason)
+
                         if result.status == RequestStatus.FINISHED:
-                            continue
-                        else:
-                            queue_is_flushed = True
+                            break
 
-                    finish_reason = "stop" if result.status == RequestStatus.FINISHED else None
-                    yield self.build_chunk(result.next_token, request_id=request_id, finish_reason=finish_reason)
-
-                    if result.status == RequestStatus.FINISHED:
-                        break
-
-                yield "data: [DONE]\n\n"
+                    yield "data: [DONE]\n\n"
+                except Exception as e:
+                    logger.error(str(e))
+                    yield f'data: {{"error": "{str(e)}"}}'
 
             return StreamingResponse(stream_response(inputs[0]), media_type="text/event-stream")
 
@@ -295,6 +302,10 @@ class ServeCommand(BaseTransformersCLICommand):
             generation_streamer = TextIteratorStreamer(self.tokenizer, skip_special_tokens=True, skip_prompt=True)
 
             generation_config = create_generation_config_from_req(req)
+            max_new_tokens = req.max_tokens or generation_config.max_new_tokens or 256
+            generation_config.max_new_tokens = max_new_tokens
+
+            print(generation_config)
 
             generation_kwargs = {
                 "inputs": inputs,
