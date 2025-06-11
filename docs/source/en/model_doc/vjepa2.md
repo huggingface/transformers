@@ -25,16 +25,16 @@ rendered properly in your Markdown viewer.
 
 # V-JEPA 2
 
-V-JEPA 2 is a self-supervised approach to training video encoders developed by FAIR, Meta. Using internet-scale video data, VJEPA 2 attains state-of-the-art performance on motion understanding and human action anticipation tasks. V-JEPA 2-AC is a latent action-conditioned world model post-trained from V-JEPA 2 (using a small amount of robot trajectory interaction data) that solves robot manipulation tasks without environment-specific data collection or task-specific training or calibration.
+V-JEPA 2 is a self-supervised approach to training video encoders developed by FAIR, Meta. Using internet-scale video data, V-JEPA 2 attains state-of-the-art performance on motion understanding and human action anticipation tasks. V-JEPA 2-AC is a latent action-conditioned world model post-trained from V-JEPA 2 (using a small amount of robot trajectory interaction data) that solves robot manipulation tasks without environment-specific data collection or task-specific training or calibration.
 
-You can find all original VJEPA2 checkpoints under the [VJEPA 2](https://huggingface.co/collections/facebook/v-jepa-2-6841bad8413014e185b497a6) collection.
+You can find all original V-JEPA2 checkpoints under the [V-JEPA 2](https://huggingface.co/collections/facebook/v-jepa-2-6841bad8413014e185b497a6) collection.
 
 
-This model was contributed by [koustuvs](https://huggingface.co/koustuvs) and [yonigozlan](https://huggingface.co/yonigozlan). The original code can be found [here](https://github.com/facebookresearch/vjepa2).
+This model was contributed by [koustuvs](https://huggingface.co/koustuvs), [yonigozlan](https://huggingface.co/yonigozlan) and [qubvel](https://huggingface.co/qubvel-hf). The original code can be found [here](https://github.com/facebookresearch/vjepa2).
 
 ## Usage example
 
-The snippet below shows how to load the VJEPA 2 model using the `AutoModel` class.
+The snippet below shows how to load the V-JEPA 2 model using the `AutoModel` class.
 
 ```py
 import torch
@@ -57,10 +57,10 @@ video = vr.get_frames_at(indices=frame_idx).data  # T x C x H x W
 video = processor(video, return_tensors="pt").to(model.device)
 outputs = model(**video)
 
-# VJEPA-2 encoder outputs, same as calling `model.get_vision_features()`
+# V-JEPA 2 encoder outputs, same as calling `model.get_vision_features()`
 encoder_outputs = outputs.last_hidden_state
 
-# VJEPA-2 predictor outputs
+# V-JEPA 2 predictor outputs
 predictor_outputs = outputs.predictor_output.last_hidden_state
 ```
 
