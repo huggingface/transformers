@@ -238,7 +238,7 @@ class CohereIntegrationTest(unittest.TestCase):
         ).to(device=torch_device, dtype=torch.float16)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = CohereForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
+        model = CohereForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16).to(
             torch_device
         )
 

@@ -392,7 +392,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         model_id = "google/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
+            model_id, torch_dtype=torch.bfloat16
         ).to(torch_device)
 
         inputs = self.processor.apply_chat_template(
@@ -422,7 +422,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         model_id = "google/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
+            model_id, torch_dtype=torch.bfloat16
         ).to(torch_device)
 
         messages_2 = [
@@ -475,7 +475,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         model_id = "google/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
+            model_id, torch_dtype=torch.bfloat16
         ).to(torch_device)
 
         crop_config = {
@@ -517,7 +517,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         model_id = "google/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
+            model_id, torch_dtype=torch.bfloat16
         ).to(torch_device)
         crop_config = {
             "images_kwargs": {
@@ -577,7 +577,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
         model_id = "google/gemma-3-4b-it"
 
         model = Gemma3ForConditionalGeneration.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
+            model_id, torch_dtype=torch.bfloat16
         ).to(torch_device)
 
         messages = [
@@ -616,7 +616,7 @@ class Gemma3IntegrationTest(unittest.TestCase):
     def test_model_1b_text_only(self):
         model_id = "google/gemma-3-1b-it"
 
-        model = Gemma3ForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
+        model = Gemma3ForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(
             torch_device
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")

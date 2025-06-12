@@ -722,7 +722,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 model_sdpa = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch.float16,
-                    low_cpu_mem_usage=True,
+                    
                 ).to(torch_device)
 
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
@@ -730,7 +730,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch.float16,
-                    low_cpu_mem_usage=True,
+                    
                     attn_implementation="eager",
                 ).to(torch_device)
 

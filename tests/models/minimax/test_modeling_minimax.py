@@ -246,7 +246,7 @@ class MiniMaxIntegrationTest(unittest.TestCase):
         model_id = "hf-internal-testing/MiniMax-tiny"
         dummy_input = torch.LongTensor([[0, 1, 0], [0, 1, 0]]).to(torch_device)
 
-        model = MiniMaxForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
+        model = MiniMaxForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, ).to(
             torch_device
         )
         expected_slice = torch.tensor(
@@ -265,7 +265,7 @@ class MiniMaxIntegrationTest(unittest.TestCase):
         model_id = "hf-internal-testing/MiniMax-tiny"
         dummy_input = torch.LongTensor([[0, 1, 0], [0, 1, 0]]).to(torch_device)
 
-        model = MiniMaxForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
+        model = MiniMaxForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, ).to(
             torch_device
         )
         expected_slice = (

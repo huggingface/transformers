@@ -328,7 +328,7 @@ class AwqFusedTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             quantization_config=quantization_config,
-            low_cpu_mem_usage=True,
+            
             revision=self.model_revision,
         ).to(torch_device)
 
@@ -347,7 +347,7 @@ class AwqFusedTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             quantization_config=quantization_config,
-            low_cpu_mem_usage=True,
+            
         ).to(torch_device)
 
         # Check if model has been correctly fused
@@ -370,7 +370,7 @@ class AwqFusedTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             quantization_config=quantization_config,
-            low_cpu_mem_usage=True,
+            
             revision=self.model_revision,
         ).to(torch_device)
 
@@ -399,7 +399,7 @@ class AwqFusedTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             quantization_config=quantization_config,
-            low_cpu_mem_usage=True,
+            
             revision=self.model_revision,
         ).to(torch_device)
 
