@@ -1627,8 +1627,8 @@ class ProcessorMixin(PushToHubMixin):
                         offsets = offset_mapping[i]
                         offset_starts = [start for start, end in offsets]
                         for assistant_start_char, assistant_end_char in generation_indices[i]:
-                            start_pos = bisect.bisect_right(offset_starts, assistant_start_char) - 1
-                            end_pos = bisect.bisect_right(offset_starts, assistant_end_char) - 1
+                            start_pos = bisect.bisect_left(offset_starts, assistant_start_char)
+                            end_pos = bisect.bisect_left(offset_starts, assistant_end_char)
 
                             if not (
                                 start_pos >= 0

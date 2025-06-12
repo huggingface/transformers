@@ -1196,13 +1196,12 @@ class ProcessorTesterMixin:
         dummy_template = (
             "{% for message in messages %}"
             "{% if (message['role'] != 'assistant') %}"
-            "{{'<|im_start|>' + message['role'] + '\n' + message['content'][0]['text'] + '<|im_end|>' + '\n'}}"
+            "{{'<|special_start|>' + message['role'] + '\n' + message['content'][0]['text'] + '<|special_end|>' + '\n'}}"
             "{% elif (message['role'] == 'assistant')%}"
-            "{{'<|im_start|>' + message['role'] + '\n'}}"
+            "{{'<|special_start|>' + message['role'] + '\n'}}"
             "{% generation %}"
-            "{{message['content'][0]['text'] + '<|im_end|>'}}"
+            "{{message['content'][0]['text'] + '<|special_end|>' + '\n'}}"
             "{% endgeneration %}"
-            "{{'\n'}}"
             "{% endif %}"
             "{% endfor %}"
         )
@@ -1222,5 +1221,12 @@ class ProcessorTesterMixin:
         mask = inputs["assistant_masks"].bool()
         assistant_ids = inputs["input_ids"][mask]
 
-        assistant_text = "The capital of France is Paris.<|im_end|>The capital of Italy is Rome.<|im_end|>"
-        self.assertEqual(assistant_text, processor.decode(assistant_ids))
+        assistant_text = (
+            "The capital of France is Paris.<|special_end|>\nThe capital of Italy is Rome.<|special_end|>\n"
+        )
+
+        # Some tokenizers add extra spaces which aren't then removed when decoding, so we need to check token ids
+        # if we can't get identical text outputs
+        text_is_same = assistant_text == processor.decode(assistant_ids, clean_up_tokenization_spaces=True)
+        ids_is_same = processor.tokenizer.encode(assistant_text, add_special_tokens=False), assistant_ids.tolist()
+        self.assertTrue(text_is_same or ids_is_same)
