@@ -26,15 +26,12 @@ rendered properly in your Markdown viewer.
 
 [Moonshine](https://huggingface.co/papers/2410.15608) is an encoder-decoder speech recognition model optimized for real-time transcription and recognizing voice command. Instead of using traditional absolute position embeddings, Moonshine uses Rotary Position Embedding (RoPE) to handle speech with varying lengths without using padding. This improves efficiency during inference, making it ideal for resource-constrained devices.
 
-
 You can find all the original Moonshine checkpoints under the [Useful Sensors](https://huggingface.co/UsefulSensors) organization.
 
 > [!TIP]
 > Click on the Moonshine models in the right sidebar for more examples of how to apply Moonshine to different speech recognition tasks.
 
 The example below demonstrates how to transcribe speech into text with [`Pipeline`] or the [`AutoModel`] class.
-
-
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -87,10 +84,6 @@ transcription[0]
 ```
 </hfoption>
 </hfoptions>
-
-## Resources
-
-- [Automatic speech recognition task guide](../tasks/asr)
 
 ## MoonshineConfig
 
