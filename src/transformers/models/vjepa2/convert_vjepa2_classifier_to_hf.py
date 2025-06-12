@@ -210,10 +210,7 @@ def main(args: argparse.Namespace):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    # parser.add_argument("--model_name", type=str, default="vjepa2-vitg-fpc64-384-ssv2")
-    # parser.add_argument("--model_name", type=str, default="vjepa2-vitl-fpc16-256-ssv2")
-    # parser.add_argument("--model_name", type=str, default="vjepa2-vitl-fpc32-256-diving48")
-    parser.add_argument("--model_name", type=str, default="vjepa2-vitg-fpc32-384-diving48")
+    parser.add_argument("--model_name", type=str, required=True)
     parser.add_argument("--base_dir", type=str, default="converted_models/")
     parser.add_argument("--repo_org", type=str, default="qubvel-hf")
     parser.add_argument("--push_to_hub", action="store_true")
