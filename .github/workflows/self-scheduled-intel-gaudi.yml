@@ -53,16 +53,7 @@ jobs:
     if: contains(fromJSON('["run_models_gaudi"]'), inputs.job)
     name: Setup
     needs: check_runners
-    strategy:
-      matrix:
-        machine_type: [1gaudi, 2gaudi]
-    runs-on:
-      group: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
-    container:
-      image: vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
-      options: --runtime=habana --shm-size=64G --env HABANA_VISIBLE_DEVICES --env HABANA_VISIBLE_MODULES
-      env:
-        OMPI_MCA_btl_vader_single_copy_mechanism: none
+    runs-on: ubuntu-latest
     outputs:
       folder_slices: ${{ steps.set-matrix.outputs.folder_slices }}
     steps:
@@ -71,18 +62,24 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.10
 
-      - name: Show installed libraries and their versions
-        run: pip freeze
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -e .
 
       - id: set-matrix
         name: Identify models to test
         working-directory: tests
         run: |
           folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})
+          echo "folder_slices=$folder_slices"
           echo "folder_slices=$folder_slices" >> $GITHUB_ENV
+          echo "::set-output name=folder_slices::$folder_slices"
 
   run_models_gaudi:
     if: ${{ inputs.job == 'run_models_gaudi' }}
