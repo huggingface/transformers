@@ -22,6 +22,8 @@ on:
 env:
   HF_HOME: /mnt/cache
   TRANSFORMERS_IS_CI: yes
+  DOCKER_IMAGE: vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
+  DOCKER_OPTIONS: --runtime=habana --shm-size=64G --env HABANA_VISIBLE_DEVICES --env HABANA_VISIBLE_MODULES --env OMPI_MCA_btl_vader_single_copy_mechanism=none
   HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
   OMP_NUM_THREADS: 8
@@ -38,10 +40,8 @@ jobs:
     runs-on:
       group: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
     container:
-      image: vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
-      options: --runtime=habana --shm-size=64G --env HABANA_VISIBLE_DEVICES --env HABANA_VISIBLE_MODULES
-      env:
-        OMPI_MCA_btl_vader_single_copy_mechanism: none
+      image: ${{ env.DOCKER_IMAGE}})
+      options: ${{ env.DOCKER_OPTIONS}})
     steps:
       - name: HL-SMI
         run: |
@@ -88,10 +88,8 @@ jobs:
     runs-on:
       group: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
     container:
-      image: vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
-      options: --runtime=habana --shm-size=64G --env HABANA_VISIBLE_DEVICES --env HABANA_VISIBLE_MODULES
-      env:
-        OMPI_MCA_btl_vader_single_copy_mechanism: none
+      image: ${{ env.DOCKER_IMAGE}})
+      options: ${{ env.DOCKER_OPTIONS}})
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -122,29 +120,34 @@ jobs:
           fi
           echo "machine_type=$machine_type" >> $GITHUB_ENV
 
+      - name: Set `matrix_folders` for report and artifact names
+        shell: bash
+        run: |
+          echo "matrix_folders=${{ fromJson(matrix.folders) }}" >> $GITHUB_ENV
+
       - name: Run all tests on Gaudi
         run: |
-          python3 -m pytest -rsfE -v --make-reports=${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }} -m "not not_device_test"
+          python3 -m pytest -rsfE -v --make-reports=${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports tests/${{ env.matrix_folders }} -m "not not_device_test"
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
         run: |
-          cat reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports/failures_short.txt
+          cat reports/${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports/failures_short.txt
 
       - name: Run test
         shell: bash
         run: |
-          mkdir -p reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports
-          echo "hello" > reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports/hello.txt
-          echo "${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports"
+          mkdir -p reports/${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports
+          echo "hello" > reports/${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports/hello.txt
+          echo "${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports"
 
-      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports"
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports"
         uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
-          name: ${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports
-          path: reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports
+          name: ${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports
+          path: reports/${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports
 
   run_pipelines_gaudi:
     if: ${{ inputs.job == 'run_pipelines_gaudi' }}
@@ -157,10 +160,8 @@ jobs:
     runs-on:
       group: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
     container:
-      image: vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
-      options: --runtime=habana --shm-size=64G --env HABANA_VISIBLE_DEVICES --env HABANA_VISIBLE_MODULES
-      env:
-        OMPI_MCA_btl_vader_single_copy_mechanism: none
+      image: ${{ env.DOCKER_IMAGE}})
+      options: ${{ env.DOCKER_OPTIONS}})
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -222,10 +223,8 @@ jobs:
     runs-on:
       group: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
     container:
-      image: vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
-      options: --runtime=habana --shm-size=64G --env HABANA_VISIBLE_DEVICES --env HABANA_VISIBLE_MODULES
-      env:
-        OMPI_MCA_btl_vader_single_copy_mechanism: none
+      image: ${{ env.DOCKER_IMAGE}})
+      options: ${{ env.DOCKER_OPTIONS}})
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -291,10 +290,8 @@ jobs:
     runs-on:
       group: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
     container:
-      image: vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
-      options: --runtime=habana --shm-size=64G --env HABANA_VISIBLE_DEVICES --env HABANA_VISIBLE_MODULES
-      env:
-        OMPI_MCA_btl_vader_single_copy_mechanism: none
+      image: ${{ env.DOCKER_IMAGE}})
+      options: ${{ env.DOCKER_OPTIONS}})
     steps:
       - name: Checkout
         uses: actions/checkout@v4
