@@ -26,15 +26,15 @@ rendered properly in your Markdown viewer.
 
 # RoBERTa
 
-[RoBERTa](https://huggingface.co/papers/1907.11692) is a transformer-based language model that builds on BERT with improved pretraining techniques like dynamic masking, larger batch sizes, and removal of next-sentence prediction. It uses a byte-level BPE tokenizer and the same underlying architecture as BERT, making it easy to fine-tune for tasks such as text classification, token classification, question answering, and masked language modeling with the Hugging Face Transformers library.
+[RoBERTa](https://huggingface.co/papers/1907.11692) improves BERT with new pretraining objectives, demonstrating [BERT](./bert) was undertrained and training design is important. The pretraining objectives include dynamic masking, sentence packing, larger batches and a byte-level BPE tokenizer.
 
-You can find all the original RoBERTa checkpoints under the [RoBERTa](https://huggingface.co/FacebookAI) collection.
+You can find all the original RoBERTa checkpoints under the [Facebook AI](https://huggingface.co/FacebookAI) organization.
 
 
 > [!TIP]
 > Click on the RoBERTa models in the right sidebar for more examples of how to apply RoBERTa to different language tasks.
 
-The example below demonstrates how to predict the `<MASK>` token with [`Pipeline`], [`AutoModel`], and from the command line.
+The example below demonstrates how to predict the `<mask>` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -85,11 +85,15 @@ print(f"The predicted token is: {predicted_token}")
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "Plants create <mask> through a process known as photosynthesis." | transformers run --task fill-mask --model FacebookAI/roberta-base --device 0
+echo -e "Plants create <mask> through a process known as photosynthesis." | transformers-cli run --task fill-mask --model FacebookAI/roberta-base --device 0
 ```
 
 </hfoption>
 </hfoptions>
+
+## Notes
+
+- RoBERTa doesn't have `token_type_ids` so you don't need to indicate which token belongs to which segment. Separate your segments with the separation token `tokenizer.sep_token` or `</s>`.
 
 ## RobertaConfig
 
