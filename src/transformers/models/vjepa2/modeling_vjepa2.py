@@ -736,6 +736,257 @@ class VJEPA2Predictor(nn.Module):
         )
 
 
+class VJEPA2PoolerSelfAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: VJEPA2Config):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
+            )
+        self.scale = self.head_dim**-0.5
+        self.dropout = config.attention_dropout
+        self.is_causal = False
+
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        """Input shape: Batch x Time x Channel"""
+
+        batch_size, seq_length, embed_dim = hidden_states.shape
+
+        queries = self.q_proj(hidden_states)
+        keys = self.k_proj(hidden_states)
+        values = self.v_proj(hidden_states)
+
+        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
+            attention_mask,
+            is_causal=self.is_causal,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
+        )
+
+        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+        attn_output = self.out_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights
+
+
+class VJEPA2PoolerCrossAttention(nn.Module):
+    """It's different from other cross-attention layers, doesn't have output projection layer (o_proj)"""
+
+    # in case of modular refactoring - o_proj can be replaces with nn.Identity()
+
+    def __init__(self, config: VJEPA2Config):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
+            )
+        self.scale = self.head_dim**-0.5
+        self.dropout = config.attention_dropout
+        self.is_causal = False
+
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
+
+    def forward(
+        self,
+        queries: torch.Tensor,
+        keys: torch.Tensor,
+        values: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        """Input shape: Batch x Time x Channel"""
+
+        batch_size, q_seq_length, embed_dim = queries.shape
+        kv_seq_length = keys.shape[1]
+
+        queries = self.q_proj(queries)
+        keys = self.k_proj(keys)
+        values = self.v_proj(values)
+
+        queries = queries.view(batch_size, q_seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, kv_seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, kv_seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and output_attentions:
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
+            attention_mask,
+            is_causal=self.is_causal,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
+        )
+
+        attn_output = attn_output.reshape(batch_size, q_seq_length, embed_dim).contiguous()
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights
+
+
+# Modified from SiglipEncoderLayer, but we have to propagate proper hidden_size to VJEPA2MLP
+class VJEPA2PoolerSelfAttentionLayer(GradientCheckpointingLayer):
+    def __init__(self, config: VJEPA2Config):
+        super().__init__()
+        self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.self_attn = VJEPA2PoolerSelfAttention(config)
+        self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.mlp = VJEPA2MLP(config, hidden_size=config.hidden_size)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor, ...]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`):
+                Input to the layer of shape `(batch, seq_len, embed_dim)`.
+            attention_mask (`torch.FloatTensor`):
+                Attention mask of shape `(batch, 1, q_len, k_v_seq_len)` where padding elements are indicated by very large negative values.
+            output_attentions (`bool`, *optional*, defaults to `False`):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+        """
+        residual = hidden_states
+        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states, attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+        )
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
+
+
+class VJEPA2PoolerCrossAttentionLayer(GradientCheckpointingLayer):
+    def __init__(self, config: VJEPA2Config):
+        super().__init__()
+        self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.cross_attn = VJEPA2PoolerCrossAttention(config)
+        self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.mlp = VJEPA2MLP(config, hidden_size=config.hidden_size)
+
+    def forward(
+        self,
+        queries: torch.Tensor,
+        hidden_state: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, ...]:
+        # Apply cross-attention
+        residual = queries
+        hidden_state = self.layer_norm1(hidden_state)
+        hidden_state, *attn_weights = self.cross_attn(
+            queries,
+            hidden_state,
+            hidden_state,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+        )
+        hidden_state = residual + hidden_state
+
+        # Apply MLP
+        residual = hidden_state
+        hidden_state = self.layer_norm2(hidden_state)
+        hidden_state = self.mlp(hidden_state)
+        hidden_state = residual + hidden_state
+
+        outputs = (hidden_state,)
+        if output_attentions:
+            outputs += tuple(attn_weights)
+
+        return outputs
+
+
+class VJEPA2AttentivePooler(nn.Module):
+    """Attentive Pooler"""
+
+    def __init__(self, config: VJEPA2Config):
+        super().__init__()
+        self.query_tokens = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.cross_attention_layer = VJEPA2PoolerCrossAttentionLayer(config)
+        self.self_attention_layers = nn.ModuleList(
+            [VJEPA2PoolerSelfAttentionLayer(config) for _ in range(config.num_pooler_layers)]
+        )
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        for layer in self.self_attention_layers:
+            hidden_state = layer(hidden_state, attention_mask=None)[0]
+        queries = self.query_tokens.repeat(hidden_state.shape[0], 1, 1)
+        hidden_state = self.cross_attention_layer(queries, hidden_state)[0]
+        return hidden_state.squeeze(1)
+
+
 @auto_docstring
 class VJEPA2PreTrainedModel(PreTrainedModel):
     config_class = VJEPA2Config
@@ -757,28 +1008,36 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
         ],
     ):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv3d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(
-                module.weight.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.weight.dtype)
+
+        init_std = self.config.initializer_range
+
+        # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
+        # `trunc_normal_cpu` not implemented in `half` issues
+        def trunc_normal_f32_(weight, std):
+            data_float_32 = weight.data.to(torch.float32)
+            data_init = nn.init.trunc_normal_(data_float_32, mean=0.0, std=std)
+            weight.data = data_init.to(weight.dtype)
+
+        if isinstance(module, VJEPA2AttentivePooler):
+            trunc_normal_f32_(module.query_tokens, std=init_std)
+            for i, layer in enumerate(module.self_attention_layers, 1):
+                std = init_std / (i**0.5)
+                trunc_normal_f32_(layer.self_attn.out_proj.weight, std=std)
+                trunc_normal_f32_(layer.mlp.fc2.weight, std=std)
+            std = init_std / (len(module.self_attention_layers) + 1) ** 0.5
+            trunc_normal_f32_(module.cross_attention_layer.mlp.fc2.weight, std=std)
+        elif isinstance(module, VJEPA2PredictorEmbeddings):
+            if module.zero_init_mask_tokens:
+                module.mask_tokens.data.zero_()
+            else:
+                trunc_normal_f32_(module.mask_tokens, std=init_std)
+        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv3d)):
+            trunc_normal_f32_(module.weight, std=init_std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, VJEPA2PredictorEmbeddings):
-            if not module.zero_init_mask_tokens:
-                module.mask_token = nn.init.trunc_normal_(
-                    module.mask_token.to(torch.float32),
-                    mean=0.0,
-                    std=self.config.initializer_range,
-                ).to(module.mask_token.dtype)
-            else:
-                module.mask_tokens.data.zero_()
 
 
 def _convert_head_mask_to_5d(head_mask, num_hidden_layers):
@@ -895,288 +1154,6 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         )
 
         return encoder_output
-
-
-class VJEPA2PoolerSelfAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
-        self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
-        self.is_causal = False
-
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        """Input shape: Batch x Time x Channel"""
-
-        batch_size, seq_length, embed_dim = hidden_states.shape
-
-        queries = self.q_proj(hidden_states)
-        keys = self.k_proj(hidden_states)
-        values = self.v_proj(hidden_states)
-
-        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            queries,
-            keys,
-            values,
-            attention_mask,
-            is_causal=self.is_causal,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
-        )
-
-        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
-        attn_output = self.out_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights
-
-
-class VJEPA2PoolerCrossAttention(nn.Module):
-    """It's different from other cross-attention layers, doesn't have output projection layer (o_proj)"""
-
-    # in case of modular refactoring - o_proj can be replaces with nn.Identity()
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
-        self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
-        self.is_causal = False
-
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
-
-    def forward(
-        self,
-        queries: torch.Tensor,
-        keys: torch.Tensor,
-        values: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        """Input shape: Batch x Time x Channel"""
-
-        batch_size, q_seq_length, embed_dim = queries.shape
-        kv_seq_length = keys.shape[1]
-
-        queries = self.q_proj(queries)
-        keys = self.k_proj(keys)
-        values = self.v_proj(values)
-
-        queries = queries.view(batch_size, q_seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, kv_seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, kv_seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            queries,
-            keys,
-            values,
-            attention_mask,
-            is_causal=self.is_causal,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
-        )
-
-        attn_output = attn_output.reshape(batch_size, q_seq_length, embed_dim).contiguous()
-
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights
-
-
-# Modified from SiglipEncoderLayer, but we have to propagate proper hidden_size to VJEPA2MLP
-class VJEPA2PoolerSelfAttentionLayer(GradientCheckpointingLayer):
-    def __init__(self, config):
-        super().__init__()
-        self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.self_attn = VJEPA2PoolerSelfAttention(config)
-        self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = VJEPA2MLP(config, hidden_size=config.hidden_size)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, ...]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`):
-                Input to the layer of shape `(batch, seq_len, embed_dim)`.
-            attention_mask (`torch.FloatTensor`):
-                Attention mask of shape `(batch, 1, q_len, k_v_seq_len)` where padding elements are indicated by very large negative values.
-            output_attentions (`bool`, *optional*, defaults to `False`):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
-        residual = hidden_states
-        hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-        )
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
-
-
-class VJEPA2PoolerCrossAttentionLayer(GradientCheckpointingLayer):
-    def __init__(self, config):
-        super().__init__()
-        self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.cross_attn = VJEPA2PoolerCrossAttention(config)
-        self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = VJEPA2MLP(config, hidden_size=config.hidden_size)
-
-    def forward(
-        self,
-        queries: torch.Tensor,
-        hidden_state: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
-        # Apply cross-attention
-        residual = queries
-        hidden_state = self.layer_norm1(hidden_state)
-        hidden_state, *attn_weights = self.cross_attn(
-            queries,
-            hidden_state,
-            hidden_state,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-        )
-        hidden_state = residual + hidden_state
-
-        # Apply MLP
-        residual = hidden_state
-        hidden_state = self.layer_norm2(hidden_state)
-        hidden_state = self.mlp(hidden_state)
-        hidden_state = residual + hidden_state
-
-        outputs = (hidden_state,)
-        if output_attentions:
-            outputs += tuple(attn_weights)
-
-        return outputs
-
-
-class VJEPA2AttentivePooler(nn.Module):
-    """Attentive Pooler"""
-
-    def __init__(self, config: VJEPA2Config):
-        super().__init__()
-        self.query_tokens = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.cross_attention_layer = VJEPA2PoolerCrossAttentionLayer(config)
-        self.self_attention_layers = nn.ModuleList(
-            [VJEPA2PoolerSelfAttentionLayer(config) for _ in range(config.num_pooler_layers)]
-        )
-
-        # self.init_std = init_std
-        # nn.init.trunc_normal_(self.query_tokens, std=self.init_std)
-        # self.apply(self._init_weights)
-        # self._rescale_blocks()
-
-    # def _rescale_blocks(self):
-    #     def rescale(param, layer_id):
-    #         param.div_(math.sqrt(2.0 * layer_id))
-
-    #     layer_id = 0
-    #     if self.blocks is not None:
-    #         for layer_id, layer in enumerate(self.blocks):
-    #             rescale(layer.attn.proj.weight.data, layer_id + 1)
-    #             rescale(layer.mlp.fc2.weight.data, layer_id + 1)
-
-    #     if self.complete_block:
-    #         rescale(self.cross_attention_block.mlp.fc2.weight.data, layer_id + 1)
-
-    # def _init_weights(self, m):
-    #     if isinstance(m, nn.Linear):
-    #         nn.init.trunc_normal_(m.weight, std=self.init_std)
-    #         if isinstance(m, nn.Linear) and m.bias is not None:
-    #             nn.init.constant_(m.bias, 0)
-    #     elif isinstance(m, nn.LayerNorm):
-    #         nn.init.constant_(m.bias, 0)
-    #         nn.init.constant_(m.weight, 1.0)
-    #     elif isinstance(m, nn.Conv2d):
-    #         nn.init.trunc_normal_(m.weight, std=self.init_std)
-    #         if m.bias is not None:
-    #             nn.init.constant_(m.bias, 0)
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        for layer in self.self_attention_layers:
-            hidden_state = layer(hidden_state, attention_mask=None)[0]
-        queries = self.query_tokens.repeat(hidden_state.shape[0], 1, 1)
-        hidden_state = self.cross_attention_layer(queries, hidden_state)[0]
-        return hidden_state.squeeze(1)
 
 
 @auto_docstring(
