@@ -14,7 +14,6 @@
 # limitations under the License.
 """EfficientFormer model configuration"""
 
-
 from ....configuration_utils import PretrainedConfig
 from ....utils import logging
 

@@ -14,7 +14,6 @@
 # limitations under the License.
 """TimesFM model configuration"""
 
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 

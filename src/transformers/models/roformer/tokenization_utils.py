@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization utils for RoFormer."""
 
-
 from tokenizers import NormalizedString, PreTokenizedString, normalizers
 
 

@@ -16,7 +16,6 @@
 Image/Text processor class for OneFormer
 """
 
-
 from ...processing_utils import ProcessorMixin
 from ...utils import is_torch_available
 
