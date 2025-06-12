@@ -684,9 +684,9 @@ def create_causal_mask(
             useful to easily overlay another mask on top of the causal one, for example for image tokens handling.
     """
     # If we have an HybridCache structure, here we want to create the mask for the full layers
-    try:
-        layer_idx = past_key_values.is_sliding.index(False)
-    except (ValueError, AttributeError):
+    if past_key_values is not None and hasattr(past_key_values, "is_sliding"):
+        layer_idx = past_key_values.is_sliding.index(False) if False in past_key_values.is_sliding else 0
+    else:
         layer_idx = 0
 
     early_exit, attention_mask, kv_length, kv_offset = _preprocess_mask_arguments(
@@ -765,10 +765,10 @@ def create_sliding_window_causal_mask(
             An optional mask function to combine with the sliding causal mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top of the sliding causal one, for example for image tokens handling.
     """
-    # If we have an HybridCache structure, here we want to create the mask for the sliding layers
-    try:
-        layer_idx = past_key_values.is_sliding.index(True)
-    except (ValueError, AttributeError):
+    # If we have an HybridCache structure, here we want to create the mask for the full layers
+    if past_key_values is not None and hasattr(past_key_values, "is_sliding"):
+        layer_idx = past_key_values.is_sliding.index(False) if False in past_key_values.is_sliding else 0
+    else:
         layer_idx = 0
 
     early_exit, attention_mask, kv_length, kv_offset = _preprocess_mask_arguments(
@@ -852,10 +852,10 @@ def create_chunked_causal_mask(
             An optional mask function to combine with the chunked causal mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top of the chunked causal one, for example for image tokens handling.
     """
-    # If we have an HybridCache structure, here we want to create the mask for the sliding layers
-    try:
-        layer_idx = past_key_values.is_sliding.index(True)
-    except (ValueError, AttributeError):
+    # If we have an HybridCache structure, here we want to create the mask for the full layers
+    if past_key_values is not None and hasattr(past_key_values, "is_sliding"):
+        layer_idx = past_key_values.is_sliding.index(False) if False in past_key_values.is_sliding else 0
+    else:
         layer_idx = 0
 
     early_exit, attention_mask, kv_length, kv_offset = _preprocess_mask_arguments(
