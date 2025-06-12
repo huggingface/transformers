@@ -1461,6 +1461,8 @@ class ProcessorMixin(PushToHubMixin):
                 # It's a template string, render it directly
                 chat_template = chat_template
 
+        is_tokenizers_fast = hasattr(self, "tokenizer") and self.tokenizer.__class__.__name__.endswith("Fast")
+
         if kwargs.get("continue_final_message", False):
             if kwargs.get("add_generation_prompt", False):
                 raise ValueError(
@@ -1468,6 +1470,15 @@ class ProcessorMixin(PushToHubMixin):
                 )
             if kwargs.get("return_assistant_tokens_mask", False):
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
+
+        if kwargs.get("return_assistant_tokens_mask", False):
+            if not is_tokenizers_fast:
+                raise ValueError(
+                    "`return_assistant_tokens_mask` is not possible with slow tokenizers. Make sure you have `tokenizers` installed. "
+                    "If the error persists, open an issue to support a Fast tokenizer for your model."
+                )
+            else:
+                kwargs["return_offsets_mapping"] = True  # force offset mapping so we can infer token boundaries
 
         # Fill sets of kwargs that should be used by different parts of template
         processed_kwargs = {
@@ -1603,17 +1614,17 @@ class ProcessorMixin(PushToHubMixin):
                 images=batch_images if batch_images else None,
                 videos=batch_videos if batch_videos else None,
                 audio=batch_audios if batch_audios else None,
-                return_offsets_mapping=True,
                 **kwargs,
             )
 
             if return_dict:
                 if processed_kwargs["template_kwargs"].get("return_assistant_tokens_mask", False):
                     assistant_masks = []
+                    offset_mapping = out.pop("offset_mapping")
                     input_ids = out["input_ids"]
                     for i in range(len(input_ids)):
                         current_mask = [0] * len(input_ids[i])
-                        offsets = out["offset_mapping"][i]
+                        offsets = offset_mapping[i]
                         offset_starts = [start for start, end in offsets]
                         for assistant_start_char, assistant_end_char in generation_indices[i]:
                             start_pos = bisect.bisect_right(offset_starts, assistant_start_char) - 1

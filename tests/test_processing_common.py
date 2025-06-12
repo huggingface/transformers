@@ -100,7 +100,11 @@ class ProcessorTesterMixin:
         assert attribute in self.processor_class.attributes
         component_class_name = getattr(self.processor_class, f"{attribute}_class")
         if isinstance(component_class_name, tuple):
-            component_class_name = component_class_name[0]
+            if attribute == "image_processor":
+                # TODO: @yoni, change logic in v4.52 (when use_fast set to True by default)
+                component_class_name = component_class_name[0]
+            else:
+                component_class_name = component_class_name[-1]
 
         component_class = processor_class_from_name(component_class_name)
         component = component_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa
