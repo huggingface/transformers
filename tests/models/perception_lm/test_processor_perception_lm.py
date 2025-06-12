@@ -16,7 +16,12 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import AutoProcessor, AutoTokenizer, PerceptionLMTokenizerFast, PerceptionLMProcessor
+from transformers import (
+    AutoProcessor,
+    AutoTokenizer,
+    LlamaTokenizerFast,
+    PerceptionLMProcessor,
+)
 from transformers.testing_utils import require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -24,10 +29,13 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import CLIPImageProcessor
+    from transformers import PerceptionLMImageProcessorFast, PerceptionLMVideoProcessor
 
-if is_torch_available:
-    pass
+if is_torch_available():
+    import torch
+
+
+TEST_MODEL_PATH = "/checkpoint/vision_encoder/smhu/debug/plm_hf_1b"
 
 
 @require_vision
@@ -38,13 +46,22 @@ class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
 
-        image_processor = CLIPImageProcessor(do_center_crop=False)
-        tokenizer = PerceptionLMTokenizerFast.from_pretrained("huggyllama/llama-7b")
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
+        image_processor = PerceptionLMImageProcessorFast()
+        video_processor = PerceptionLMVideoProcessor()
+        tokenizer = LlamaTokenizerFast.from_pretrained(TEST_MODEL_PATH)
+        tokenizer.add_special_tokens(
+            {"additional_special_tokens": ["<|image|>", "<|video|>"]}
+        )
         processor_kwargs = cls.prepare_processor_dict()
-        processor = PerceptionLMProcessor(image_processor, tokenizer, **processor_kwargs)
+        processor = PerceptionLMProcessor(
+            image_processor=image_processor,
+            video_processor=video_processor,
+            tokenizer=tokenizer,
+            **processor_kwargs
+        )
         processor.save_pretrained(cls.tmpdirname)
-        cls.image_token = processor.image_token
+        cls.image_token_id = processor.image_token_id
+        cls.video_token_id = processor.video_token_id
 
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
@@ -59,9 +76,10 @@ class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @staticmethod
     def prepare_processor_dict():
         return {
-            "chat_template": "{% for message in messages %}{% if message['role'] != 'system' %}{{ message['role'].upper() + ': '}}{% endif %}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>\n' }}{% endfor %}{# Render all text next #}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ content['text'] + ' '}}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ content['text'] + ' '}}{% endgeneration %}{% endfor %}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'ASSISTANT:' }}{% endif %}",
-            "patch_size": 128,
-            "vision_feature_select_strategy": "default"
+            "chat_template": CHAT_TEMPLATE,
+            "pooling_ratio": 1,
+            "patch_size": 14,
+            "processor_class": "PerceptionLMProcessor",
         }  # fmt: skip
 
     def test_chat_template_is_saved(self):
@@ -73,36 +91,63 @@ class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # they have to be saved as separate file and loaded back from that file
         # so we check if the same template is loaded
         processor_dict = self.prepare_processor_dict()
-        self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
-
-    def test_can_load_various_tokenizers(self):
-        for checkpoint in ["Intel/perception_lm-gemma-2b", "facebook/Perception-LM-1B"]:
-            processor = PerceptionLMProcessor.from_pretrained(checkpoint)
-            tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-            self.assertEqual(processor.tokenizer.__class__, tokenizer.__class__)
-
-    def test_special_mm_token_truncation(self):
-        """Tests that special vision tokens do not get truncated when `truncation=True` is set."""
-
-        processor = PerceptionLMProcessor.from_pretrained("facebook/Perception-LM-1B")
-
-        input_str = self.prepare_text_inputs(batch_size=2, modality="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
-
-        _ = processor(
-            text=input_str,
-            images=image_input,
-            return_tensors="pt",
-            truncation=None,
-            padding=True,
+        self.assertTrue(
+            processor_loaded.chat_template == processor_dict.get("chat_template", None)
         )
 
-        with self.assertRaises(ValueError):
-            _ = processor(
-                text=input_str,
-                images=image_input,
-                return_tensors="pt",
-                truncation=True,
-                padding=True,
-                max_length=5,
-            )
+    def test_image_token_filling(self):
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor.patch_size = 14
+        processor.image_processor.tile_size = 448
+        processor.image_processor.max_num_tiles = 36
+        processor.image_processor.vision_input_type = "thumb+tile"
+        # Important to check with non square image
+        image = torch.randint(0, 2, (1, 3, 503, 316))
+        expected_image_tokens = 1525
+        image_token_index = processor.image_token_id
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": "What is shown in this image?"},
+                ],
+            },
+        ]
+        inputs = processor(
+            text=[processor.apply_chat_template(messages)],
+            images=[image],
+            return_tensors="pt",
+        )
+        image_tokens = (inputs["input_ids"] == image_token_index).sum().item()
+        self.assertEqual(expected_image_tokens, image_tokens)
+
+CHAT_TEMPLATE = (
+    "{{- bos_token }}"
+    "{%- if messages[0]['role'] == 'system' -%}"
+    "    {%- set system_message = messages[0]['content']|trim %}\n"
+    "    {%- set messages = messages[1:] %}\n"
+    "{%- else %}"
+    "    {%- set system_message = 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.' %}"
+    "{%- endif %}"
+    "{{- '<|start_header_id|>system<|end_header_id|>\\n\\n' }}"
+    "{{- system_message }}"
+    "{{- '<|eot_id|>' }}"
+    "{%- for message in messages %}"
+    "{{- '<|start_header_id|>' + message['role'] + '<|end_header_id|>\\n\\n' }}"
+    "{%- for content in message['content'] | selectattr('type', 'equalto', 'image') %}"
+    "{{ '<|image|>' }}"
+    "{%- endfor %}"
+    "{%- for content in message['content'] | selectattr('type', 'equalto', 'video') %}"
+    "{{ '<|video|>' }}"
+    "{%- endfor %}"
+    "{%- for content in message['content'] | selectattr('type', 'equalto', 'text') %}"
+    "{{- content['text'] | trim }}"
+    "{%- endfor %}"
+    "{{'<|eot_id|>' }}"
+    "{%- endfor %}"
+    "{%- if add_generation_prompt %}"
+    "{{- '<|start_header_id|>assistant<|end_header_id|>\\n\\n' }}"
+    "{%- endif %}"
+)
