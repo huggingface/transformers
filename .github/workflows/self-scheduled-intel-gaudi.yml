@@ -70,9 +70,10 @@ jobs:
       folder_slices: ${{ steps.set-matrix.outputs.folder_slices }}
       slice_ids: ${{ steps.set-matrix.outputs.slice_ids }}
     steps:
-      - name: Update clone
-        working-directory: /transformers
-        run: git fetch && git checkout ${{ github.sha }}
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Cleanup
         working-directory: /transformers
@@ -136,9 +137,10 @@ jobs:
       env:
         OMPI_MCA_btl_vader_single_copy_mechanism: none
     steps:
-      - name: Update clone
-        working-directory: /transformers
-        run: git fetch && git checkout ${{ github.sha }}
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
@@ -203,9 +205,10 @@ jobs:
       env:
         OMPI_MCA_btl_vader_single_copy_mechanism: none
     steps:
-      - name: Update clone
-        working-directory: /transformers
-        run: git fetch && git checkout ${{ github.sha }}
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
@@ -272,9 +275,10 @@ jobs:
       env:
         OMPI_MCA_btl_vader_single_copy_mechanism: none
     steps:
-      - name: Update clone
-        working-directory: /transformers
-        run: git fetch && git checkout ${{ github.sha }}
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
