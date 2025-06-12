@@ -772,11 +772,7 @@ class DiaDecoder(DiaPreTrainedModel):
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length, num_codebooks)`):
             The original `decoder_input_ids` in 3D shape to facilitate more efficient computations.
 
-            # TODO: indices from processor via dac encode
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are decoder input IDs?](../glossary#decoder-input-ids)
+            [What are input IDs?](../glossary#input-ids)
         """
 
         batch_size, seq_length = input_ids.size()[:-1]
@@ -1076,6 +1072,7 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
+            **kwargs,
         )
 
         last_hidden_state = outputs[0]
