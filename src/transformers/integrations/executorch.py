@@ -803,7 +803,6 @@ def sdpa_mask_without_vmap(
         raise ValueError("Cannot use both `sliding_window` and `attention_chunk_size`")
 
     # Simplest and most efficient way to obtain a causal mask
-    kv_arange = kv_arange.view(1, -1)
     causal_mask = kv_arange <= reshaped_cache_position
     # If using sliding window, add the sliding mask
     if sliding_window is not None:
