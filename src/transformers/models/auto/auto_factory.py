@@ -415,7 +415,7 @@ class _BaseAutoModelClass:
     _model_mapping = None
 
     def __init__(self, *args, **kwargs) -> None:
-        raise EnvironmentError(
+        raise OSError(
             f"{self.__class__.__name__} is designed to be instantiated "
             f"using the `{self.__class__.__name__}.from_pretrained(pretrained_model_name_or_path)` or "
             f"`{self.__class__.__name__}.from_config(config)` methods."
