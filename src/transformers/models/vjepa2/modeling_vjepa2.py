@@ -1150,6 +1150,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         encoder_output = self.forward(pixel_values_videos)
         return encoder_output.last_hidden_state
 
+
 @auto_docstring(
     custom_intro="""
     VJEPA2 Model transformer with a video classification head on top (a linear layer on top of the average pooled hidden
