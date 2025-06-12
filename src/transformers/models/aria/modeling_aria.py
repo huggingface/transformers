@@ -670,7 +670,6 @@ class AriaPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_flex_attn = True
-
     _supports_static_cache = False  # MoE models don't work with torch.compile (dynamic slicing)
     _supports_attention_backend = True
 
