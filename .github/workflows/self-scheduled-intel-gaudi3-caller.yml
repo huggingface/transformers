@@ -7,7 +7,7 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - run_intel_gaudi_scheduled_ci*
+      - gaudi-ci*
 
 jobs:
   model-ci:
@@ -15,9 +15,9 @@ jobs:
     uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
     with:
       job: run_models_gaudi
-      slack_report_channel: "#intel-gaudi-hf-ci"
       ci_event: Scheduled CI (Intel Gaudi3)
-      report_repo_id: optimum-habana/transformers_daily_ci
+      slack_report_channel: "#transformers-ci-dummy"
+      report_repo_id: hf-internal-testing/transformers_daily_ci_gaudi3
     secrets: inherit
 
   pipeline:
@@ -25,9 +25,9 @@ jobs:
     uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
     with:
       job: run_pipelines_gaudi
-      slack_report_channel: "#intel-gaudi-hf-ci"
       ci_event: Scheduled CI (Intel Gaudi3)
-      report_repo_id: optimum-habana/transformers_daily_ci
+      slack_report_channel: "#transformers-ci-dummy"
+      report_repo_id: hf-internal-testing/transformers_daily_ci_gaudi3
     secrets: inherit
 
   example-ci:
@@ -35,9 +35,9 @@ jobs:
     uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
     with:
       job: run_examples_gaudi
-      slack_report_channel: "#intel-gaudi-hf-ci"
       ci_event: Scheduled CI (Intel Gaudi3)
-      report_repo_id: optimum-habana/transformers_daily_ci
+      slack_report_channel: "#transformers-ci-dummy"
+      report_repo_id: hf-internal-testing/transformers_daily_ci_gaudi3
     secrets: inherit
 
   deepspeed-ci:
@@ -45,7 +45,7 @@ jobs:
     uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
     with:
       job: run_deepspeed_gaudi
-      slack_report_channel: "#intel-gaudi-hf-ci"
       ci_event: Scheduled CI (Intel Gaudi3)
-      report_repo_id: optimum-habana/transformers_daily_ci
+      slack_report_channel: "#transformers-ci-dummy"
+      report_repo_id: hf-internal-testing/transformers_daily_ci_gaudi3
     secrets: inherit

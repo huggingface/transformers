@@ -304,7 +304,7 @@ jobs:
 
       - name: Run all tests on intel Gaudi
         working-directory: /transformers
-        run: python3 -m pytest -v --make-reports=${{ env.machine_type }}_run_deepspeed_gaudi_test_reports tests/deepspeed tests/extended -m "not not_device_test"
+        run: python3 -m pytest -v --make-reports=${{ env.machine_type }}_run_deepspeed_gaudi_test_reports tests/deepspeed -m "not not_device_test"
 
       - name: Failure short reports
         if: ${{ failure() }}
