@@ -135,7 +135,10 @@ class QAPipelineTests(unittest.TestCase):
             question_answerer(question="In what field is HuggingFace working ?", context=None)
 
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris.", top_k=20, align_to_words=False
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
+            top_k=20,
+            align_to_words=False,
         )
         self.assertEqual(
             outputs, [{"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)} for i in range(20)]
@@ -208,7 +211,9 @@ class QAPipelineTests(unittest.TestCase):
                 yield {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."}
 
         for outputs in pipe(data()):
-            self.assertEqual(nested_simplify(outputs), {"score": 0.163, "start": 0, "end": 11, "answer": "HuggingFace"})
+            self.assertEqual(
+                nested_simplify(outputs), {"score": 0.163, "start": 0, "end": 11, "answer": "HuggingFace"}
+            )
 
     @require_torch
     def test_small_model_pt_softmax_trick(self):
@@ -427,14 +432,10 @@ between them. It's straightforward to train your models with one before loading 
             {"score": 0.010, "start": 19, "end": 24, "answer": "1990."},
             {"score": 0.003, "start": 16, "end": 23, "answer": "in 1990"},
         ]
-        outputs = qa_pipeline(
-            question=question, context=context, align_to_words=True, top_k=3
-        )
+        outputs = qa_pipeline(question=question, context=context, align_to_words=True, top_k=3)
         self.assertEqual(nested_simplify(outputs), ideal_answers)
 
-        outputs = qa_pipeline(
-            question=question, context=context, align_to_words=False, top_k=3
-        )
+        outputs = qa_pipeline(question=question, context=context, align_to_words=False, top_k=3)
         self.assertEqual(nested_simplify(outputs), ideal_answers)
 
         # Here the issue is observed and should be fixed
@@ -453,9 +454,7 @@ between them. It's straightforward to train your models with one before loading 
             {"score": 0.0, "start": 0, "end": 32, "answer": "Angela Merkel was the chancellor"},
             {"score": 0.0, "start": 0, "end": 21, "answer": "Angela Merkel was the"},
         ]
-        outputs = qa_pipeline(
-            question=question, context=context, align_to_words=False, top_k=10
-        )
+        outputs = qa_pipeline(question=question, context=context, align_to_words=False, top_k=10)
         self.assertEqual(nested_simplify(outputs), unaligned_answers)
 
         aligned_answers = [
@@ -470,9 +469,7 @@ between them. It's straightforward to train your models with one before loading 
             {"score": 0.0, "start": 0, "end": 35, "answer": "Angela Merkel was the chancellor of"},
             {"score": 0.0, "start": 7, "end": 44, "answer": "Merkel was the chancellor of Germany."},
         ]
-        outputs = qa_pipeline(
-            question=question, context=context, align_to_words=True, top_k=10
-        )
+        outputs = qa_pipeline(question=question, context=context, align_to_words=True, top_k=10)
         self.assertEqual(nested_simplify(outputs), aligned_answers)
 
     @slow
@@ -491,14 +488,10 @@ between them. It's straightforward to train your models with one before loading 
             {"score": 0.008, "start": 19, "end": 24, "answer": "1990."},
             {"score": 0.003, "start": 16, "end": 23, "answer": "in 1990"},
         ]
-        outputs = qa_pipeline(
-            question=question, context=context, align_to_words=True, top_k=3
-        )
+        outputs = qa_pipeline(question=question, context=context, align_to_words=True, top_k=3)
         self.assertEqual(nested_simplify(outputs), ideal_answers)
 
-        outputs = qa_pipeline(
-            question=question, context=context, align_to_words=False, top_k=3
-        )
+        outputs = qa_pipeline(question=question, context=context, align_to_words=False, top_k=3)
         self.assertEqual(nested_simplify(outputs), ideal_answers)
 
         ### Now comes the issue related inputs
@@ -515,9 +508,7 @@ between them. It's straightforward to train your models with one before loading 
             {"score": 0.0, "start": 0, "end": 32, "answer": "Angela Merkel was the chancellor"},
             {"score": 0.0, "start": 0, "end": 10, "answer": "Angela Mer"},
         ]
-        outputs = qa_pipeline(
-            question=question, context=context, align_to_words=False, top_k=7
-        )
+        outputs = qa_pipeline(question=question, context=context, align_to_words=False, top_k=7)
         self.assertEqual(nested_simplify(outputs), unaligned_answers)
 
         aligned_answers = [
@@ -529,9 +520,7 @@ between them. It's straightforward to train your models with one before loading 
             {"score": 0.0, "start": 0, "end": 32, "answer": "Angela Merkel was the chancellor"},
             {"score": 0.0, "start": 0, "end": 17, "answer": "Angela Merkel was"},
         ]
-        outputs = qa_pipeline(
-            question=question, context=context, align_to_words=True, top_k=7
-        )
+        outputs = qa_pipeline(question=question, context=context, align_to_words=True, top_k=7)
         self.assertEqual(nested_simplify(outputs), aligned_answers)
 
 
