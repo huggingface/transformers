@@ -40,7 +40,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import VJEPA2Model
+    from transformers import VJEPA2ForVideoClassification, VJEPA2Model
 
 
 if is_vision_available():
@@ -153,7 +153,7 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_torch_exportable = True
 
-    all_model_classes = (VJEPA2Model,) if is_torch_available() else ()
+    all_model_classes = (VJEPA2Model, VJEPA2ForVideoClassification) if is_torch_available() else ()
 
     fx_compatible = True
 
