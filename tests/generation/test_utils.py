@@ -1129,7 +1129,7 @@ class GenerationTesterMixin:
                     "moshi",
                     "git",
                     "prophetnet",
-                    "mllama", # special cache sizes
+                    "mllama",  # special cache sizes
                     "blip2",  # overridden `generate()` all BLIP models
                     "instructblip",
                     "instructblipvideo",
@@ -1207,7 +1207,7 @@ class GenerationTesterMixin:
                     "moshi",
                     "git",
                     "prophetnet",
-                    "mllama", # special cache sizes
+                    "mllama",  # special cache sizes
                     "blip2",  # overridden `generate()` for all BLIP models
                     "instructblip",
                     "instructblipvideo",
@@ -1328,7 +1328,7 @@ class GenerationTesterMixin:
                     "moshi",
                     "git",
                     "prophetnet",
-                    "mllama", # special cache sizes
+                    "mllama",  # special cache sizes
                     "blip2",  # overridden `generate()` for all BLIP models
                     "instructblip",
                     "instructblipvideo",
