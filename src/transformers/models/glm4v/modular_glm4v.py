@@ -1,11 +1,6 @@
 # coding=utf-8
 # Copyright 2025 The ZhipuAI Inc. team and HuggingFace Inc. team. All rights reserved.
 #
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
-#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -386,55 +381,70 @@ class Glm4vVisionEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
-    def adapt_position_encoding(
-        self, lengths: torch.Tensor, image_shapes: torch.Tensor, h_coords: torch.Tensor, w_coords: torch.Tensor
-    ):
+    def forward(self, embeddings, lengths, image_shapes, h_coords, w_coords) -> torch.Tensor:
         """
-        Adapt position encoding using 2D interpolation.
+        Forward pass with integrated position encoding adaptation using 2D interpolation.
 
         Args:
+            embeddings: Input embeddings tensor
             lengths (torch.Tensor): Sequence lengths for each image in the batch.
             image_shapes (torch.Tensor): Tensor of shape [batch_size, 3] representing the image shapes (t, h, w).
             h_coords (torch.Tensor): Tensor of shape [total_seq] representing the h coordinate for each patch.
             w_coords (torch.Tensor): Tensor of shape [total_seq] representing the w coordinate for each patch.
 
         Returns:
-            torch.Tensor: Adapted position encoding tensor of shape [total_seq, hidden_size].
+            torch.Tensor: Embeddings with adapted position encoding added.
         """
+        # Get position embedding parameters
         pos_embed_weight = self.position_embedding.weight
         hidden_size = pos_embed_weight.shape[1]
         total_seq = h_coords.shape[0]
         device = pos_embed_weight.device
+
+        # Move coordinates to correct device
         h_coords, w_coords = h_coords.to(device), w_coords.to(device)
+
+        # Handle empty sequence case
         if total_seq == 0:
-            return torch.empty(0, hidden_size, device=device, dtype=pos_embed_weight.dtype)
+            adapted_pos_embed = torch.empty(0, hidden_size, device=device, dtype=pos_embed_weight.dtype)
+        else:
+            # Convert inputs to tensors if needed
+            if isinstance(lengths, list):
+                lengths = torch.tensor(lengths, device=device, dtype=torch.long)
+            if not isinstance(image_shapes, torch.Tensor):
+                image_shapes = torch.tensor(image_shapes, device=device, dtype=torch.long)
 
-        if isinstance(lengths, list):
-            lengths = torch.tensor(lengths, device=device, dtype=torch.long)
-        if not isinstance(image_shapes, torch.Tensor):
-            image_shapes = torch.tensor(image_shapes, device=device, dtype=torch.long)
+            # Prepare 2D position embedding
+            orig_size_sq = pos_embed_weight.shape[0]
+            orig_size = int(orig_size_sq**0.5)
+            pos_embed_2d = (
+                pos_embed_weight.view(orig_size, orig_size, hidden_size).permute(2, 0, 1).unsqueeze(0).float()
+            )
 
-        orig_size_sq = pos_embed_weight.shape[0]
-        orig_size = int(orig_size_sq**0.5)
+            # Calculate target dimensions for each patch
+            target_h = torch.cat([image_shapes[i, 1].repeat(lengths[i]) for i in range(len(lengths))]).float()
+            target_w = torch.cat([image_shapes[i, 2].repeat(lengths[i]) for i in range(len(lengths))]).float()
 
-        pos_embed_2d = pos_embed_weight.view(orig_size, orig_size, hidden_size).permute(2, 0, 1).unsqueeze(0).float()
-        target_h = torch.cat([image_shapes[i, 1].repeat(lengths[i]) for i in range(len(lengths))]).float()
-        target_w = torch.cat([image_shapes[i, 2].repeat(lengths[i]) for i in range(len(lengths))]).float()
+            # Normalize coordinates to [-1, 1] range for grid_sample
+            h_coords = h_coords.to(dtype=torch.float32)
+            w_coords = w_coords.to(dtype=torch.float32)
+            norm_w = ((w_coords + 0.5) / target_w) * 2 - 1
+            norm_h = ((h_coords + 0.5) / target_h) * 2 - 1
 
-        h_coords = h_coords.to(dtype=torch.float32)
-        w_coords = w_coords.to(dtype=torch.float32)
-        norm_w = ((w_coords + 0.5) / target_w) * 2 - 1
-        norm_h = ((h_coords + 0.5) / target_h) * 2 - 1
-        grid = torch.stack((norm_w, norm_h), dim=-1).unsqueeze(0).unsqueeze(2)
-        interpolated_embed_fp32 = F.grid_sample(
-            pos_embed_2d, grid, mode="bicubic", align_corners=False, padding_mode="border"
-        )
-        adapted_pos_embed_fp32 = interpolated_embed_fp32.squeeze(0).squeeze(-1).permute(1, 0)
-        adapted_pos_embed = adapted_pos_embed_fp32.to(pos_embed_weight.dtype)
-        return adapted_pos_embed
+            # Create sampling grid
+            grid = torch.stack((norm_w, norm_h), dim=-1).unsqueeze(0).unsqueeze(2)
 
-    def forward(self, embeddings, lengths, image_shapes, h_coords, w_coords) -> torch.Tensor:
-        embeddings = embeddings + self.adapt_position_encoding(lengths, image_shapes, h_coords, w_coords)
+            # Perform bicubic interpolation
+            interpolated_embed_fp32 = F.grid_sample(
+                pos_embed_2d, grid, mode="bicubic", align_corners=False, padding_mode="border"
+            )
+
+            # Reshape and convert back to original dtype
+            adapted_pos_embed_fp32 = interpolated_embed_fp32.squeeze(0).squeeze(-1).permute(1, 0)
+            adapted_pos_embed = adapted_pos_embed_fp32.to(pos_embed_weight.dtype)
+
+        # Add adapted position encoding to embeddings
+        embeddings = embeddings + adapted_pos_embed
         return embeddings
 
 
@@ -561,7 +571,7 @@ class Glm4vPreTrainedModel(Qwen2_5_VLPreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-class Glm4vVisionTransformerPretrainedModel(Glm4vPreTrainedModel):
+class Glm4vVisionModel(Glm4vPreTrainedModel):
     config_class = Glm4vVisionConfig
     _no_split_modules = ["Glm4vVisionBlock"]
 
@@ -686,6 +696,92 @@ class Glm4vModelOutputWithPast(Qwen2_5_VLModelOutputWithPast):
     pass
 
 
+class Glm4vDecoderLayer(Qwen2_5_VLDecoderLayer):
+    def __init__(self, config: Glm4vTextConfig, layer_idx: int):
+        super().__init__()
+        self.mlp = Glm4vMLP(config)
+        self.input_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_self_attn_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_mlp_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        **kwargs,
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
+                `(batch, sequence_length)` where padding elements are indicated by 0.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence.
+            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
+            kwargs (`dict`, *optional*):
+                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
+                into the model
+        """
+
+        residual = hidden_states
+
+        hidden_states = self.input_layernorm(hidden_states)
+
+        # Self Attention
+        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings,
+        )
+
+        hidden_states = self.post_self_attn_layernorm(hidden_states)
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.post_mlp_layernorm(hidden_states)
+        hidden_states = residual + hidden_states
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (self_attn_weights,)
+
+        if use_cache:
+            outputs += (present_key_value,)
+
+        return outputs
+
+
+class Glm4vTextModel(Qwen2_5_VLTextModel):
+    def __init__(self, config: Glm4vTextConfig):
+        super().__init__(config)
+        self.norm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+
 class Glm4vModel(Glm4vPreTrainedModel):
     base_model_prefix = ""
     _checkpoint_conversion_mapping = None
@@ -694,7 +790,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.visual = Glm4vVisionTransformerPretrainedModel._from_config(config.vision_config)
+        self.visual = Glm4vVisionModel._from_config(config.vision_config)
         self.language_model = Glm4vTextModel._from_config(config.text_config)
         self.rope_deltas = None  # cache rope_deltas here
 
@@ -1072,92 +1168,6 @@ class Glm4vModel(Glm4vPreTrainedModel):
             rope_deltas=self.rope_deltas,
         )
         return output if return_dict else output.to_tuple()
-
-
-class Glm4vDecoderLayer(Qwen2_5_VLDecoderLayer):
-    def __init__(self, config: Glm4vTextConfig, layer_idx: int):
-        super().__init__()
-        self.mlp = Glm4vMLP(config)
-        self.input_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_self_attn_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_mlp_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch, sequence_length)` where padding elements are indicated by 0.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
-                with `head_dim` being the embedding dimension of each attention head.
-            kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
-        """
-
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_value=past_key_value,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings,
-        )
-
-        hidden_states = self.post_self_attn_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_mlp_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        if use_cache:
-            outputs += (present_key_value,)
-
-        return outputs
-
-
-class Glm4vTextModel(Qwen2_5_VLTextModel):
-    def __init__(self, config: Glm4vTextConfig):
-        super().__init__(config)
-        self.norm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 class Glm4vCausalLMOutputWithPast(Qwen2_5_VLCausalLMOutputWithPast):

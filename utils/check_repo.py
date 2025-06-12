@@ -92,7 +92,7 @@ PRIVATE_MODELS = [
     "AriaTextModel",
     "Phi4MultimodalAudioModel",
     "Phi4MultimodalVisionModel",
-    "Glm4vVisionTransformerPretrainedModel",
+    "Glm4vVisionModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
