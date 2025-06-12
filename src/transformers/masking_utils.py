@@ -684,7 +684,7 @@ def create_causal_mask(
             useful to easily overlay another mask on top of the causal one, for example for image tokens handling.
     """
     # If we have an HybridCache structure, here we want to create the mask for the full layers
-    if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding::
+    if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
         layer_idx = past_key_values.is_sliding.index(False)
     else:
         layer_idx = 0
