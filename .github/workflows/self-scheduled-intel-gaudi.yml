@@ -93,38 +93,14 @@ jobs:
       env:
         OMPI_MCA_btl_vader_single_copy_mechanism: none
     steps:
-      - name: Echo folder
-        shell: bash
-        run: |
-          matrix_folders=${{ matrix.folders }}
-          matrix_folders=${matrix_folders/'models/'/'models_'}
-          echo "$matrix_folders"
-          echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
-
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+      - name: Install dependencies
         run: |
-          python3 -m pip uninstall -y transformers && python3 -m pip install -e .
-
-      - name: Update / Install some packages (for Past CI)
-        if: ${{ contains(inputs.docker, '-past-') }}
-        run: |
-          python3 -m pip install -U datasets
-
-      - name: Update / Install some packages (for Past CI)
-        if: ${{ contains(inputs.docker, '-past-') && contains(inputs.docker, '-pytorch-') }}
-        run: |
-          python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
-
-      - name: HL-SMI
-        run: |
-          hl-smi
-          echo "HABANA_VISIBLE_DEVICES=${HABANA_VISIBLE_DEVICES}"
-          echo "HABANA_VISIBLE_MODULES=${HABANA_VISIBLE_MODULES}"
+          pip install -e .[testing] "numpy<2.0.0" scipy scikit-learn
 
       - name: Environment
         run: |
@@ -191,8 +167,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+      - name: Install dependencies
+        run: |
+          pip install -e .[testing] "numpy<2.0.0" scipy scikit-learn
 
       - name: HL-SMI
         run: |
@@ -255,9 +232,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+      - name: Install dependencies
         run: |
-          python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+          pip install -e .[testing] "numpy<2.0.0" scipy scikit-learn
 
       - name: HL-SMI
         run: |
@@ -324,9 +301,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+      - name: Install dependencies
         run: |
-          python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+          pip install -e .[testing] "numpy<2.0.0" scipy scikit-learn
+          pip install git+https://github.com/HabanaAI/DeepSpeed.git@1.20.0
 
       - name: HL-SMI
         run: |
