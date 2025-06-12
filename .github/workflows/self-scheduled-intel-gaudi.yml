@@ -116,17 +116,17 @@ jobs:
       - name: Echo input and matrix info
         shell: bash
         run: |
-          echo "${{ inputs.folder_slices }}"
-          echo "${{ matrix.folders }}"
-          echo "${{ toJson(fromJson(inputs.folder_slices)[inputs.slice_id]) }}"
+          echo "${{ needs.setup.outputs.folder_slices }}"
+          echo "${{ fromJson(needs.setup.outputs.folder_slices)[matrix.slice_id] }}"
+          echo "${{ toJson(fromJson(needs.setup.outputs.folder_slices)[matrix.slice_id]) }}"
 
-      - name: Echo folder ${{ matrix.folders }}
+      - name: Echo folder
         shell: bash
         # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
         # set the artifact folder names (because the character `/` is not allowed).
         run: |
-          echo "${{ matrix.folders }}"
-          matrix_folders=${{ matrix.folders }}
+          echo "${{ fromJson(needs.setup.outputs.folder_slices)[matrix.slice_id] }}"
+          matrix_folders=${{ fromJson(needs.setup.outputs.folder_slices)[matrix.slice_id] }}
           matrix_folders=${matrix_folders/'models/'/'models_'}
           echo "$matrix_folders"
           echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
@@ -178,27 +178,27 @@ jobs:
 
       - name: Run all tests on Gaudi
         run: |
-          python3 -m pytest -rsfE -v --make-reports=${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}  -m "not not_device_test"
+          python3 -m pytest -rsfE -v --make-reports=${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports tests/${{ env.matrix_folders }}  -m "not not_device_test"
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
         run: |
-          cat reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports/failures_short.txt
+          cat reports/${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports/failures_short.txt
 
       - name: Run test
         shell: bash
         run: |
-          mkdir -p reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports
-          echo "hello" > reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports/hello.txt
-          echo "${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports"
+          mkdir -p reports/${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports
+          echo "hello" > reports/${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports/hello.txt
+          echo "${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports"
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports"
         uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
           name: ${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports
-          path: reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports
+          path: reports/${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports
 
   run_pipelines_gaudi:
     if: ${{ inputs.job == 'run_pipelines_gaudi' }}
@@ -222,7 +222,6 @@ jobs:
           fetch-depth: 0
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
-        working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
       - name: HL-SMI
@@ -232,15 +231,12 @@ jobs:
           echo "HABANA_VISIBLE_MODULES=${HABANA_VISIBLE_MODULES}"
 
       - name: Environment
-        working-directory: /transformers
         run: python3 utils/print_env.py
 
       - name: Show installed libraries and their versions
-        working-directory: /transformers
         run: pip freeze
 
       - name: Set `machine_type` for report and artifact names
-        working-directory: /transformers
         shell: bash
         run: |
           if [ "${{ matrix.machine_type }}" = "1gaudi" ]; then
@@ -253,20 +249,20 @@ jobs:
           echo "machine_type=$machine_type" >> $GITHUB_ENV
 
       - name: Run all pipeline tests on Intel Gaudi
-        working-directory: /transformers
         run: python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ env.machine_type }}_run_pipelines_gaudi_test_reports tests/pipelines -m "not not_device_test"
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/${{ env.machine_type }}_run_pipelines_gaudi_test_reports/failures_short.txt
+        run: |
+          cat reports/${{ env.machine_type }}_run_pipelines_gaudi_test_reports/failures_short.txt
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_pipelines_gaudi_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.machine_type }}_run_pipelines_gaudi_test_reports
-          path: /transformers/reports/${{ env.machine_type }}_run_pipelines_gaudi_test_reports
+          path: reports/${{ env.machine_type }}_run_pipelines_gaudi_test_reports
 
   run_examples_gaudi:
     if: ${{ inputs.job == 'run_examples_gaudi' }}
@@ -290,8 +286,8 @@ jobs:
           fetch-depth: 0
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
-        working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+        run: |
+          python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
       - name: HL-SMI
         run: |
@@ -300,15 +296,14 @@ jobs:
           echo "HABANA_VISIBLE_MODULES=${HABANA_VISIBLE_MODULES}"
 
       - name: Environment
-        working-directory: /transformers
-        run: python3 utils/print_env.py
+        run: |
+          python3 utils/print_env.py
 
       - name: Show installed libraries and their versions
-        working-directory: /transformers
-        run: pip freeze
+        run: |
+          pip freeze
 
       - name: Set `machine_type` for report and artifact names
-        working-directory: /transformers
         shell: bash
         run: |
           if [ "${{ matrix.machine_type }}" = "1gaudi" ]; then
@@ -321,7 +316,6 @@ jobs:
           echo "machine_type=$machine_type" >> $GITHUB_ENV
 
       - name: Run examples tests on Intel Gaudi
-        working-directory: /transformers
         run: |
           pip install -r examples/pytorch/_tests_requirements.txt
           python3 -m pytest -v --make-reports=${{ env.machine_type }}_run_examples_gaudi_test_reports examples/pytorch -m "not not_device_test"
@@ -329,14 +323,15 @@ jobs:
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/${{ env.machine_type }}_run_examples_gaudi_test_reports/failures_short.txt
+        run: |
+          cat reports/${{ env.machine_type }}_run_examples_gaudi_test_reports/failures_short.txt
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_examples_gaudi_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.machine_type }}_run_examples_gaudi_test_reports
-          path: /transformers/reports/${{ env.machine_type }}_run_examples_gaudi_test_reports
+          path: reports/${{ env.machine_type }}_run_examples_gaudi_test_reports
 
   run_deepspeed_gaudi:
     if: ${{ inputs.job == 'run_deepspeed_gaudi' }}
@@ -360,8 +355,8 @@ jobs:
           fetch-depth: 0
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
-        working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+        run: |
+          python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
       - name: HL-SMI
         run: |
@@ -370,15 +365,14 @@ jobs:
           echo "HABANA_VISIBLE_MODULES=${HABANA_VISIBLE_MODULES}"
 
       - name: Environment
-        working-directory: /transformers
-        run: python3 utils/print_env.py
+        run: |
+          python3 utils/print_env.py
 
       - name: Show installed libraries and their versions
-        working-directory: /transformers
-        run: pip freeze
+        run: |
+          pip freeze
 
       - name: Set `machine_type` for report and artifact names
-        working-directory: /transformers
         shell: bash
         run: |
           if [ "${{ matrix.machine_type }}" = "1gaudi" ]; then
@@ -391,31 +385,32 @@ jobs:
           echo "machine_type=$machine_type" >> $GITHUB_ENV
 
       - name: Run all tests on intel Gaudi
-        working-directory: /transformers
-        run: python3 -m pytest -v --make-reports=${{ env.machine_type }}_run_deepspeed_gaudi_test_reports tests/deepspeed -m "not not_device_test"
+        run: |
+          python3 -m pytest -v --make-reports=${{ env.machine_type }}_run_deepspeed_gaudi_test_reports tests/deepspeed -m "not not_device_test"
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/${{ env.machine_type }}_run_deepspeed_gaudi_test_reports/failures_short.txt
+        run: |
+          cat reports/${{ env.machine_type }}_run_deepspeed_gaudi_test_reports/failures_short.txt
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_deepspeed_gaudi_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.machine_type }}_run_deepspeed_gaudi_test_reports
-          path: /transformers/reports/${{ env.machine_type }}_run_deepspeed_gaudi_test_reports
+          path: reports/${{ env.machine_type }}_run_deepspeed_gaudi_test_reports
 
   send_results:
     name: Slack Report
     needs:
       [
-        check_runners,
         setup,
+        check_runners,
         run_models_gaudi,
-        run_pipelines_gaudi,
         run_examples_gaudi,
         run_deepspeed_gaudi,
+        run_pipelines_gaudi,
       ]
     if: ${{ always() }}
     uses: huggingface/transformers/.github/workflows/slack-report.yml@main
