@@ -2123,27 +2123,15 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
             nn.init.xavier_uniform_(module.output_proj.weight.data)
             nn.init.constant_(module.output_proj.bias.data, 0.0)
 
-        elif isinstance(module, Mask2FormerMaskedAttentionDecoderLayer):
-            for p in module.parameters():
-                if p.dim() > 1:
-                    nn.init.xavier_uniform_(p, gain=xavier_std)
-
-        elif isinstance(module, Mask2FormerPixelDecoder):
-            for p in module.parameters():
-                if p.dim() > 1:
-                    nn.init.xavier_uniform_(p)
-            nn.init.normal_(module.level_embed, std=0)
-
-        elif isinstance(module, Mask2FormerPixelDecoderEncoderOnly):
-            for p in module.parameters():
-                if p.dim() > 1:
-                    nn.init.xavier_uniform_(p)
-
         elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        
+
+        elif isinstance(module, nn.MultiheadAttention):
+            # This uses torch's original init
+            module._reset_parameters()
+
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
             module.weight.data.fill_(1.0)
             module.bias.data.zero_()
@@ -2156,6 +2144,10 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
         if hasattr(module, "reference_points"):
             nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
             nn.init.constant_(module.reference_points.bias.data, 0.0)
+
+        if hasattr(module, "level_embed"):
+            if not isinstance(module.level_embed, nn.Embedding):
+                nn.init.normal_(module.level_embed, std=0)
 
 
 @auto_docstring
