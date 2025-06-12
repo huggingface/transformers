@@ -347,10 +347,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         pass
 
     @unittest.skip(reason="Compile not yet supported because in Qwen2_5_VL models")
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported because in Qwen2_5_VL models")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
@@ -368,17 +364,9 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip(reason="Can't compile fullgraph due to dynamic control flow in `prepare_inputs_for_generate`")
-    def test_generate_compile_fullgraph(self):
-        pass
-
     @is_flaky()  # TODO (joao/raushan): Investigate why this test is flaky on this model
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         super().test_prompt_lookup_decoding_matches_greedy_search()
-
-    @unittest.skip(reason="The base class is LM only and cannot be init with XModelConfig`")
-    def test_save_load_fast_init_from_base(self):
-        pass
 
     # The multimodal base model embeds will not match ids, due to pixel values. We can't change base test
     # because in some models `pixel_values` are required. Will be fixed when we add support for merging `embeds+pixels`

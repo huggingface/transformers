@@ -13,26 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from typing import List, Optional, Union
 
 import numpy as np
 
-from transformers.processing_utils import (
-    ImagesKwargs,
-    ProcessingKwargs,
-    ProcessorMixin,
-    Unpack,
-)
-from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
-
 from ...image_processing_utils import BatchFeature
-from ...image_utils import (
-    ImageInput,
-    concatenate_list,
-    make_flat_list_of_images,
-)
-from ...video_utils import VideoInput, VideoMetadata, load_video, make_batched_videos
+from ...image_utils import ImageInput, concatenate_list, make_flat_list_of_images
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...video_utils import VideoInput, make_batched_videos
 
 
 class InternVLImagesKwargs(ImagesKwargs, total=False):
@@ -46,6 +35,7 @@ class InternVLProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding_side": "left",
+            "return_mm_token_type_ids": False,
         },
         "images_kwargs": {
             "crop_to_patches": True,
@@ -74,10 +64,6 @@ class InternVLProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer", "video_processor"]
-    valid_kwargs = [
-        "chat_template",
-        "image_seq_length",
-    ]
     image_processor_class = "AutoImageProcessor"
     video_processor_class = "AutoVideoProcessor"
     tokenizer_class = "AutoTokenizer"
@@ -94,9 +80,12 @@ class InternVLProcessor(ProcessorMixin):
         self.image_seq_length = image_seq_length
         self.start_image_token = tokenizer.start_image_token
         self.end_image_token = tokenizer.end_image_token
+        self.start_image_token_id = tokenizer.start_image_token_id
+        self.end_image_token_id = tokenizer.end_image_token_id
         self.image_token = tokenizer.context_image_token
         self.video_token = tokenizer.video_token
         self.image_token_id = tokenizer.context_image_token_id
+        self.image_ids = [self.image_token_id, self.start_image_token_id, self.end_image_token_id]
 
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template, **kwargs)
 
@@ -261,36 +250,45 @@ class InternVLProcessor(ProcessorMixin):
             image_videos_inputs = {"pixel_values": concatenate_list(image_video_patches)}
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
         return BatchFeature(data={**text_inputs, **image_videos_inputs}, tensor_type=return_tensors)
 
-    def sample_indices_fn(
-        self, metadata: VideoMetadata, num_frames: Optional[int] = None, initial_shift: Union[bool, float, int] = True
-    ):
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
-        The function to generate indices of frames to sample from a video.
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
-            metadata (`VideoMetadata`):
-                `VideoMetadata` object containing metadata about the video, such as "total_num_frames" or "fps".
-            num_frames (`int`, *optional*):
-                Number of frames to sample uniformly. If None, all frames are sampled.
-            initial_shift (`bool`, `float` or `int`, defaults to `0`):
-                The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
+            image_sizes (`List[List[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
 
         Returns:
-            `np.ndarray`: Array of frame indices to sample.
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
         """
-        num_frames = num_frames if num_frames is not None else metadata.total_num_frames
 
-        if initial_shift is True:
-            initial_shift = metadata.total_num_frames / num_frames / 2
-        indices = np.arange(initial_shift, metadata.total_num_frames, metadata.total_num_frames / num_frames).astype(
-            int
-        )
-        return indices
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = InternVLProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_tokens(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            # Add 2 for BOI and EOI tokens
+            num_image_tokens = [2 + (self.image_seq_length * num_patches) for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
 
     def batch_decode(self, *args, **kwargs):
         """
@@ -311,40 +309,6 @@ class InternVLProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(tokenizer_input_names) + list(image_processor_input_names)
-
-    # TODO: raushan, has to be public method under `VideoProcessorBase` when API is added
-    def _load_video_for_model(
-        self,
-        video: Union[str, "VideoInput"],
-        num_frames: Optional[int],
-        backend: str = "pyav",
-        initial_shift: bool = True,
-        **kwargs,
-    ) -> np.array:
-        """
-        Loads `video` to a numpy array.
-
-        Args:
-            video (`str` or `VideoInput`):
-                The video to convert to the numpy array format. Can be a link to video or local path.
-            num_frames (`int`, *optional*):
-                Number of frames to sample uniformly. If not passed, the whole video is loaded.
-            backend (`str`, *optional*, defaults to `"pyav"`):
-                The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "pyav".
-            initial_shift (`bool`, *optional*, defaults to `True`):
-                The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
-
-        Returns:
-            Tuple[`np.array`, Dict]: A tuple containing:
-                - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
-                - Metadata dictionary.
-        """
-
-        def sample_indices_fn_func(metadata, **fn_kwargs):
-            return self.sample_indices_fn(metadata, num_frames=num_frames, initial_shift=initial_shift, **fn_kwargs)
-
-        video, metadata = load_video(video, backend=backend, sample_indices_fn=sample_indices_fn_func)
-        return video, metadata
 
 
 __all__ = ["InternVLProcessor"]

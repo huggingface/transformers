@@ -79,7 +79,6 @@ from transformers.testing_utils import (
     require_deepspeed,
     require_galore_torch,
     require_grokadamw,
-    require_intel_extension_for_pytorch,
     require_liger_kernel,
     require_lomo,
     require_non_hpu,
@@ -1324,37 +1323,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer = get_regression_trainer(learning_rate=0.1, max_steps=10, output_dir=tmp_dir)
         train_output = trainer.train()
         self.assertEqual(train_output.global_step, 10)
-
-    @require_torch_bf16
-    @require_intel_extension_for_pytorch
-    def test_number_of_steps_in_training_with_ipex(self):
-        for mix_bf16 in [True, False]:
-            tmp_dir = self.get_auto_remove_tmp_dir()
-            # Regular training has n_epochs * len(train_dl) steps
-            trainer = get_regression_trainer(
-                learning_rate=0.1, use_ipex=True, bf16=mix_bf16, use_cpu=True, output_dir=tmp_dir
-            )
-            train_output = trainer.train()
-            self.assertEqual(train_output.global_step, self.n_epochs * 64 / trainer.args.train_batch_size)
-
-            # Check passing num_train_epochs works (and a float version too):
-            trainer = get_regression_trainer(
-                learning_rate=0.1,
-                num_train_epochs=1.5,
-                use_ipex=True,
-                bf16=mix_bf16,
-                use_cpu=True,
-                output_dir=tmp_dir,
-            )
-            train_output = trainer.train()
-            self.assertEqual(train_output.global_step, int(1.5 * 64 / trainer.args.train_batch_size))
-
-            # If we pass a max_steps, num_train_epochs is ignored
-            trainer = get_regression_trainer(
-                learning_rate=0.1, max_steps=10, use_ipex=True, bf16=mix_bf16, use_cpu=True, output_dir=tmp_dir
-            )
-            train_output = trainer.train()
-            self.assertEqual(train_output.global_step, 10)
 
     def test_torch_compile_loss_func_compatibility(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
@@ -2628,69 +2596,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
-    @require_torch_bf16
-    @require_intel_extension_for_pytorch
-    def test_evaluate_with_ipex(self):
-        for mix_bf16 in [True, False]:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                trainer = get_regression_trainer(
-                    a=1.5,
-                    b=2.5,
-                    use_ipex=True,
-                    compute_metrics=AlmostAccuracy(),
-                    bf16=mix_bf16,
-                    use_cpu=True,
-                    output_dir=tmp_dir,
-                )
-                results = trainer.evaluate()
-
-                x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
-                pred = 1.5 * x + 2.5
-                expected_loss = ((pred - y) ** 2).mean()
-                self.assertAlmostEqual(results["eval_loss"], expected_loss)
-                expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
-                self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
-
-                # With a number of elements not a round multiple of the batch size
-                trainer = get_regression_trainer(
-                    a=1.5,
-                    b=2.5,
-                    use_ipex=True,
-                    eval_len=66,
-                    compute_metrics=AlmostAccuracy(),
-                    bf16=mix_bf16,
-                    use_cpu=True,
-                    output_dir=tmp_dir,
-                )
-                results = trainer.evaluate()
-
-                x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
-                pred = 1.5 * x + 2.5
-                expected_loss = ((pred - y) ** 2).mean()
-                self.assertAlmostEqual(results["eval_loss"], expected_loss)
-                expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
-                self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
-
-                # With logits preprocess
-                trainer = get_regression_trainer(
-                    a=1.5,
-                    b=2.5,
-                    use_ipex=True,
-                    compute_metrics=AlmostAccuracy(),
-                    preprocess_logits_for_metrics=lambda logits, labels: logits + 1,
-                    bf16=mix_bf16,
-                    use_cpu=True,
-                    output_dir=tmp_dir,
-                )
-                results = trainer.evaluate()
-
-                x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
-                pred = 1.5 * x + 2.5
-                expected_loss = ((pred - y) ** 2).mean()
-                self.assertAlmostEqual(results["eval_loss"], expected_loss)
-                expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
-                self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
-
     def test_predict(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(a=1.5, b=2.5, output_dir=tmp_dir)
@@ -2829,57 +2734,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
             self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
             self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
-
-    @require_torch_bf16
-    @require_intel_extension_for_pytorch
-    def test_predict_with_ipex(self):
-        for mix_bf16 in [True, False]:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                trainer = get_regression_trainer(
-                    a=1.5, b=2.5, use_ipex=True, bf16=mix_bf16, use_cpu=True, output_dir=tmp_dir
-                )
-                preds = trainer.predict(trainer.eval_dataset).predictions
-                x = trainer.eval_dataset.x
-                self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
-
-                # With a number of elements not a round multiple of the batch size
-                trainer = get_regression_trainer(
-                    a=1.5, b=2.5, eval_len=66, use_ipex=True, bf16=mix_bf16, use_cpu=True, output_dir=tmp_dir
-                )
-                preds = trainer.predict(trainer.eval_dataset).predictions
-                x = trainer.eval_dataset.x
-                self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
-
-                # With more than one output of the model
-                trainer = get_regression_trainer(
-                    a=1.5, b=2.5, double_output=True, use_ipex=True, bf16=mix_bf16, use_cpu=True, output_dir=tmp_dir
-                )
-                preds = trainer.predict(trainer.eval_dataset).predictions
-                x = trainer.eval_dataset.x
-                self.assertEqual(len(preds), 2)
-                self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
-                self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
-
-                # With more than one output/label of the model
-                trainer = get_regression_trainer(
-                    a=1.5,
-                    b=2.5,
-                    double_output=True,
-                    label_names=["labels", "labels_2"],
-                    use_ipex=True,
-                    bf16=mix_bf16,
-                    use_cpu=True,
-                    output_dir=tmp_dir,
-                )
-                outputs = trainer.predict(trainer.eval_dataset)
-                preds = outputs.predictions
-                labels = outputs.label_ids
-                x = trainer.eval_dataset.x
-                self.assertEqual(len(preds), 2)
-                self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
-                self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
-                self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
-                self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
 
     def test_dynamic_shapes(self):
         eval_dataset = DynamicShapesDataset(batch_size=self.batch_size)
@@ -3224,7 +3078,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # For more than 1 GPUs, since the randomness is introduced in the model and with DataParallel (which is used
         # in this test for more than 2 GPUs), the calls to the torch RNG will happen in a random order (sometimes
         # GPU 0 will call first and sometimes GPU 1).
-        random_torch = not torch.cuda.is_available() or torch.cuda.device_count() <= 1
+        random_torch = not torch.cuda.is_available() or backend_device_count(torch_device) <= 1
 
         if torch.cuda.is_available():
             torch.backends.cudnn.deterministic = True
@@ -5514,19 +5368,19 @@ if is_torch_available():
             )
         )
     if is_torchao_available():
-        import torchao
+        from torchao.optim import AdamW4bit, AdamW8bit
 
         optim_test_params.append(
             (
                 OptimizerNames.ADAMW_TORCH_4BIT,
-                torchao.prototype.low_bit_optim.AdamW4bit,
+                AdamW4bit,
                 default_adam_kwargs,
             )
         )
         optim_test_params.append(
             (
                 TrainingArguments(optim=OptimizerNames.ADAMW_TORCH_8BIT, output_dir="None"),
-                torchao.prototype.low_bit_optim.AdamW8bit,
+                AdamW8bit,
                 default_adam_kwargs,
             )
         )

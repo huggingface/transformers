@@ -14,10 +14,11 @@
 # limitations under the License.
 
 import os
+from collections.abc import Iterable
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 
 import numpy as np
@@ -72,6 +73,9 @@ class VideoMetadata:
     fps: float
     duration: float
     video_backend: str
+
+    def __getitem__(self, item):
+        return getattr(self, item)
 
 
 def is_valid_video_frame(frame):
@@ -162,7 +166,7 @@ def make_batched_videos(videos) -> List[Union["np.ndarray", "torch.Tensor"]]:
         videos = [np.array(videos)[None, ...]]
     # nested batch so we need to unflatten
     elif isinstance(videos[0], (list, tuple)) and is_valid_video(videos[0][0]):
-        return [video for sublist in videos for video in sublist]
+        videos = [video for sublist in videos for video in sublist]
     return convert_pil_frames_to_video(videos)
 
 
@@ -696,11 +700,13 @@ def group_videos_by_shape(
     grouped_videos_index = {}
     for i, video in enumerate(videos):
         shape = video.shape[-2::]
+        num_frames = video.shape[-4]  # video format BTCHW
+        shape = (num_frames, *shape)
         if shape not in grouped_videos:
             grouped_videos[shape] = []
         grouped_videos[shape].append(video)
         grouped_videos_index[i] = (shape, len(grouped_videos[shape]) - 1)
-    # stack videos with the same shape
+    # stack videos with the same size and number of frames
     grouped_videos = {shape: torch.stack(videos, dim=0) for shape, videos in grouped_videos.items()}
     return grouped_videos, grouped_videos_index
 
