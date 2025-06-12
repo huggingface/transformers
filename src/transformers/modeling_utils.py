@@ -1967,7 +1967,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     # Flex Attention support
     _supports_flex_attn = False
 
-    # Has support for a `Cache` instance as `past_key_values`? Does it support a `StaticCache`?
+    # Has support `torch.compile(fullgraph=True)`
     _supports_static_cache = False
 
     # A tensor parallel plan to be applied to the model when TP is enabled. For

@@ -1949,7 +1949,7 @@ class GenerationMixin(ContinuousMixin):
         and do not need to initialize the Cache in advance in order to save memory (because no back and forth
         `to_legacy_cache` and `from_legacy_cache` will be performed for `HybridMambaAttentionDynamicCache`).
         """
-        # NOTE: remove xlnet/reformer when the models is deprecated, it uses `mems` as cache name
+        # NOTE: remove xlnet/reformer when the models are deprecated, non-standard model architecture/cache name
         return not cls._is_stateful and all(
             special_model_name not in cls.__name__.lower()
             for special_model_name in [
@@ -4132,7 +4132,7 @@ class GenerationMixin(ContinuousMixin):
             # beam search as a whole (as opposed to individual beams, i.e. `stopping_criteria`)
 
             # pluck the cache from the beam indices that will be used in the next iteration
-            # NOTE: we need to check if `self._reorder_cache` for special models like RAG, RecurrentGemma etc.
+            # NOTE: we need to check if `self._reorder_cache` exists for special models like RAG, RecurrentGemma etc.
             if model_kwargs.get("past_key_values", None) is not None:
                 beam_idx = self._flatten_beam_dim(running_beam_indices[..., cur_len - decoder_prompt_len])
                 if hasattr(self, "_reorder_cache"):
@@ -4435,7 +4435,7 @@ class GenerationMixin(ContinuousMixin):
             # (that way the memory peak does not include outputs.logits)
             del outputs
 
-            # NOTE: we need to check if `self._reorder_cache` for special models like RAG, RecurrentGemma etc.
+            # NOTE: we need to check if `self._reorder_cache` exists for special models like RAG, RecurrentGemma etc.
             if model_kwargs.get("past_key_values", None) is not None:
                 if hasattr(self, "_reorder_cache"):
                     model_kwargs["past_key_values"] = self._reorder_cache(
@@ -4676,7 +4676,7 @@ class GenerationMixin(ContinuousMixin):
             # (that way the memory peak does not include outputs.logits)
             del outputs
 
-            # NOTE: we need to check if `self._reorder_cache` for special models like RAG, RecurrentGemma etc.
+            # NOTE: we need to check if `self._reorder_cache` exists for special models like RAG, RecurrentGemma etc.
             if model_kwargs.get("past_key_values", None) is not None:
                 if hasattr(self, "_reorder_cache"):
                     model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
