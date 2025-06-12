@@ -214,7 +214,6 @@ class EoMTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertLessEqual(
             torch.mean(torch.abs(image_encoding_slow.pixel_values - image_encoding_fast.pixel_values)).item(), 1e-3
         )
-        # self.assertTrue(torch.allclose(image_encoding_slow.mask_labels[0], image_encoding_fast.mask_labels[0], atol=1e-1))
 
     def test_slow_fast_equivalence_batched(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:

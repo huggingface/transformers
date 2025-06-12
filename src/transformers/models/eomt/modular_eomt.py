@@ -397,7 +397,7 @@ class EoMTPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The EoMT Model with heads on top for instance/semantic/panoptic segmentation.
+    The EoMT Model with head on top for instance/semantic/panoptic segmentation.
     """
 )
 class EoMTForUniversalSegmentation(Mask2FormerForUniversalSegmentation, nn.Module):
