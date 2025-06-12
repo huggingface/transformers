@@ -4569,10 +4569,7 @@ class ModelTesterMixin:
 
                 # Export model
                 exported_model = torch.export.export(
-                    model,
-                    args=(),
-                    kwargs=inputs_dict,
-                    strict=True,
+                    model, args=(), kwargs=inputs_dict, strict=getattr(self, "test_torch_exportable_strictly", True)
                 )
 
                 # Run exported model and eager model
