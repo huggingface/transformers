@@ -52,16 +52,10 @@ class QAPipelineTests(unittest.TestCase):
     tf_model_mapping = TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
     if not hasattr(model_mapping, "is_dummy"):
-        model_mapping = {
-            config: model
-            for config, model in model_mapping.items()
-            if config.__name__ not in _TO_SKIP
-        }
+        model_mapping = {config: model for config, model in model_mapping.items() if config.__name__ not in _TO_SKIP}
     if not hasattr(tf_model_mapping, "is_dummy"):
         tf_model_mapping = {
-            config: model
-            for config, model in tf_model_mapping.items()
-            if config.__name__ not in _TO_SKIP
+            config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
         }
 
     def get_test_pipeline(
@@ -183,17 +177,11 @@ class QAPipelineTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             question_answerer(question="", context="HuggingFace was founded in Paris.")
         with self.assertRaises(ValueError):
-            question_answerer(
-                question=None, context="HuggingFace was founded in Paris."
-            )
+            question_answerer(question=None, context="HuggingFace was founded in Paris.")
         with self.assertRaises(ValueError):
-            question_answerer(
-                question="In what field is HuggingFace working ?", context=""
-            )
+            question_answerer(question="In what field is HuggingFace working ?", context="")
         with self.assertRaises(ValueError):
-            question_answerer(
-                question="In what field is HuggingFace working ?", context=None
-            )
+            question_answerer(question="In what field is HuggingFace working ?", context=None)
 
         outputs = question_answerer(
             question="Where was HuggingFace founded ?",
@@ -213,9 +201,7 @@ class QAPipelineTests(unittest.TestCase):
             ],
         )
         for single_output in outputs:
-            compare_pipeline_output_to_hub_spec(
-                single_output, QuestionAnsweringOutputElement
-            )
+            compare_pipeline_output_to_hub_spec(single_output, QuestionAnsweringOutputElement)
 
         # Very long context require multiple features
         outputs = question_answerer(
@@ -234,9 +220,7 @@ class QAPipelineTests(unittest.TestCase):
 
         # Using batch is OK
         if question_answerer.tokenizer.pad_token_id is None:
-            question_answerer.tokenizer.pad_token_id = (
-                question_answerer.model.config.eos_token_id
-            )
+            question_answerer.tokenizer.pad_token_id = question_answerer.model.config.eos_token_id
         new_outputs = question_answerer(
             question="Where was HuggingFace founded ?",
             context="HuggingFace was founded in Paris." * 20,
@@ -577,14 +561,10 @@ between them. It's straightforward to train your models with one before loading 
             {"score": 0.010, "start": 19, "end": 24, "answer": "1990."},
             {"score": 0.003, "start": 16, "end": 23, "answer": "in 1990"},
         ]
-        outputs = qa_pipeline(
-            question=question, context=context, align_to_words=True, top_k=3
-        )
+        outputs = qa_pipeline(question=question, context=context, align_to_words=True, top_k=3)
         self.assertEqual(nested_simplify(outputs), ideal_answers)
 
-        outputs = qa_pipeline(
-            question=question, context=context, align_to_words=False, top_k=3
-        )
+        outputs = qa_pipeline(question=question, context=context, align_to_words=False, top_k=3)
         self.assertEqual(nested_simplify(outputs), ideal_answers)
 
         # Here the issue is observed and should be fixed
@@ -618,9 +598,7 @@ between them. It's straightforward to train your models with one before loading 
             },
             {"score": 0.0, "start": 0, "end": 21, "answer": "Angela Merkel was the"},
         ]
-        outputs = qa_pipeline(
-            question=question, context=context, align_to_words=False, top_k=10
-        )
+        outputs = qa_pipeline(question=question, context=context, align_to_words=False, top_k=10)
         self.assertEqual(nested_simplify(outputs), unaligned_answers)
 
         aligned_answers = [
@@ -660,9 +638,7 @@ between them. It's straightforward to train your models with one before loading 
                 "answer": "Merkel was the chancellor of Germany.",
             },
         ]
-        outputs = qa_pipeline(
-            question=question, context=context, align_to_words=True, top_k=10
-        )
+        outputs = qa_pipeline(question=question, context=context, align_to_words=True, top_k=10)
         self.assertEqual(nested_simplify(outputs), aligned_answers)
 
     @slow
@@ -681,14 +657,10 @@ between them. It's straightforward to train your models with one before loading 
             {"score": 0.008, "start": 19, "end": 24, "answer": "1990."},
             {"score": 0.003, "start": 16, "end": 23, "answer": "in 1990"},
         ]
-        outputs = qa_pipeline(
-            question=question, context=context, align_to_words=True, top_k=3
-        )
+        outputs = qa_pipeline(question=question, context=context, align_to_words=True, top_k=3)
         self.assertEqual(nested_simplify(outputs), ideal_answers)
 
-        outputs = qa_pipeline(
-            question=question, context=context, align_to_words=False, top_k=3
-        )
+        outputs = qa_pipeline(question=question, context=context, align_to_words=False, top_k=3)
         self.assertEqual(nested_simplify(outputs), ideal_answers)
 
         ### Now comes the issue related inputs
@@ -720,9 +692,7 @@ between them. It's straightforward to train your models with one before loading 
             },
             {"score": 0.0, "start": 0, "end": 10, "answer": "Angela Mer"},
         ]
-        outputs = qa_pipeline(
-            question=question, context=context, align_to_words=False, top_k=7
-        )
+        outputs = qa_pipeline(question=question, context=context, align_to_words=False, top_k=7)
         self.assertEqual(nested_simplify(outputs), unaligned_answers)
 
         aligned_answers = [
@@ -749,9 +719,7 @@ between them. It's straightforward to train your models with one before loading 
             },
             {"score": 0.0, "start": 0, "end": 17, "answer": "Angela Merkel was"},
         ]
-        outputs = qa_pipeline(
-            question=question, context=context, align_to_words=True, top_k=7
-        )
+        outputs = qa_pipeline(question=question, context=context, align_to_words=True, top_k=7)
         self.assertEqual(nested_simplify(outputs), aligned_answers)
 
 
