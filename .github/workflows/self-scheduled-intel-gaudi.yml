@@ -81,16 +81,8 @@ jobs:
         name: Identify models to test
         working-directory: tests
         run: |
-          echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
-
-      - name: HL-SMI
-        run: |
-          hl-smi
-          echo "HABANA_VISIBLE_DEVICES=${HABANA_VISIBLE_DEVICES}"
-          echo "HABANA_VISIBLE_MODULES=${HABANA_VISIBLE_MODULES}"
-
-      - name: Environment
-        run: python3 utils/print_env.py
+          folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})
+          echo "folder_slices=$folder_slices" >> $GITHUB_ENV
 
   run_models_gaudi:
     if: ${{ inputs.job == 'run_models_gaudi' }}

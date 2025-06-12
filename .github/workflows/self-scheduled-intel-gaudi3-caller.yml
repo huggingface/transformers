@@ -19,7 +19,7 @@ jobs:
       runner_scale_set: itac-bm-emr-gaudi3-dell
       slack_report_channel: "#transformers-ci-dummy"
       report_repo_id: hf-internal-testing/transformers_daily_ci_gaudi3
-      docker: vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
+
     secrets: inherit
 
   # pipeline:
@@ -31,7 +31,7 @@ jobs:
   #     runner_scale_set: itac-bm-emr-gaudi3-dell
   #     slack_report_channel: "#transformers-ci-dummy"
   #     report_repo_id: hf-internal-testing/transformers_daily_ci_gaudi3
-  #     docker: docker://vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
+
   #   secrets: inherit
 
   # example-ci:
@@ -43,7 +43,7 @@ jobs:
   #     runner_scale_set: itac-bm-emr-gaudi3-dell
   #     slack_report_channel: "#transformers-ci-dummy"
   #     report_repo_id: hf-internal-testing/transformers_daily_ci_gaudi3
-  #     docker: docker://vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
+
   #   secrets: inherit
 
   # deepspeed-ci:
@@ -55,5 +55,5 @@ jobs:
   #     runner_scale_set: itac-bm-emr-gaudi3-dell
   #     slack_report_channel: "#transformers-ci-dummy"
   #     report_repo_id: hf-internal-testing/transformers_daily_ci_gaudi3
-  #     docker: docker://vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
+
   #   secrets: inherit
