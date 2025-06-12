@@ -535,7 +535,6 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         handle_impossible_answer=False,
         max_answer_len=15,
         align_to_words=True,
-        handle_duplicate_answers=False,
     ):
         min_null_score = 1000000  # large and positive
         answers = []
@@ -596,7 +595,6 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 # - we start by finding the right word containing the token with `token_to_word`
                 # - then we convert this word in a character span with `word_to_chars`
                 sequence_index = 1 if question_first else 0
-                answers_history = [] if handle_duplicate_answers else None
 
                 for s, e, score in zip(starts, ends, scores):
                     s = s - offset
@@ -604,18 +602,11 @@ class QuestionAnsweringPipeline(ChunkPipeline):
 
                     start_index, end_index = self.get_indices(enc, s, e, sequence_index, align_to_words)
 
-                    if handle_duplicate_answers:
-                        if (start_index, end_index) not in answers_history:
-                            answers_history.append((start_index, end_index))
+                    target_answer = example.context_text[start_index:end_index]
+                    answer = self.get_answer(answers, target_answer)
 
-                            answers.append(
-                                {
-                                    "score": score.item(),
-                                    "start": start_index,
-                                    "end": end_index,
-                                    "answer": example.context_text[start_index:end_index],
-                                }
-                            )
+                    if answer:
+                        answer['score'] += score.item()
                     else:
                         answers.append(
                             {
@@ -632,6 +623,12 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         if len(answers) == 1:
             return answers[0]
         return answers
+
+    def get_answer(self, answers: List[Dict], target: str) -> Optional[Dict]:
+        for answer in answers:
+            if answer['answer'].lower() == target.lower():
+                return answer
+        return None
 
     def get_indices(
         self, enc: "tokenizers.Encoding", s: int, e: int, sequence_index: int, align_to_words: bool

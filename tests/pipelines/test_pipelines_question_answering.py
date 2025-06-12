@@ -138,7 +138,7 @@ class QAPipelineTests(unittest.TestCase):
             question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris.", top_k=20
         )
         self.assertEqual(
-            outputs, [{"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)} for i in range(20)]
+            outputs, [{"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)} for i in range(len(outputs))]
         )
         for single_output in outputs:
             compare_pipeline_output_to_hub_spec(single_output, QuestionAnsweringOutputElement)
@@ -287,7 +287,6 @@ class QAPipelineTests(unittest.TestCase):
             question="Who is the chancellor of Germany?",
             context="Angela Merkel was the chancellor of Germany.",
             top_k=10,
-            handle_duplicate_answers=True,
         )
 
         answers = [output["answer"] for output in outputs]
