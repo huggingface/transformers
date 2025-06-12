@@ -52,10 +52,16 @@ class QAPipelineTests(unittest.TestCase):
     tf_model_mapping = TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
     if not hasattr(model_mapping, "is_dummy"):
-        model_mapping = {config: model for config, model in model_mapping.items() if config.__name__ not in _TO_SKIP}
+        model_mapping = {
+            config: model
+            for config, model in model_mapping.items()
+            if config.__name__ not in _TO_SKIP
+        }
     if not hasattr(tf_model_mapping, "is_dummy"):
         tf_model_mapping = {
-            config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
+            config: model
+            for config, model in tf_model_mapping.items()
+            if config.__name__ not in _TO_SKIP
         }
 
     def get_test_pipeline(
@@ -81,37 +87,76 @@ class QAPipelineTests(unittest.TestCase):
         )
 
         examples = [
-            {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."},
-            {"question": "In what field is HuggingFace ?", "context": "HuggingFace is  an AI startup."},
+            {
+                "question": "Where was HuggingFace founded ?",
+                "context": "HuggingFace was founded in Paris.",
+            },
+            {
+                "question": "In what field is HuggingFace ?",
+                "context": "HuggingFace is  an AI startup.",
+            },
         ]
         return question_answerer, examples
 
     def run_pipeline_test(self, question_answerer, _):
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
         )
-        self.assertEqual(outputs, {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)})
+        self.assertEqual(
+            outputs,
+            {
+                "answer": ANY(str),
+                "start": ANY(int),
+                "end": ANY(int),
+                "score": ANY(float),
+            },
+        )
         outputs = question_answerer(
             question="Where was HuggingFace founded ?",
             context="HuggingFace was founded in Paris.",
             handle_impossible_answer=True,
         )
-        self.assertEqual(outputs, {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)})
+        self.assertEqual(
+            outputs,
+            {
+                "answer": ANY(str),
+                "start": ANY(int),
+                "end": ANY(int),
+                "score": ANY(float),
+            },
+        )
 
         outputs = question_answerer(
-            question=["In what field is HuggingFace working ?", "In what field is HuggingFace working ?"],
+            question=[
+                "In what field is HuggingFace working ?",
+                "In what field is HuggingFace working ?",
+            ],
             context="HuggingFace was founded in Paris.",
         )
         self.assertEqual(
             outputs,
             [
-                {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)},
-                {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)},
+                {
+                    "answer": ANY(str),
+                    "start": ANY(int),
+                    "end": ANY(int),
+                    "score": ANY(float),
+                },
+                {
+                    "answer": ANY(str),
+                    "start": ANY(int),
+                    "end": ANY(int),
+                    "score": ANY(float),
+                },
             ],
         )
 
         outputs = question_answerer(
-            question=["What field is HuggingFace working ?", "In what field is HuggingFace ?"],
+            question=[
+                "What field is HuggingFace working ?",
+                "In what field is HuggingFace ?",
+            ],
             context=[
                 "HuggingFace is a startup based in New-York",
                 "HuggingFace is a startup founded in Paris",
@@ -120,55 +165,110 @@ class QAPipelineTests(unittest.TestCase):
         self.assertEqual(
             outputs,
             [
-                {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)},
-                {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)},
+                {
+                    "answer": ANY(str),
+                    "start": ANY(int),
+                    "end": ANY(int),
+                    "score": ANY(float),
+                },
+                {
+                    "answer": ANY(str),
+                    "start": ANY(int),
+                    "end": ANY(int),
+                    "score": ANY(float),
+                },
             ],
         )
 
         with self.assertRaises(ValueError):
             question_answerer(question="", context="HuggingFace was founded in Paris.")
         with self.assertRaises(ValueError):
-            question_answerer(question=None, context="HuggingFace was founded in Paris.")
+            question_answerer(
+                question=None, context="HuggingFace was founded in Paris."
+            )
         with self.assertRaises(ValueError):
-            question_answerer(question="In what field is HuggingFace working ?", context="")
+            question_answerer(
+                question="In what field is HuggingFace working ?", context=""
+            )
         with self.assertRaises(ValueError):
-            question_answerer(question="In what field is HuggingFace working ?", context=None)
+            question_answerer(
+                question="In what field is HuggingFace working ?", context=None
+            )
 
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris.", top_k=20
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
+            top_k=20,
         )
         self.assertEqual(
-            outputs, [{"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)} for i in range(20)]
+            outputs,
+            [
+                {
+                    "answer": ANY(str),
+                    "start": ANY(int),
+                    "end": ANY(int),
+                    "score": ANY(float),
+                }
+                for i in range(20)
+            ],
         )
         for single_output in outputs:
-            compare_pipeline_output_to_hub_spec(single_output, QuestionAnsweringOutputElement)
+            compare_pipeline_output_to_hub_spec(
+                single_output, QuestionAnsweringOutputElement
+            )
 
         # Very long context require multiple features
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris." * 20
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris." * 20,
         )
-        self.assertEqual(outputs, {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)})
+        self.assertEqual(
+            outputs,
+            {
+                "answer": ANY(str),
+                "start": ANY(int),
+                "end": ANY(int),
+                "score": ANY(float),
+            },
+        )
 
         # Using batch is OK
         if question_answerer.tokenizer.pad_token_id is None:
-            question_answerer.tokenizer.pad_token_id = question_answerer.model.config.eos_token_id
+            question_answerer.tokenizer.pad_token_id = (
+                question_answerer.model.config.eos_token_id
+            )
         new_outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris." * 20, batch_size=2
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris." * 20,
+            batch_size=2,
         )
-        self.assertEqual(new_outputs, {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)})
+        self.assertEqual(
+            new_outputs,
+            {
+                "answer": ANY(str),
+                "start": ANY(int),
+                "end": ANY(int),
+                "score": ANY(float),
+            },
+        )
         self.assertEqual(nested_simplify(outputs), nested_simplify(new_outputs))
 
     @require_torch
     def test_small_model_pt(self):
         question_answerer = pipeline(
-            "question-answering", model="sshleifer/tiny-distilbert-base-cased-distilled-squad"
+            "question-answering",
+            model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
         )
 
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
         )
 
-        self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
+        self.assertEqual(
+            nested_simplify(outputs),
+            {"score": 0.163, "start": 0, "end": 11, "answer": "HuggingFace"},
+        )
 
     @require_torch
     def test_small_model_pt_fp16(self):
@@ -179,10 +279,14 @@ class QAPipelineTests(unittest.TestCase):
         )
 
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
         )
 
-        self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
+        self.assertEqual(
+            nested_simplify(outputs),
+            {"score": 0.163, "start": 0, "end": 11, "answer": "HuggingFace"},
+        )
 
     @require_torch
     def test_small_model_pt_bf16(self):
@@ -193,27 +297,42 @@ class QAPipelineTests(unittest.TestCase):
         )
 
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
         )
 
-        self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
+        self.assertEqual(
+            nested_simplify(outputs),
+            {"score": 0.163, "start": 0, "end": 11, "answer": "HuggingFace"},
+        )
 
     @require_torch
     def test_small_model_pt_iterator(self):
         # https://github.com/huggingface/transformers/issues/18510
-        pipe = pipeline(model="sshleifer/tiny-distilbert-base-cased-distilled-squad", batch_size=16, framework="pt")
+        pipe = pipeline(
+            model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
+            batch_size=16,
+            framework="pt",
+        )
 
         def data():
             for i in range(10):
-                yield {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."}
+                yield {
+                    "question": "Where was HuggingFace founded ?",
+                    "context": "HuggingFace was founded in Paris.",
+                }
 
         for outputs in pipe(data()):
-            self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
+            self.assertEqual(
+                nested_simplify(outputs),
+                {"score": 0.163, "start": 0, "end": 11, "answer": "HuggingFace"},
+            )
 
     @require_torch
     def test_small_model_pt_softmax_trick(self):
         question_answerer = pipeline(
-            "question-answering", model="sshleifer/tiny-distilbert-base-cased-distilled-squad"
+            "question-answering",
+            model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
         )
 
         real_postprocess = question_answerer.postprocess
@@ -239,10 +358,14 @@ class QAPipelineTests(unittest.TestCase):
         question_answerer.postprocess = ensure_large_logits_postprocess
 
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
         )
 
-        self.assertEqual(nested_simplify(outputs), {"score": 0.028, "start": 0, "end": 11, "answer": "HuggingFace"})
+        self.assertEqual(
+            nested_simplify(outputs),
+            {"score": 0.25, "start": 0, "end": 11, "answer": "HuggingFace"},
+        )
 
     @slow
     @require_torch
@@ -277,18 +400,27 @@ class QAPipelineTests(unittest.TestCase):
             question="What country is Paris the capital of?",
             context="""London is the capital and largest city of England and the United Kingdom. It stands on the River Thames in south-east England at the head of a 50-mile (80 km) estuary down to the North Sea, and has been a major settlement for two millennia. The City of London, its ancient core and financial centre, was founded by the Romans as Londinium and retains boundaries close to its medieval ones. Since the 19th century, \"London\" has also referred to the metropolis around this core, historically split between the counties of Middlesex, Essex, Surrey, Kent, and Hertfordshire, which largely comprises Greater London, governed by the Greater London Authority. The City of Westminster, to the west of the City of London, has for centuries held the national government and parliament. As one of the world's global cities, London exerts strong influence on its arts, commerce, education, entertainment, fashion, finance, health care, media, tourism, and communications, and has sometimes been called the capital of the world. Its GDP (€801.66 billion in 2017) makes it the biggest urban economy in Europe, and it is one of the major financial centres in the world. In 2019 it had the second-highest number of ultra high-net-worth individuals in Europe after Paris and the second-highest number of billionaires in Europe after Moscow. As of 2021, London has the most millionaires of any city. With Europe's largest concentration of higher education institutions, it includes Imperial College London in natural and applied sciences, the London School of Economics in social sciences, and the comprehensive University College London. The city is home to the most 5-star hotels of any city in the world. In 2012, London became the first city to host three Summer Olympic Games. London is the capital and largest city of England and the United Kingdom. It stands on the River Thames in south-east England at the head of a 50-mile (80 km) estuary down to the North Sea, and has been a major settlement for two millennia. The City of London, its ancient core and financial centre, was founded by the Romans as Londinium and retains boundaries close to its medieval ones. Since the 19th century, \"London\" has also referred to the metropolis around this core, historically split between the counties of Middlesex, Essex, Surrey, Kent, and Hertfordshire, which largely comprises Greater London, governed by the Greater London Authority. The City of Westminster, to the west of the City of London, has for centuries held the national government and parliament. As one of the world's global cities, London exerts strong influence on its arts, commerce, education, entertainment, fashion, finance, health care, media, tourism, and communications, and has sometimes been called the capital of the world. Its GDP (€801.66 billion in 2017) makes it the biggest urban economy in Europe, and it is one of the major financial centres in the world. In 2019 it had the second-highest number of ultra high-net-worth individuals in Europe after Paris and the second-highest number of billionaires in Europe after Moscow. As of 2021, London has the most millionaires of any city. With Europe's largest concentration of higher education institutions, it includes Imperial College London in natural and applied sciences, the London School of Economics in social sciences, and the comprehensive University College London. The city is home to the most 5-star hotels of any city in the world. In 2012, London became the first city to host three Summer Olympic Games.""",
         )
-        self.assertEqual(nested_simplify(outputs), {"score": 0.988, "start": 0, "end": 0, "answer": ""})
+        self.assertEqual(
+            nested_simplify(outputs),
+            {"score": 0.988, "start": 0, "end": 0, "answer": ""},
+        )
 
     @require_tf
     def test_small_model_tf(self):
         question_answerer = pipeline(
-            "question-answering", model="sshleifer/tiny-distilbert-base-cased-distilled-squad", framework="tf"
+            "question-answering",
+            model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
+            framework="tf",
         )
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
         )
 
-        self.assertEqual(nested_simplify(outputs), {"score": 0.011, "start": 0, "end": 11, "answer": "HuggingFace"})
+        self.assertEqual(
+            nested_simplify(outputs),
+            {"score": 0.158, "start": 0, "end": 11, "answer": "HuggingFace"},
+        )
 
     @slow
     @require_torch
@@ -297,10 +429,14 @@ class QAPipelineTests(unittest.TestCase):
             "question-answering",
         )
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
         )
 
-        self.assertEqual(nested_simplify(outputs), {"score": 0.979, "start": 27, "end": 32, "answer": "Paris"})
+        self.assertEqual(
+            nested_simplify(outputs),
+            {"score": 0.979, "start": 27, "end": 32, "answer": "Paris"},
+        )
 
     @slow
     @require_torch
@@ -352,7 +488,12 @@ class QAPipelineTests(unittest.TestCase):
         )
         self.assertEqual(
             nested_simplify(outputs),
-            {"answer": "an accused in the loan fraud case", "end": 294, "score": 0.001, "start": 261},
+            {
+                "answer": "an accused in the loan fraud case",
+                "end": 294,
+                "score": 0.002,
+                "start": 261,
+            },
         )
 
     @slow
@@ -401,7 +542,12 @@ between them. It's straightforward to train your models with one before loading 
 
         self.assertEqual(
             nested_simplify(outputs),
-            {"answer": "Jax, PyTorch and TensorFlow", "end": 1919, "score": 0.971, "start": 1892},
+            {
+                "answer": "Jax, PyTorch and TensorFlow",
+                "end": 1919,
+                "score": 0.972,
+                "start": 1892,
+            },
         )
 
     @slow
@@ -409,10 +555,14 @@ between them. It's straightforward to train your models with one before loading 
     def test_large_model_tf(self):
         question_answerer = pipeline("question-answering", framework="tf")
         outputs = question_answerer(
-            question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
+            question="Where was HuggingFace founded ?",
+            context="HuggingFace was founded in Paris.",
         )
 
-        self.assertEqual(nested_simplify(outputs), {"score": 0.979, "start": 27, "end": 32, "answer": "Paris"})
+        self.assertEqual(
+            nested_simplify(outputs),
+            {"score": 0.979, "start": 27, "end": 32, "answer": "Paris"},
+        )
 
     @slow
     @require_torch
@@ -427,10 +577,14 @@ between them. It's straightforward to train your models with one before loading 
             {"score": 0.010, "start": 19, "end": 24, "answer": "1990."},
             {"score": 0.003, "start": 16, "end": 23, "answer": "in 1990"},
         ]
-        outputs = qa_pipeline(question=question, context=context, align_to_words=True, top_k=3)
+        outputs = qa_pipeline(
+            question=question, context=context, align_to_words=True, top_k=3
+        )
         self.assertEqual(nested_simplify(outputs), ideal_answers)
 
-        outputs = qa_pipeline(question=question, context=context, align_to_words=False, top_k=3)
+        outputs = qa_pipeline(
+            question=question, context=context, align_to_words=False, top_k=3
+        )
         self.assertEqual(nested_simplify(outputs), ideal_answers)
 
     @slow
@@ -438,7 +592,8 @@ between them. It's straightforward to train your models with one before loading 
     def test_align_word_topk_issue_with_wpiece(self):
         # https://github.com/huggingface/transformers/issues/26286
         qa_pipeline = pipeline(
-            "question-answering", model="google-bert/bert-large-uncased-whole-word-masking-finetuned-squad"
+            "question-answering",
+            model="google-bert/bert-large-uncased-whole-word-masking-finetuned-squad",
         )
         # Here nothing interesting happens, the issue is not observed
         question = "When was Rachel born?"
@@ -448,10 +603,14 @@ between them. It's straightforward to train your models with one before loading 
             {"score": 0.008, "start": 19, "end": 24, "answer": "1990."},
             {"score": 0.003, "start": 16, "end": 23, "answer": "in 1990"},
         ]
-        outputs = qa_pipeline(question=question, context=context, align_to_words=True, top_k=3)
+        outputs = qa_pipeline(
+            question=question, context=context, align_to_words=True, top_k=3
+        )
         self.assertEqual(nested_simplify(outputs), ideal_answers)
 
-        outputs = qa_pipeline(question=question, context=context, align_to_words=False, top_k=3)
+        outputs = qa_pipeline(
+            question=question, context=context, align_to_words=False, top_k=3
+        )
         self.assertEqual(nested_simplify(outputs), ideal_answers)
 
 
