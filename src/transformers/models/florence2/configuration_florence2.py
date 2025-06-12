@@ -44,7 +44,7 @@ class Florence2VisionConfig(PretrainedConfig):
             The patch padding of the image.
         patch_prenorm (`Tuple[bool]`, *optional*, defaults to `(False, True, True, True)`):
             Whether to apply layer normalization before the patch embedding layer.
-        dim_embed (`Tuple[int]`, *optional*, defaults to `(256, 512, 1024, 2048)`):
+        embed_dim (`Tuple[int]`, *optional*, defaults to `(256, 512, 1024, 2048)`):
             The dimension of the embedding layer.
         num_heads (`Tuple[int]`, *optional*, defaults to `(8, 16, 32, 64)`):
             The number of attention heads.
@@ -58,12 +58,9 @@ class Florence2VisionConfig(PretrainedConfig):
             Ratio of mlp hidden dim to embedding dim.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             If True, add a learnable bias to query, key, value.
-        norm_layer_type (`str *optional*, defaults to `"layernorm"`):
-            Norm layer type, can be `"layernorm"` or `"batchnorm"`
-        conv_at_attn (`bool`, *optional*, defaults to `True`):
-            If True, add a convolution layer before attention layer
-        conv_at_ffn (`bool`, *optional*, defaults to `True`):
-            If True, add a convolution layer before fully connected layer
+        activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
         projection_dim (`int`, *optional*, defaults to 1024):
             The dimension of the projection layer.
         visual_temporal_embedding (`dict`, *optional*, defaults to `{'type': 'COSINE', 'max_temporal_embeddings': 100}`):
@@ -100,14 +97,14 @@ class Florence2VisionConfig(PretrainedConfig):
         patch_stride=(4, 2, 2, 2),
         patch_padding=(3, 1, 1, 1),
         patch_prenorm=(False, True, True, True),
-        dim_embed=(256, 512, 1024, 2048),
+        embed_dim=(256, 512, 1024, 2048),
         num_heads=(8, 16, 32, 64),
         num_groups=(8, 16, 32, 64),
         window_size=12,
         drop_path_rate=0.1,
         mlp_ratio=4.0,
         qkv_bias=True,
-        norm_layer_type="layernorm",
+        activation_function="gelu",
         projection_dim=1024,
         visual_temporal_embedding={"type": "COSINE", "max_temporal_embeddings": 100},
         image_pos_embed={"type": "learned_abs_2d", "max_pos_embeddings": 50},
@@ -124,19 +121,19 @@ class Florence2VisionConfig(PretrainedConfig):
         self.patch_stride = patch_stride
         self.patch_padding = patch_padding
         self.patch_prenorm = patch_prenorm
-        self.dim_embed = dim_embed
+        self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.num_groups = num_groups
         self.window_size = window_size
         self.drop_path_rate = drop_path_rate
         self.mlp_ratio = mlp_ratio
         self.qkv_bias = qkv_bias
-        self.norm_layer_type = norm_layer_type
         self.projection_dim = projection_dim
         self.visual_temporal_embedding = visual_temporal_embedding
         self.image_pos_embed = image_pos_embed
         self.image_feature_source = image_feature_source
         self.initializer_range = initializer_range
+        self.activation_function = activation_function
 
 
 class Florence2LanguageConfig(PretrainedConfig):

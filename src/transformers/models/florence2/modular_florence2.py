@@ -20,6 +20,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from transformers.activations import ACT2FN
+
 from ...generation import GenerationMixin
 from ...modeling_outputs import Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
@@ -77,7 +79,10 @@ class Florence2VisionPositionalEmbeddingCosine1D(nn.Module):
         self.embed_dim = embed_dim
         self.max_seq_len = max_seq_len
         pos_idx_to_embed = torch.empty((self.max_seq_len, self.embed_dim))
-        sine, cosine = Florence2VisionPositionalEmbeddingCosine1D.get_sinusoid_embeddings(max_positions=self.max_seq_len, embed_dim=self.embed_dim)
+        sine, cosine = Florence2VisionPositionalEmbeddingCosine1D.get_sinusoid_embeddings(
+            max_positions=self.max_seq_len,
+            embed_dim=self.embed_dim,
+        )
         pos_idx_to_embed[:, 0::2] = sine
         pos_idx_to_embed[:, 1::2] = cosine
         # Save the positional embeddings in a constant buffer.
@@ -113,21 +118,21 @@ class Florence2VisionPositionalEmbeddingCosine1D(nn.Module):
 class Florence2VisionMLP(nn.Module):
     def __init__(
         self,
-        in_features,
-        hidden_features=None,
-        out_features=None,
-        act_layer=nn.GELU,
+        in_features: int,
+        hidden_features: int | None = None,
+        out_features: int | None = None,
+        activation_function: str = "gelu",
     ):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
         self.fc1 = nn.Linear(in_features, hidden_features)
-        self.act = act_layer()
+        self.activation_fn = ACT2FN[activation_function]
         self.fc2 = nn.Linear(hidden_features, out_features)
 
     def forward(self, hidden_states: torch.Tensor):
         hidden_states = self.fc1(hidden_states)
-        hidden_states = self.act(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
         return hidden_states
 
@@ -135,35 +140,29 @@ class Florence2VisionMLP(nn.Module):
 class Florence2VisionConvEmbed(nn.Module):
     """Image to Patch Embedding"""
 
-    def __init__(
-        self,
-        config: Florence2VisionConfig,
-        stage_idx: int,
-        norm_layer: nn.Module = nn.LayerNorm,
-    ):
+    def __init__(self, config: Florence2VisionConfig, stage_idx: int):
         super().__init__()
         self.config = config
         self.stage_idx = stage_idx
         self.patch_size = config.patch_size[stage_idx]
-        self.in_channels = config.in_channels if stage_idx == 0 else config.dim_embed[stage_idx - 1]
-        self.dim_embed = config.dim_embed[stage_idx]
+        self.in_channels = config.in_channels if stage_idx == 0 else config.embed_dim[stage_idx - 1]
+        self.embed_dim = config.embed_dim[stage_idx]
         self.stride = config.patch_stride[stage_idx]
         self.padding = config.patch_padding[stage_idx]
         self.pre_norm = config.patch_prenorm[stage_idx]
 
         self.conv = nn.Conv2d(
             self.in_channels,
-            self.dim_embed,
+            self.embed_dim,
             kernel_size=self.patch_size,
             stride=self.stride,
             padding=self.padding,
         )
 
-        dim_norm = self.in_channels if self.pre_norm else self.dim_embed
-        self.norm = norm_layer(dim_norm) if norm_layer else None
+        dim_norm = self.in_channels if self.pre_norm else self.embed_dim
+        self.norm = nn.LayerNorm(dim_norm)
 
     def forward(self, hidden_states: torch.Tensor):
-        print(self.stage_idx, hidden_states.shape, self.in_channels, self.pre_norm, self.dim_embed)
         if self.norm and self.pre_norm:
             hidden_states = hidden_states.permute(0, 2, 3, 1)
             hidden_states = self.norm(hidden_states)
@@ -189,15 +188,21 @@ class Florence2VisionChannelAttention(nn.Module):
     def forward(self, hidden_states: torch.Tensor):
         B, N, C = hidden_states.shape
 
-        qkv = self.qkv(hidden_states).reshape(B, N, 3, self.groups, C // self.groups).permute(2, 0, 3, 1, 4)
+        # Reshape for grouped channel attention
+        qkv = self.qkv(hidden_states).reshape(B, N, 3, self.groups, C // self.groups)
+        qkv = qkv.permute(2, 0, 3, 1, 4)
         query, key, value = qkv.unbind(0)
 
-        # Dynamic scale
+        # Dynamic scaling for varying sequence lengths
         query = query * N**-0.5
+
+        # Channel-to-channel attention within groups:
         attn_weights = query.transpose(-1, -2) @ key
         attn_weights = attn_weights.softmax(dim=-1)
         hidden_states = (attn_weights @ value.transpose(-1, -2)).transpose(-1, -2)
         hidden_states = hidden_states.transpose(1, 2).reshape(B, N, C)
+
+        # Final projection
         hidden_states = self.proj(hidden_states)
         return hidden_states
 
@@ -207,14 +212,13 @@ class Florence2VisionChannelBlock(nn.Module):
         self,
         config: Florence2VisionConfig,
         stage_idx: int,
-        channel_drop_path_rate: float,
+        drop_path_rate: float,
         kernel_size: int = 3,
-        act_layer: nn.Module = nn.GELU,
     ):
         super().__init__()
 
         self.config = config
-        dim_in = config.dim_embed[stage_idx]
+        dim_in = config.embed_dim[stage_idx]
 
         self.conv1 = nn.Conv2d(
             dim_in,
@@ -223,15 +227,13 @@ class Florence2VisionChannelBlock(nn.Module):
             padding=kernel_size // 2,
             groups=dim_in,
         )
-        self.norm1 = nn.LayerNorm(config.dim_embed[stage_idx])
+        self.norm1 = nn.LayerNorm(config.embed_dim[stage_idx])
         self.channel_attn = Florence2VisionChannelAttention(
-            config.dim_embed[stage_idx],
+            config.embed_dim[stage_idx],
             groups=config.num_groups[stage_idx],
             qkv_bias=config.qkv_bias,
         )
-        self.drop_path1 = (
-            Florence2VisionDropPath(channel_drop_path_rate) if channel_drop_path_rate > 0.0 else nn.Identity()
-        )
+        self.drop_path1 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
         self.conv2 = nn.Conv2d(
             dim_in,
@@ -240,39 +242,44 @@ class Florence2VisionChannelBlock(nn.Module):
             padding=kernel_size // 2,
             groups=dim_in,
         )
-        self.norm2 = nn.LayerNorm(config.dim_embed[stage_idx])
+        self.norm2 = nn.LayerNorm(config.embed_dim[stage_idx])
         self.ffn = Florence2VisionMLP(
-            in_features=config.dim_embed[stage_idx],
-            hidden_features=int(config.dim_embed[stage_idx] * config.mlp_ratio),
-            act_layer=act_layer,
+            in_features=config.embed_dim[stage_idx],
+            hidden_features=int(config.embed_dim[stage_idx] * config.mlp_ratio),
+            activation_function=config.activation_function,
         )
-        self.drop_path2 = (
-            Florence2VisionDropPath(channel_drop_path_rate) if channel_drop_path_rate > 0.0 else nn.Identity()
-        )
+        self.drop_path2 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor):
         B, C, H, W = hidden_states.shape
 
+        # First channel block: Depthwise Conv + Channel Attention
         hidden_states = self.conv1(hidden_states) + hidden_states
         hidden_states = hidden_states.flatten(2).transpose(1, 2)
         residual = hidden_states
 
-        cur = self.norm1(hidden_states)
-        cur = self.channel_attn(cur)
-        hidden_states = hidden_states + self.drop_path1(cur)
+        # Channel group attention self-attention mechanism
+        hidden_states = self.norm1(hidden_states)
+        hidden_states = self.channel_attn(hidden_states)
+        hidden_states = residual + self.drop_path1(hidden_states)
         hidden_states = hidden_states.transpose(1, 2).view(B, C, H, W)
 
-        hidden_states = self.conv2(hidden_states)
+        # Second channel block: Depthwise Conv + FFN
+        hidden_states = self.conv2(hidden_states) + hidden_states
         hidden_states = hidden_states.flatten(2).transpose(1, 2)
-        cur = self.norm2(hidden_states)
-        cur = self.ffn(cur)
-        hidden_states = hidden_states + self.drop_path2(cur)
+        residual = hidden_states
+
+        # FFN
+        hidden_states = self.norm2(hidden_states)
+        hidden_states = self.ffn(hidden_states)
+        hidden_states = residual + self.drop_path2(hidden_states)
         hidden_states = hidden_states.transpose(1, 2).view(B, C, H, W)
 
         return hidden_states
 
 
 def window_partition(hidden_states: torch.Tensor, window_size: int):
+    """Split input tensor into non-overlapping windows"""
     B, H, W, C = hidden_states.shape
     hidden_states = hidden_states.view(B, H // window_size, window_size, W // window_size, window_size, C)
     windows = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
@@ -280,6 +287,7 @@ def window_partition(hidden_states: torch.Tensor, window_size: int):
 
 
 def window_reverse(windows: torch.Tensor, window_size: int, H: int, W: int):
+    """Merge windows back into original spatial layout"""
     C = windows.shape[-1]
     hidden_states = windows.view(-1, H // window_size, W // window_size, window_size, window_size, C)
     hidden_states = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, H, W, C)
@@ -341,27 +349,34 @@ class Florence2VisionWindowAttention(nn.Module):
     def forward(self, hidden_states: torch.Tensor):
         B, H, W, C = hidden_states.shape
 
+        # Calculate padding needed to make H,W divisible by window_size
         pad_l = pad_t = 0
         pad_r = (self.window_size - W % self.window_size) % self.window_size
         pad_b = (self.window_size - H % self.window_size) % self.window_size
+        # Pad the input if necessary
         hidden_states = F.pad(hidden_states, (0, 0, pad_l, pad_r, pad_t, pad_b))
         _, Hp, Wp, _ = hidden_states.shape
 
+        # Partition input into non-overlapping windows
         window_contexts = window_partition(hidden_states, self.window_size)
         window_contexts = window_contexts.view(-1, self.window_size * self.window_size, C)
 
+        # Generate Q, K, V for each window
         B_, N, C = window_contexts.shape
         qkv = self.qkv(window_contexts).reshape(B_, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         query, key, value = qkv.unbind(0)
 
+        # Apply attention within each window
         window_contexts, _ = eager_attention_forward(self, query, key, value, attention_mask=None, scaling=self.scale)
         window_contexts = window_contexts.view(B_, N, C)
+        # Apply output projection
         window_contexts = self.proj(window_contexts)
 
-        # merge windows
+        # Merge windows back to original spatial layout
         window_contexts = window_contexts.view(-1, self.window_size, self.window_size, C)
         hidden_states = window_reverse(window_contexts, self.window_size, Hp, Wp)
 
+        # Remove padding and reshape to flat sequence
         hidden_states = hidden_states[:, :H, :W, :].contiguous()
         hidden_states = hidden_states.view(B, H * W, C)
 
@@ -375,57 +390,62 @@ class Florence2VisionSpatialBlock(nn.Module):
         stage_idx: int,
         drop_path_rate: float,
         kernel_size: int = 3,
-        act_layer: nn.Module = nn.GELU,
     ):
         super().__init__()
 
         self.conv1 = nn.Conv2d(
-            config.dim_embed[stage_idx],
-            config.dim_embed[stage_idx],
+            config.embed_dim[stage_idx],
+            config.embed_dim[stage_idx],
             kernel_size=kernel_size,
             padding=kernel_size // 2,
-            groups=config.dim_embed[stage_idx],
+            groups=config.embed_dim[stage_idx],
         )
-        self.norm1 = nn.LayerNorm(config.dim_embed[stage_idx])
+        self.norm1 = nn.LayerNorm(config.embed_dim[stage_idx])
         self.window_attn = Florence2VisionWindowAttention(
-                config,
-                config.dim_embed[stage_idx],
-                config.num_heads[stage_idx],
-                config.window_size,
-                config.qkv_bias,
-            )
+            config,
+            config.embed_dim[stage_idx],
+            config.num_heads[stage_idx],
+            config.window_size,
+            config.qkv_bias,
+        )
         self.drop_path1 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
         self.conv2 = nn.Conv2d(
-            config.dim_embed[stage_idx],
-            config.dim_embed[stage_idx],
+            config.embed_dim[stage_idx],
+            config.embed_dim[stage_idx],
             kernel_size=kernel_size,
             padding=kernel_size // 2,
-            groups=config.dim_embed[stage_idx],
+            groups=config.embed_dim[stage_idx],
         )
-        self.norm2 = nn.LayerNorm(config.dim_embed[stage_idx])
+        self.norm2 = nn.LayerNorm(config.embed_dim[stage_idx])
         self.ffn = Florence2VisionMLP(
-            in_features=config.dim_embed[stage_idx],
-            hidden_features=int(config.dim_embed[stage_idx] * config.mlp_ratio),
-            act_layer=act_layer,
+            in_features=config.embed_dim[stage_idx],
+            hidden_features=int(config.embed_dim[stage_idx] * config.mlp_ratio),
+            activation_function=config.activation_function,
         )
         self.drop_path2 = Florence2VisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor):
         B, C, H, W = hidden_states.shape
+
+        # First spatial mixing block: Conv + Window Attention
         hidden_states = self.conv1(hidden_states) + hidden_states
         hidden_states = hidden_states.flatten(2).transpose(1, 2)
         residual = hidden_states
 
+        # Spatial Window-based self-attention mechanism
         hidden_states = self.norm1(hidden_states)
         hidden_states = hidden_states.view(B, H, W, C)
         hidden_states = self.window_attn(hidden_states)
         hidden_states = residual + self.drop_path1(hidden_states)
         hidden_states = hidden_states.transpose(1, 2).view(B, C, H, W)
 
+        # Second spatial mixing block: Conv + FFN
         hidden_states = self.conv2(hidden_states) + hidden_states
         hidden_states = hidden_states.flatten(2).transpose(1, 2)
         residual = hidden_states
+
+        # FFN
         hidden_states = self.norm2(hidden_states)
         hidden_states = self.ffn(hidden_states)
         hidden_states = residual + self.drop_path2(hidden_states)
@@ -439,19 +459,19 @@ class Florence2VisionBlock(nn.Module):
         self,
         config: Florence2VisionConfig,
         stage_idx: int,
-        drop_path_rate: float,
+        spatial_drop_path_rate: float,
         channel_drop_path_rate: float,
     ):
         super().__init__()
         self.spatial_block = Florence2VisionSpatialBlock(
             config=config,
             stage_idx=stage_idx,
-            drop_path_rate=drop_path_rate,
+            drop_path_rate=spatial_drop_path_rate,
         )
         self.channel_block = Florence2VisionChannelBlock(
             config=config,
             stage_idx=stage_idx,
-            channel_drop_path_rate=channel_drop_path_rate,
+            drop_path_rate=channel_drop_path_rate,
         )
 
     def forward(self, hidden_states: torch.Tensor):
@@ -485,10 +505,10 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
         self.config = config
 
         self.num_classes = config.num_classes
-        self.dim_embed = config.dim_embed
+        self.embed_dim = config.embed_dim
         self.num_heads = config.num_heads
         self.num_groups = config.num_groups
-        self.num_stages = len(self.dim_embed)
+        self.num_stages = len(self.embed_dim)
 
         if not (self.num_stages == len(self.num_heads) == len(self.num_groups)):
             raise ValueError(
@@ -500,15 +520,11 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths) * 2, device="cpu")]
         depth_offset = 0
 
-        # Resolve norm layer from config
-        norm_layer = self._get_norm_layer(config.norm_layer_type)
-
         convs = []
         blocks = []
         for stage_idx in range(self.num_stages):
             conv_embed = Florence2VisionConvEmbed(
                 config=config,
-                norm_layer=norm_layer,
                 stage_idx=stage_idx,
             )
             convs.append(conv_embed)
@@ -517,7 +533,7 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
                 Florence2VisionBlock(
                     config=config,
                     stage_idx=stage_idx,
-                    drop_path_rate=dpr[depth_offset + block_idx * 2],
+                    spatial_drop_path_rate=dpr[depth_offset + block_idx * 2],
                     channel_drop_path_rate=dpr[depth_offset + block_idx * 2 + 1],
                 )
                 for block_idx in range(config.depths[stage_idx])
@@ -527,43 +543,24 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
 
         self.convs = nn.ModuleList(convs)
         self.blocks = nn.ModuleList(blocks)
-        self.norms = norm_layer(self.dim_embed[-1])
-        self.avgpool = nn.AdaptiveAvgPool1d(1)
-        self.head = nn.Linear(self.dim_embed[-1], self.num_classes) if self.num_classes > 0 else nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def _get_norm_layer(self, norm_type: str):
-        if norm_type.lower() == "layernorm":
-            return nn.LayerNorm
-        elif norm_type.lower() == "batchnorm":
-            return nn.BatchNorm2d
-        else:
-            raise ValueError(f"Unsupported norm layer type: {norm_type}")
-
     @property
     def dim_out(self):
-        return self.dim_embed[-1]
+        return self.embed_dim[-1]
 
     def forward_features_unpool(self, hidden_states: torch.Tensor):
         for conv, block in zip(self.convs, self.blocks):
             hidden_states = conv(hidden_states)
-            print(hidden_states.shape)
             for layer in block:
                 hidden_states = layer(hidden_states)
         return hidden_states
 
-    def forward_features(self, hidden_states: torch.Tensor):
-        hidden_states = self.forward_features_unpool(hidden_states)
-        hidden_states = self.avgpool(hidden_states.transpose(1, 2))
-        hidden_states = torch.flatten(hidden_states, 1)
-        hidden_states = self.norms(hidden_states)
-        return hidden_states
-
     def forward(self, hidden_states: torch.Tensor):
-        hidden_states = self.forward_features(hidden_states)
-        hidden_states = self.head(hidden_states)
+        hidden_states = self.forward_features_unpool(hidden_states)
+        hidden_states = hidden_states.permute(0, 2, 3, 1).reshape(1, -1, 1024)
         return hidden_states
 
 
@@ -604,6 +601,7 @@ class Florence2LanguagePreTrainedModel(BartPreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.weight.data.fill_(1.0)
             module.bias.data.zero_()
+
 
 class Florence2LanguageEncoder(BartEncoder):
     pass
@@ -809,10 +807,6 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
     def __init__(self, config: Florence2Config):
         super().__init__(config)
         self.vision_tower = Florence2VisionBackbone(config=config.vision_config)
-        # remove unused layers
-        del self.vision_tower.head
-        del self.vision_tower.norms
-
         self.vocab_size = config.vocab_size
         self._attn_implementation = config._attn_implementation
         self._build_image_projection_layers(config)
@@ -823,7 +817,7 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
         self.post_init()
 
     def _build_image_projection_layers(self, config: Florence2Config):
-        image_dim_out = config.vision_config.dim_embed[-1]
+        image_dim_out = config.vision_config.embed_dim[-1]
         dim_projection = config.vision_config.projection_dim
         self.image_projection = nn.Parameter(torch.ones(image_dim_out, dim_projection))
         self.image_proj_norm = nn.LayerNorm(dim_projection)
