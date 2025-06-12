@@ -167,8 +167,6 @@ IGNORE_NON_TESTED = (
         "Florence2LanguageForConditionalGeneration",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
         "Florence2LanguageModel",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
         "Florence2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
-        "Florence2VisionModel",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
-        "Florence2VisionModelWithProjection",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
     ]
 )
 
@@ -385,8 +383,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Florence2LanguageForConditionalGeneration",  # Building part of a bigger model
     "Florence2LanguageModel",  # Building part of a bigger model
     "Florence2VisionBackbone",  # Building part of a bigger model
-    "Florence2VisionModel",  # Building part of a bigger model
-    "Florence2VisionModelWithProjection",  # Building part of a bigger model
 ]
 
 # DO NOT edit this list!

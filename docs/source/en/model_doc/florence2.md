@@ -64,13 +64,3 @@ The original code can be found [here](https://huggingface.co/microsoft/Florence-
 
 [[autodoc]] Florence2VisionBackbone
     - forward
-
-## Florence2VisionModel
-
-[[autodoc]] Florence2VisionModel
-    - forward
-
-## Florence2VisionModelWithProjection
-
-[[autodoc]] Florence2VisionModelWithProjection
-    - forward

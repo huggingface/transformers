@@ -30,7 +30,7 @@ class Florence2VisionConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        in_chans (`int`, *optional*, defaults to 3):
+        in_channels (`int`, *optional*, defaults to 3):
             Number of input image channels.
         num_classes (`int`, *optional*, defaults to 1000):
             Number of classes for classification head
@@ -108,8 +108,6 @@ class Florence2VisionConfig(PretrainedConfig):
         mlp_ratio=4.0,
         qkv_bias=True,
         norm_layer_type="layernorm",
-        conv_at_attn=True,
-        conv_at_ffn=True,
         projection_dim=1024,
         visual_temporal_embedding={"type": "COSINE", "max_temporal_embeddings": 100},
         image_pos_embed={"type": "learned_abs_2d", "max_pos_embeddings": 50},
@@ -134,8 +132,6 @@ class Florence2VisionConfig(PretrainedConfig):
         self.mlp_ratio = mlp_ratio
         self.qkv_bias = qkv_bias
         self.norm_layer_type = norm_layer_type
-        self.conv_at_attn = conv_at_attn
-        self.conv_at_ffn = conv_at_ffn
         self.projection_dim = projection_dim
         self.visual_temporal_embedding = visual_temporal_embedding
         self.image_pos_embed = image_pos_embed
