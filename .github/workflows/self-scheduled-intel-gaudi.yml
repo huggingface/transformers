@@ -116,9 +116,8 @@ jobs:
       - name: Echo input and matrix info
         shell: bash
         run: |
-          echo "${{ needs.setup.outputs.folder_slices }}"
+          echo "${{ fromJson(needs.setup.outputs.folder_slices) }}"
           echo "${{ fromJson(needs.setup.outputs.folder_slices)[matrix.slice_id] }}"
-          echo "${{ toJson(fromJson(needs.setup.outputs.folder_slices)[matrix.slice_id]) }}"
 
       - name: Echo folder
         shell: bash
