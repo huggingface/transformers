@@ -587,6 +587,84 @@ between them. It's straightforward to train your models with one before loading 
         )
         self.assertEqual(nested_simplify(outputs), ideal_answers)
 
+        # Here the issue is observed and should be fixed
+        question = "Who is the chancellor of Germany?"
+        context = "Angela Merkel was the chancellor of Germany."
+
+        unaligned_answers = [
+            {"score": 0.996, "start": 0, "end": 13, "answer": "Angela Merkel"},
+            {
+                "score": 0.001,
+                "start": 0,
+                "end": 44,
+                "answer": "Angela Merkel was the chancellor of Germany.",
+            },
+            {
+                "score": 0.0,
+                "start": 0,
+                "end": 43,
+                "answer": "Angela Merkel was the chancellor of Germany",
+            },
+            {"score": 0.0, "start": 7, "end": 13, "answer": "Merkel"},
+            {"score": 0.0, "start": 0, "end": 6, "answer": "Angela"},
+            {"score": 0.0, "start": 3, "end": 13, "answer": "ela Merkel"},
+            {"score": 0.0, "start": 0, "end": 3, "answer": "Ang"},
+            {"score": 0.0, "start": 0, "end": 17, "answer": "Angela Merkel was"},
+            {
+                "score": 0.0,
+                "start": 0,
+                "end": 32,
+                "answer": "Angela Merkel was the chancellor",
+            },
+            {"score": 0.0, "start": 0, "end": 21, "answer": "Angela Merkel was the"},
+        ]
+        outputs = qa_pipeline(
+            question=question, context=context, align_to_words=False, top_k=10
+        )
+        self.assertEqual(nested_simplify(outputs), unaligned_answers)
+
+        aligned_answers = [
+            {"score": 0.996, "start": 0, "end": 13, "answer": "Angela Merkel"},
+            {
+                "score": 0.001,
+                "start": 0,
+                "end": 44,
+                "answer": "Angela Merkel was the chancellor of Germany.",
+            },
+            {
+                "score": 0.0,
+                "start": 0,
+                "end": 43,
+                "answer": "Angela Merkel was the chancellor of Germany",
+            },
+            {"score": 0.0, "start": 7, "end": 13, "answer": "Merkel"},
+            {"score": 0.0, "start": 0, "end": 6, "answer": "Angela"},
+            {"score": 0.0, "start": 0, "end": 17, "answer": "Angela Merkel was"},
+            {
+                "score": 0.0,
+                "start": 0,
+                "end": 32,
+                "answer": "Angela Merkel was the chancellor",
+            },
+            {"score": 0.0, "start": 0, "end": 21, "answer": "Angela Merkel was the"},
+            {
+                "score": 0.0,
+                "start": 0,
+                "end": 35,
+                "answer": "Angela Merkel was the chancellor of",
+            },
+            {
+                "score": 0.0,
+                "start": 7,
+                "end": 44,
+                "answer": "Merkel was the chancellor of Germany.",
+            },
+        ]
+        outputs = qa_pipeline(
+            question=question, context=context, align_to_words=True, top_k=10
+        )
+        self.assertEqual(nested_simplify(outputs), aligned_answers)
+
     @slow
     @require_torch
     def test_align_word_topk_issue_with_wpiece(self):
@@ -612,6 +690,69 @@ between them. It's straightforward to train your models with one before loading 
             question=question, context=context, align_to_words=False, top_k=3
         )
         self.assertEqual(nested_simplify(outputs), ideal_answers)
+
+        ### Now comes the issue related inputs
+
+        question = "Who is the chancellor of Germany?"
+        context = "Angela Merkel was the chancellor of Germany."
+
+        unaligned_answers = [
+            {"score": 0.993, "start": 0, "end": 13, "answer": "Angela Merkel"},
+            {
+                "score": 0.004,
+                "start": 0,
+                "end": 43,
+                "answer": "Angela Merkel was the chancellor of Germany",
+            },
+            {"score": 0.001, "start": 7, "end": 13, "answer": "Merkel"},
+            {"score": 0.001, "start": 0, "end": 6, "answer": "Angela"},
+            {
+                "score": 0.0,
+                "start": 0,
+                "end": 44,
+                "answer": "Angela Merkel was the chancellor of Germany.",
+            },
+            {
+                "score": 0.0,
+                "start": 0,
+                "end": 32,
+                "answer": "Angela Merkel was the chancellor",
+            },
+            {"score": 0.0, "start": 0, "end": 10, "answer": "Angela Mer"},
+        ]
+        outputs = qa_pipeline(
+            question=question, context=context, align_to_words=False, top_k=7
+        )
+        self.assertEqual(nested_simplify(outputs), unaligned_answers)
+
+        aligned_answers = [
+            {"score": 0.993, "start": 0, "end": 13, "answer": "Angela Merkel"},
+            {
+                "score": 0.004,
+                "start": 0,
+                "end": 43,
+                "answer": "Angela Merkel was the chancellor of Germany",
+            },
+            {"score": 0.001, "start": 7, "end": 13, "answer": "Merkel"},
+            {"score": 0.001, "start": 0, "end": 6, "answer": "Angela"},
+            {
+                "score": 0.0,
+                "start": 0,
+                "end": 44,
+                "answer": "Angela Merkel was the chancellor of Germany.",
+            },
+            {
+                "score": 0.0,
+                "start": 0,
+                "end": 32,
+                "answer": "Angela Merkel was the chancellor",
+            },
+            {"score": 0.0, "start": 0, "end": 17, "answer": "Angela Merkel was"},
+        ]
+        outputs = qa_pipeline(
+            question=question, context=context, align_to_words=True, top_k=7
+        )
+        self.assertEqual(nested_simplify(outputs), aligned_answers)
 
 
 @require_torch_or_tf
