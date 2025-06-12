@@ -5,7 +5,6 @@ from functools import reduce
 from logging import getLogger
 from typing import Any, Callable, Tuple, Union, Sequence
 
-import numpy as np
 import torch
 import torchvision.transforms as tv
 from PIL import Image
@@ -15,10 +14,6 @@ from torchvision.transforms import ToPILImage, PILToTensor
 
 
 logger = getLogger()
-
-
-MEAN = (0.5, 0.5, 0.5)
-STD = (0.5, 0.5, 0.5)
 
 
 """
@@ -48,20 +43,17 @@ def get_image_transform(
     vision_input_type: str = "vanilla",
     image_res: int = 336,
     max_num_tiles: int = 1,
-    normalize_img: bool = True,
 ) -> Tuple[Callable, int]:
 
     if vision_input_type == "thumb+tile":
         transforms = VariableSizeImageTransform(
             size=image_res,
             max_num_tiles=max_num_tiles,
-            normalize_img=normalize_img,
             use_thumbnail="before",
         )
     else:
         transforms = ImageTransform(
             size=image_res,
-            normalize_img=normalize_img,
         )
 
     logger.info(
@@ -73,36 +65,19 @@ def get_image_transform(
 
 class ImageTransform(object):
     """
-    Image transform will resize the longer edge to a given size and pad the shorter edge with mean pixel value of the image.
+    Vanilla Image transform.
     """
-
     def __init__(
         self,
         size: int = 336,
-        normalize_img: bool = True,
     ) -> None:
         self.size = size
-        self._mean = MEAN
-        self._std = STD
-        self.normalize_img = normalize_img
-
         logger.info(f"ImageTransform size: {self.size}")
-
         self.to_tensor = tv.ToTensor()
-        self.normalize = (
-            tv.Normalize(
-                mean=self._mean,
-                std=self._std,
-                inplace=True,
-            )
-            if normalize_img
-            else lambda x: x
-        )
 
     def to_dict(self):
         return {
             "size": self.size,
-            "normalize_img": self.normalize_img,
         }
 
     def __call__(self, image: Union[Image.Image, torch.Tensor]):
@@ -120,7 +95,6 @@ class ImageTransform(object):
             image = self.to_tensor(image)
         else:
             image = F.convert_image_dtype(image, torch.float32)
-        image = self.normalize(image)
 
         # Add chunk dim to make it compatible with existing dataloaders
         image = image.view(1, -1, 3, self.size, self.size)
@@ -154,41 +128,26 @@ class VariableSizeImageTransform(object):
     def __init__(
         self,
         size: int = 336,
-        normalize_img: bool = True,
         max_num_tiles: int = 1,
         use_thumbnail: str = "no",
         area_limit: bool = False,
     ) -> None:
         self.size = size
-        self._mean = MEAN
-        self._std = STD
 
         logger.info(f"VariableSizeImageTransform size: {self.size}")
 
         self.to_tensor = tv.ToTensor()
-        self.normalize = (
-            tv.Normalize(
-                mean=self._mean,
-                std=self._std,
-                inplace=True,
-            )
-            if normalize_img
-            else lambda x: x
-        )
         self.area_limit = area_limit
         self.max_num_tiles = max_num_tiles
         self.use_thumbnail = use_thumbnail
-        self.normalize_img = normalize_img
         if self.use_thumbnail != "no":
             self.thumbnail_transform = ImageTransform(
                 size=self.size,
-                normalize_img=normalize_img,
             )
 
     def to_dict(self):
         return {
             "size": self.size,
-            "normalize_img": self.normalize_img,
             "max_num_tiles": self.max_num_tiles,
             "use_thumbnail": self.use_thumbnail,
         }
@@ -435,7 +394,6 @@ class VariableSizeImageTransform(object):
         else:
             image = F.convert_image_dtype(image, torch.float32)
 
-        image = self.normalize(image)
         image = self._split(image, ar[0], ar[1])  # type: ignore
         if self.use_thumbnail == "before":
             image = torch.cat((thumbnail, image), dim=1)
