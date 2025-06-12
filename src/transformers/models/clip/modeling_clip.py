@@ -938,6 +938,9 @@ class CLIPModel(CLIPPreTrainedModel):
             output_hidden_states=output_hidden_states,
         )
 
+        if output_hidden_states:
+            return text_outputs
+
         pooled_output = text_outputs.pooler_output
         text_features = self.text_projection(pooled_output)
 
@@ -985,6 +988,9 @@ class CLIPModel(CLIPPreTrainedModel):
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
         )
+
+        if output_hidden_states:
+            return vision_outputs
 
         pooled_output = vision_outputs.pooler_output
         image_features = self.visual_projection(pooled_output)

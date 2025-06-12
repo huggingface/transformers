@@ -915,6 +915,9 @@ class TFCLIPMainLayer(keras.layers.Layer):
             training=training,
         )
 
+        if output_hidden_states:
+            return text_outputs
+
         pooled_output = text_outputs[1]
         text_features = self.text_projection(inputs=pooled_output)
 
@@ -939,6 +942,9 @@ class TFCLIPMainLayer(keras.layers.Layer):
             return_dict=return_dict,
             training=training,
         )
+
+        if output_hidden_states:
+            return vision_outputs
 
         pooled_output = vision_outputs[1]  # pooled_output
         image_features = self.visual_projection(inputs=pooled_output)
