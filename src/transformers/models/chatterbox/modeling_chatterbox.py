@@ -21,8 +21,10 @@ from transformers.utils import logging
 
 from .configuration_chatterbox import ChatterboxConfig
 
+
 logger = logging.get_logger(__name__)
+
 
 class ChatterboxModel(PreTrainedModel):
     config_class = ChatterboxConfig
-    base_model_prefix = "chatterbox" 
+    base_model_prefix = "chatterbox"

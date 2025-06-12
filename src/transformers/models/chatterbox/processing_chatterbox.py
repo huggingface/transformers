@@ -21,7 +21,9 @@ from transformers.utils import logging
 
 from .configuration_chatterbox import ChatterboxConfig
 
+
 logger = logging.get_logger(__name__)
 
+
 class ChatterboxProcessor(ProcessorMixin):
-    config_class = ChatterboxConfig 
+    config_class = ChatterboxConfig
