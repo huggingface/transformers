@@ -103,7 +103,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         state_dict: Dict[str, Any],
         **kwargs,
     ):
-        from ..integrations import Mxfp4Linear, Mxfp4OpenaiExperts
+        from ..integrations import Mxfp4Linear, Mxfp4OpenAIMoeExperts
 
         module, tensor_name = get_module_from_name(model, param_name)
 
@@ -113,7 +113,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     raise ValueError("Expect quantized weights but got an unquantized weight")
                 return False
             return True
-        if isinstance(module, Mxfp4OpenaiExperts):
+        if isinstance(module, Mxfp4OpenAIMoeExperts):
             if self.pre_quantized or tensor_name == "bias":
                 if (tensor_name == "down_proj" or tensor_name == "gate_up_proj") and param_value.dtype != torch.float8_e5m2:
                     raise ValueError("Expect quantized weights but got an unquantized weight")
@@ -167,11 +167,11 @@ class Mxfp4HfQuantizer(HfQuantizer):
         model.config.quantization_config = self.quantization_config
 
     def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
-        from ..integrations import Mxfp4Linear, Mxfp4OpenaiExperts
+        from ..integrations import Mxfp4Linear, Mxfp4OpenAIMoeExperts
 
         not_missing_keys = []
         for name, module in model.named_modules():
-            if isinstance(module, Mxfp4Linear) or isinstance(module, Mxfp4OpenaiExperts):
+            if isinstance(module, Mxfp4Linear) or isinstance(module, Mxfp4OpenAIMoeExperts):
                 for missing in missing_keys:
                     if (
                         (name in missing or name in f"{prefix}.{missing}")
@@ -183,7 +183,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
     def update_tp_plan(self, config):
         # TODO: for tp support
-        # if "OpenaiExperts" in config.__class__.__name__:
+        # if "OpenAIMoeExperts" in config.__class__.__name__:
         #     return config
         return config
 

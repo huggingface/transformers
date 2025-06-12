@@ -48,7 +48,7 @@ class Mxfp4Linear(torch.nn.Linear):
 
 
 # maybe subclass
-class Mxfp4OpenaiExperts(nn.Module):
+class Mxfp4OpenAIMoeExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.num_experts = config.num_local_experts
@@ -146,12 +146,12 @@ def _replace_with_mxfp4_linear(
                 )
                 has_been_replaced = True
                 model._modules[name].requires_grad_(False)
-        if module.__class__.__name__ == "OpenaiExperts" and should_convert_module(
+        if module.__class__.__name__ == "OpenAIMoeExperts" and should_convert_module(
             current_key_name, modules_to_not_convert
         ):
             with init_empty_weights():
                 # tp_plan[re.sub(r"\d+", "*", current_key_name_str + ".down_proj_scale")] = None
-                model._modules[name] = Mxfp4OpenaiExperts(config)
+                model._modules[name] = Mxfp4OpenAIMoeExperts(config)
                 has_been_replaced=True
 
         if len(list(module.children())) > 0:
