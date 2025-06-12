@@ -51,6 +51,15 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
     return (caption_loss + image_loss) / 2.0
 
 
+
+
+
+
+
+
+
+
+
 @dataclass
 # Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->AltCLIP
 class AltCLIPOutput(ModelOutput):
