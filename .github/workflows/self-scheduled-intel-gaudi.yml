@@ -68,7 +68,6 @@ jobs:
         OMPI_MCA_btl_vader_single_copy_mechanism: none
     outputs:
       folder_slices: ${{ steps.set-matrix.outputs.folder_slices }}
-      slice_ids: ${{ steps.set-matrix.outputs.slice_ids }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -85,7 +84,6 @@ jobs:
         name: Identify models to test
         run: |
           echo "folder_slices=$(python3 utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
-          echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
 
       - name: HL-SMI
         run: |
@@ -104,7 +102,7 @@ jobs:
       fail-fast: false
       matrix:
         machine_type: [1gaudi, 2gaudi]
-        slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
+        folders: ${{ fromJson(needs.setup.outputs.folder_slices) }}
     runs-on:
       group: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
     container:
@@ -113,19 +111,10 @@ jobs:
       env:
         OMPI_MCA_btl_vader_single_copy_mechanism: none
     steps:
-      - name: Echo input and matrix info
-        shell: bash
-        run: |
-          echo "${{ fromJson(needs.setup.outputs.folder_slices) }}"
-          echo "${{ fromJson(needs.setup.outputs.folder_slices)[matrix.slice_id] }}"
-
       - name: Echo folder
         shell: bash
-        # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
-        # set the artifact folder names (because the character `/` is not allowed).
         run: |
-          echo "${{ fromJson(needs.setup.outputs.folder_slices)[matrix.slice_id] }}"
-          matrix_folders=${{ fromJson(needs.setup.outputs.folder_slices)[matrix.slice_id] }}
+          matrix_folders=${{ matrix.folders }}
           matrix_folders=${matrix_folders/'models/'/'models_'}
           echo "$matrix_folders"
           echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
