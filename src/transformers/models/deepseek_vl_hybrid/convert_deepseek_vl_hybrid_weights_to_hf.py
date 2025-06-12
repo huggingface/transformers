@@ -212,7 +212,7 @@ def load_model_state_dict(input_path: str) -> dict:
         for shard_file in unique_shard_files:
             print(f"Loading shard {shard_file}...")
             shard_path = os.path.join(input_path, shard_file)
-            shard_dict = torch.load(shard_path, map_location="cpu", weights_only=True)
+            shard_dict = load_file(shard_path)
             state_dict.update(shard_dict)
 
         return state_dict
