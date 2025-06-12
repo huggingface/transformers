@@ -555,6 +555,8 @@
         title: MegatronBERT
       - local: model_doc/megatron_gpt2
         title: MegatronGPT2
+      - local: model_doc/minimax
+        title: MiniMax
       - local: model_doc/mistral
         title: Mistral
       - local: model_doc/mixtral
@@ -903,6 +905,8 @@
     - sections:
       - local: model_doc/timesformer
         title: TimeSformer
+      - local: model_doc/vjepa2
+        title: V-JEPA 2
       - local: model_doc/videomae
         title: VideoMAE
       - local: model_doc/vivit
