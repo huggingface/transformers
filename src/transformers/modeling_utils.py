@@ -715,11 +715,13 @@ def _infer_parameter_dtype(
         else:
             raise e
     is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
+    is_torch_e5m2_available = hasattr(torch, "float8_e5m2")
     # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
     # in int/uint/bool and not cast them.
     casting_dtype = None
     is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
-    if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
+    is_param_float8_e5m2 = is_torch_e5m2_available and empty_param.dtype == torch.float8_e5m2
+    if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn and not is_param_float8_e5m2:
         # First fp32 if part of the exception list
         if keep_in_fp32_regex is not None and keep_in_fp32_regex.search(param_name):
             casting_dtype = torch.float32
@@ -789,7 +791,6 @@ def _load_state_dict_into_meta_model(
             param = file_pointer.get_slice(serialized_param_name)
         else:
             param = empty_param.to(tensor_device)  # It is actually not empty!
-
         to_contiguous, casting_dtype = _infer_parameter_dtype(
             model,
             param_name,

@@ -15,11 +15,13 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from .base import HfQuantizer
 
+
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_accelerate_available, is_fbgemm_gpu_available, is_torch_available, logging
+from ..utils import is_torch_available, logging, is_accelerate_available
 from .quantizers_utils import get_module_from_name
+
 
 if is_torch_available():
     import torch
@@ -33,7 +35,8 @@ class Mxfp4HfQuantizer(HfQuantizer):
     """
 
     requires_parameters_quantization = True
-    requires_calibration = False
+    # to remove if we decide to allow quantizing weights with this method
+    requires_calibration = True
 
     required_packages = ["accelerate"]
 
@@ -55,6 +58,11 @@ class Mxfp4HfQuantizer(HfQuantizer):
         if major < 9:
             raise ValueError(
                 "FP4 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100)"
+            )
+        # TODO: update accelerate version when it is released
+        if not is_accelerate_available():
+            raise ImportError(
+                f"Using `bitsandbytes` 4-bit quantization requires Accelerate: `pip install 'accelerate>=1.8.0'`"
             )
 
         device_map = kwargs.get("device_map", None)
@@ -95,18 +103,20 @@ class Mxfp4HfQuantizer(HfQuantizer):
         state_dict: Dict[str, Any],
         **kwargs,
     ):
-        from ..integrations import Mxfp4Linear, Mxfp4OaiTextExperts
+        from ..integrations import Mxfp4Linear, Mxfp4OpenaiExperts
 
         module, tensor_name = get_module_from_name(model, param_name)
 
         if isinstance(module, Mxfp4Linear):
             if self.pre_quantized or tensor_name == "bias":
-                if tensor_name == "weight" and param_value.dtype != torch.float4_e2m1fn:
+                if tensor_name == "weight" and param_value.dtype != torch.float8_e5m2:
                     raise ValueError("Expect quantized weights but got an unquantized weight")
                 return False
             return True
-        if isinstance(module, Mxfp4OaiTextExperts):
+        if isinstance(module, Mxfp4OpenaiExperts):
             if self.pre_quantized or tensor_name == "bias":
+                if (tensor_name == "down_proj" or tensor_name == "gate_up_proj") and param_value.dtype != torch.float8_e5m2:
+                    raise ValueError("Expect quantized weights but got an unquantized weight")
                 return False
             else:
                 if tensor_name == "gate_up_proj_scale" or tensor_name == "down_proj_scale":
@@ -126,8 +136,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         """
         Quantizes weights into weight and weight_scale
         """
-
-        pass 
+        pass
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         return model
@@ -158,11 +167,11 @@ class Mxfp4HfQuantizer(HfQuantizer):
         model.config.quantization_config = self.quantization_config
 
     def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
-        from ..integrations import Mxfp4Linear, Mxfp4Llama4TextExperts
+        from ..integrations import Mxfp4Linear, Mxfp4OpenaiExperts
 
         not_missing_keys = []
         for name, module in model.named_modules():
-            if isinstance(module, Mxfp4Linear) or isinstance(module, Mxfp4Llama4TextExperts):
+            if isinstance(module, Mxfp4Linear) or isinstance(module, Mxfp4OpenaiExperts):
                 for missing in missing_keys:
                     if (
                         (name in missing or name in f"{prefix}.{missing}")
@@ -173,9 +182,9 @@ class Mxfp4HfQuantizer(HfQuantizer):
         return [k for k in missing_keys if k not in not_missing_keys]
 
     def update_tp_plan(self, config):
-        if "OAI" in config.__class__.__name__:
-            # config.base_model_tp_plan = text_plan
-            return config
+        # TODO: for tp support
+        # if "OpenaiExperts" in config.__class__.__name__:
+        #     return config
         return config
 
     def is_serializable(self, safe_serialization=None):
@@ -184,4 +193,3 @@ class Mxfp4HfQuantizer(HfQuantizer):
     @property
     def is_trainable(self) -> bool:
         return False
-    

@@ -2050,6 +2050,7 @@ class QuarkConfig(QuantizationConfigMixin):
 
         self.quant_method = QuantizationMethod.QUARK
 
+
 @dataclass
 class Mxfp4Config(QuantizationConfigMixin):
     """
