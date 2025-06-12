@@ -421,7 +421,7 @@ args = TrainingArguments(
 model_id = "google/gemma-2b"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(0)
+model = AutoModelForCausalLM.from_pretrained(model_id).to(0)
 
 trainer = trl.SFTTrainer(
     model=model, 

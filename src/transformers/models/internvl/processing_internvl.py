@@ -21,7 +21,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, concatenate_list, make_flat_list_of_images
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...video_utils import VideoInput, VideoMetadata, load_video, make_batched_videos
+from ...video_utils import VideoInput, make_batched_videos
 
 
 class InternVLImagesKwargs(ImagesKwargs, total=False):
@@ -290,32 +290,6 @@ class InternVLProcessor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
-    def sample_indices_fn(
-        self, metadata: VideoMetadata, num_frames: Optional[int] = None, initial_shift: Union[bool, float, int] = True
-    ):
-        """
-        The function to generate indices of frames to sample from a video.
-
-        Args:
-            metadata (`VideoMetadata`):
-                `VideoMetadata` object containing metadata about the video, such as "total_num_frames" or "fps".
-            num_frames (`int`, *optional*):
-                Number of frames to sample uniformly. If None, all frames are sampled.
-            initial_shift (`bool`, `float` or `int`, defaults to `0`):
-                The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
-
-        Returns:
-            `np.ndarray`: Array of frame indices to sample.
-        """
-        num_frames = num_frames if num_frames is not None else metadata.total_num_frames
-
-        if initial_shift is True:
-            initial_shift = metadata.total_num_frames / num_frames / 2
-        indices = np.arange(initial_shift, metadata.total_num_frames, metadata.total_num_frames / num_frames).astype(
-            int
-        )
-        return indices
-
     def batch_decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
@@ -335,40 +309,6 @@ class InternVLProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(tokenizer_input_names) + list(image_processor_input_names)
-
-    # TODO: raushan, has to be public method under `VideoProcessorBase` when API is added
-    def _load_video_for_model(
-        self,
-        video: Union[str, "VideoInput"],
-        num_frames: Optional[int],
-        backend: str = "pyav",
-        initial_shift: bool = True,
-        **kwargs,
-    ) -> np.array:
-        """
-        Loads `video` to a numpy array.
-
-        Args:
-            video (`str` or `VideoInput`):
-                The video to convert to the numpy array format. Can be a link to video or local path.
-            num_frames (`int`, *optional*):
-                Number of frames to sample uniformly. If not passed, the whole video is loaded.
-            backend (`str`, *optional*, defaults to `"pyav"`):
-                The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "pyav".
-            initial_shift (`bool`, *optional*, defaults to `True`):
-                The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
-
-        Returns:
-            Tuple[`np.array`, Dict]: A tuple containing:
-                - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
-                - Metadata dictionary.
-        """
-
-        def sample_indices_fn_func(metadata, **fn_kwargs):
-            return self.sample_indices_fn(metadata, num_frames=num_frames, initial_shift=initial_shift, **fn_kwargs)
-
-        video, metadata = load_video(video, backend=backend, sample_indices_fn=sample_indices_fn_func)
-        return video, metadata
 
 
 __all__ = ["InternVLProcessor"]
