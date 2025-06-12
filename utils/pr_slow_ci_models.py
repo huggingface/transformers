@@ -31,7 +31,6 @@ import os.path
 import re
 import string
 from pathlib import Path
-from typing import List
 
 from git import Repo
 
@@ -39,7 +38,7 @@ from git import Repo
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
 
 
-def get_new_python_files_between_commits(base_commit: str, commits: List[str]) -> List[str]:
+def get_new_python_files_between_commits(base_commit: str, commits: list[str]) -> list[str]:
     """
     Get the list of added python files between a base commit and one or several commits.
 
@@ -48,11 +47,11 @@ def get_new_python_files_between_commits(base_commit: str, commits: List[str]) -
             A git repository (for instance the Transformers repo).
         base_commit (`str`):
             The commit reference of where to compare for the diff. This is the current commit, not the branching point!
-        commits (`List[str]`):
+        commits (list[str]`):
             The list of commits with which to compare the repo at `base_commit` (so the branching point).
 
     Returns:
-        `List[str]`: The list of python files added between a base commit and one or several commits.
+        list[str]`: The list of python files added between a base commit and one or several commits.
     """
     code_diff = []
     for commit in commits:
@@ -64,12 +63,12 @@ def get_new_python_files_between_commits(base_commit: str, commits: List[str]) -
     return code_diff
 
 
-def get_new_python_files(diff_with_last_commit=False) -> List[str]:
+def get_new_python_files(diff_with_last_commit=False) -> list[str]:
     """
     Return a list of python files that have been added between the current head and the main branch.
 
     Returns:
-        `List[str]`: The list of python files added.
+        list[str]`: The list of python files added.
     """
     repo = Repo(PATH_TO_REPO)
 

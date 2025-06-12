@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Union
+from typing import Any, Union
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
 from .base import Pipeline, build_pipeline_init_args
@@ -19,8 +19,8 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-Prediction = Dict[str, Any]
-Predictions = List[Prediction]
+Prediction = dict[str, Any]
+Predictions = list[Prediction]
 
 
 @add_end_docstrings(build_pipeline_init_args(has_image_processor=True))
@@ -69,12 +69,12 @@ class ObjectDetectionPipeline(Pipeline):
             postprocess_kwargs["threshold"] = kwargs["threshold"]
         return preprocess_params, {}, postprocess_kwargs
 
-    def __call__(self, *args, **kwargs) -> Union[Predictions, List[Prediction]]:
+    def __call__(self, *args, **kwargs) -> Union[Predictions, list[Prediction]]:
         """
         Detect objects (bounding boxes & classes) in the image(s) passed as inputs.
 
         Args:
-            inputs (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            inputs (`str`, list[str]`, `PIL.Image` or list[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing an HTTP(S) link pointing to an image
@@ -98,7 +98,7 @@ class ObjectDetectionPipeline(Pipeline):
 
             - **label** (`str`) -- The class label identified by the model.
             - **score** (`float`) -- The score attributed by the model for that label.
-            - **box** (`List[Dict[str, int]]`) -- The bounding box of detected object in image's original size.
+            - **box** (`Listdict[str, int]]`) -- The bounding box of detected object in image's original size.
         """
         # After deprecation of this is completed, remove the default `None` value for `images`
         if "images" in kwargs and "inputs" not in kwargs:
@@ -169,7 +169,7 @@ class ObjectDetectionPipeline(Pipeline):
 
         return annotation
 
-    def _get_bounding_box(self, box: "torch.Tensor") -> Dict[str, int]:
+    def _get_bounding_box(self, box: "torch.Tensor") -> dict[str, int]:
         """
         Turns list [xmin, xmax, ymin, ymax] into dict { "xmin": xmin, ... }
 
@@ -177,7 +177,7 @@ class ObjectDetectionPipeline(Pipeline):
             box (`torch.Tensor`): Tensor containing the coordinates in corners format.
 
         Returns:
-            bbox (`Dict[str, int]`): Dict containing the coordinates in corners format.
+            bbox (dict[str, int]`): Dict containing the coordinates in corners format.
         """
         if self.framework != "pt":
             raise ValueError("The ObjectDetectionPipeline is only available in PyTorch.")

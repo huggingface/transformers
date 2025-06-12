@@ -39,7 +39,7 @@ import collections
 import os
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 
 # Path is set with the intent you should run this script from the root of the repo.
@@ -89,7 +89,7 @@ def find_backend(line: str) -> Optional[str]:
     return "_and_".join(backends)
 
 
-def parse_init(init_file) -> Optional[Tuple[Dict[str, List[str]], Dict[str, List[str]]]]:
+def parse_init(init_file) -> Optional[tuple[dict[str, list[str]], dict[str, list[str]]]]:
     """
     Read an init_file and parse (per backend) the `_import_structure` objects defined and the `TYPE_CHECKING` objects
     defined.
@@ -98,7 +98,7 @@ def parse_init(init_file) -> Optional[Tuple[Dict[str, List[str]], Dict[str, List
         init_file (`str`): Path to the init file to inspect.
 
     Returns:
-        `Optional[Tuple[Dict[str, List[str]], Dict[str, List[str]]]]`: A tuple of two dictionaries mapping backends to list of
+        `Optional[Tupledict[str,list[str]],dict[str,list[str]]]]`: A tuple of two dictionaries mapping backends to list of
         imported objects, one for the `_import_structure` part of the init and one for the `TYPE_CHECKING` part of the
         init. Returns `None` if the init is not a custom init.
     """
@@ -232,20 +232,20 @@ def parse_init(init_file) -> Optional[Tuple[Dict[str, List[str]], Dict[str, List
     return import_dict_objects, type_hint_objects
 
 
-def analyze_results(import_dict_objects: Dict[str, List[str]], type_hint_objects: Dict[str, List[str]]) -> List[str]:
+def analyze_results(import_dict_objects: dict[str, list[str]], type_hint_objects: dict[str, list[str]]) -> list[str]:
     """
     Analyze the differences between _import_structure objects and TYPE_CHECKING objects found in an init.
 
     Args:
-        import_dict_objects (`Dict[str, List[str]]`):
+        import_dict_objects (dict[str,list[str]]`):
             A dictionary mapping backend names (`"none"` for the objects independent of any specific backend) to
             list of imported objects.
-        type_hint_objects (`Dict[str, List[str]]`):
+        type_hint_objects (dict[str,list[str]]`):
             A dictionary mapping backend names (`"none"` for the objects independent of any specific backend) to
             list of imported objects.
 
     Returns:
-        `List[str]`: The list of errors corresponding to mismatches.
+        list[str]`: The list of errors corresponding to mismatches.
     """
 
     def find_duplicates(seq):
@@ -279,7 +279,7 @@ def analyze_results(import_dict_objects: Dict[str, List[str]], type_hint_objects
     return errors
 
 
-def get_transformers_submodules() -> List[str]:
+def get_transformers_submodules() -> list[str]:
     """
     Returns the list of Transformers submodules.
     """

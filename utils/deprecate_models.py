@@ -9,7 +9,7 @@ import argparse
 import os
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 import requests
 from custom_init_isort import sort_imports_in_all_inits
@@ -77,7 +77,7 @@ def insert_tip_to_model_doc(model_doc_path, tip_message):
         f.write("\n".join(new_model_lines))
 
 
-def get_model_doc_path(model: str) -> Tuple[Optional[str], Optional[str]]:
+def get_model_doc_path(model: str) -> tuple[Optional[str], Optional[str]]:
     # Possible variants of the model name in the model doc path
     model_names = [model, model.replace("_", "-"), model.replace("_", "")]
 
@@ -175,7 +175,7 @@ def update_main_init_file(models):
     Replace all instances of model.model_name with model.deprecated.model_name in the __init__.py file
 
     Args:
-        models (List[str]): The models to mark as deprecated
+        models list[str]): The models to mark as deprecated
     """
     filename = REPO_PATH / "src/transformers/__init__.py"
     with open(filename, "r") as f:
@@ -199,7 +199,7 @@ def remove_model_references_from_file(filename, models, condition):
 
     Args:
         filename (str): The file to remove the references from
-        models (List[str]): The models to remove
+        models list[str]): The models to remove
         condition (Callable): A function that takes the line and model and returns True if the line should be removed
     """
     filename = REPO_PATH / filename
@@ -221,7 +221,7 @@ def remove_model_config_classes_from_config_check(model_config_classes):
     Remove the deprecated model config classes from the check_config_attributes.py file
 
     Args:
-        model_config_classes (List[str]): The model config classes to remove e.g. ["BertConfig", "DistilBertConfig"]
+        model_config_classes list[str]): The model config classes to remove e.g. ["BertConfig", "DistilBertConfig"]
     """
     filename = REPO_PATH / "utils/check_config_attributes.py"
     with open(filename, "r") as f:

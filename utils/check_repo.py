@@ -40,7 +40,6 @@ from collections import OrderedDict
 from difflib import get_close_matches
 from importlib.machinery import ModuleSpec
 from pathlib import Path
-from typing import List, Tuple
 
 from transformers import is_flax_available, is_tf_available, is_torch_available
 from transformers.models.auto.auto_factory import get_values
@@ -470,7 +469,7 @@ def check_model_list():
 
 # If some modeling modules should be ignored for all checks, they should be added in the nested list
 # _ignore_modules of this function.
-def get_model_modules() -> List[str]:
+def get_model_modules() -> list[str]:
     """Get all the model modules inside the transformers library (except deprecated models)."""
     _ignore_modules = [
         "modeling_auto",
@@ -502,7 +501,7 @@ def get_model_modules() -> List[str]:
     return modules
 
 
-def get_models(module: types.ModuleType, include_pretrained: bool = False) -> List[Tuple[str, type]]:
+def get_models(module: types.ModuleType, include_pretrained: bool = False) -> list[tuple[str, type]]:
     """
     Get the objects in a module that are models.
 
@@ -513,7 +512,7 @@ def get_models(module: types.ModuleType, include_pretrained: bool = False) -> Li
             Whether or not to include the `PreTrainedModel` subclass (like `BertPreTrainedModel`) or not.
 
     Returns:
-        List[Tuple[str, type]]: List of models as tuples (class name, actual class).
+        Listtuple[str, type]]: List of models as tuples (class name, actual class).
     """
     models = []
     model_classes = (transformers.PreTrainedModel, transformers.TFPreTrainedModel, transformers.FlaxPreTrainedModel)
@@ -564,12 +563,12 @@ def check_models_are_in_init():
 
 # If some test_modeling files should be ignored when checking models are all tested, they should be added in the
 # nested list _ignore_files of this function.
-def get_model_test_files() -> List[str]:
+def get_model_test_files() -> list[str]:
     """
     Get the model test files.
 
     Returns:
-        `List[str]`: The list of test files. The returned files will NOT contain the `tests` (i.e. `PATH_TO_TESTS`
+        list[str]`: The list of test files. The returned files will NOT contain the `tests` (i.e. `PATH_TO_TESTS`
         defined in this script). They will be considered as paths relative to `tests`. A caller has to use
         `os.path.join(PATH_TO_TESTS, ...)` to access the files.
     """
@@ -605,7 +604,7 @@ def get_model_test_files() -> List[str]:
 
 # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the tester class
 # for the all_model_classes variable.
-def find_tested_models(test_file: str) -> List[str]:
+def find_tested_models(test_file: str) -> list[str]:
     """
     Parse the content of test_file to detect what's in `all_model_classes`. This detects the models that inherit from
     the common test class.
@@ -614,7 +613,7 @@ def find_tested_models(test_file: str) -> List[str]:
         test_file (`str`): The path to the test file to check
 
     Returns:
-        `List[str]`: The list of models tested in that file.
+        list[str]`: The list of models tested in that file.
     """
     with open(os.path.join(PATH_TO_TESTS, test_file), "r", encoding="utf-8", newline="\n") as f:
         content = f.read()
@@ -640,7 +639,7 @@ def should_be_tested(model_name: str) -> bool:
     return not is_building_block(model_name)
 
 
-def check_models_are_tested(module: types.ModuleType, test_file: str) -> List[str]:
+def check_models_are_tested(module: types.ModuleType, test_file: str) -> list[str]:
     """Check models defined in a module are all tested in a given file.
 
     Args:
@@ -648,7 +647,7 @@ def check_models_are_tested(module: types.ModuleType, test_file: str) -> List[st
         test_file (`str`): The path to the file where the module is tested.
 
     Returns:
-        `List[str]`: The list of error messages corresponding to models not tested.
+        list[str]`: The list of error messages corresponding to models not tested.
     """
     # XxxPreTrainedModel are not tested
     defined_models = get_models(module)
@@ -696,7 +695,7 @@ def check_all_models_are_tested():
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
 
-def get_all_auto_configured_models() -> List[str]:
+def get_all_auto_configured_models() -> list[str]:
     """Return the list of all models in at least one auto class."""
     result = set()  # To avoid duplicates we concatenate all model classes in a set.
     if is_torch_available():
@@ -725,18 +724,18 @@ def ignore_unautoclassed(model_name: str) -> bool:
     return False
 
 
-def check_models_are_auto_configured(module: types.ModuleType, all_auto_models: List[str]) -> List[str]:
+def check_models_are_auto_configured(module: types.ModuleType, all_auto_models: list[str]) -> list[str]:
     """
     Check models defined in module are each in an auto class.
 
     Args:
         module (`types.ModuleType`):
             The module in which we get the models.
-        all_auto_models (`List[str]`):
+        all_auto_models (list[str]`):
             The list of all models in an auto class (as obtained with `get_all_auto_configured_models()`).
 
     Returns:
-        `List[str]`: The list of error messages corresponding to models not tested.
+        list[str]`: The list of error messages corresponding to models not tested.
     """
     defined_models = get_models(module)
     failures = []
@@ -916,7 +915,7 @@ def check_objects_being_equally_in_main_init():
 _re_decorator = re.compile(r"^\s*@(\S+)\s+$")
 
 
-def check_decorator_order(filename: str) -> List[int]:
+def check_decorator_order(filename: str) -> list[int]:
     """
     Check that in a given test file, the slow decorator is always last.
 
@@ -924,7 +923,7 @@ def check_decorator_order(filename: str) -> List[int]:
         filename (`str`): The path to a test file to check.
 
     Returns:
-        `List[int]`: The list of failures as a list of indices where there are problems.
+        list[int]`: The list of failures as a list of indices where there are problems.
     """
     with open(filename, "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
@@ -958,13 +957,13 @@ def check_all_decorator_order():
         )
 
 
-def find_all_documented_objects() -> List[str]:
+def find_all_documented_objects() -> list[str]:
     """
     Parse the content of all doc files to detect which classes and functions it documents.
 
     Returns:
-        `List[str]`: The list of all object names being documented.
-        `Dict[str, List[str]]`: A dictionary mapping the object name (full import path, e.g.
+        list[str]`: The list of all object names being documented.
+        dict[str,list[str]]`: A dictionary mapping the object name (full import path, e.g.
             `integrations.PeftAdapterMixin`) to its documented methods
     """
     documented_obj = []

@@ -42,7 +42,7 @@ import os
 import re
 import subprocess
 from collections import OrderedDict
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from transformers.utils import direct_transformers_import
 
@@ -253,12 +253,12 @@ def _sanity_check_splits(splits_1, splits_2, is_class, filename):
         raise ValueError(f"In {filename}, two code blocks expected to be copies have different structures.")
 
 
-def find_block_end(lines: List[str], start_index: int, indent: int) -> int:
+def find_block_end(lines: list[str], start_index: int, indent: int) -> int:
     """
     Find the end of the class/func block starting at `start_index` in a source code (defined by `lines`).
 
     Args:
-        lines (`List[str]`):
+        lines (list[str]`):
             The source code, represented by a list of lines.
         start_index (`int`):
             The starting index of the target class/func block.
@@ -282,8 +282,8 @@ def find_block_end(lines: List[str], start_index: int, indent: int) -> int:
 
 
 def split_code_into_blocks(
-    lines: List[str], start_index: int, end_index: int, indent: int, backtrace: bool = False
-) -> List[Tuple[str, int, int]]:
+    lines: list[str], start_index: int, end_index: int, indent: int, backtrace: bool = False
+) -> list[tuple[str, int, int]]:
     """
     Split the class/func block starting at `start_index` in a source code (defined by `lines`) into *inner blocks*.
 
@@ -292,7 +292,7 @@ def split_code_into_blocks(
     block are also included as (dummy) blocks.
 
     Args:
-        lines (`List[str]`):
+        lines (list[str]`):
             The source code, represented by a list of lines.
         start_index (`int`):
             The starting index of the target class/func block.
@@ -305,7 +305,7 @@ def split_code_into_blocks(
             etc.) until an empty line is encountered.
 
     Returns:
-        `List[Tuple[str, int, int]]`: A list of elements with the form `(block_name, start_index, end_index)`.
+        `Listtuple[str, int, int]]`: A list of elements with the form `(block_name, start_index, end_index)`.
     """
     splits = []
     # `indent - 4` is the indent level of the target class/func header
@@ -391,7 +391,7 @@ def split_code_into_blocks(
 
 def find_code_in_transformers(
     object_name: str, base_path: Optional[str] = None, return_indices: bool = False
-) -> Union[str, Tuple[List[str], int, int]]:
+) -> Union[str, tuple[list[str], int, int]]:
     """
     Find and return the source code of an object.
 
@@ -406,7 +406,7 @@ def find_code_in_transformers(
             the file that defines the object.
 
     Returns:
-        `Union[str, Tuple[List[str], int, int]]`: If `return_indices=False`, only the source code of the object will be
+        `Union[str,tuplelist[str], int, int]]`: If `return_indices=False`, only the source code of the object will be
         returned. Otherwise, it also returns the whole lines of the file where the object specified by `object_name` is
         defined, together the start/end indices of the block in the file that defines the object.
     """
@@ -505,11 +505,11 @@ def find_code_and_splits(object_name: str, base_path: str, buffer: Optional[dict
             The buffer used to store the previous results in order to speed up the process.
 
     Returns:
-        lines (`List[str]`):
+        lines (list[str]`):
             The lines of the whole file where the object is defined.
         code (`str`):
             The object's code.
-        code_splits (`List[Tuple[str, int, int]]`):
+        code_splits (`Listtuple[str, int, int]]`):
             `code` splitted into blocks. See `split_code_into_blocks`.
     """
     if buffer is None:
@@ -640,7 +640,7 @@ def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int
 
 def is_copy_consistent(
     filename: str, overwrite: bool = False, buffer: Optional[dict] = None
-) -> Optional[List[Tuple[str, int]]]:
+) -> Optional[list[tuple[str, int]]]:
     """
     Check if the code commented as a copy in a file matches the original.
 
@@ -653,7 +653,7 @@ def is_copy_consistent(
             The buffer used to store the previous results in order to speed up the process.
 
     Returns:
-        `Optional[List[Tuple[str, int]]]`: If `overwrite=False`, returns the list of differences as tuples `(str, int)`
+        `Optional[Listtuple[str, int]]]`: If `overwrite=False`, returns the list of differences as tuples `(str, int)`
         with the name of the object having a diff and the line number where there is the first diff.
     """
     base_path = TRANSFORMERS_PATH if not filename.startswith("tests") else MODEL_TEST_PATH
@@ -936,7 +936,7 @@ def get_model_list(filename: str, start_prompt: str, end_prompt: str) -> str:
     return "".join(result)
 
 
-def convert_to_localized_md(model_list: str, localized_model_list: str, format_str: str) -> Tuple[bool, str]:
+def convert_to_localized_md(model_list: str, localized_model_list: str, format_str: str) -> tuple[bool, str]:
     """
     Compare the model list from the main README to the one in a localized README.
 
@@ -948,7 +948,7 @@ def convert_to_localized_md(model_list: str, localized_model_list: str, format_s
             `LOCALIZED_READMES` for examples).
 
     Returns:
-        `Tuple[bool, str]`: A tuple where the first value indicates if the READMEs match or not, and the second value
+        tuple[bool, str]`: A tuple where the first value indicates if the READMEs match or not, and the second value
         is the correct localized README.
     """
 

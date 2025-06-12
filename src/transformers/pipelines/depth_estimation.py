@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import Union
 
 from ..utils import (
     add_end_docstrings,
@@ -52,12 +52,12 @@ class DepthEstimationPipeline(Pipeline):
         requires_backends(self, "vision")
         self.check_model_type(MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES)
 
-    def __call__(self, inputs: Union[str, List[str], "Image.Image", List["Image.Image"]] = None, **kwargs):
+    def __call__(self, inputs: Union[str, list[str], "Image.Image", list["Image.Image"]] = None, **kwargs):
         """
         Predict the depth(s) of the image(s) passed as inputs.
 
         Args:
-            inputs (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            inputs (`str`, list[str]`, `PIL.Image` or list[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing a http link pointing to an image

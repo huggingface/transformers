@@ -42,7 +42,7 @@ import operator as op
 import os
 import re
 from pathlib import Path
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 from check_repo import ignore_undocumented
 from git import Repo
@@ -788,7 +788,7 @@ def find_source_file(obj: Any) -> Path:
     return obj_file.with_suffix(".py")
 
 
-def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
+def match_docstring_with_signature(obj: Any) -> Optional[tuple[str, str]]:
     """
     Matches the docstring of an object with its signature.
 
@@ -796,7 +796,7 @@ def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
         obj (`Any`): The object to process.
 
     Returns:
-        `Optional[Tuple[str, str]]`: Returns `None` if there is no docstring or no parameters documented in the
+        `Optionaltuple[str, str]]`: Returns `None` if there is no docstring or no parameters documented in the
         docstring, otherwise returns a tuple of two strings: the current documentation of the arguments in the
         docstring and the one matched with the signature.
     """

@@ -162,7 +162,7 @@ class EsmConfig(PretrainedConfig):
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
 
         Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+            dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = super().to_dict()
         if isinstance(self.esmfold_config, EsmFoldConfig):
@@ -196,7 +196,7 @@ class EsmFoldConfig:
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
 
         Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+            dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = asdict(self)
         output["trunk"] = self.trunk.to_dict()
@@ -261,7 +261,7 @@ class TrunkConfig:
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
 
         Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+            dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = asdict(self)
         output["structure_module"] = self.structure_module.to_dict()

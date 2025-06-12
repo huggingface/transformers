@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -80,10 +80,10 @@ class FastSpeech2ConformerModelOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     spectrogram: Optional[torch.FloatTensor] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
     duration_outputs: Optional[torch.LongTensor] = None
     pitch_outputs: Optional[torch.FloatTensor] = None
     energy_outputs: Optional[torch.FloatTensor] = None
@@ -455,7 +455,7 @@ class FastSpeech2ConformerAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         pos_emb: Optional[torch.Tensor] = None,
         output_attentions: Optional[torch.Tensor] = False,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Compute 'Scaled Dot Product Attention' with rel. positional encoding.
 
@@ -1133,7 +1133,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         return_dict: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Union[Tuple, FastSpeech2ConformerModelOutput]:
+    ) -> Union[tuple, FastSpeech2ConformerModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Input sequence of text vectors.
@@ -1529,7 +1529,7 @@ class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
         return_dict: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Union[Tuple, FastSpeech2ConformerModelOutput]:
+    ) -> Union[tuple, FastSpeech2ConformerModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Input sequence of text vectors.

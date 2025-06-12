@@ -1,6 +1,5 @@
 import inspect
 import warnings
-from typing import Dict
 
 import numpy as np
 
@@ -125,7 +124,7 @@ class TextClassificationPipeline(Pipeline):
         Classify the text(s) given as inputs.
 
         Args:
-            inputs (`str` or `List[str]` or `Dict[str]`, or `List[Dict[str]]`):
+            inputs (`str` or list[str]` or dict[str]`, or `Listdict[str]]`):
                 One or several texts to classify. In order to use text pairs for your classification, you can send a
                 dictionary containing `{"text", "text_pair"}` keys, or a list of those.
             top_k (`int`, *optional*, defaults to `1`):
@@ -165,7 +164,7 @@ class TextClassificationPipeline(Pipeline):
         else:
             return result
 
-    def preprocess(self, inputs, **tokenizer_kwargs) -> Dict[str, GenericTensor]:
+    def preprocess(self, inputs, **tokenizer_kwargs) -> dict[str, GenericTensor]:
         return_tensors = self.framework
         if isinstance(inputs, dict):
             return self.tokenizer(**inputs, return_tensors=return_tensors, **tokenizer_kwargs)

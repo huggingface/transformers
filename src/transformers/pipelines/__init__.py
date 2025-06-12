@@ -466,7 +466,7 @@ for task, values in SUPPORTED_TASKS.items():
 PIPELINE_REGISTRY = PipelineRegistry(supported_tasks=SUPPORTED_TASKS, task_aliases=TASK_ALIASES)
 
 
-def get_supported_tasks() -> List[str]:
+def get_supported_tasks() -> list[str]:
     """
     Returns a list of supported task strings.
     """
@@ -500,7 +500,7 @@ def get_task(model: str, token: Optional[str] = None, **deprecated_kwargs) -> st
     return task
 
 
-def check_task(task: str) -> Tuple[str, Dict, Any]:
+def check_task(task: str) -> tuple[str, dict, Any]:
     """
     Checks an incoming task string, to validate it's correct and return the default Pipeline and Model classes, and
     default models if they exist.
@@ -580,7 +580,7 @@ def pipeline(
     device_map=None,
     torch_dtype=None,
     trust_remote_code: Optional[bool] = None,
-    model_kwargs: Optional[Dict[str, Any]] = None,
+    model_kwargs: Optional[dict[str, Any]] = None,
     pipeline_class: Optional[Any] = None,
     **kwargs,
 ) -> Pipeline:
@@ -707,7 +707,7 @@ def pipeline(
         device (`int` or `str` or `torch.device`):
             Defines the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"mps"`, or a GPU ordinal rank like `1`) on which this
             pipeline will be allocated.
-        device_map (`str` or `Dict[str, Union[int, str, torch.device]`, *optional*):
+        device_map (`str` or dict[str, Union[int, str, torch.device]`, *optional*):
             Sent directly as `model_kwargs` (just a simpler shortcut). When `accelerate` library is present, set
             `device_map="auto"` to compute the most optimized `device_map` automatically (see
             [here](https://huggingface.co/docs/accelerate/main/en/package_reference/big_modeling#accelerate.cpu_offload)
@@ -726,10 +726,10 @@ def pipeline(
             Whether or not to allow for custom code defined on the Hub in their own modeling, configuration,
             tokenization or even pipeline files. This option should only be set to `True` for repositories you trust
             and in which you have read the code, as it will execute code present on the Hub on your local machine.
-        model_kwargs (`Dict[str, Any]`, *optional*):
+        model_kwargs (dict[str, Any]`, *optional*):
             Additional dictionary of keyword arguments passed along to the model's `from_pretrained(...,
             **model_kwargs)` function.
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (dict[str, Any]`, *optional*):
             Additional keyword arguments passed along to the specific pipeline init (see the documentation for the
             corresponding pipeline class for possible values).
 

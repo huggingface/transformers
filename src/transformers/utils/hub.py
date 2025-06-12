@@ -275,7 +275,7 @@ def cached_file(
         resume_download:
             Deprecated and ignored. All downloads are now resumed by default when possible.
             Will be removed in v5 of Transformers.
-        proxies (`Dict[str, str]`, *optional*):
+        proxies (dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or *bool*, *optional*):
@@ -341,7 +341,7 @@ def cached_files(
             This can be either:
             - a string, the *model id* of a model repo on huggingface.co.
             - a path to a *directory* potentially containing the file.
-        filenames (`List[str]`):
+        filenames (list[str]`):
             The name of all the files to locate in `path_or_repo`.
         cache_dir (`str` or `os.PathLike`, *optional*):
             Path to a directory in which a downloaded pretrained model configuration should be cached if the standard
@@ -352,7 +352,7 @@ def cached_files(
         resume_download:
             Deprecated and ignored. All downloads are now resumed by default when possible.
             Will be removed in v5 of Transformers.
-        proxies (`Dict[str, str]`, *optional*):
+        proxies (dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or *bool*, *optional*):
@@ -590,7 +590,7 @@ def download_url(url, proxies=None):
 
     Args:
         url (`str`): The url of the file to download.
-        proxies (`Dict[str, str]`, *optional*):
+        proxies (dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
 
@@ -881,7 +881,7 @@ class PushToHubMixin:
                 Branch to push the uploaded files to.
             commit_description (`str`, *optional*):
                 The description of the commit that will be created
-            tags (`List[str]`, *optional*):
+            tags (list[str]`, *optional*):
                 List of tags to push on the Hub.
 
         Examples:
@@ -1137,7 +1137,7 @@ def create_and_tag_model_card(
     Args:
         repo_id (`str`):
             The repo_id where to look for the model card.
-        tags (`List[str]`, *optional*):
+        tags (list[str]`, *optional*):
             The list of tags to add in the model card
         token (`str`, *optional*):
             Authentication token, obtained with `huggingface_hub.HfApi.login` method. Will default to the stored token.

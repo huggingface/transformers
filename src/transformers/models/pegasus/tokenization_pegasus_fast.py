@@ -16,7 +16,7 @@
 
 import os
 from shutil import copyfile
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
@@ -73,7 +73,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
             sentences generation (GSG). This is the sentence that the PEGASUS decoder will try to predict during
             pretraining. It corresponds to *[MASK1]* in [PEGASUS: Pre-training with Extracted Gap-sentences for
             Abstractive Summarization](https://arxiv.org/pdf/1912.08777.pdf).
-        additional_special_tokens (`List[str]`, *optional*):
+        additional_special_tokens (list[str]`, *optional*):
             Additional special tokens used by the tokenizer. If no additional_special_tokens are provided <mask_2> and
             <unk_2, ..., unk_102> are used as additional special tokens corresponding to the [original PEGASUS
             tokenizer](https://github.com/google-research/pegasus/blob/939830367bcf411193d2b5eca2f2f90f3f9260ca/pegasus/ops/pretrain_parsing_ops.cc#L66)
@@ -161,8 +161,8 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
         return [1 if x in all_special_ids else 0 for x in seq]
 
     def get_special_tokens_mask(
-        self, token_ids_0: List, token_ids_1: Optional[List] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list, token_ids_1: Optional[list] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """Get list where entries are [1] if a token is [eos] or [pad] else 0."""
         if already_has_special_tokens:
             return self._special_token_mask(token_ids_0)
@@ -171,7 +171,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
         else:
             return self._special_token_mask(token_ids_0 + token_ids_1) + [1]
 
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> list[int]:
         """
         Build model inputs from a sequence by adding eos to the end. no bos token is added to the front.
 
@@ -179,20 +179,20 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
         - pair of sequences: `A B </s>` (not intended use)
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (list[int]`):
                 List of IDs to which the special tokens will be added
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            list[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return token_ids_0 + [self.eos_token_id]
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "

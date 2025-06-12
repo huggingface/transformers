@@ -14,7 +14,7 @@
 """PyTorch UnivNetModel model."""
 
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -161,7 +161,7 @@ class UnivNetKernelPredictor(nn.Module):
                 Tensor containing the log-mel spectrograms.
 
         Returns:
-            Tuple[`torch.FloatTensor, `torch.FloatTensor`]: tuple of tensors where the first element is the tensor of
+           tuple[`torch.FloatTensor, `torch.FloatTensor`]: tuple of tensors where the first element is the tensor of
             location variable convolution kernels of shape `(batch_size, self.conv_layers, self.conv_in_channels,
             self.conv_out_channels, self.conv_kernel_size, seq_length)` and the second element is the tensor of
             location variable convolution biases of shape `(batch_size, self.conv_layers. self.conv_out_channels,
@@ -474,7 +474,7 @@ class UnivNetModel(PreTrainedModel):
         padding_mask: Optional[torch.FloatTensor] = None,
         generator: Optional[torch.Generator] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], UnivNetModelOutput]:
+    ) -> Union[tuple[torch.FloatTensor], UnivNetModelOutput]:
         r"""
         input_features (`torch.FloatTensor`):
             Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,

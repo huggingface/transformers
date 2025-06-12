@@ -15,7 +15,7 @@
 """Fast Image processor class for BridgeTower."""
 
 from collections.abc import Iterable
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Union
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -45,7 +45,7 @@ if is_torchvision_available():
 
 def make_pixel_mask(
     image: "torch.Tensor",
-    output_size: Tuple[int, int],
+    output_size: tuple[int, int],
 ) -> "torch.Tensor":
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -53,7 +53,7 @@ def make_pixel_mask(
     Args:
         image (`np.ndarray`):
             Image to make the pixel mask for.
-        output_size (`Tuple[int, int]`):
+        output_size (tuple[int, int]`):
             Output size of the mask.
     """
     input_height, input_width = image.shape[-2:]
@@ -68,7 +68,7 @@ def get_resize_output_image_size(
     shorter: int = 800,
     longer: int = 1333,
     size_divisor: int = 32,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     input_height, input_width = input_image.shape[-2:]
     min_size, max_size = shorter, longer
 
@@ -176,7 +176,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
     def center_crop(
         self,
         image: "torch.Tensor",
-        size: Dict[str, int],
+        size: dict[str, int],
         **kwargs,
     ) -> "torch.Tensor":
         """
@@ -186,7 +186,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
         Args:
             image (`torch.Tensor`):
                 Image to center crop.
-            size (`Dict[str, int]`):
+            size (dict[str, int]`):
                 Size of the output image in the form `{"height": h, "width": w}`.
         """
         output_size = size.shortest_edge
@@ -199,7 +199,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
     def _pad_image(
         self,
         image: "torch.Tensor",
-        output_size: Tuple[int, int],
+        output_size: tuple[int, int],
         constant_values: Union[float, Iterable[float]] = 0,
     ) -> "torch.Tensor":
         """

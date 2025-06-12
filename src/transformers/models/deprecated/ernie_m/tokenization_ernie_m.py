@@ -17,7 +17,7 @@
 import io
 import os
 import unicodedata
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import sentencepiece as spm
 
@@ -67,7 +67,7 @@ class ErnieMTokenizer(PreTrainedTokenizer):
     """
 
     # Ernie-M model doesn't have token_type embedding.
-    model_input_names: List[str] = ["input_ids"]
+    model_input_names: list[str] = ["input_ids"]
 
     vocab_files_names = VOCAB_FILES_NAMES
     resource_files_names = RESOURCE_FILES_NAMES
@@ -83,7 +83,7 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         pad_token="[PAD]",
         cls_token="[CLS]",
         mask_token="[MASK]",
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        sp_model_kwargs: Optional[dict[str, Any]] = None,
         **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it and
@@ -248,12 +248,12 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         - pair of sequences: `[CLS] A [SEP] [SEP] B [SEP]`
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (list[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
         Returns:
-            `List[int]`: List of input_id with the appropriate special tokens.
+            list[int]`: List of input_id with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
@@ -270,12 +270,12 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         - pair of sequences: `(0,0) A (0,0) (0,0) B (0,0)`
 
         Args:
-            offset_mapping_ids_0 (`List[tuple]`):
+            offset_mapping_ids_0 (list[tuple]`):
                 List of char offsets to which the special tokens will be added.
-            offset_mapping_ids_1 (`List[tuple]`, *optional*):
+            offset_mapping_ids_1 (list[tuple]`, *optional*):
                 Optional second list of wordpiece offsets for offset mapping pairs.
         Returns:
-            `List[tuple]`: List of wordpiece offsets with the appropriate offsets of special tokens.
+            list[tuple]`: List of wordpiece offsets with the appropriate offsets of special tokens.
         """
         if offset_mapping_1 is None:
             return [(0, 0)] + offset_mapping_0 + [(0, 0)]
@@ -288,14 +288,14 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         special tokens using the tokenizer `encode` method.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (list[int]`):
                 List of ids of the first sequence.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`str`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
         Returns:
-            `List[int]`:
+            list[int]`:
                 The list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
@@ -312,20 +312,20 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         return [1] + ([0] * len(token_ids_0)) + [1]
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Create the token type IDs corresponding to the sequences passed. [What are token type
         IDs?](../glossary#token-type-ids) Should be overridden in a subclass if the model has a special way of
         building: those.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (list[int]`):
                 The first tokenized sequence.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (list[int]`, *optional*):
                 The second tokenized sequence.
         Returns:
-            `List[int]`: The token type ids.
+            list[int]`: The token type ids.
         """
         # called when `add_special_tokens` is True, so align with `build_inputs_with_special_tokens` method
         if token_ids_1 is None:
@@ -380,7 +380,7 @@ class ErnieMTokenizer(PreTrainedTokenizer):
 
         return token_to_idx
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         index = 0
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(

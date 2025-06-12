@@ -15,7 +15,7 @@
 """Jukebox configuration"""
 
 import os
-from typing import List, Union
+from typing import Union
 
 from ....configuration_utils import PretrainedConfig
 from ....utils import logging
@@ -199,7 +199,7 @@ class JukeboxPriorConfig(PretrainedConfig):
             encoder-decoder architecture
         metadata_conditioning (`bool`, *optional*, defaults to `True)`:
             Whether or not to condition on the artist and genre metadata.
-        metadata_dims (`List[int]`, *optional*, defaults to `[604, 7898]`):
+        metadata_dims (list[int]`, *optional*, defaults to `[604, 7898]`):
             Number of genres and the number of artists that were used to train the embedding layers of the prior
             models.
         min_duration (`int`, *optional*, defaults to 0):
@@ -230,9 +230,9 @@ class JukeboxPriorConfig(PretrainedConfig):
             tokens.
         res_dilation_growth_rate (`int`, *optional*, defaults to 1):
             Dilation grow rate used between each convolutionnal block of the `JukeboxMusicTokenConditioner`
-        res_downs_t (`List[int]`, *optional*, defaults to `[3, 2, 2]`):
+        res_downs_t (list[int]`, *optional*, defaults to `[3, 2, 2]`):
             Downsampling rates used in the audio conditioning network
-        res_strides_t (`List[int]`, *optional*, defaults to `[2, 2, 2]`):
+        res_strides_t (list[int]`, *optional*, defaults to `[2, 2, 2]`):
             Striding used in the audio conditioning network
         resid_dropout (`int`, *optional*, defaults to 0):
             Residual dropout used in the attention pattern.
@@ -388,14 +388,14 @@ class JukeboxVQVAEConfig(PretrainedConfig):
             Whether or not to scale the residuals of the `JukeboxResConv1DBlock`.
         embed_dim (`int`, *optional*, defaults to 64):
             Embedding dimension of the codebook vectors.
-        hop_fraction (`List[int]`, *optional*, defaults to `[0.125, 0.5, 0.5]`):
+        hop_fraction (list[int]`, *optional*, defaults to `[0.125, 0.5, 0.5]`):
             Fraction of non-intersecting window used when continuing the sampling process.
         levels (`int`, *optional*, defaults to 3):
             Number of hierarchical levels that used in the VQVAE.
         lmu (`float`, *optional*, defaults to 0.99):
             Used in the codebook update, exponential moving average coefficient. For more detail refer to Appendix A.1
             of the original [VQVAE paper](https://arxiv.org/pdf/1711.00937v2.pdf)
-        multipliers (`List[int]`, *optional*, defaults to `[2, 1, 1]`):
+        multipliers (list[int]`, *optional*, defaults to `[2, 1, 1]`):
             Depth and width multipliers used for each level. Used on the `res_conv_width` and `res_conv_depth`
         res_conv_depth (`int`, *optional*, defaults to 4):
             Depth of the encoder and decoder block. If no `multipliers` are used, this is the same for each level.
@@ -408,9 +408,9 @@ class JukeboxVQVAEConfig(PretrainedConfig):
             reduced by a power of `res_dilation_cycle`.
         res_dilation_growth_rate (`int`, *optional*, defaults to 3):
             Resnet dilation growth rate used in the VQVAE (dilation_growth_rate ** depth)
-        res_downs_t (`List[int]`, *optional*, defaults to `[3, 2, 2]`):
+        res_downs_t (list[int]`, *optional*, defaults to `[3, 2, 2]`):
             Downsampling rate for each level of the hierarchical VQ-VAE.
-        res_strides_t (`List[int]`, *optional*, defaults to `[2, 2, 2]`):
+        res_strides_t (list[int]`, *optional*, defaults to `[2, 2, 2]`):
             Stride used for each level of the hierarchical VQ-VAE.
         sample_length (`int`, *optional*, defaults to 1058304):
             Provides the max input shape of the VQVAE. Is used to compute the input shape of each level.
@@ -505,7 +505,7 @@ class JukeboxConfig(PretrainedConfig):
     Args:
         vqvae_config (`JukeboxVQVAEConfig`, *optional*):
             Configuration for the `JukeboxVQVAE` model.
-        prior_config_list (`List[JukeboxPriorConfig]`, *optional*):
+        prior_config_list (list[JukeboxPriorConfig]`, *optional*):
             List of the configs for each of the `JukeboxPrior` of the model. The original architecture uses 3 priors.
         nb_priors (`int`, *optional*, defaults to 3):
             Number of prior models that will sequentially sample tokens. Each prior is conditional auto regressive
@@ -592,7 +592,7 @@ class JukeboxConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
     @classmethod
-    def from_configs(cls, prior_configs: List[JukeboxPriorConfig], vqvae_config: JukeboxVQVAEConfig, **kwargs):
+    def from_configs(cls, prior_configs: list[JukeboxPriorConfig], vqvae_config: JukeboxVQVAEConfig, **kwargs):
         r"""
         Instantiate a [`JukeboxConfig`] (or a derived class) from clip text model configuration and clip vision model
         configuration.

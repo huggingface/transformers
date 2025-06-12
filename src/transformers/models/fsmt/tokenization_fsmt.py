@@ -18,7 +18,7 @@ import json
 import os
 import re
 import unicodedata
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
@@ -125,7 +125,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
     this superclass for more information regarding those methods.
 
     Args:
-        langs (`List[str]`, *optional*):
+        langs (list[str]`, *optional*):
             A list of two languages to translate from and to, for instance `["en", "ru"]`.
         src_vocab_file (`str`, *optional*):
             File containing the vocabulary for the source language.
@@ -227,7 +227,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
         )
 
     # hack override
-    def get_vocab(self) -> Dict[str, int]:
+    def get_vocab(self) -> dict[str, int]:
         return self.get_src_vocab()
 
     # hack override
@@ -377,8 +377,8 @@ class FSMTTokenizer(PreTrainedTokenizer):
         return text
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A FAIRSEQ Transformer sequence has the following format:
@@ -387,13 +387,13 @@ class FSMTTokenizer(PreTrainedTokenizer):
         - pair of sequences: `<s> A </s> B </s>`
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (list[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         sep = [self.sep_token_id]
 
@@ -403,22 +403,22 @@ class FSMTTokenizer(PreTrainedTokenizer):
         return token_ids_0 + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
@@ -431,8 +431,8 @@ class FSMTTokenizer(PreTrainedTokenizer):
         return ([0] * len(token_ids_0)) + [1]
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. A FAIRSEQ
         Transformer sequence pair mask has the following format:
@@ -445,13 +445,13 @@ class FSMTTokenizer(PreTrainedTokenizer):
         If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
+            list[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
 
         Creates a mask from the two sequences passed to be used in a sequence-pair classification task. An
         FAIRSEQ_TRANSFORMER sequence pair mask has the following format:
@@ -463,7 +463,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
             return len(token_ids_0 + sep) * [0]
         return len(token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return

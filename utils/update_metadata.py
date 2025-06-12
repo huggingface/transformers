@@ -34,7 +34,6 @@ import collections
 import os
 import re
 import tempfile
-from typing import Dict, List, Tuple
 
 import pandas as pd
 from datasets import Dataset
@@ -124,7 +123,7 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
 ]
 
 
-def camel_case_split(identifier: str) -> List[str]:
+def camel_case_split(identifier: str) -> list[str]:
     """
     Split a camel-cased name into words.
 
@@ -132,7 +131,7 @@ def camel_case_split(identifier: str) -> List[str]:
         identifier (`str`): The camel-cased name to parse.
 
     Returns:
-        `List[str]`: The list of words in the identifier (as separated by capital letters).
+        list[str]`: The list of words in the identifier (as separated by capital letters).
 
     Example:
 
@@ -213,17 +212,17 @@ def get_frameworks_table() -> pd.DataFrame:
     return pd.DataFrame(data)
 
 
-def update_pipeline_and_auto_class_table(table: Dict[str, Tuple[str, str]]) -> Dict[str, Tuple[str, str]]:
+def update_pipeline_and_auto_class_table(table: dict[str, tuple[str, str]]) -> dict[str, tuple[str, str]]:
     """
     Update the table mapping models to pipelines and auto classes without removing old keys if they don't exist anymore.
 
     Args:
-        table (`Dict[str, Tuple[str, str]]`):
+        table (dict[str,tuple[str, str]]`):
             The existing table mapping model names to a tuple containing the pipeline tag and the auto-class name with
             which they should be used.
 
     Returns:
-        `Dict[str, Tuple[str, str]]`: The updated table in the same format.
+        dict[str,tuple[str, str]]`: The updated table in the same format.
     """
     auto_modules = [
         transformers_module.models.auto.modeling_auto,

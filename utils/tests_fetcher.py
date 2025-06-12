@@ -59,7 +59,7 @@ import re
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from git import Repo
 
@@ -182,7 +182,7 @@ def keep_doc_examples_only(content: str) -> str:
     return "\n".join(lines_to_keep)
 
 
-def get_all_tests() -> List[str]:
+def get_all_tests() -> list[str]:
     """
     Walks the `tests` folder to return a list of files/subfolders. This is used to split the tests to run when using
     parallelism. The split is:
@@ -263,7 +263,7 @@ def diff_contains_doc_examples(repo: Repo, branching_point: str, filename: str) 
     return old_content_clean != new_content_clean
 
 
-def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = False) -> List[str]:
+def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = False) -> list[str]:
     """
     Return a list of python modeling files that are impacted by the changes of `tiny_model_summary.json` in between:
 
@@ -271,7 +271,7 @@ def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = Fal
     - the current head and its parent commit otherwise.
 
     Returns:
-        `List[str]`: The list of Python modeling files that are impacted by the changes of `tiny_model_summary.json`.
+        list[str]`: The list of Python modeling files that are impacted by the changes of `tiny_model_summary.json`.
     """
     repo = Repo(PATH_TO_REPO)
 
@@ -379,7 +379,7 @@ def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = Fal
     return sorted(files)
 
 
-def get_diff(repo: Repo, base_commit: str, commits: List[str]) -> List[str]:
+def get_diff(repo: Repo, base_commit: str, commits: list[str]) -> list[str]:
     """
     Get the diff between a base commit and one or several commits.
 
@@ -388,11 +388,11 @@ def get_diff(repo: Repo, base_commit: str, commits: List[str]) -> List[str]:
             A git repository (for instance the Transformers repo).
         base_commit (`str`):
             The commit reference of where to compare for the diff. This is the current commit, not the branching point!
-        commits (`List[str]`):
+        commits (list[str]`):
             The list of commits with which to compare the repo at `base_commit` (so the branching point).
 
     Returns:
-        `List[str]`: The list of Python files with a diff (files added, renamed or deleted are always returned, files
+        list[str]`: The list of Python files with a diff (files added, renamed or deleted are always returned, files
         modified are returned if the diff in the file is not only in docstrings or comments, see
         `diff_is_docstring_only`).
     """
@@ -421,7 +421,7 @@ def get_diff(repo: Repo, base_commit: str, commits: List[str]) -> List[str]:
     return code_diff
 
 
-def get_modified_python_files(diff_with_last_commit: bool = False) -> List[str]:
+def get_modified_python_files(diff_with_last_commit: bool = False) -> list[str]:
     """
     Return a list of python files that have been modified between:
 
@@ -429,7 +429,7 @@ def get_modified_python_files(diff_with_last_commit: bool = False) -> List[str]:
     - the current head and its parent commit otherwise.
 
     Returns:
-        `List[str]`: The list of Python files with a diff (files added, renamed or deleted are always returned, files
+        list[str]`: The list of Python files with a diff (files added, renamed or deleted are always returned, files
         modified are returned if the diff in the file is not only in docstrings or comments, see
         `diff_is_docstring_only`).
     """
@@ -451,7 +451,7 @@ def get_modified_python_files(diff_with_last_commit: bool = False) -> List[str]:
         return get_diff(repo, repo.head.commit, parent_commits)
 
 
-def get_diff_for_doctesting(repo: Repo, base_commit: str, commits: List[str]) -> List[str]:
+def get_diff_for_doctesting(repo: Repo, base_commit: str, commits: list[str]) -> list[str]:
     """
     Get the diff in doc examples between a base commit and one or several commits.
 
@@ -460,11 +460,11 @@ def get_diff_for_doctesting(repo: Repo, base_commit: str, commits: List[str]) ->
             A git repository (for instance the Transformers repo).
         base_commit (`str`):
             The commit reference of where to compare for the diff. This is the current commit, not the branching point!
-        commits (`List[str]`):
+        commits (list[str]`):
             The list of commits with which to compare the repo at `base_commit` (so the branching point).
 
     Returns:
-        `List[str]`: The list of Python and Markdown files with a diff (files added or renamed are always returned, files
+        list[str]`: The list of Python and Markdown files with a diff (files added or renamed are always returned, files
         modified are returned if the diff in the file is only in doctest examples).
     """
     print("\n### DIFF ###\n")
@@ -492,14 +492,14 @@ def get_diff_for_doctesting(repo: Repo, base_commit: str, commits: List[str]) ->
     return code_diff
 
 
-def get_all_doctest_files() -> List[str]:
+def get_all_doctest_files() -> list[str]:
     """
     Return the complete list of python and Markdown files on which we run doctest.
 
     At this moment, we restrict this to only take files from `src/` or `docs/source/en/` that are not in `utils/not_doctested.txt`.
 
     Returns:
-        `List[str]`: The complete list of Python and Markdown files on which we run doctest.
+        list[str]`: The complete list of Python and Markdown files on which we run doctest.
     """
     py_files = [str(x.relative_to(PATH_TO_REPO)) for x in PATH_TO_REPO.glob("**/*.py")]
     md_files = [str(x.relative_to(PATH_TO_REPO)) for x in PATH_TO_REPO.glob("**/*.md")]
@@ -525,13 +525,13 @@ def get_all_doctest_files() -> List[str]:
     return sorted(test_files_to_run)
 
 
-def get_new_doctest_files(repo, base_commit, branching_commit) -> List[str]:
+def get_new_doctest_files(repo, base_commit, branching_commit) -> list[str]:
     """
     Get the list of files that were removed from "utils/not_doctested.txt", between `base_commit` and
     `branching_commit`.
 
     Returns:
-        `List[str]`: List of files that were removed from "utils/not_doctested.txt".
+        list[str]`: List of files that were removed from "utils/not_doctested.txt".
     """
     for diff_obj in branching_commit.diff(base_commit):
         # Ignores all but the "utils/not_doctested.txt" file.
@@ -552,7 +552,7 @@ def get_new_doctest_files(repo, base_commit, branching_commit) -> List[str]:
     return []
 
 
-def get_doctest_files(diff_with_last_commit: bool = False) -> List[str]:
+def get_doctest_files(diff_with_last_commit: bool = False) -> list[str]:
     """
     Return a list of python and Markdown files where doc example have been modified between:
 
@@ -560,7 +560,7 @@ def get_doctest_files(diff_with_last_commit: bool = False) -> List[str]:
     - the current head and its parent commit otherwise.
 
     Returns:
-        `List[str]`: The list of Python and Markdown files with a diff (files added or renamed are always returned, files
+        list[str]`: The list of Python and Markdown files with a diff (files added or renamed are always returned, files
         modified are returned if the diff in the file is only in doctest examples).
     """
     repo = Repo(PATH_TO_REPO)
@@ -621,7 +621,7 @@ _re_single_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*
 _re_multi_line_direct_imports = re.compile(r"(?:^|\n)\s*from\s+transformers(\S*)\s+import\s+\(([^\)]+)\)")
 
 
-def extract_imports(module_fname: str, cache: Optional[Dict[str, List[str]]] = None) -> List[str]:
+def extract_imports(module_fname: str, cache: Optional[dict[str, list[str]]] = None) -> list[str]:
     """
     Get the imports a given module makes.
 
@@ -629,12 +629,12 @@ def extract_imports(module_fname: str, cache: Optional[Dict[str, List[str]]] = N
         module_fname (`str`):
             The name of the file of the module where we want to look at the imports (given relative to the root of
             the repo).
-        cache (Dictionary `str` to `List[str]`, *optional*):
+        cache (Dictionary `str` to list[str]`, *optional*):
             To speed up this function if it was previously called on `module_fname`, the cache of all previously
             computed results.
 
     Returns:
-        `List[str]`: The list of module filenames imported in the input `module_fname` (a submodule we import from that
+        list[str]`: The list of module filenames imported in the input `module_fname` (a submodule we import from that
         is a subfolder will give its init file).
     """
     if cache is not None and module_fname in cache:
@@ -703,7 +703,7 @@ def extract_imports(module_fname: str, cache: Optional[Dict[str, List[str]]] = N
     return result
 
 
-def get_module_dependencies(module_fname: str, cache: Optional[Dict[str, List[str]]] = None) -> List[str]:
+def get_module_dependencies(module_fname: str, cache: Optional[dict[str, list[str]]] = None) -> list[str]:
     """
     Refines the result of `extract_imports` to remove subfolders and get a proper list of module filenames: if a file
     as an import `from utils import Foo, Bar`, with `utils` being a subfolder containing many files, this will traverse
@@ -717,12 +717,12 @@ def get_module_dependencies(module_fname: str, cache: Optional[Dict[str, List[st
         module_fname (`str`):
             The name of the file of the module where we want to look at the imports (given relative to the root of
             the repo).
-        cache (Dictionary `str` to `List[str]`, *optional*):
+        cache (Dictionary `str` to list[str]`, *optional*):
             To speed up this function if it was previously called on `module_fname`, the cache of all previously
             computed results.
 
     Returns:
-        `List[str]`: The list of module filenames imported in the input `module_fname` (with submodule imports refined).
+        list[str]`: The list of module filenames imported in the input `module_fname` (with submodule imports refined).
     """
     dependencies = []
     imported_modules = extract_imports(module_fname, cache=cache)
@@ -786,7 +786,7 @@ def get_module_dependencies(module_fname: str, cache: Optional[Dict[str, List[st
     return dependencies
 
 
-def create_reverse_dependency_tree() -> List[Tuple[str, str]]:
+def create_reverse_dependency_tree() -> list[tuple[str, str]]:
     """
     Create a list of all edges (a, b) which mean that modifying a impacts b with a going over all module and test files.
     """
@@ -800,16 +800,16 @@ def create_reverse_dependency_tree() -> List[Tuple[str, str]]:
     return list(set(edges))
 
 
-def get_tree_starting_at(module: str, edges: List[Tuple[str, str]]) -> List[Union[str, List[str]]]:
+def get_tree_starting_at(module: str, edges: list[tuple[str, str]]) -> list[Union[str, list[str]]]:
     """
     Returns the tree starting at a given module following all edges.
 
     Args:
         module (`str`): The module that will be the root of the subtree we want.
-        eges (`List[Tuple[str, str]]`): The list of all edges of the tree.
+        eges (`Listtuple[str, str]]`): The list of all edges of the tree.
 
     Returns:
-        `List[Union[str, List[str]]]`: The tree to print in the following format: [module, [list of edges
+        list[Union[str,list[str]]]`: The tree to print in the following format: [module, [list of edges
         starting at module], [list of edges starting at the preceding level], ...]
     """
     vertices_seen = [module]
@@ -834,7 +834,7 @@ def print_tree_deps_of(module, all_edges=None):
 
     Args:
         module (`str`): The module that will be the root of the subtree we want.
-        all_eges (`List[Tuple[str, str]]`, *optional*):
+        all_eges (`Listtuple[str, str]]`, *optional*):
             The list of all edges of the tree. Will be set to `create_reverse_dependency_tree()` if not passed.
     """
     if all_edges is None:
@@ -861,14 +861,14 @@ def print_tree_deps_of(module, all_edges=None):
         print(line[0])
 
 
-def init_test_examples_dependencies() -> Tuple[Dict[str, List[str]], List[str]]:
+def init_test_examples_dependencies() -> tuple[dict[str, list[str]], list[str]]:
     """
     The test examples do not import from the examples (which are just scripts, not modules) so we need some extra
     care initializing the dependency map, which is the goal of this function. It initializes the dependency map for
     example files by linking each example to the example test file for the example framework.
 
     Returns:
-        `Tuple[Dict[str, List[str]], List[str]]`: A tuple with two elements: the initialized dependency map which is a
+        `Tupledict[str,list[str]],list[str]]`: A tuple with two elements: the initialized dependency map which is a
         dict test example file to list of example files potentially tested by that test file, and the list of all
         example files (to avoid recomputing it later).
     """
@@ -897,12 +897,12 @@ def init_test_examples_dependencies() -> Tuple[Dict[str, List[str]], List[str]]:
     return test_example_deps, all_examples
 
 
-def create_reverse_dependency_map() -> Dict[str, List[str]]:
+def create_reverse_dependency_map() -> dict[str, list[str]]:
     """
     Create the dependency map from module/test filename to the list of modules/tests that depend on it recursively.
 
     Returns:
-        `Dict[str, List[str]]`: The reverse dependency map as a dictionary mapping filenames to all the filenames
+        dict[str,list[str]]`: The reverse dependency map as a dictionary mapping filenames to all the filenames
         depending on it recursively. This way the tests impacted by a change in file A are the test files in the list
         corresponding to key A in this result.
     """
@@ -953,20 +953,20 @@ def create_reverse_dependency_map() -> Dict[str, List[str]]:
 
 
 def create_module_to_test_map(
-    reverse_map: Optional[Dict[str, List[str]]] = None, filter_models: bool = False
-) -> Dict[str, List[str]]:
+    reverse_map: Optional[dict[str, list[str]]] = None, filter_models: bool = False
+) -> dict[str, list[str]]:
     """
     Extract the tests from the reverse_dependency_map and potentially filters the model tests.
 
     Args:
-        reverse_map (`Dict[str, List[str]]`, *optional*):
+        reverse_map (dict[str,list[str]]`, *optional*):
             The reverse dependency map as created by `create_reverse_dependency_map`. Will default to the result of
             that function if not provided.
         filter_models (`bool`, *optional*, defaults to `False`):
             Whether or not to filter model tests to only include core models if a file impacts a lot of models.
 
     Returns:
-        `Dict[str, List[str]]`: A dictionary that maps each file to the tests to execute if that file was modified.
+        dict[str,list[str]]`: A dictionary that maps each file to the tests to execute if that file was modified.
     """
     if reverse_map is None:
         reverse_map = create_reverse_dependency_map()
@@ -1108,13 +1108,13 @@ def infer_tests_to_run(
             f.write(" ".join(doctest_list))
 
 
-def filter_tests(output_file: str, filters: List[str]):
+def filter_tests(output_file: str, filters: list[str]):
     """
     Reads the content of the output file and filters out all the tests in a list of given folders.
 
     Args:
         output_file (`str` or `os.PathLike`): The path to the output file of the tests fetcher.
-        filters (`List[str]`): A list of folders to filter.
+        filters (list[str]`): A list of folders to filter.
     """
     if not os.path.isfile(output_file):
         print("No test file found.")
@@ -1135,7 +1135,7 @@ def filter_tests(output_file: str, filters: List[str]):
         f.write(" ".join(test_files))
 
 
-def parse_commit_message(commit_message: str) -> Dict[str, bool]:
+def parse_commit_message(commit_message: str) -> dict[str, bool]:
     """
     Parses the commit message to detect if a command is there to skip, force all or part of the CI.
 
@@ -1143,7 +1143,7 @@ def parse_commit_message(commit_message: str) -> Dict[str, bool]:
         commit_message (`str`): The commit message of the current commit.
 
     Returns:
-        `Dict[str, bool]`: A dictionary of strings to bools with keys the following keys: `"skip"`,
+        dict[str, bool]`: A dictionary of strings to bools with keys the following keys: `"skip"`,
         `"test_all_models"` and `"test_all"`.
     """
     if commit_message is None:

@@ -19,7 +19,7 @@ import itertools
 import json
 import os
 import unicodedata
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...tokenization_utils_base import (
@@ -298,12 +298,12 @@ class RoCBertTokenizer(PreTrainedTokenizer):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def prepare_for_model(
         self,
-        ids: List[int],
-        shape_ids: List[int],
-        pronunciation_ids: List[int],
-        pair_ids: Optional[List[int]] = None,
-        pair_shape_ids: Optional[List[int]] = None,
-        pair_pronunciation_ids: Optional[List[int]] = None,
+        ids: list[int],
+        shape_ids: list[int],
+        pronunciation_ids: list[int],
+        pair_ids: Optional[list[int]] = None,
+        pair_shape_ids: Optional[list[int]] = None,
+        pair_pronunciation_ids: Optional[list[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -330,22 +330,22 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         overflowing tokens. Such a combination of arguments will raise an error.
 
         Args:
-            ids (`List[int]`):
+            ids (list[int]`):
                 Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize` and
                 `convert_tokens_to_id` methods.
-            shape_ids (`List[int]`):
+            shape_ids (list[int]`):
                 Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize` and
                 `convert_token_to_shape_id` methods.
-            pronunciation_ids (`List[int]`):
+            pronunciation_ids (list[int]`):
                 Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize` and
                 `convert_token_to_pronunciation_id` methods.
-            pair_ids (`List[int]`, *optional*):
+            pair_ids (list[int]`, *optional*):
                 Tokenized input ids of the second sequence. Can be obtained from a string by chaining the `tokenize`
                 and `convert_tokens_to_id` methods.
-            pair_shape_ids (`List[int]`, *optional*):
+            pair_shape_ids (list[int]`, *optional*):
                 Tokenized input ids of the second sequence. Can be obtained from a string by chaining the `tokenize`
                 and `convert_token_to_shape_id` methods.
-            pair_pronunciation_ids (`List[int]`, *optional*):
+            pair_pronunciation_ids (list[int]`, *optional*):
                 Tokenized input ids of the second sequence. Can be obtained from a string by chaining the `tokenize`
                 and `convert_token_to_pronunciation_id` methods.
         """
@@ -480,7 +480,7 @@ class RoCBertTokenizer(PreTrainedTokenizer):
 
     def _pad(
         self,
-        encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
+        encoded_inputs: Union[dict[str, EncodedInput], BatchEncoding],
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
@@ -543,12 +543,12 @@ class RoCBertTokenizer(PreTrainedTokenizer):
     def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
-            List[TextInput],
-            List[TextInputPair],
-            List[PreTokenizedInput],
-            List[PreTokenizedInputPair],
-            List[EncodedInput],
-            List[EncodedInputPair],
+            list[TextInput],
+            list[TextInputPair],
+            list[PreTokenizedInput],
+            list[PreTokenizedInputPair],
+            list[EncodedInput],
+            list[EncodedInputPair],
         ],
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
@@ -649,9 +649,9 @@ class RoCBertTokenizer(PreTrainedTokenizer):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def _batch_prepare_for_model(
         self,
-        batch_ids_pairs: List[Union[PreTokenizedInputPair, Tuple[List[int], None]]],
-        batch_shape_ids_pairs: List[Union[PreTokenizedInputPair, Tuple[List[int], None]]],
-        batch_pronunciation_ids_pairs: List[Union[PreTokenizedInputPair, Tuple[List[int], None]]],
+        batch_ids_pairs: list[Union[PreTokenizedInputPair, tuple[list[int], None]]],
+        batch_shape_ids_pairs: list[Union[PreTokenizedInputPair, tuple[list[int], None]]],
+        batch_pronunciation_ids_pairs: list[Union[PreTokenizedInputPair, tuple[list[int], None]]],
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -733,7 +733,7 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         """Converts a token (str) in an shape_id using the shape vocab."""
         return self.word_shape.get(token, self.word_shape.get(self.unk_token))
 
-    def convert_tokens_to_shape_ids(self, tokens: Union[str, List[str]]) -> Union[int, List[int]]:
+    def convert_tokens_to_shape_ids(self, tokens: Union[str, list[str]]) -> Union[int, list[int]]:
         if tokens is None:
             return None
 
@@ -746,7 +746,7 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         """Converts a token (str) in an shape_id using the shape vocab."""
         return self.word_pronunciation.get(token, self.word_pronunciation.get(self.unk_token))
 
-    def convert_tokens_to_pronunciation_ids(self, tokens: Union[str, List[str]]) -> Union[int, List[int]]:
+    def convert_tokens_to_pronunciation_ids(self, tokens: Union[str, list[str]]) -> Union[int, list[int]]:
         if tokens is None:
             return None
 
@@ -768,11 +768,11 @@ class RoCBertTokenizer(PreTrainedTokenizer):
 
     def build_inputs_with_special_tokens(
         self,
-        token_ids_0: List[int],
-        token_ids_1: Optional[List[int]] = None,
+        token_ids_0: list[int],
+        token_ids_1: Optional[list[int]] = None,
         cls_token_id: Optional[int] = None,
         sep_token_id: Optional[int] = None,
-    ) -> List[int]:
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A BERT sequence has the following format:
@@ -781,13 +781,13 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         - pair of sequences: `[CLS] A [SEP] B [SEP]`
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (list[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         cls = [self.cls_token_id] if cls_token_id is None else [cls_token_id]
         sep = [self.sep_token_id] if sep_token_id is None else [sep_token_id]
@@ -797,22 +797,22 @@ class RoCBertTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
@@ -826,8 +826,8 @@ class RoCBertTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
         pair mask has the following format:
@@ -840,13 +840,13 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
+            list[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -854,7 +854,7 @@ class RoCBertTokenizer(PreTrainedTokenizer):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str, str, str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str, str, str]:
         index = 0
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
@@ -944,7 +944,7 @@ class RoCBertBasicTokenizer:
         Basic Tokenization of a piece of text. For sub-word tokenization, see WordPieceTokenizer.
 
         Args:
-            never_split (`List[str]`, *optional*)
+            never_split (list[str]`, *optional*)
                 Kept for backward compatibility purposes. Now implemented directly at the base class level (see
                 [`PreTrainedTokenizer.tokenize`]) List of token not to split.
         """

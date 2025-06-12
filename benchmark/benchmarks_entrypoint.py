@@ -28,7 +28,7 @@ class MetricsRecorder:
         self.commit_id = commit_id
         self.commit_msg = commit_msg
 
-    def initialise_benchmark(self, metadata: Dict[str, str]) -> int:
+    def initialise_benchmark(self, metadata:dict[str, str]) -> int:
         """
         Creates a new benchmark, returns the benchmark id
         """
@@ -55,7 +55,7 @@ class MetricsRecorder:
             f"inserted device measurements for benchmark #{benchmark_id} [CPU util: {cpu_util}, mem MBs: {mem_megabytes}, GPU util: {gpu_util}, GPU mem MBs: {gpu_mem_megabytes}]"
         )
 
-    def collect_model_measurements(self, benchmark_id: int, measurements: Dict[str, float]):
+    def collect_model_measurements(self, benchmark_id: int, measurements:dict[str, float]):
         with self.conn.cursor() as cur:
             cur.execute(
                 """
@@ -85,7 +85,7 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 
-def parse_arguments() -> Tuple[str, str, str, str]:
+def parse_arguments() ->tuple[str, str, str, str]:
     """
     Parse command line arguments for the benchmarking CLI.
     """

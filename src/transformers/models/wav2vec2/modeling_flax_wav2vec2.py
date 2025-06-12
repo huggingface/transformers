@@ -15,7 +15,7 @@
 """Flax Wav2Vec2 model."""
 
 from functools import partial
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import flax
 import flax.linen as nn
@@ -67,8 +67,8 @@ class FlaxWav2Vec2BaseModelOutput(ModelOutput):
 
     last_hidden_state: jnp.ndarray = None
     extract_features: jnp.ndarray = None
-    hidden_states: Optional[Tuple[jnp.ndarray]] = None
-    attentions: Optional[Tuple[jnp.ndarray]] = None
+    hidden_states: Optional[tuple[jnp.ndarray]] = None
+    attentions: Optional[tuple[jnp.ndarray]] = None
 
 
 @flax.struct.dataclass
@@ -102,12 +102,12 @@ class FlaxWav2Vec2ForPreTrainingOutput(ModelOutput):
     projected_states: jnp.ndarray = None
     projected_quantized_states: jnp.ndarray = None
     codevector_perplexity: jnp.ndarray = None
-    hidden_states: Optional[Tuple[jnp.ndarray]] = None
-    attentions: Optional[Tuple[jnp.ndarray]] = None
+    hidden_states: Optional[tuple[jnp.ndarray]] = None
+    attentions: Optional[tuple[jnp.ndarray]] = None
 
 
 def _compute_mask_indices(
-    shape: Tuple[int, int],
+    shape: tuple[int, int],
     mask_prob: float,
     mask_length: int,
     attention_mask: Optional[np.ndarray] = None,
@@ -179,7 +179,7 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-def _sample_negative_indices(features_shape: Tuple, num_negatives: int, attention_mask: Optional[np.ndarray] = None):
+def _sample_negative_indices(features_shape: tuple, num_negatives: int, attention_mask: Optional[np.ndarray] = None):
     """
     Sample `num_negatives` vectors from feature vectors.
     """
@@ -255,7 +255,7 @@ WAV2VEC2_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`jnp.ndarray` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            into an array of type list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
             soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
             conversion into a tensor of type `jnp.ndarray`. See [`Wav2Vec2Processor.__call__`] for details.
         attention_mask (`jnp.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
@@ -474,7 +474,7 @@ class FlaxWav2Vec2Attention(nn.Module):
         key_value_states: Optional[jnp.ndarray] = None,
         attention_mask: Optional[jnp.ndarray] = None,
         deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ) -> tuple[jnp.ndarray]:
         """Input shape: Batch x Time x Channel"""
 
         # get query proj
@@ -857,7 +857,7 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: Wav2Vec2Config,
-        input_shape: Tuple = (1, 1024),
+        input_shape: tuple = (1, 1024),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
@@ -866,7 +866,7 @@ class FlaxWav2Vec2PreTrainedModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_values = jnp.zeros(input_shape, dtype="i4")
         attention_mask = jnp.ones_like(input_values)

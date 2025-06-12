@@ -72,12 +72,12 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
         Assign labels to the audio(s) passed as inputs.
 
         Args:
-            audios (`str`, `List[str]`, `np.array` or `List[np.array]`):
+            audios (`str`, list[str]`, `np.array` or list[np.array]`):
                 The pipeline handles three types of inputs:
                 - A string containing a http link pointing to an audio
                 - A string containing a local path to an audio
                 - An audio loaded in numpy
-            candidate_labels (`List[str]`):
+            candidate_labels (list[str]`):
                 The candidate labels for this audio. They will be formatted using *hypothesis_template*.
             hypothesis_template (`str`, *optional*, defaults to `"This is a sound of {}"`):
                 The format used in conjunction with *candidate_labels* to attempt the audio classification by

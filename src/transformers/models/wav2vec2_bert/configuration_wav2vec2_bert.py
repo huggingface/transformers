@@ -110,13 +110,13 @@ class Wav2Vec2BertConfig(PretrainedConfig):
             instance of [`Wav2Vec2BertForSequenceClassification`].
         classifier_proj_size (`int`, *optional*, defaults to 768):
             Dimensionality of the projection before token mean-pooling for classification.
-        tdnn_dim (`Tuple[int]` or `List[int]`, *optional*, defaults to `(512, 512, 512, 512, 1500)`):
+        tdnn_dim (tuple[int]` or list[int]`, *optional*, defaults to `(512, 512, 512, 512, 1500)`):
             A tuple of integers defining the number of output channels of each 1D convolutional layer in the *TDNN*
             module of the *XVector* model. The length of *tdnn_dim* defines the number of *TDNN* layers.
-        tdnn_kernel (`Tuple[int]` or `List[int]`, *optional*, defaults to `(5, 3, 3, 1, 1)`):
+        tdnn_kernel (tuple[int]` or list[int]`, *optional*, defaults to `(5, 3, 3, 1, 1)`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the *TDNN* module of the
             *XVector* model. The length of *tdnn_kernel* has to match the length of *tdnn_dim*.
-        tdnn_dilation (`Tuple[int]` or `List[int]`, *optional*, defaults to `(1, 2, 3, 1, 1)`):
+        tdnn_dilation (tuple[int]` or list[int]`, *optional*, defaults to `(1, 2, 3, 1, 1)`):
             A tuple of integers defining the dilation factor of each 1D convolutional layer in *TDNN* module of the
             *XVector* model. The length of *tdnn_dilation* has to match the length of *tdnn_dim*.
         xvector_output_dim (`int`, *optional*, defaults to 512):

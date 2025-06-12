@@ -20,7 +20,7 @@ from collections import namedtuple
 from dataclasses import dataclass
 from functools import reduce
 from operator import mul
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -1815,7 +1815,7 @@ class ReformerModelOutput(ModelOutput):
 
             `num_predict` corresponds to `target_mapping.shape[1]`. If `target_mapping` is `None`, then `num_predict`
             corresponds to `sequence_length`.
-        past_buckets_states (`List[Tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_buckets_states (list[Tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `Tuple(torch.LongTensor, torch.FloatTensor` of length `config.n_layers`, with the first element
             being the previous *buckets* of shape `(batch_size, num_heads, num_hashes, sequence_length)`) and the
             second being the previous *hidden_states* of shape `(batch_size, sequence_length, hidden_size)`).
@@ -1836,9 +1836,9 @@ class ReformerModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    past_buckets_states: Optional[List[Tuple[torch.LongTensor, torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_buckets_states: Optional[list[tuple[torch.LongTensor, torch.FloatTensor]]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -1854,7 +1854,7 @@ class ReformerModelWithLMHeadOutput(ModelOutput):
 
             `num_predict` corresponds to `target_mapping.shape[1]`. If `target_mapping` is `None`, then `num_predict`
             corresponds to `sequence_length`.
-        past_buckets_states (`List[Tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_buckets_states (list[Tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `Tuple(torch.LongTensor, torch.FloatTensor` of length `config.n_layers`, with the first element
             being the previous *buckets* of shape `(batch_size, num_heads, num_hashes, sequence_length)`) and the
             second being the previous *hidden_states* of shape `(batch_size, sequence_length, hidden_size)`).
@@ -1876,9 +1876,9 @@ class ReformerModelWithLMHeadOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_buckets_states: Optional[List[Tuple[torch.LongTensor, torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_buckets_states: Optional[list[tuple[torch.LongTensor, torch.FloatTensor]]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @auto_docstring
@@ -1919,12 +1919,12 @@ class ReformerModel(ReformerPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         num_hashes: Optional[int] = None,
-        past_buckets_states: Optional[List[Tuple[torch.Tensor]]] = None,
+        past_buckets_states: Optional[list[tuple[torch.Tensor]]] = None,
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ReformerModelOutput]:
+    ) -> Union[tuple, ReformerModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. During training the input_ids sequence_length has to be
@@ -1940,7 +1940,7 @@ class ReformerModel(ReformerPreTrainedModel):
             the default defined in `config.num_hashes`.
 
             For more information, see `num_hashes` in [`ReformerConfig`].
-        past_buckets_states (`List[Tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*):
+        past_buckets_states (list[Tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*):
             List of `Tuple(torch.LongTensor, torch.FloatTensor` of length `config.n_layers`, with the first element
             being the previous *buckets* of shape `(batch_size, num_heads, num_hashes, sequence_length)`) and the
             second being the previous *hidden_states* of shape `(batch_size, sequence_length, hidden_size)`).
@@ -2153,14 +2153,14 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         num_hashes: Optional[int] = None,
-        past_buckets_states: Optional[List[Tuple[torch.Tensor]]] = None,
+        past_buckets_states: Optional[list[tuple[torch.Tensor]]] = None,
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> Union[Tuple, CausalLMOutput]:
+    ) -> Union[tuple, CausalLMOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. During training the input_ids sequence_length has to be
@@ -2176,7 +2176,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
             the default defined in `config.num_hashes`.
 
             For more information, see `num_hashes` in [`ReformerConfig`].
-        past_buckets_states (`List[Tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*):
+        past_buckets_states (list[Tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*):
             List of `Tuple(torch.LongTensor, torch.FloatTensor` of length `config.n_layers`, with the first element
             being the previous *buckets* of shape `(batch_size, num_heads, num_hashes, sequence_length)`) and the
             second being the previous *hidden_states* of shape `(batch_size, sequence_length, hidden_size)`).
@@ -2297,7 +2297,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, MaskedLMOutput]:
+    ) -> Union[tuple, MaskedLMOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. During training the input_ids sequence_length has to be
@@ -2430,7 +2430,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. During training the input_ids sequence_length has to be
@@ -2581,7 +2581,7 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. During training the input_ids sequence_length has to be

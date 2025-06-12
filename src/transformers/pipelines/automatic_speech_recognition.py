@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections import defaultdict
-from typing import TYPE_CHECKING, Dict, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 import requests
@@ -266,7 +266,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         Return:
             `Dict`: A dictionary with the following keys:
                 - **text** (`str`): The recognized text.
-                - **chunks** (*optional(, `List[Dict]`)
+                - **chunks** (*optional(, list[Dict]`)
                     When using `return_timestamps`, the `chunks` will become a list containing all the various text
                     chunks identified by the model, *e.g.* `[{"text": "hi ", "timestamp": (0.5, 0.9)}, {"text":
                     "there", "timestamp": (1.0, 1.5)}]`. The original full text can roughly be recovered by doing
@@ -551,7 +551,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         return {"is_last": is_last, **out, **extra}
 
     def postprocess(
-        self, model_outputs, decoder_kwargs: Optional[Dict] = None, return_timestamps=None, return_language=None
+        self, model_outputs, decoder_kwargs: Optional[dict] = None, return_timestamps=None, return_language=None
     ):
         # Optional return types
         optional = {}

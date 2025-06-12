@@ -286,11 +286,11 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
                 `beta_slow` (`float`, *optional*):
                     Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
                     ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
+                `short_factor` (list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to short contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
+                `long_factor` (list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to long contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
@@ -634,11 +634,11 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
                 `beta_slow` (`float`, *optional*):
                     Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
                     ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
+                `short_factor` (list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to short contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
+                `long_factor` (list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to long contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
@@ -822,11 +822,11 @@ class Qwen2_5OmniDiTConfig(PretrainedConfig):
             The dimension of the pre-trained speaker embedding.
         enc_dim (`int`, *optional*, defaults to 128):
             The dimension of the encoder output.
-        enc_channels (`List[int]`, *optional*, defaults to `[256, 256, 256, 256, 768]`):
+        enc_channels (list[int]`, *optional*, defaults to `[256, 256, 256, 256, 768]`):
             A list of output channels for each TDNN/SERes2Net layer in the encoder.
-        enc_kernel_sizes (`List[int]`, *optional*, defaults to `[5, 3, 3, 3, 1]`):
+        enc_kernel_sizes (list[int]`, *optional*, defaults to `[5, 3, 3, 3, 1]`):
             A list of kernel sizes for each layer in the encoder.
-        enc_dilations (`List[int]`, *optional*, defaults to `[1, 2, 3, 4, 1]`):
+        enc_dilations (list[int]`, *optional*, defaults to `[1, 2, 3, 4, 1]`):
             A list of dilations for each layer in the encoder.
         enc_attention_channels (`int`, *optional*, defaults to 64):
             The number of attention channels in the SqueezeExcitationBlock.
@@ -901,13 +901,13 @@ class Qwen2_5OmniBigVGANConfig(PretrainedConfig):
             The dimension of the mel-spectrogram.
         upsample_initial_channel (`int`, *optional*, defaults to 1536):
             The number of channels in the initial upsampling layer.
-        resblock_kernel_sizes (`List[int]`, *optional*, defaults to `[3, 7, 11]`):
+        resblock_kernel_sizes (list[int]`, *optional*, defaults to `[3, 7, 11]`):
             A list of kernel sizes for each residual block.
-        resblock_dilation_sizes (`List[List[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
+        resblock_dilation_sizes (list[List[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
             A list of dilation sizes for each residual block.
-        upsample_rates (`List[int]`, *optional*, defaults to `[5, 3, 2, 2, 2, 2]`):
+        upsample_rates (list[int]`, *optional*, defaults to `[5, 3, 2, 2, 2, 2]`):
             A list of upsampling rates for each upsampling layer.
-        upsample_kernel_sizes (`List[int]`, *optional*, defaults to `[11, 7, 4, 4, 4, 4]`):
+        upsample_kernel_sizes (list[int]`, *optional*, defaults to `[11, 7, 4, 4, 4, 4]`):
             A list of kernel sizes for each upsampling layer.
     """
 

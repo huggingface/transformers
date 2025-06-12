@@ -1,4 +1,3 @@
-from typing import Dict
 
 from ..utils import add_end_docstrings, is_vision_available
 from .base import GenericTensor, Pipeline, build_pipeline_init_args
@@ -57,7 +56,7 @@ class ImageFeatureExtractionPipeline(Pipeline):
 
         return preprocess_params, {}, postprocess_params
 
-    def preprocess(self, image, timeout=None, **image_processor_kwargs) -> Dict[str, GenericTensor]:
+    def preprocess(self, image, timeout=None, **image_processor_kwargs) -> dict[str, GenericTensor]:
         image = load_image(image, timeout=timeout)
         model_inputs = self.image_processor(image, return_tensors=self.framework, **image_processor_kwargs)
         if self.framework == "pt":
@@ -93,7 +92,7 @@ class ImageFeatureExtractionPipeline(Pipeline):
         Extract the features of the input(s).
 
         Args:
-            images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            images (`str`, list[str]`, `PIL.Image` or list[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing a http link pointing to an image

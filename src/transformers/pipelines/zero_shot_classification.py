@@ -1,5 +1,5 @@
 import inspect
-from typing import List, Union
+from typing import Union
 
 import numpy as np
 
@@ -162,7 +162,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
 
     def __call__(
         self,
-        sequences: Union[str, List[str]],
+        sequences: Union[str, list[str]],
         *args,
         **kwargs,
     ):
@@ -171,9 +171,9 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         information.
 
         Args:
-            sequences (`str` or `List[str]`):
+            sequences (`str` or list[str]`):
                 The sequence(s) to classify, will be truncated if the model input is too large.
-            candidate_labels (`str` or `List[str]`):
+            candidate_labels (`str` or list[str]`):
                 The set of possible class labels to classify each sequence into. Can be a single label, a string of
                 comma-separated labels, or a list of labels.
             hypothesis_template (`str`, *optional*, defaults to `"This example is {}."`):
@@ -193,8 +193,8 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
             A `dict` or a list of `dict`: Each result comes as a dictionary with the following keys:
 
             - **sequence** (`str`) -- The sequence for which this is the output.
-            - **labels** (`List[str]`) -- The labels sorted by order of likelihood.
-            - **scores** (`List[float]`) -- The probabilities for each of the labels.
+            - **labels** (list[str]`) -- The labels sorted by order of likelihood.
+            - **scores** (list[float]`) -- The probabilities for each of the labels.
         """
         if len(args) == 0:
             pass
