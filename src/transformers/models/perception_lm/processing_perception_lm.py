@@ -76,7 +76,6 @@ class PerceptionLMProcessor(ProcessorMixin):
     valid_kwargs = [
         "chat_template",
         "patch_size",
-        "vision_feature_select_strategy",
         "image_token",
         "num_additional_image_tokens",
     ]
