@@ -286,6 +286,32 @@ WAV2VEC2_INPUTS_DOCSTRING = r"""
 """
 
 
+class FlaxWav2Vec2NoLayerNormConvLayer(nn.Module):
+    config: Wav2Vec2Config
+    layer_id: int = 0
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.in_conv_dim = self.config.conv_dim[self.layer_id] if self.layer_id > 0 else 1
+        self.out_conv_dim = self.config.conv_dim[self.layer_id]
+
+        self.conv = nn.Conv(
+            features=self.config.conv_dim[self.layer_id],
+            kernel_size=(self.config.conv_kernel[self.layer_id],),
+            strides=(self.config.conv_stride[self.layer_id],),
+            use_bias=self.config.conv_bias,
+            kernel_init=jax.nn.initializers.he_normal(),
+            padding="VALID",
+            dtype=self.dtype,
+        )
+        self.activation = ACT2FN[self.config.feat_extract_activation]
+
+    def __call__(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
+
+
 class FlaxWav2Vec2LayerNormConvLayer(nn.Module):
     config: Wav2Vec2Config
     layer_id: int = 0
@@ -383,7 +409,10 @@ class FlaxConvLayersCollection(nn.Module):
                 for i in range(self.config.num_feat_extract_layers)
             ]
         elif self.config.feat_extract_norm == "group":
-            raise NotImplementedError("At the moment only ``config.feat_extact_norm == 'layer'`` is supported")
+            self.layers = [FlaxWav2Vec2LayerNormConvLayer(self.config, layer_id=0, name=str(0), dtype=self.dtype)] + [
+                FlaxWav2Vec2NoLayerNormConvLayer(self.config, layer_id=i + 1, name=str(i + 1), dtype=self.dtype)
+                for i in range(self.config.num_feat_extract_layers - 1)
+            ]
         else:
             raise ValueError(
                 f"`config.feat_extract_norm` is {self.config.feat_extract_norm}, but has to be one of ['group',"
@@ -556,6 +585,146 @@ class FlaxWav2Vec2FeedForward(nn.Module):
         hidden_states = self.output_dense(hidden_states)
         hidden_states = self.output_dropout(hidden_states, deterministic=deterministic)
         return hidden_states
+
+
+class FlaxWav2Vec2EncoderStableLayerNormPostAttention(nn.Module):
+    config: Wav2Vec2Config
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.attention = FlaxWav2Vec2Attention(
+            config=self.config,
+            embed_dim=self.config.hidden_size,
+            num_heads=self.config.num_attention_heads,
+            dropout=self.config.attention_dropout,
+            dtype=self.dtype,
+        )
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout)
+        self.layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.feed_forward = FlaxWav2Vec2FeedForward(self.config, dtype=self.dtype)
+        self.final_layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+
+    def __call__(self, hidden_states, attention_mask=None, deterministic=True, output_attentions=False):
+        attn_residual = hidden_states
+
+        hidden_states, attn_weights = self.attention(
+            hidden_states, attention_mask=attention_mask, deterministic=deterministic
+        )
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+        hidden_states = attn_residual + hidden_states
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = hidden_states + self.feed_forward(hidden_states)
+        hidden_states = self.final_layer_norm(hidden_states)
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
+
+
+class FlaxWav2Vec2LayerNormPostAttentionCollection(nn.Module):
+    config: Wav2Vec2Config
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.layers = [
+            FlaxWav2Vec2EncoderStableLayerNormPostAttention(self.config, name=str(i), dtype=self.dtype)
+            for i in range(self.config.num_hidden_layers)
+        ]
+
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask=None,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        all_attentions = () if output_attentions else None
+        all_hidden_states = () if output_hidden_states else None
+
+        for i, layer in enumerate(self.layers):
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            layer_outputs = layer(
+                hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
+            )
+
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_attentions += (layer_outputs[1],)
+
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        outputs = (hidden_states, all_hidden_states, all_attentions)
+
+        if not return_dict:
+            return tuple(v for v in outputs if v is not None)
+
+        return FlaxBaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+        )
+
+
+class FlaxWav2Vec2LayerNormPostAttention(nn.Module):
+    config: Wav2Vec2Config
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.pos_conv_embed = FlaxWav2Vec2PositionalConvEmbedding(self.config, dtype=self.dtype)
+        self.layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout)
+        self.layers = FlaxWav2Vec2LayerNormPostAttentionCollection(self.config, dtype=self.dtype)
+
+    def __call__(
+        self,
+        hidden_states,
+        attention_mask=None,
+        deterministic=True,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=True,
+    ):
+        if attention_mask is not None:
+            # make sure padded tokens are not attended to
+            hidden_states = jnp.where(
+                jnp.broadcast_to(attention_mask[:, :, None], hidden_states.shape), hidden_states, 0
+            )
+
+        position_embeddings = self.pos_conv_embed(hidden_states)
+
+        hidden_states = hidden_states + position_embeddings
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
+
+        outputs = self.layers(
+            hidden_states,
+            attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        last_hidden_state = outputs[0]
+
+        # update the last element in `hidden_states` after applying `layernorm` above
+        hidden_states = None
+        if output_hidden_states:
+            hidden_states = outputs[1]
+            hidden_states = hidden_states[:-1] + (last_hidden_state,)
+
+        if not return_dict:
+            outputs = (last_hidden_state, hidden_states) + (outputs[2:] if output_hidden_states else outputs[1:])
+            return tuple(v for v in outputs if v is not None)
+
+        return FlaxBaseModelOutput(
+            last_hidden_state=last_hidden_state, hidden_states=hidden_states, attentions=outputs.attentions
+        )
 
 
 class FlaxWav2Vec2EncoderLayerStableLayerNorm(nn.Module):
@@ -950,8 +1119,7 @@ class FlaxWav2Vec2Module(nn.Module):
         if self.config.do_stable_layer_norm:
             self.encoder = FlaxWav2Vec2StableLayerNormEncoder(self.config, dtype=self.dtype)
         else:
-            raise NotImplementedError("``config.do_stable_layer_norm is False`` is currently not supported.")
-
+            self.encoder = FlaxWav2Vec2LayerNormPostAttention(self.config, dtype=self.dtype)
         self.adapter = FlaxWav2Vec2Adapter(self.config, dtype=self.dtype) if self.config.add_adapter else None
 
     def __call__(
