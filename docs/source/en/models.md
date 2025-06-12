@@ -245,7 +245,7 @@ Big Model Inference's second feature relates to how weights are loaded and dispa
 
 Both features combined reduces memory usage and loading times for big pretrained models.
 
-Set [device_map](https://github.com/huggingface/transformers/blob/026a173a64372e9602a16523b8fae9de4b0ff428/src/transformers/modeling_utils.py#L3061) to `"auto"` to enable Big Model Inference. This also sets the [low_cpu_mem_usage](https://github.com/huggingface/transformers/blob/026a173a64372e9602a16523b8fae9de4b0ff428/src/transformers/modeling_utils.py#L3028) parameter to `True`, such that not more than 1x the model size is used in CPU memory.
+Set [device_map](https://github.com/huggingface/transformers/blob/026a173a64372e9602a16523b8fae9de4b0ff428/src/transformers/modeling_utils.py#L3061) to `"auto"` to enable Big Model Inference.
 
 ```py
 from transformers import AutoModelForCausalLM
