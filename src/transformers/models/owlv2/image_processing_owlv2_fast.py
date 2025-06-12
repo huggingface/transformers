@@ -232,14 +232,14 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
-    # Copied from transformers.models.owlvit.image_processing_owlvit.OwlViTImageProcessor.post_process
+    # Copied from transformers.models.owlvit.image_processing_owlvit.OwlViTImageProcessor.post_process with OwlViT->Owlv2
     def post_process(self, outputs, target_sizes):
         """
-        Converts the raw output of [`OwlViTForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        Converts the raw output of [`Owlv2ForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
         bottom_right_x, bottom_right_y) format.
 
         Args:
-            outputs ([`OwlViTObjectDetectionOutput`]):
+            outputs ([`Owlv2ObjectDetectionOutput`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
                 Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
@@ -333,14 +333,14 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
 
         return results
 
-    # Copied from transformers.models.owlvit.image_processing_owlvit.OwlViTImageProcessor.post_process_image_guided_detection
+    # Copied from transformers.models.owlvit.image_processing_owlvit.OwlViTImageProcessor.post_process_image_guided_detection with OwlViT->Owlv2
     def post_process_image_guided_detection(self, outputs, threshold=0.0, nms_threshold=0.3, target_sizes=None):
         """
-        Converts the output of [`OwlViTForObjectDetection.image_guided_detection`] into the format expected by the COCO
+        Converts the output of [`Owlv2ForObjectDetection.image_guided_detection`] into the format expected by the COCO
         api.
 
         Args:
-            outputs ([`OwlViTImageGuidedObjectDetectionOutput`]):
+            outputs ([`Owlv2ImageGuidedObjectDetectionOutput`]):
                 Raw outputs of the model.
             threshold (`float`, *optional*, defaults to 0.0):
                 Minimum confidence threshold to use to filter out predicted boxes.
@@ -354,7 +354,7 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model. All labels are set to None as
-            `OwlViTForObjectDetection.image_guided_detection` perform one-shot object detection.
+            `Owlv2ForObjectDetection.image_guided_detection` perform one-shot object detection.
         """
         logits, target_boxes = outputs.logits, outputs.target_pred_boxes
 
