@@ -74,13 +74,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Cleanup
-        working-directory: /transformers
-        run: |
-          rm -rf tests/__pycache__
-          rm -rf tests/models/__pycache__
-          rm -rf reports
+          path: /transformers
 
       - name: Show installed libraries and their versions
         working-directory: /transformers
