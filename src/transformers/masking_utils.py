@@ -684,10 +684,12 @@ def create_causal_mask(
             useful to easily overlay another mask on top of the causal one, for example for image tokens handling.
     """
     # If we have an HybridCache structure, here we want to create the mask for the full layers
-    try:
-        layer_idx = past_key_values.is_sliding.index(False)
-    except (ValueError, AttributeError):
-        layer_idx = 0
+    layer_idx = 0
+    if past_key_values is not None:
+        try:
+            layer_idx = past_key_values.is_sliding.index(False)
+        except (ValueError, AttributeError):
+            pass
 
     early_exit, attention_mask, kv_length, kv_offset = _preprocess_mask_arguments(
         config, input_embeds, attention_mask, cache_position, past_key_values, layer_idx
@@ -766,10 +768,12 @@ def create_sliding_window_causal_mask(
             useful to easily overlay another mask on top of the sliding causal one, for example for image tokens handling.
     """
     # If we have an HybridCache structure, here we want to create the mask for the sliding layers
-    try:
-        layer_idx = past_key_values.is_sliding.index(True)
-    except (ValueError, AttributeError):
-        layer_idx = 0
+    layer_idx = 0
+    if past_key_values is not None:
+        try:
+            layer_idx = past_key_values.is_sliding.index(False)
+        except (ValueError, AttributeError):
+            pass
 
     early_exit, attention_mask, kv_length, kv_offset = _preprocess_mask_arguments(
         config, input_embeds, attention_mask, cache_position, past_key_values, layer_idx
