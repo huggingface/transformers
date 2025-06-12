@@ -16,6 +16,7 @@
 import argparse
 import json
 import os
+import re
 
 import numpy as np
 import torch
@@ -75,6 +76,20 @@ CLASSIFIERS = {
     },
 }
 
+# fmt: off
+ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
+    r"module.pooler.query_tokens":                          r"pooler.query_tokens",
+    r"module.pooler.cross_attention_block.norm(\d+).":      r"pooler.cross_attention_layer.layer_norm\1.",
+    r"module.pooler.cross_attention_block.xattn.(q|k|v).":  r"pooler.cross_attention_layer.cross_attn.\1_proj.",
+    r"module.pooler.cross_attention_block.mlp.fc(\d+).":    r"pooler.cross_attention_layer.mlp.fc\1.",
+    r"module.pooler.blocks.(\d+).norm(\d+).":               r"pooler.self_attention_layers.\1.layer_norm\2.",
+    r"module.pooler.blocks.(\d+).attn.(q|k|v).":            r"pooler.self_attention_layers.\1.self_attn.\2_proj.",
+    r"module.pooler.blocks.(\d+).attn.proj.":               r"pooler.self_attention_layers.\1.self_attn.out_proj.",
+    r"module.pooler.blocks.(\d+).mlp.fc(\d+).":             r"pooler.self_attention_layers.\1.mlp.fc\2.",
+    r"module.linear.":                                      r"classifier.",
+}
+# fmt: on
+
 
 def get_id2label_mapping(dataset_name: str) -> dict[int, str]:
     path = hf_hub_download(
@@ -88,36 +103,40 @@ def get_id2label_mapping(dataset_name: str) -> dict[int, str]:
     return id2label
 
 
-def convert_classifier_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-    state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
-
+def split_qkv(state_dict):
+    state_dict = state_dict.copy()
     keys = list(state_dict.keys())
     for key in keys:
-        if ".norm" in key:
-            new_key = key.replace(".norm1.", ".layer_norm1.").replace(".norm2.", ".layer_norm2.")
-            state_dict[new_key] = state_dict.pop(key)
-        elif "qkv" in key and ".blocks." in key:
+        if ".qkv." in key:
             tensor = state_dict.pop(key)
             q, k, v = torch.chunk(tensor, 3, dim=0)
-            state_dict[key.replace(".attn.qkv.", ".self_attn.q_proj.")] = q
-            state_dict[key.replace(".attn.qkv.", ".self_attn.k_proj.")] = k
-            state_dict[key.replace(".attn.qkv.", ".self_attn.v_proj.")] = v
-        elif ".attn.proj." in key:
-            new_key = key.replace(".attn.proj.", ".self_attn.out_proj.")
-            state_dict[new_key] = state_dict.pop(key)
-        elif ".xattn.q." in key:
-            new_key = key.replace(".xattn.q.", ".cross_attn.q_proj.")
-            state_dict[new_key] = state_dict.pop(key)
-        elif ".xattn.kv." in key:
+            state_dict[key.replace(".qkv.", ".q.")] = q
+            state_dict[key.replace(".qkv.", ".k.")] = k
+            state_dict[key.replace(".qkv.", ".v.")] = v
+        elif ".kv." in key:
             tensor = state_dict.pop(key)
             k, v = torch.chunk(tensor, 2, dim=0)
-            state_dict[key.replace(".xattn.kv.", ".cross_attn.k_proj.")] = k
-            state_dict[key.replace(".xattn.kv.", ".cross_attn.v_proj.")] = v
+            state_dict[key.replace(".kv.", ".k.")] = k
+            state_dict[key.replace(".kv.", ".v.")] = v
 
-    state_dict = {k.replace(".blocks.", ".self_attention_layers."): v for k, v in state_dict.items()}
-    state_dict = {k.replace(".cross_attention_block.", ".cross_attention_layer."): v for k, v in state_dict.items()}
-    state_dict = {k.replace("linear.", "classifier."): v for k, v in state_dict.items()}
     return state_dict
+
+
+def convert_old_keys_to_new_keys(state_dict):
+    """
+    This function should be applied only once, on the concatenated keys to efficiently rename using
+    the key mappings.
+    """
+    output_dict = {}
+    old_text = "\n".join(state_dict)
+    new_text = old_text
+    for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
+        if replacement is None:
+            new_text = re.sub(pattern, "", new_text)  # an empty line
+            continue
+        new_text = re.sub(pattern, replacement, new_text)
+    output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
+    return output_dict
 
 
 def main(args: argparse.Namespace):
@@ -141,9 +160,12 @@ def main(args: argparse.Namespace):
     # load and convert classifier checkpoint
     checkpoint = torch.hub.load_state_dict_from_url(model_params["checkpoint"])
     state_dict = checkpoint["classifiers"][0]
-    converted_state_dict = convert_classifier_state_dict(state_dict)
 
-    result = model.load_state_dict(converted_state_dict, strict=False)
+    state_dict_qkv_split = split_qkv(state_dict)
+    key_mapping = convert_old_keys_to_new_keys(state_dict_qkv_split.keys())
+    converted_state_dict2 = {key_mapping[k]: v for k, v in state_dict_qkv_split.items()}
+
+    result = model.load_state_dict(converted_state_dict2, strict=False)
     if result.unexpected_keys:
         raise ValueError(f"Error loading state dict: {result.unexpected_keys}")
 
