@@ -27,7 +27,6 @@ deps = {
     "huggingface-hub": "huggingface-hub>=0.30.0,<1.0",
     "importlib_metadata": "importlib_metadata",
     "ipadic": "ipadic>=1.0.0,<2.0",
-    "isort": "isort>=5.5.4",
     "jax": "jax>=0.4.1,<=0.4.13",
     "jaxlib": "jaxlib>=0.4.1,<=0.4.13",
     "jieba": "jieba",
