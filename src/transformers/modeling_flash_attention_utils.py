@@ -46,6 +46,9 @@ if is_torch_npu_available():
     from .integrations.npu_flash_attention import npu_flash_attn_varlen_func as flash_attn_varlen_func
 
 
+_flash_supports_window_size = False
+
+
 if flash_attn_func:
     _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
 
