@@ -12,9 +12,6 @@ on:
       runner_scale_set:
         required: true
         type: string
-      docker:
-        required: true
-        type: string
       ci_event:
         required: true
         type: string
@@ -62,7 +59,7 @@ jobs:
     runs-on:
       group: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
     container:
-      image: ${{ inputs.docker }}
+      image: vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
       options: --runtime=habana --shm-size=64G --env HABANA_VISIBLE_DEVICES --env HABANA_VISIBLE_MODULES
       env:
         OMPI_MCA_btl_vader_single_copy_mechanism: none
@@ -82,8 +79,9 @@ jobs:
 
       - id: set-matrix
         name: Identify models to test
+        working-directory: tests
         run: |
-          echo "folder_slices=$(python3 utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
+          echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
 
       - name: HL-SMI
         run: |
@@ -106,7 +104,7 @@ jobs:
     runs-on:
       group: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
     container:
-      image: ${{ inputs.docker }}
+      image: vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
       options: --runtime=habana --shm-size=64G --env HABANA_VISIBLE_DEVICES --env HABANA_VISIBLE_MODULES
       env:
         OMPI_MCA_btl_vader_single_copy_mechanism: none
@@ -199,7 +197,7 @@ jobs:
     runs-on:
       group: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
     container:
-      image: ${{ inputs.docker }}
+      image: vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
       options: --runtime=habana --shm-size=64G --env HABANA_VISIBLE_DEVICES --env HABANA_VISIBLE_MODULES
       env:
         OMPI_MCA_btl_vader_single_copy_mechanism: none
@@ -263,7 +261,7 @@ jobs:
     runs-on:
       group: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
     container:
-      image: ${{ inputs.docker }}
+      image: vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
       options: --runtime=habana --shm-size=64G --env HABANA_VISIBLE_DEVICES --env HABANA_VISIBLE_MODULES
       env:
         OMPI_MCA_btl_vader_single_copy_mechanism: none
@@ -332,7 +330,7 @@ jobs:
     runs-on:
       group: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
     container:
-      image: ${{ inputs.docker }}
+      image: vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
       options: --runtime=habana --shm-size=64G --env HABANA_VISIBLE_DEVICES --env HABANA_VISIBLE_MODULES
       env:
         OMPI_MCA_btl_vader_single_copy_mechanism: none
@@ -410,7 +408,7 @@ jobs:
       # This would be an empty string if `setup` is skipped.
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
       quantization_matrix: ${{ needs.setup.outputs.quantization_matrix }}
-      ci_event: ${{ inputs.ci_event }}
       report_repo_id: ${{ inputs.report_repo_id }}
+      ci_event: ${{ inputs.ci_event }}
 
     secrets: inherit
