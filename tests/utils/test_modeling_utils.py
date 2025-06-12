@@ -64,7 +64,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_multi_accelerator,
-    require_usr_bin_time,
     slow,
     torch_device,
 )
@@ -1486,7 +1485,6 @@ class ModelUtilsTest(TestCasePlus):
                 config=model_config,
                 ignore_mismatched_sizes=True,
                 torch_dtype=torch.float16,
-                
             )
             model_ref = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path=model_id)
 

@@ -593,7 +593,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                         adapter_state_dict=dummy_state_dict,
                         adapter_name="other",
                         peft_config=peft_config,
-                        
                     )
                     # after loading, no meta device should be remaining
                     self.assertFalse(any((p.device.type == "meta") for p in model.parameters()))
@@ -604,7 +603,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                             adapter_state_dict=dummy_state_dict,
                             adapter_name="other",
                             peft_config=peft_config,
-                            
                         )
 
     def test_peft_from_pretrained_hub_kwargs(self):

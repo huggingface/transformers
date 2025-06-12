@@ -527,7 +527,6 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     tmpdirname,
                     torch_dtype=torch.float16,
                     attn_implementation="flash_attention_2",
-                    
                     load_in_4bit=True,
                 )
 
@@ -563,7 +562,10 @@ class JambaModelIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         model_id = "ai21labs/Jamba-tiny-dev"
-        cls.model = JambaForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, )
+        cls.model = JambaForCausalLM.from_pretrained(
+            model_id,
+            torch_dtype=torch.bfloat16,
+        )
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
         cls.device_properties = get_device_properties()
 

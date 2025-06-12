@@ -578,7 +578,6 @@ class ModelTesterMixin:
                 f"The following keys are not properly handled by `_init_weights()`:\n{different_weights}",
             )
 
-
     def test_torch_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if config.__class__ not in MODEL_MAPPING:

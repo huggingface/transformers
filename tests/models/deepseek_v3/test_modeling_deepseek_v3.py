@@ -459,7 +459,6 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         model_sdpa = DeepseekV3ForCausalLM.from_pretrained(
             "bzantium/tiny-deepseek-v3",
             torch_dtype=torch.float16,
-            
         ).to(torch_device)
 
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
@@ -467,7 +466,6 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         model_eager = DeepseekV3ForCausalLM.from_pretrained(
             "bzantium/tiny-deepseek-v3",
             torch_dtype=torch.float16,
-            
             attn_implementation="eager",
         ).to(torch_device)
 

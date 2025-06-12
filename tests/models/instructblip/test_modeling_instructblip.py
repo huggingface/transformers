@@ -726,7 +726,9 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
     @require_accelerate
     def test_inference_vicuna_7b(self):
         processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
-        model = InstructBlipForConditionalGeneration.from_pretrained("Salesforce/instructblip-vicuna-7b", load_in_8bit=True)
+        model = InstructBlipForConditionalGeneration.from_pretrained(
+            "Salesforce/instructblip-vicuna-7b", load_in_8bit=True
+        )
 
         url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
         image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
@@ -750,7 +752,6 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         model = InstructBlipForConditionalGeneration.from_pretrained(
             "Salesforce/instructblip-flan-t5-xl",
             torch_dtype=torch.bfloat16,
-            
         ).to(torch_device)
 
         url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
@@ -787,7 +788,6 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         model = InstructBlipForConditionalGeneration.from_pretrained(
             "Salesforce/instructblip-flan-t5-xl",
             torch_dtype=torch.bfloat16,
-            
         ).to(torch_device)
         processor.image_processor.size = {"height": 500, "width": 500}
 
@@ -808,7 +808,6 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         model = InstructBlipForConditionalGeneration.from_pretrained(
             "Salesforce/instructblip-flan-t5-xl",
             torch_dtype=torch.bfloat16,
-            
         ).to(torch_device)
 
         image = prepare_img()

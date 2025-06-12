@@ -126,9 +126,7 @@ class GemmaIntegrationTest(unittest.TestCase):
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16).to(
-            torch_device
-        )
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16).to(torch_device)
 
         model.generation_config.cache_implementation = "static"
 
@@ -149,9 +147,7 @@ class GemmaIntegrationTest(unittest.TestCase):
             "Hi today I am going to share with you a very easy and simple recipe of <strong><em>Kaju Kat",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -171,9 +167,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         ]
 
         # bfloat16 gives strange values, likely due to it has lower precision + very short prompts
-        model = AutoModelForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float16, attn_implementation="eager"
-        )
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16, attn_implementation="eager")
         model.to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -256,9 +250,7 @@ class GemmaIntegrationTest(unittest.TestCase):
             "Hi today I am going to show you how to make a simple and easy to make a DIY 3D",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16).to(
-            torch_device
-        )
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -290,9 +282,7 @@ class GemmaIntegrationTest(unittest.TestCase):
         # fmt: on
         expected_text = EXPECTED_TEXTS.get_expectation()
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -312,9 +302,7 @@ class GemmaIntegrationTest(unittest.TestCase):
             "Hi today I am going to show you how to make a simple and easy to make a DIY 3D",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16).to(
-            torch_device
-        )
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16).to(torch_device)
 
         model.generation_config.cache_implementation = "static"
 
@@ -451,9 +439,7 @@ class GemmaIntegrationTest(unittest.TestCase):
             "Hi today we have the review for a <strong>2016/2017</strong> season of",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)

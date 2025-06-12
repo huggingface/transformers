@@ -125,7 +125,6 @@ class GlmIntegrationTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
-            
             torch_dtype=torch.bfloat16,
             attn_implementation="eager",
             revision=self.revision,
@@ -149,7 +148,6 @@ class GlmIntegrationTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
-            
             torch_dtype=torch.bfloat16,
             attn_implementation="sdpa",
             revision=self.revision,
@@ -174,7 +172,6 @@ class GlmIntegrationTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
-            
             torch_dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             revision=self.revision,

@@ -156,9 +156,10 @@ class MixtralIntegrationTest(unittest.TestCase):
         model_id = "hf-internal-testing/Mixtral-tiny"
         dummy_input = torch.LongTensor([[0, 1, 0], [0, 1, 0]]).to(torch_device)
 
-        model = MixtralForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, ).to(
-            torch_device
-        )
+        model = MixtralForCausalLM.from_pretrained(
+            model_id,
+            torch_dtype=torch.bfloat16,
+        ).to(torch_device)
         # TODO: might need to tweak it in case the logits do not match on our daily runners
         # these logits have been obtained with the original megablocks implementation.
         # ("cuda", 8) for A100/A10, and ("cuda", 7) for T4
@@ -189,9 +190,10 @@ class MixtralIntegrationTest(unittest.TestCase):
         dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
         attention_mask = dummy_input.ne(0).to(torch.long)
 
-        model = MixtralForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, ).to(
-            torch_device
-        )
+        model = MixtralForCausalLM.from_pretrained(
+            model_id,
+            torch_dtype=torch.bfloat16,
+        ).to(torch_device)
 
         # TODO: might need to tweak it in case the logits do not match on our daily runners
         #
