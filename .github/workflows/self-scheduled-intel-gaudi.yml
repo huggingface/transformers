@@ -75,6 +75,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
       - name: Show installed libraries and their versions
         run: pip freeze
 
@@ -102,14 +105,100 @@ jobs:
       matrix:
         machine_type: [1gaudi, 2gaudi]
         slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
-    uses: ./.github/workflows/model_jobs_intel_gaudi.yml
-    with:
-      folder_slices: ${{ needs.setup.outputs.folder_slices }}
-      runner_scale_set: ${{ inputs.runner_scale_set }}
-      machine_type: ${{ matrix.machine_type }}
-      slice_id: ${{ matrix.slice_id }}
-      docker: ${{ inputs.docker }}
-    secrets: inherit
+    runs-on:
+      group: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
+    container:
+      image: ${{ inputs.docker }}
+      options: --runtime=habana --shm-size=64G --env HABANA_VISIBLE_DEVICES --env HABANA_VISIBLE_MODULES
+      env:
+        OMPI_MCA_btl_vader_single_copy_mechanism: none
+    steps:
+      - name: Echo input and matrix info
+        shell: bash
+        run: |
+          echo "${{ inputs.folder_slices }}"
+          echo "${{ matrix.folders }}"
+          echo "${{ toJson(fromJson(inputs.folder_slices)[inputs.slice_id]) }}"
+
+      - name: Echo folder ${{ matrix.folders }}
+        shell: bash
+        # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
+        # set the artifact folder names (because the character `/` is not allowed).
+        run: |
+          echo "${{ matrix.folders }}"
+          matrix_folders=${{ matrix.folders }}
+          matrix_folders=${matrix_folders/'models/'/'models_'}
+          echo "$matrix_folders"
+          echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        run: |
+          python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
+      - name: Update / Install some packages (for Past CI)
+        if: ${{ contains(inputs.docker, '-past-') }}
+        run: |
+          python3 -m pip install -U datasets
+
+      - name: Update / Install some packages (for Past CI)
+        if: ${{ contains(inputs.docker, '-past-') && contains(inputs.docker, '-pytorch-') }}
+        run: |
+          python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
+
+      - name: HL-SMI
+        run: |
+          hl-smi
+          echo "HABANA_VISIBLE_DEVICES=${HABANA_VISIBLE_DEVICES}"
+          echo "HABANA_VISIBLE_MODULES=${HABANA_VISIBLE_MODULES}"
+
+      - name: Environment
+        run: |
+          python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        run: |
+          pip freeze
+
+      - name: Set `machine_type` for report and artifact names
+        shell: bash
+        run: |
+          if [ "${{ matrix.machine_type }}" = "1gaudi" ]; then
+            machine_type=single-gaudi
+          elif [ "${{ matrix.machine_type }}" = "2gaudi" ]; then
+            machine_type=multi-gaudi
+          else
+            machine_type=${{ matrix.machine_type }}
+          fi
+          echo "machine_type=$machine_type" >> $GITHUB_ENV
+
+      - name: Run all tests on Gaudi
+        run: |
+          python3 -m pytest -rsfE -v --make-reports=${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}  -m "not not_device_test"
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: |
+          cat reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports/failures_short.txt
+
+      - name: Run test
+        shell: bash
+        run: |
+          mkdir -p reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports
+          echo "hello" > reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports/hello.txt
+          echo "${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports"
+
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports"
+        uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: ${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports
+          path: reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports
 
   run_pipelines_gaudi:
     if: ${{ inputs.job == 'run_pipelines_gaudi' }}
