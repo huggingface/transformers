@@ -1765,7 +1765,6 @@ class TrainingArguments:
                     logger.info(
                         "average_tokens_across_devices is True but world size is 1. Setting it to False automatically."
                     )
-
                     self.average_tokens_across_devices = False
             except ImportError as e:
                 logger.warning(f"Can not specify world size due to {e}. Turn average_tokens_across_devices to False.")
