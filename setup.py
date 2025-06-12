@@ -156,6 +156,7 @@ _deps = [
     "pytest-xdist",
     "pytest-order",
     "python>=3.9.0",
+    "pyupdate",
     "ray[tune]>=2.7.0",
     "regex!=2019.12.17",
     "requests",
