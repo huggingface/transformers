@@ -1146,6 +1146,9 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
 
         return encoder_output
 
+    def get_vision_features(self, pixel_values_videos) -> torch.Tensor:
+        encoder_output = self.forward(pixel_values_videos)
+        return encoder_output.last_hidden_state
 
 @auto_docstring(
     custom_intro="""

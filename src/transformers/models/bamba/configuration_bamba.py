@@ -100,6 +100,8 @@ class BambaConfig(PretrainedConfig):
             Flag indicating whether or not to use bias in the convolution layer of the mamba mixer block.
         mamba_proj_bias (`bool`, *optional*, defaults to `False`):
             Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the mamba mixer block
+        z_loss_coefficient (`float`, *optional*, defaults to 0.0):
+            Coefficient for auxiliary z-loss used to control logit growth during training
 
     """
 
@@ -135,6 +137,7 @@ class BambaConfig(PretrainedConfig):
         mamba_chunk_size=256,
         mamba_conv_bias=True,
         mamba_proj_bias=False,
+        z_loss_coefficient=0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -186,6 +189,7 @@ class BambaConfig(PretrainedConfig):
         self.mamba_chunk_size = mamba_chunk_size
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
+        self.z_loss_coefficient = z_loss_coefficient
 
         super().__init__(
             pad_token_id=pad_token_id,
