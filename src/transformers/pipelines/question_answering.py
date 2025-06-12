@@ -309,6 +309,10 @@ def map_subwords_to_words(
         undesired_tokens_mask (`np.ndarray`): Mask array for subwords, where 1 indicates undesired tokens
             (shape: `[1, sequence_length]`).
     """
+    if enc is None or enc.word_ids is None or enc.sequence_ids is None:
+        print("Warning: `word_ids` or `sequence_ids` is None. Skipping word alignment.")
+        return start, end, undesired_tokens_mask
+
     word_ids = np.array(enc.word_ids)
     seg_ids = np.array(enc.sequence_ids)
 
