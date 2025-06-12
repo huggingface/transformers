@@ -1636,7 +1636,7 @@ class ProcessorMixin(PushToHubMixin):
                             ):
                                 # start_token is out of bounds maybe due to truncation.
                                 continue
-                            for token_id in range(start_pos, end_pos + 1 if end_pos else len(input_ids[i])):
+                            for token_id in range(start_pos, end_pos if end_pos else len(input_ids[i])):
                                 current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
                     out["assistant_masks"] = assistant_masks

@@ -1222,5 +1222,5 @@ class ProcessorTesterMixin:
         mask = inputs["assistant_masks"].bool()
         assistant_ids = inputs["input_ids"][mask]
 
-        assistant_text = "The capital of France is Paris.<|im_end|>\nThe capital of Italy is Rome.<|im_end|>\n"
+        assistant_text = "The capital of France is Paris.<|im_end|>The capital of Italy is Rome.<|im_end|>"
         self.assertEqual(assistant_text, processor.decode(assistant_ids))
