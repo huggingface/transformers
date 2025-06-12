@@ -124,27 +124,27 @@ jobs:
 
       - name: Run all tests on Gaudi
         run: |
-          python3 -m pytest -rsfE -v --make-reports=${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports tests/${{ env.matrix_folders }}  -m "not not_device_test"
+          python3 -m pytest -rsfE -v --make-reports=${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }} -m "not not_device_test"
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
         run: |
-          cat reports/${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports/failures_short.txt
+          cat reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports/failures_short.txt
 
       - name: Run test
         shell: bash
         run: |
-          mkdir -p reports/${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports
-          echo "hello" > reports/${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports/hello.txt
-          echo "${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports"
+          mkdir -p reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports
+          echo "hello" > reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports/hello.txt
+          echo "${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports"
 
-      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports"
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports"
         uses: actions/upload-artifact@v4
         if: ${{ always() }}
         with:
-          name: ${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports
-          path: reports/${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports
+          name: ${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports
+          path: reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports
 
   run_pipelines_gaudi:
     if: ${{ inputs.job == 'run_pipelines_gaudi' }}
