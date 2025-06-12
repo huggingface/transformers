@@ -228,11 +228,12 @@ def load_model_state_dict(input_path: str) -> dict:
 
 def convert_model(
     hf_repo_id: str,
-    output_dir: str,
+    output_dir: Optional[str] = None,
     output_hub_path: Optional[str] = None,
     safe_serialization: bool = True,
 ):
-    os.makedirs(output_dir, exist_ok=True)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
 
     try:
         input_path = snapshot_download(hf_repo_id)
@@ -274,8 +275,9 @@ def convert_model(
     )
 
     # save config
-    config.save_pretrained(output_dir)
-    print("Model config saved successfully...")
+    if output_dir:
+        config.save_pretrained(output_dir)
+        print("Model config saved successfully...")
 
     # ------------------------------------------------------------
     # Convert processor
@@ -354,13 +356,13 @@ def main():
     )
     parser.add_argument(
         "--output_dir",
-        default="deepseek-community/deepseek-vl-7b-chat",
+        default=None,
         help="Location to write the converted model and processor",
     )
     parser.add_argument(
         "--output_hub_path",
-        help="Repository ID to push model to hub (e.g. 'username/model-name')",
         default=None,
+        help="Repository ID to push model to hub (e.g. 'username/model-name')",
     )
     parser.add_argument(
         "--safe_serialization", default=True, type=bool, help="Whether or not to save using `safetensors`."
