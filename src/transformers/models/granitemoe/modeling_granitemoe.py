@@ -505,7 +505,6 @@ class GraniteMoeDecoderLayer(GradientCheckpointingLayer):
 
         self.self_attn = GraniteMoeAttention(config=config, layer_idx=layer_idx)
         if config.num_local_experts > 0:
-
             self.block_sparse_moe = GraniteMoeMoE(config)
         self.input_layernorm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
