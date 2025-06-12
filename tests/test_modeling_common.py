@@ -944,7 +944,7 @@ class ModelTesterMixin:
                     model = AutoModelForCausalLM.from_pretrained(
                         tmpdir, torch_dtype=torch.float32, device_map=torch_device
                     )
-                    inputs_dict["num_items_in_batch"] = inputs_dict["input_ids"].shape[0]
+                    inputs_dict["num_items_in_batch"] = torch.tensor(inputs_dict["input_ids"].shape[0])
                     inputs_dict["labels"] = inputs_dict["input_ids"]
                     _ = model(**inputs_dict, return_dict=False)
 
@@ -1301,6 +1301,7 @@ class ModelTesterMixin:
                     "input_values",
                     "inputs_embeds",
                     "pixel_values",
+                    "pixel_values_videos",
                     "token_type_ids",
                     "visual_feats",
                     "visual_pos",
