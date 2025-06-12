@@ -31,97 +31,84 @@ logger = logging.get_logger(__name__)
 
 class BagelVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`BagelVisionModel`]. It is used to instantiate a
-    `BagelVisionModel` according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`SiglipVisionModel`]. It is used to instantiate a
+    Siglip vision encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the vision encoder of the Siglip
+    [google/siglip-base-patch16-224](https://huggingface.co/google/siglip-base-patch16-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
+
     Args:
-        hidden_size (`int`, *optional*, defaults to 1024):
+        hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
+        intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
+        num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
+            Number of channels in the input images.
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
-        image_size (`int`, *optional*, defaults to 384):
-            The size (resolution) of each image.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for attention weights.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"`, and `"gelu_new"` are supported.
-        mlp_ratio (`float`, *optional*, defaults to 4.0):
-            Ratio of MLP hidden dimensionality to embedding dimensionality.
-        attention_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys, and values in the attention layers.
-        hidden_dropout_rate (`float`, *optional*, defaults to 0.0):
-            The dropout probability for fully connected layers in the encoder.
-        projection_dim (`int`, *optional*, defaults to 2048):
-            Dimensionality of the MLP projection head.
-        projection_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for the projection layer.
-        use_qk_norm (`bool`, *optional*, defaults to `False`):
-            Whether to normalize the query and key matrices.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated normal initializer for initializing all weight matrices.
-        depth (`int`, *optional*, defaults to 2):
-            Number of hidden layers in the aligner module.
-        num_image_tokens (`int`, *optional*, defaults to 576):
-            Number of image tokens.
-    """
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+
+    Example:
+
+    ```python
+    >>> from transformers import SiglipVisionConfig, SiglipVisionModel
+
+    >>> # Initializing a SiglipVisionConfig with google/siglip-base-patch16-224 style configuration
+    >>> configuration = SiglipVisionConfig()
+
+    >>> # Initializing a SiglipVisionModel (with random weights) from the google/siglip-base-patch16-224 style configuration
+    >>> model = SiglipVisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "bagel_vision_model"
     base_config_key = "vision_config"
 
     def __init__(
         self,
-        hidden_size=1024,
-        num_hidden_layers=24,
-        num_attention_heads=16,
+        hidden_size=768,
+        intermediate_size=3072,
+        num_hidden_layers=12,
+        num_attention_heads=12,
         num_channels=3,
+        image_size=224,
         patch_size=16,
-        image_size=384,
-        attention_dropout=0.0,
+        hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-6,
-        hidden_act="gelu",
-        mlp_ratio=4.0,
-        attention_bias=True,
-        hidden_dropout_rate=0.0,
-        projection_dim=2048,
-        projection_dropout=0.0,
-        use_qk_norm=False,
-        initializer_range=0.02,
-        depth=2,
-        num_image_tokens=576,
+        attention_dropout=0.0,
+        rope=True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            num_channels=num_channels,
+            image_size=image_size,
+            patch_size=patch_size,
+            hidden_act=hidden_act,
+            layer_norm_eps=layer_norm_eps,
+            attention_dropout=attention_dropout,
+            **kwargs)
 
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.image_size = image_size
-        self.attention_dropout = attention_dropout
-        self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
-
-        self.mlp_ratio = mlp_ratio
-        self.attention_bias = attention_bias
-        self.hidden_dropout_rate = hidden_dropout_rate
-        self.projection_dim = projection_dim
-        self.projection_dropout = projection_dropout
-        self.use_qk_norm = use_qk_norm
-        self.initializer_range = initializer_range
-        self.depth = depth
-        self.num_image_tokens = num_image_tokens
+        self.rope = rope
 
 
 class BagelVQVAEConfig(PretrainedConfig):
