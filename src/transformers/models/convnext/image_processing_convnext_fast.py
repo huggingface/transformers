@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for ConvNeXT."""
 
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -84,7 +84,7 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
     def resize(
         self,
         image: "torch.Tensor",
-        size: Dict[str, int],
+        size: dict[str, int],
         crop_pct: float,
         interpolation: PILImageResampling = PILImageResampling.BICUBIC,
         **kwargs,
@@ -141,9 +141,9 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_resize: bool,
-        size: Dict[str, int],
+        size: dict[str, int],
         crop_pct: float,
         interpolation: Optional["F.InterpolationMode"],
         do_center_crop: bool,
@@ -151,8 +151,8 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:
         # Group images by size for batched resizing

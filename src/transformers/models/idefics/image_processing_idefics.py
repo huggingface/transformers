@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for Idefics."""
 
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, Optional, Union
 
 from PIL import Image
 
@@ -78,8 +78,8 @@ class IdeficsImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         image_size: int = 224,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         image_num_channels: Optional[int] = 3,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -98,9 +98,9 @@ class IdeficsImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         image_num_channels: Optional[int] = 3,
-        image_size: Optional[Dict[str, int]] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_size: Optional[dict[str, int]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         transform: Optional[Callable] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,

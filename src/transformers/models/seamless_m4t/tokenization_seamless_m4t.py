@@ -16,7 +16,7 @@
 
 import os
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import sentencepiece as spm
 
@@ -119,8 +119,8 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
 
-    prefix_tokens: List[int] = []
-    suffix_tokens: List[int] = []
+    prefix_tokens: list[int] = []
+    suffix_tokens: list[int] = []
 
     def __init__(
         self,
@@ -134,7 +134,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         tokenizer_file=None,
         src_lang="eng",
         tgt_lang="fra",
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        sp_model_kwargs: Optional[dict[str, Any]] = None,
         additional_special_tokens=None,
         add_prefix_space=True,
         **kwargs,
@@ -211,11 +211,11 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
-        text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        text_pair: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
+        text_target: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         text_pair_target: Optional[
-            Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
+            Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]
         ] = None,
         padding: Union[bool, str, PaddingStrategy] = True,
         pad_to_multiple_of: Optional[int] = 2,
@@ -309,8 +309,8 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
@@ -340,8 +340,8 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. An NLLB sequence has the following format, where `X` represents the sequence:
@@ -368,8 +368,8 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. nllb does not
         make use of token type ids, therefore a list of zeros is returned.
@@ -436,7 +436,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         return tokenizer
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
-    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
+    def tokenize(self, text: "TextInput", **kwargs) -> list[str]:
         """
         Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
         first token is special.
@@ -494,7 +494,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         return out_string
 
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -514,9 +514,9 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.prepare_seq2seq_batch with eng_Latn->eng, fra_Latn->fra
     def prepare_seq2seq_batch(
         self,
-        src_texts: List[str],
+        src_texts: list[str],
         src_lang: str = "eng",
-        tgt_texts: Optional[List[str]] = None,
+        tgt_texts: Optional[list[str]] = None,
         tgt_lang: str = "fra",
         **kwargs,
     ) -> BatchEncoding:

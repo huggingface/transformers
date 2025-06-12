@@ -21,7 +21,7 @@ import copy
 import itertools
 import math
 import warnings
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -738,7 +738,7 @@ class TFT5MainLayer(keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-    ) -> Tuple:
+    ) -> tuple:
         if input_ids is not None and inputs_embeds is not None:
             err_msg_prefix = "decoder_" if self.is_decoder else ""
             raise ValueError(
@@ -1210,7 +1210,7 @@ class TFT5Model(TFT5PreTrainedModel):
         head_mask: np.ndarray | tf.Tensor | None = None,
         decoder_head_mask: np.ndarray | tf.Tensor | None = None,
         encoder_outputs: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
         decoder_inputs_embeds: np.ndarray | tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
@@ -1218,7 +1218,7 @@ class TFT5Model(TFT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[Tuple, TFSeq2SeqModelOutput]:
+    ) -> Union[tuple, TFSeq2SeqModelOutput]:
         r"""
         Returns:
 
@@ -1387,7 +1387,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         head_mask: np.ndarray | tf.Tensor | None = None,
         decoder_head_mask: np.ndarray | tf.Tensor | None = None,
         encoder_outputs: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
         decoder_inputs_embeds: np.ndarray | tf.Tensor | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
@@ -1396,7 +1396,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[Tuple, TFSeq2SeqLMOutput]:
+    ) -> Union[tuple, TFSeq2SeqLMOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the cross entropy classification loss. Indices should be in `[0, ...,
@@ -1624,7 +1624,7 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[Tuple, TFBaseModelOutput]:
+    ) -> Union[tuple, TFBaseModelOutput]:
         r"""
         Returns:
 

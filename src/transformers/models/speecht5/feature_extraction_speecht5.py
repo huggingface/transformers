@@ -15,7 +15,7 @@
 """Feature extractor class for SpeechT5."""
 
 import warnings
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -138,8 +138,8 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
     @staticmethod
     # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
     def zero_mean_unit_var_norm(
-        input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value: float = 0.0
-    ) -> List[np.ndarray]:
+        input_values: list[np.ndarray], attention_mask: list[np.ndarray], padding_value: float = 0.0
+    ) -> list[np.ndarray]:
         """
         Every array in the list is normalized to have zero mean and unit variance
         """
@@ -179,8 +179,8 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        audio: Optional[Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]]] = None,
-        audio_target: Optional[Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]]] = None,
+        audio: Optional[Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]]] = None,
+        audio_target: Optional[Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]]] = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         max_length: Optional[int] = None,
         truncation: bool = False,
@@ -296,7 +296,7 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
 
     def _process_audio(
         self,
-        speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         is_target: bool = False,
         padding: Union[bool, str, PaddingStrategy] = False,
         max_length: Optional[int] = None,
@@ -381,7 +381,7 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
 
         return padded_inputs
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         output = super().to_dict()
 
         # Don't serialize these as they are derived from the other properties.

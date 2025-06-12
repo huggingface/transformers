@@ -20,7 +20,7 @@ import os
 import warnings
 from functools import partial
 from pickle import UnpicklingError
-from typing import Any, Dict, Optional, Set, Tuple, Union
+from typing import Any, Optional, Union
 
 import flax.linen as nn
 import jax
@@ -174,7 +174,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         self,
         config: PretrainedConfig,
         module: nn.Module,
-        input_shape: Tuple = (1, 1),
+        input_shape: tuple = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
@@ -225,7 +225,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if _do_init:
             self.params = random_params
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> Dict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> dict:
         raise NotImplementedError(f"init method has to be implemented for {self}")
 
     def enable_gradient_checkpointing(self):
@@ -254,7 +254,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         return self._module
 
     @property
-    def params(self) -> Union[Dict, FrozenDict]:
+    def params(self) -> Union[dict, FrozenDict]:
         if not self._is_initialized:
             raise ValueError(
                 "`params` cannot be accessed from model when the model is created with `_do_init=False`. "
@@ -264,15 +264,15 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         return self._params
 
     @property
-    def required_params(self) -> Set:
+    def required_params(self) -> set:
         return self._required_params
 
     @property
-    def params_shape_tree(self) -> Dict:
+    def params_shape_tree(self) -> dict:
         return self._params_shape_tree
 
     @params.setter
-    def params(self, params: Union[Dict, FrozenDict]):
+    def params(self, params: Union[dict, FrozenDict]):
         # don't set params if the model is not initialized
         if not self._is_initialized:
             raise ValueError(
@@ -290,7 +290,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             )
         self._params = params
 
-    def _cast_floating_to(self, params: Union[Dict, FrozenDict], dtype: jnp.dtype, mask: Any = None) -> Any:
+    def _cast_floating_to(self, params: Union[dict, FrozenDict], dtype: jnp.dtype, mask: Any = None) -> Any:
         """
         Helper method to cast floating-point values of given parameter `PyTree` to given `dtype`.
         """
@@ -313,7 +313,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         return unflatten_dict(flat_params)
 
-    def to_bf16(self, params: Union[Dict, FrozenDict], mask: Any = None):
+    def to_bf16(self, params: Union[dict, FrozenDict], mask: Any = None):
         r"""
         Cast the floating-point `params` to `jax.numpy.bfloat16`. This returns a new `params` tree and does not cast
         the `params` in place.
@@ -352,7 +352,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         ```"""
         return self._cast_floating_to(params, jnp.bfloat16, mask)
 
-    def to_fp32(self, params: Union[Dict, FrozenDict], mask: Any = None):
+    def to_fp32(self, params: Union[dict, FrozenDict], mask: Any = None):
         r"""
         Cast the floating-point `params` to `jax.numpy.float32`. This method can be used to explicitly convert the
         model parameters to fp32 precision. This returns a new `params` tree and does not cast the `params` in place.
@@ -379,7 +379,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         ```"""
         return self._cast_floating_to(params, jnp.float32, mask)
 
-    def to_fp16(self, params: Union[Dict, FrozenDict], mask: Any = None):
+    def to_fp16(self, params: Union[dict, FrozenDict], mask: Any = None):
         r"""
         Cast the floating-point `params` to `jax.numpy.float16`. This returns a new `params` tree and does not cast the
         `params` in place.

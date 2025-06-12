@@ -14,7 +14,7 @@
 # limitations under the License.
 """chameleon model configuration"""
 
-from typing import List, Optional
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -73,9 +73,9 @@ class ChameleonVQVAEConfig(PretrainedConfig):
         resolution: int = 512,
         in_channels: int = 3,
         base_channels: int = 128,
-        channel_multiplier: List[int] = [1, 1, 2, 2, 4],
+        channel_multiplier: list[int] = [1, 1, 2, 2, 4],
         num_res_blocks: int = 2,
-        attn_resolutions: Optional[List[int]] = None,
+        attn_resolutions: Optional[list[int]] = None,
         dropout: float = 0.0,
         attn_type: str = "vanilla",
         initializer_range=0.02,

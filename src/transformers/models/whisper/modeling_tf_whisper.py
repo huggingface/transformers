@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import math
 import random
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -194,11 +194,11 @@ class TFWhisperAttention(keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         key_value_states: tf.Tensor | None = None,
-        past_key_value: Tuple[Tuple[tf.Tensor]] | None = None,
+        past_key_value: tuple[tuple[tf.Tensor]] | None = None,
         attention_mask: tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Tuple[tf.Tensor, tf.Tensor | None]:
+    ) -> tuple[tf.Tensor, tf.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -442,9 +442,9 @@ class TFWhisperDecoderLayer(keras.layers.Layer):
         encoder_attention_mask: tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
         cross_attn_layer_head_mask: tf.Tensor | None = None,
-        past_key_value: Tuple[tf.Tensor] | None = None,
+        past_key_value: tuple[tf.Tensor] | None = None,
         training=False,
-    ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
+    ) -> tuple[tf.Tensor, tf.Tensor, tuple[tuple[tf.Tensor]]]:
         """
         Args:
             hidden_states (`tf.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -557,7 +557,7 @@ class TFWhisperPreTrainedModel(TFPreTrainedModel):
         return input_lengths
 
     @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+    def dummy_inputs(self) -> dict[str, tf.Tensor]:
         """
         Dummy inputs to build the network.
 
@@ -1262,15 +1262,15 @@ class TFWhisperModel(TFWhisperPreTrainedModel):
         head_mask: np.ndarray | tf.Tensor | None = None,
         decoder_head_mask: np.ndarray | tf.Tensor | None = None,
         cross_attn_head_mask: np.ndarray | tf.Tensor | None = None,
-        encoder_outputs: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        decoder_inputs_embeds: Optional[Tuple[Union[np.ndarray, tf.Tensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        decoder_inputs_embeds: Optional[tuple[Union[np.ndarray, tf.Tensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFSeq2SeqModelOutput]:
+    ) -> Union[tuple[tf.Tensor], TFSeq2SeqModelOutput]:
         r"""
         Returns:
 
@@ -1385,16 +1385,16 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         head_mask: np.ndarray | tf.Tensor | None = None,
         decoder_head_mask: np.ndarray | tf.Tensor | None = None,
         cross_attn_head_mask: np.ndarray | tf.Tensor | None = None,
-        encoder_outputs: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
-        decoder_inputs_embeds: Optional[Tuple[Union[np.ndarray, tf.Tensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        decoder_inputs_embeds: Optional[tuple[Union[np.ndarray, tf.Tensor]]] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFSeq2SeqLMOutput]:
+    ) -> Union[tuple[tf.Tensor], TFSeq2SeqLMOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
@@ -1476,7 +1476,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         inputs: Optional[tf.Tensor] = None,
         generation_config: Optional[GenerationConfig] = None,
         logits_processor: Optional[TFLogitsProcessorList] = None,
-        seed: Optional[List[int]] = None,
+        seed: Optional[list[int]] = None,
         return_timestamps: Optional[bool] = None,
         task: Optional[str] = None,
         language: Optional[str] = None,

@@ -17,7 +17,7 @@
 import math
 import warnings
 from collections.abc import Sequence
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -41,7 +41,7 @@ _HIDDEN_STATES_START_POSITION = 1
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices
 def _compute_mask_indices(
-    shape: Tuple[int, int],
+    shape: tuple[int, int],
     mask_prob: float,
     mask_length: int,
     attention_mask: Optional[torch.LongTensor] = None,
@@ -1346,7 +1346,7 @@ class SEWDModel(SEWDPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
@@ -1485,7 +1485,7 @@ class SEWDForCTC(SEWDPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, CausalLMOutput]:
+    ) -> Union[tuple, CausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
             Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
@@ -1609,7 +1609,7 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file

@@ -1,5 +1,5 @@
 import pathlib
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from transformers.models.detr.image_processing_detr_fast import DetrFastImageProcessorKwargs, DetrImageProcessorFast
 
@@ -133,7 +133,7 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
+        annotations: Optional[Union[AnnotationType, list[AnnotationType]]] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         **kwargs: Unpack[RTDetrFastImageProcessorKwargs],
     ) -> BatchFeature:
@@ -142,12 +142,12 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
     def prepare_annotation(
         self,
         image: torch.Tensor,
-        target: Dict,
+        target: dict,
         format: Optional[AnnotationFormat] = None,
         return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> Dict:
+    ) -> dict:
         format = format if format is not None else self.format
 
         if format == AnnotationFormat.COCO_DETECTION:
@@ -161,8 +161,8 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
-        annotations: Optional[Union[AnnotationType, List[AnnotationType]]],
+        images: list["torch.Tensor"],
+        annotations: Optional[Union[AnnotationType, list[AnnotationType]]],
         masks_path: Optional[Union[str, pathlib.Path]],
         return_segmentation_masks: bool,
         do_resize: bool,
@@ -172,10 +172,10 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
         rescale_factor: float,
         do_normalize: bool,
         do_convert_annotations: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         do_pad: bool,
-        pad_size: Optional[Dict[str, int]],
+        pad_size: Optional[dict[str, int]],
         format: Optional[Union[str, AnnotationFormat]],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
@@ -269,7 +269,7 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
         self,
         outputs,
         threshold: float = 0.5,
-        target_sizes: Union[TensorType, List[Tuple]] = None,
+        target_sizes: Union[TensorType, list[tuple]] = None,
         use_focal_loss: bool = True,
     ):
         """
@@ -301,7 +301,7 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
                 raise ValueError(
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
-            if isinstance(target_sizes, List):
+            if isinstance(target_sizes, list):
                 img_h, img_w = torch.as_tensor(target_sizes).unbind(1)
             else:
                 img_h, img_w = target_sizes.unbind(1)

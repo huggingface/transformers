@@ -17,7 +17,7 @@ Processor class for Phi4Multimodal
 """
 
 import re
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...audio_utils import AudioInput
 from ...image_processing_utils import BatchFeature
@@ -78,7 +78,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, List[TextInput]],
+        text: Union[TextInput, list[TextInput]],
         images: Optional[ImageInput] = None,
         audio: Optional[AudioInput] = None,
         **kwargs: Unpack[ProcessingKwargs],

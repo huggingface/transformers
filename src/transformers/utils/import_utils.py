@@ -31,7 +31,7 @@ from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple, Union
+from typing import Any, Optional, Union
 
 from packaging import version
 
@@ -42,7 +42,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 # TODO: This doesn't work for all packages (`bs4`, `faiss`, etc.) Talk to Sylvain to see how to do with it better.
-def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[Tuple[bool, str], bool]:
+def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[tuple[bool, str], bool]:
     # Check if the package spec exists and grab its version to avoid importing a local directory
     package_exists = importlib.util.find_spec(pkg_name) is not None
     package_version = "N/A"
@@ -1924,8 +1924,8 @@ def is_torch_fx_proxy(x):
     return False
 
 
-BACKENDS_T = FrozenSet[str]
-IMPORT_STRUCTURE_T = Dict[BACKENDS_T, Dict[str, Set[str]]]
+BACKENDS_T = frozenset[str]
+IMPORT_STRUCTURE_T = dict[BACKENDS_T, dict[str, set[str]]]
 
 
 class _LazyModule(ModuleType):
@@ -1941,8 +1941,8 @@ class _LazyModule(ModuleType):
         module_file: str,
         import_structure: IMPORT_STRUCTURE_T,
         module_spec: Optional[importlib.machinery.ModuleSpec] = None,
-        extra_objects: Optional[Dict[str, object]] = None,
-        explicit_import_shortcut: Optional[Dict[str, List[str]]] = None,
+        extra_objects: Optional[dict[str, object]] = None,
+        explicit_import_shortcut: Optional[dict[str, list[str]]] = None,
     ):
         super().__init__(name)
 
@@ -2156,7 +2156,7 @@ class VersionComparison(Enum):
 
 
 @lru_cache()
-def split_package_version(package_version_str) -> Tuple[str, str, str]:
+def split_package_version(package_version_str) -> tuple[str, str, str]:
     pattern = r"([a-zA-Z0-9_-]+)([!<>=~]+)([0-9.]+)"
     match = re.match(pattern, package_version_str)
     if match:

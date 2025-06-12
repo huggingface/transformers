@@ -16,7 +16,7 @@
 
 import os
 from shutil import copyfile
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from ...tokenization_utils_fast import AddedToken, PreTrainedTokenizerFast
 from ...utils import logging
@@ -146,8 +146,8 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
 
     # Copied from transformers.models.xlnet.tokenization_xlnet_fast.XLNetTokenizerFast.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. An XLNet sequence has the following format:
@@ -172,8 +172,8 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
 
     # Copied from transformers.models.xlnet.tokenization_xlnet_fast.XLNetTokenizerFast.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. An XLNet
         sequence pair mask has the following format:
@@ -202,7 +202,7 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
         return len(token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1] + cls_segment_id
 
     # Copied from transformers.models.xlnet.tokenization_xlnet_fast.XLNetTokenizerFast.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "

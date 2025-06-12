@@ -14,7 +14,7 @@
 # limitations under the License.
 """Flax RoFormer model."""
 
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional
 
 import flax.linen as nn
 import jax
@@ -608,7 +608,7 @@ class FlaxRoFormerPreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: RoFormerConfig,
-        input_shape: Tuple = (1, 1),
+        input_shape: tuple = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
@@ -617,7 +617,7 @@ class FlaxRoFormerPreTrainedModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         token_type_ids = jnp.zeros_like(input_ids)

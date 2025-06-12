@@ -15,7 +15,7 @@
 """Fast Tokenization classes for Splinter."""
 
 import json
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from tokenizers import normalizers
 
@@ -125,8 +125,8 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
         return self.convert_tokens_to_ids(self.question_token)
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a pair of sequence for question answering tasks by concatenating and adding special
         tokens. A Splinter sequence has the following format:
@@ -157,8 +157,8 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
             return cls + token_ids_0 + sep + token_ids_1 + question_suffix + sep
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Create the token type IDs corresponding to the sequences passed. [What are token type
         IDs?](../glossary#token-type-ids)
@@ -185,7 +185,7 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
             # Input is context-then-question
             return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + question_suffix + sep) * [1]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 

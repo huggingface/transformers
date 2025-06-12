@@ -18,7 +18,7 @@ from collections.abc import Iterable
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 from urllib.parse import urlparse
 
 import numpy as np
@@ -56,14 +56,14 @@ logger = logging.get_logger(__name__)
 
 
 VideoInput = Union[
-    List["PIL.Image.Image"],
+    list["PIL.Image.Image"],
     "np.ndarray",
     "torch.Tensor",
-    List["np.ndarray"],
-    List["torch.Tensor"],
-    List[List["PIL.Image.Image"]],
-    List[List["np.ndarrray"]],
-    List[List["torch.Tensor"]],
+    list["np.ndarray"],
+    list["torch.Tensor"],
+    list[list["PIL.Image.Image"]],
+    list[list["np.ndarrray"]],
+    list[list["torch.Tensor"]],
 ]  # noqa
 
 
@@ -118,7 +118,7 @@ def is_scaled_video(video: np.ndarray) -> bool:
     return np.min(video) >= 0 and np.max(video) <= 1
 
 
-def convert_pil_frames_to_video(videos: List[VideoInput]) -> List[Union["np.ndarray", "torch.Tensor"]]:
+def convert_pil_frames_to_video(videos: list[VideoInput]) -> list[Union["np.ndarray", "torch.Tensor"]]:
     """
     Given a batch of videos, converts each video to a 4D array. If video is already in array type,
     it is simply returned. We assume that all inputs in the list are in the same format, based on the type of the first element.
@@ -139,7 +139,7 @@ def convert_pil_frames_to_video(videos: List[VideoInput]) -> List[Union["np.ndar
     return video_converted
 
 
-def make_batched_videos(videos) -> List[Union["np.ndarray", "torch.Tensor"]]:
+def make_batched_videos(videos) -> list[Union["np.ndarray", "torch.Tensor"]]:
     """
     Ensure that the input is a list of videos. If the input is a single video, it is converted to a list of length 1.
     If the input is a batch of videos, it is converted to a list of 4D video arrays. Videos passed as list `PIL.Image`
@@ -170,7 +170,7 @@ def make_batched_videos(videos) -> List[Union["np.ndarray", "torch.Tensor"]]:
     return convert_pil_frames_to_video(videos)
 
 
-def get_video_size(video: np.ndarray, channel_dim: ChannelDimension = None) -> Tuple[int, int]:
+def get_video_size(video: np.ndarray, channel_dim: ChannelDimension = None) -> tuple[int, int]:
     """
     Returns the (height, width) dimensions of the video.
 
@@ -601,7 +601,7 @@ def convert_to_rgb(
 
 def pad(
     video: np.ndarray,
-    padding: Union[int, Tuple[int, int], Iterable[Tuple[int, int]]],
+    padding: Union[int, tuple[int, int], Iterable[tuple[int, int]]],
     mode: PaddingMode = PaddingMode.CONSTANT,
     constant_values: Union[float, Iterable[float]] = 0.0,
     data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -689,8 +689,8 @@ def pad(
 
 
 def group_videos_by_shape(
-    videos: List["torch.Tensor"],
-) -> Tuple[Dict[Tuple[int, int], List["torch.Tensor"]], Dict[int, Tuple[Tuple[int, int], int]]]:
+    videos: list["torch.Tensor"],
+) -> tuple[dict[tuple[int, int], list["torch.Tensor"]], dict[int, tuple[tuple[int, int], int]]]:
     """
     Groups videos by shape.
     Returns a dictionary with the shape as key and a list of videos with that shape as value,
@@ -712,8 +712,8 @@ def group_videos_by_shape(
 
 
 def reorder_videos(
-    processed_videos: Dict[Tuple[int, int], "torch.Tensor"], grouped_videos_index: Dict[int, Tuple[int, int]]
-) -> List["torch.Tensor"]:
+    processed_videos: dict[tuple[int, int], "torch.Tensor"], grouped_videos_index: dict[int, tuple[int, int]]
+) -> list["torch.Tensor"]:
     """
     Reconstructs a list of videos in the original order.
     """

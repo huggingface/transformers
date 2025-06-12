@@ -16,7 +16,7 @@
 
 import math
 import os
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 import torch
@@ -734,7 +734,7 @@ class JukeboxVQVAE(PreTrainedModel):
         ]
         return self.decode(music_tokens)
 
-    def forward(self, raw_audio: torch.FloatTensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, raw_audio: torch.FloatTensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Forward pass of the VQ-VAE, encodes the `raw_audio` to latent states, which are then decoded for each level.
         The commit loss, which ensure that the encoder's computed embeddings are close to the codebook vectors, is
@@ -2225,10 +2225,10 @@ class JukeboxPrior(PreTrainedModel):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        metadata: Optional[List[torch.LongTensor]],
+        metadata: Optional[list[torch.LongTensor]],
         decode: Optional[bool] = False,
         get_preds: Optional[bool] = False,
-    ) -> List[torch.Tensor]:
+    ) -> list[torch.Tensor]:
         """
         Encode the hidden states using the `vqvae` encoder, and then predicts the next token in the `forward_tokens`
         function. The loss is the sum of the `encoder` loss and the `decoder` loss.
@@ -2446,7 +2446,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         offset=0,
         save_results=True,
         sample_length=None,
-    ) -> List[torch.LongTensor]:
+    ) -> list[torch.LongTensor]:
         """
         Core sampling function used to generate music tokens. Iterates over the provided list of levels, while saving
         the generated raw audio at each step.
@@ -2583,7 +2583,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 Number of samples to be generated in parallel.
         """,
     )
-    def ancestral_sample(self, labels, n_samples=1, **sampling_kwargs) -> List[torch.LongTensor]:
+    def ancestral_sample(self, labels, n_samples=1, **sampling_kwargs) -> list[torch.LongTensor]:
         """
         Example:
 
@@ -2624,7 +2624,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         """,
         JUKEBOX_SAMPLING_INPUT_DOCSTRING,
     )
-    def continue_sample(self, music_tokens, labels, **sampling_kwargs) -> List[torch.LongTensor]:
+    def continue_sample(self, music_tokens, labels, **sampling_kwargs) -> list[torch.LongTensor]:
         sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors))))
         music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
         return music_tokens
@@ -2639,7 +2639,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         """,
         JUKEBOX_SAMPLING_INPUT_DOCSTRING,
     )
-    def upsample(self, music_tokens, labels, **sampling_kwargs) -> List[torch.LongTensor]:
+    def upsample(self, music_tokens, labels, **sampling_kwargs) -> list[torch.LongTensor]:
         sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors) - 1)))
         music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
         return music_tokens
@@ -2656,7 +2656,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         """,
         JUKEBOX_SAMPLING_INPUT_DOCSTRING,
     )
-    def primed_sample(self, raw_audio, labels, **sampling_kwargs) -> List[torch.LongTensor]:
+    def primed_sample(self, raw_audio, labels, **sampling_kwargs) -> list[torch.LongTensor]:
         sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors))))
         self.vqvae.to(raw_audio.device).float()
         with torch.no_grad():

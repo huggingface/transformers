@@ -15,7 +15,7 @@
 """Image processor class for Fuyu."""
 
 import math
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -56,8 +56,8 @@ logger = logging.get_logger(__name__)
 
 
 def make_list_of_list_of_images(
-    images: Union[List[List[ImageInput]], List[ImageInput], ImageInput],
-) -> List[List[ImageInput]]:
+    images: Union[list[list[ImageInput]], list[ImageInput], ImageInput],
+) -> list[list[ImageInput]]:
     if is_valid_image(images):
         return [[images]]
 
@@ -236,17 +236,17 @@ class FuyuImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_pad: bool = True,
         padding_value: float = 1.0,
         padding_mode: str = "constant",
         do_normalize: bool = True,
-        image_mean: Union[float, List[float]] = 0.5,
-        image_std: Union[float, List[float]] = 0.5,
+        image_mean: Union[float, list[float]] = 0.5,
+        image_std: Union[float, list[float]] = 0.5,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
-        patch_size: Optional[Dict[str, int]] = None,
+        patch_size: Optional[dict[str, int]] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -266,7 +266,7 @@ class FuyuImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -324,7 +324,7 @@ class FuyuImageProcessor(BaseImageProcessor):
     def pad_image(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         mode: str = "constant",
         constant_values: float = 1.0,
         data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -364,7 +364,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         self,
         images,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: Optional[PILImageResampling] = None,
         do_pad: Optional[bool] = None,
         padding_value: Optional[float] = None,
@@ -374,7 +374,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         image_std: Optional[float] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
-        patch_size: Optional[Dict[str, int]] = None,
+        patch_size: Optional[dict[str, int]] = None,
         data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         return_tensors: Optional[TensorType] = None,
@@ -537,7 +537,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         }
         return FuyuBatchFeature(data=data, tensor_type=return_tensors)
 
-    def get_num_patches(self, image_height: int, image_width: int, patch_size: Optional[Dict[str, int]] = None) -> int:
+    def get_num_patches(self, image_height: int, image_width: int, patch_size: Optional[dict[str, int]] = None) -> int:
         """
         Calculate number of patches required to encode an image.
 
@@ -562,7 +562,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         num_patches = num_patches_per_dim_h * num_patches_per_dim_w
         return num_patches
 
-    def patchify_image(self, image: "torch.Tensor", patch_size: Optional[Dict[str, int]] = None) -> "torch.Tensor":
+    def patchify_image(self, image: "torch.Tensor", patch_size: Optional[dict[str, int]] = None) -> "torch.Tensor":
         """
         Convert an image into a tensor of patches.
 
@@ -597,7 +597,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         image_placeholder_id: int,
         image_newline_id: int,
         variable_sized: bool,
-        patch_size: Optional[Dict[str, int]] = None,
+        patch_size: Optional[dict[str, int]] = None,
     ) -> FuyuBatchFeature:
         """Process images for model input. In particular, variable-sized images are handled here.
 
@@ -625,10 +625,10 @@ class FuyuImageProcessor(BaseImageProcessor):
         patch_height, patch_width = patch_size["height"], patch_size["width"]
 
         # Only images that are present.
-        images: List[List[torch.Tensor]] = []
-        batch_image_patches: List[List[torch.Tensor]] = []
+        images: list[list[torch.Tensor]] = []
+        batch_image_patches: list[list[torch.Tensor]] = []
         # Image input ids for every subsequence, including ones with no image present.
-        batch_image_input_ids: List[List[torch.Tensor]] = []
+        batch_image_input_ids: list[list[torch.Tensor]] = []
         for batch_index in range(image_input.shape[0]):
             image_input_ids = []
             image_patches = []
@@ -680,8 +680,8 @@ class FuyuImageProcessor(BaseImageProcessor):
 
         # Create image_patch_input_indices, where non-negative values correspond to image patches to be inserted in
         # the stream.
-        image_patch_indices_per_batch: List[List[torch.Tensor]] = []
-        image_patch_indices_per_subsequence: List[List[torch.Tensor]] = []
+        image_patch_indices_per_batch: list[list[torch.Tensor]] = []
+        image_patch_indices_per_subsequence: list[list[torch.Tensor]] = []
 
         for sample_image_input_ids in batch_image_input_ids:
             index_offset = 0

@@ -14,7 +14,7 @@
 # limitations under the License.
 """Flax Mistral model."""
 
-from typing import Optional, Tuple
+from typing import Optional
 
 import flax.linen as nn
 import jax
@@ -290,7 +290,7 @@ class FlaxMistralAttention(nn.Module):
         deterministic: bool = True,
         output_attentions: bool = False,
         init_cache: bool = False,
-    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
@@ -407,7 +407,7 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: MistralConfig,
-        input_shape: Tuple = (1, 1),
+        input_shape: tuple = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
@@ -416,7 +416,7 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         attention_mask = jnp.ones_like(input_ids)

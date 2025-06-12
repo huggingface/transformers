@@ -19,7 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Iterable
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -43,7 +43,7 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> List[np.array]:
+def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> list[np.array]:
     """
     Divides an image into patches of a specified size.
 
@@ -107,11 +107,11 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        image_mean: Optional[List[float]] = None,
-        image_std: Optional[List[float]] = None,
+        image_mean: Optional[list[float]] = None,
+        image_std: Optional[list[float]] = None,
         max_image_size: int = 980,
         min_image_size: int = 336,
-        split_resolutions: Optional[List[Tuple[int, int]]] = None,
+        split_resolutions: Optional[list[tuple[int, int]]] = None,
         split_image: Optional[bool] = False,
         do_convert_rgb: Optional[bool] = True,
         do_rescale: bool = True,
@@ -143,9 +143,9 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        images: Union[ImageInput, List[ImageInput]],
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        images: Union[ImageInput, list[ImageInput]],
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         max_image_size: Optional[int] = None,
         min_image_size: Optional[int] = None,
         split_image: Optional[bool] = None,
@@ -388,7 +388,7 @@ class AriaImageProcessor(BaseImageProcessor):
     def pad(
         self,
         image: np.ndarray,
-        padding: Union[int, Tuple[int, int], Iterable[Tuple[int, int]]],
+        padding: Union[int, tuple[int, int], Iterable[tuple[int, int]]],
         mode: PaddingMode = PaddingMode.CONSTANT,
         constant_values: Union[float, Iterable[float]] = 0.0,
         data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -454,12 +454,12 @@ class AriaImageProcessor(BaseImageProcessor):
     def get_image_patches(
         self,
         image: np.array,
-        grid_pinpoints: List[Tuple[int, int]],
+        grid_pinpoints: list[tuple[int, int]],
         patch_size: int,
         resample: PILImageResampling,
         data_format: ChannelDimension,
         input_data_format: ChannelDimension,
-    ) -> List[np.array]:
+    ) -> list[np.array]:
         """
         Process an image with variable resolutions by dividing it into patches.
 

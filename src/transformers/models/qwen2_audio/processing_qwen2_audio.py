@@ -17,7 +17,7 @@ Processor class for Qwen2Audio.
 """
 
 import warnings
-from typing import List, Union
+from typing import Union
 
 import numpy as np
 
@@ -83,8 +83,8 @@ class Qwen2AudioProcessor(ProcessorMixin):
     @deprecate_kwarg("audios", version="4.54.0", new_name="audio")
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        audio: Union[np.ndarray, List[np.ndarray]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        audio: Union[np.ndarray, list[np.ndarray]] = None,
         audios=None,  # kept for BC
         **kwargs: Unpack[Qwen2AudioProcessorKwargs],
     ) -> BatchFeature:

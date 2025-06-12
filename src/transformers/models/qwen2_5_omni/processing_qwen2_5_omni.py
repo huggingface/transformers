@@ -19,7 +19,7 @@ Processor class for Qwen2.5Omni.
 
 import logging
 import re
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -31,7 +31,7 @@ from ...video_utils import VideoInput, make_batched_videos
 
 
 class Qwen2_5_OmniVideosKwargs(VideosKwargs):
-    fps: Optional[List[int]] = None
+    fps: Optional[list[int]] = None
     use_audio_in_video: Optional[bool] = None
     seconds_per_chunk: Optional[float] = None
     position_id_per_seconds: Optional[int] = None
@@ -112,7 +112,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         images: ImageInput = None,
         videos: VideoInput = None,
         audio: AudioInput = None,

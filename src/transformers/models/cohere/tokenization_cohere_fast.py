@@ -16,7 +16,7 @@
 # This file is based on the tokenization_llama_fast.py file in transformers
 
 import pickle
-from typing import Dict, List, Literal, Union
+from typing import Literal, Union
 
 from tokenizers import processors
 
@@ -227,10 +227,10 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
 
     def apply_tool_use_template(
         self,
-        conversation: Union[List[Dict[str, str]]],
-        tools: List[Dict],
+        conversation: Union[list[dict[str, str]]],
+        tools: list[dict],
         **kwargs,
-    ) -> Union[str, List[int]]:
+    ) -> Union[str, list[int]]:
         """Create a Command-R tool-use prompt.
 
         Once rendered, the prompt instructs the model to generate a list of actions to perform on a set of user supplied tools
@@ -382,11 +382,11 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
 
     def apply_grounded_generation_template(
         self,
-        conversation: Union[List[Dict[str, str]]],
-        documents: List[Dict],
+        conversation: Union[list[dict[str, str]]],
+        documents: list[dict],
         citation_mode: Literal["fast", "accurate"] = "accurate",
         **kwargs,
-    ) -> Union[str, List[int]]:
+    ) -> Union[str, list[int]]:
         """Create a Command-R grounded generation (aka RAG) prompt.
 
         Once rendered, the prompt instructs the model to generate a response with citations in, based on supplied documents.

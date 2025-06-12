@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ..utils.logging import tqdm
 from .base import HfQuantizer
@@ -87,8 +87,8 @@ class HiggsHfQuantizer(HfQuantizer):
         param_value: "torch.Tensor",
         param_name: str,
         target_device: "torch.device",
-        state_dict: Dict[str, Any],
-        unexpected_keys: Optional[List[str]] = None,
+        state_dict: dict[str, Any],
+        unexpected_keys: Optional[list[str]] = None,
     ):
         from ..integrations import quantize_with_higgs
 
@@ -158,7 +158,7 @@ class HiggsHfQuantizer(HfQuantizer):
             )
             self.quantization_config.tune_metadata[name] = module.tune_metadata.to_dict()
 
-    def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+    def update_missing_keys(self, model, missing_keys: list[str], prefix: str) -> list[str]:
         from ..integrations import HiggsLinear
 
         higgs_names = {name for name, module in model.named_modules() if isinstance(module, HiggsLinear)}
@@ -183,7 +183,7 @@ class HiggsHfQuantizer(HfQuantizer):
         model: "PreTrainedModel",
         param_value: "torch.Tensor",
         param_name: str,
-        state_dict: Dict[str, Any],
+        state_dict: dict[str, Any],
         **kwargs,
     ) -> bool:
         from ..integrations import HiggsLinear

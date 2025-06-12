@@ -21,7 +21,7 @@
 # limitations under the License.
 import os
 from shutil import copyfile
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Optional
 
 import sentencepiece as spm
 
@@ -98,7 +98,7 @@ class GemmaTokenizer(PreTrainedTokenizer):
         bos_token="<bos>",
         eos_token="<eos>",
         pad_token="<pad>",
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        sp_model_kwargs: Optional[dict[str, Any]] = None,
         add_bos_token=True,
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
@@ -155,7 +155,7 @@ class GemmaTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
+    def tokenize(self, text: "TextInput", **kwargs) -> list[str]:
         """
         Args:
             text: TextInput
@@ -194,7 +194,7 @@ class GemmaTokenizer(PreTrainedTokenizer):
         out_string += self.sp_model.decode(current_sub_tokens)
         return out_string
 
-    def save_vocabulary(self, save_directory, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory, filename_prefix: Optional[str] = None) -> tuple[str]:
         """
         Save the vocabulary and special tokens file to a directory.
 
@@ -233,8 +233,8 @@ class GemmaTokenizer(PreTrainedTokenizer):
         return output
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
@@ -270,8 +270,8 @@ class GemmaTokenizer(PreTrainedTokenizer):
         )
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Creates a mask from the two sequences passed to be used in a sequence-pair classification task. An ALBERT
         sequence pair mask has the following format:
@@ -304,7 +304,7 @@ class GemmaTokenizer(PreTrainedTokenizer):
 
     def _decode(
         self,
-        token_ids: List[int],
+        token_ids: list[int],
         skip_special_tokens: bool = False,
         spaces_between_special_tokens: bool = False,
         **kwargs,

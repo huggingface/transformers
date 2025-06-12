@@ -17,7 +17,7 @@ import math
 import warnings
 import zlib
 from collections.abc import Iterator
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -349,16 +349,16 @@ class WhisperGenerationMixin(GenerationMixin):
         generation_config: Optional[GenerationConfig] = None,
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
-        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
+        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], list[int]]] = None,
         synced_gpus: bool = False,
         return_timestamps: Optional[bool] = None,
         task: Optional[str] = None,
-        language: Optional[Union[str, List[str]]] = None,
+        language: Optional[Union[str, list[str]]] = None,
         is_multilingual: Optional[bool] = None,
         prompt_ids: Optional[torch.Tensor] = None,
         prompt_condition_type: Optional[str] = None,  # first-segment, all-segments
         condition_on_prev_tokens: Optional[bool] = None,
-        temperature: Optional[Union[float, Tuple[float, ...]]] = None,
+        temperature: Optional[Union[float, tuple[float, ...]]] = None,
         compression_ratio_threshold: Optional[float] = None,
         logprob_threshold: Optional[float] = None,
         no_speech_threshold: Optional[float] = None,
@@ -1384,7 +1384,7 @@ class WhisperGenerationMixin(GenerationMixin):
             generation_config.task = task
 
     def _retrieve_init_tokens(self, input_features, batch_size, generation_config, config, num_segment_frames, kwargs):
-        def replace_or_add(lst: List[int], num: int, itr: Iterator[int]):
+        def replace_or_add(lst: list[int], num: int, itr: Iterator[int]):
             """short function to replace num with a itr in lst"""
             found = any(i in lst for i in itr)
             if found:

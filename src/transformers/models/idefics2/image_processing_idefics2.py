@@ -15,7 +15,7 @@
 
 
 from collections.abc import Iterable
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -46,7 +46,7 @@ if is_vision_available():
     from PIL import Image
 
 
-def get_resize_output_image_size(image, size, input_data_format) -> Tuple[int, int]:
+def get_resize_output_image_size(image, size, input_data_format) -> tuple[int, int]:
     """
     Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
 
@@ -79,7 +79,7 @@ def get_resize_output_image_size(image, size, input_data_format) -> Tuple[int, i
 
 
 # Copied from transformers.models.detr.image_processing_detr.max_across_indices
-def max_across_indices(values: Iterable[Any]) -> List[Any]:
+def max_across_indices(values: Iterable[Any]) -> list[Any]:
     """
     Return the maximum value across all indices of an iterable of values.
     """
@@ -87,8 +87,8 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
 
 
 def get_max_height_width(
-    images_list: List[List[np.ndarray]], input_data_format: Optional[Union[str, ChannelDimension]] = None
-) -> List[int]:
+    images_list: list[list[np.ndarray]], input_data_format: Optional[Union[str, ChannelDimension]] = None
+) -> list[int]:
     """
     Get the maximum height and width across all images in a batch.
     """
@@ -106,7 +106,7 @@ def get_max_height_width(
 
 # Copied from transformers.models.detr.image_processing_detr.make_pixel_mask
 def make_pixel_mask(
-    image: np.ndarray, output_size: Tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    image: np.ndarray, output_size: tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
 ) -> np.ndarray:
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -191,13 +191,13 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         self,
         do_convert_rgb: bool = True,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_pad: bool = True,
         do_image_splitting: bool = False,
         **kwargs,
@@ -218,7 +218,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -256,7 +256,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
     def _pad_image(
         self,
         image: np.ndarray,
-        output_size: Tuple[int, int],
+        output_size: tuple[int, int],
         constant_values: Union[float, Iterable[float]] = 0,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -282,7 +282,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
 
     def pad(
         self,
-        images: List[np.ndarray],
+        images: list[np.ndarray],
         constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -396,13 +396,13 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_convert_rgb: Optional[bool] = None,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_pad: Optional[bool] = None,
         do_image_splitting: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,

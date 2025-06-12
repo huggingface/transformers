@@ -19,7 +19,7 @@ PyTorch XLNet model.
 
 import warnings
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 from torch import nn
@@ -861,9 +861,9 @@ class XLNetModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    mems: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    mems: Optional[list[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -898,9 +898,9 @@ class XLNetLMHeadModelOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    mems: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    mems: Optional[list[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -932,9 +932,9 @@ class XLNetForSequenceClassificationOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    mems: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    mems: Optional[list[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -966,9 +966,9 @@ class XLNetForTokenClassificationOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    mems: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    mems: Optional[list[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -1002,9 +1002,9 @@ class XLNetForMultipleChoiceOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    mems: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    mems: Optional[list[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -1039,9 +1039,9 @@ class XLNetForQuestionAnsweringSimpleOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     start_logits: Optional[torch.FloatTensor] = None
     end_logits: Optional[torch.FloatTensor] = None
-    mems: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    mems: Optional[list[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -1087,9 +1087,9 @@ class XLNetForQuestionAnsweringOutput(ModelOutput):
     end_top_log_probs: Optional[torch.FloatTensor] = None
     end_top_index: Optional[torch.LongTensor] = None
     cls_logits: Optional[torch.FloatTensor] = None
-    mems: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    mems: Optional[list[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @auto_docstring
@@ -1238,7 +1238,7 @@ class XLNetModel(XLNetPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,  # delete after depreciation warning is removed
-    ) -> Union[Tuple, XLNetModelOutput]:
+    ) -> Union[tuple, XLNetModelOutput]:
         r"""
         mems (`List[torch.FloatTensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (see `mems` output below) . Can be used to speed up sequential
@@ -1566,7 +1566,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,  # delete when `use_cache` is removed in XLNetModel
-    ) -> Union[Tuple, XLNetLMHeadModelOutput]:
+    ) -> Union[tuple, XLNetLMHeadModelOutput]:
         r"""
         mems (`List[torch.FloatTensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (see `mems` output below) . Can be used to speed up sequential
@@ -1705,7 +1705,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         )
 
     @staticmethod
-    def _reorder_cache(mems: List[torch.Tensor], beam_idx: torch.Tensor) -> List[torch.Tensor]:
+    def _reorder_cache(mems: list[torch.Tensor], beam_idx: torch.Tensor) -> list[torch.Tensor]:
         """
         This function is used to re-order the `mems` cache if [`~PreTrainedModel.beam_search`] or
         [`~PreTrainedModel.beam_sample`] is called. This is required to match `mems` with the correct beam_idx at every
@@ -1751,7 +1751,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,  # delete when `use_cache` is removed in XLNetModel
-    ) -> Union[Tuple, XLNetForSequenceClassificationOutput]:
+    ) -> Union[tuple, XLNetForSequenceClassificationOutput]:
         r"""
         mems (`List[torch.FloatTensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (see `mems` output below) . Can be used to speed up sequential
@@ -1879,7 +1879,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,  # delete when `use_cache` is removed in XLNetModel
-    ) -> Union[Tuple, XLNetForTokenClassificationOutput]:
+    ) -> Union[tuple, XLNetForTokenClassificationOutput]:
         r"""
         mems (`List[torch.FloatTensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (see `mems` output below) . Can be used to speed up sequential
@@ -1989,7 +1989,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,  # delete when `use_cache` is removed in XLNetModel
-    ) -> Union[Tuple, XLNetForMultipleChoiceOutput]:
+    ) -> Union[tuple, XLNetForMultipleChoiceOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -2136,7 +2136,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,  # delete when `use_cache` is removed in XLNetModel
-    ) -> Union[Tuple, XLNetForQuestionAnsweringSimpleOutput]:
+    ) -> Union[tuple, XLNetForQuestionAnsweringSimpleOutput]:
         r"""
         mems (`List[torch.FloatTensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (see `mems` output below) . Can be used to speed up sequential
@@ -2265,7 +2265,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,  # delete when `use_cache` is removed in XLNetModel
-    ) -> Union[Tuple, XLNetForQuestionAnsweringOutput]:
+    ) -> Union[tuple, XLNetForQuestionAnsweringOutput]:
         r"""
         mems (`List[torch.FloatTensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (see `mems` output below) . Can be used to speed up sequential

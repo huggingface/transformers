@@ -19,7 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 
@@ -62,7 +62,7 @@ class LlavaOnevisionFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         number of patches in the batch. Padding will be applied to the bottom and right with zeros.
     """
 
-    image_grid_pinpoints: Optional[List[List[int]]]
+    image_grid_pinpoints: Optional[list[list[int]]]
     do_pad: Optional[bool]
 
 
@@ -173,7 +173,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         size: tuple,
         patch_size: int,
         interpolation: "F.InterpolationMode",
-    ) -> List["torch.Tensor"]:
+    ) -> list["torch.Tensor"]:
         """
         Process an image with variable resolutions by dividing it into patches.
 
@@ -212,8 +212,8 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
 
     def _pad_for_batching(
         self,
-        pixel_values: List["torch.Tensor"],
-    ) -> List["torch.Tensor"]:
+        pixel_values: list["torch.Tensor"],
+    ) -> list["torch.Tensor"]:
         """
         Pads images on the `num_of_patches` dimension with zeros to form a batch of same number of patches.
 
@@ -234,20 +234,20 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        image_grid_pinpoints: List[List[int]],
+        image_grid_pinpoints: list[list[int]],
         interpolation: Optional["F.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         do_pad: bool,
-        batch_num_images: List[int],
+        batch_num_images: list[int],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:
         processed_images = []
@@ -321,7 +321,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
     def pad_to_square(
         self,
         images: "torch.Tensor",
-        background_color: Union[int, Tuple[int, int, int]] = 0,
+        background_color: Union[int, tuple[int, int, int]] = 0,
     ) -> "torch.Tensor":
         """
         Pads an image to a square based on the longest edge.

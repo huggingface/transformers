@@ -14,7 +14,7 @@
 # limitations under the License.
 import os
 from shutil import copyfile
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from tokenizers import normalizers, processors
 
@@ -323,7 +323,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         return tokens
 
     # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
@@ -343,8 +343,8 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         return (out_vocab_file,)
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. The special tokens depend on calling set_lang.

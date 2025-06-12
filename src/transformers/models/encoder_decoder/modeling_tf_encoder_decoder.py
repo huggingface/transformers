@@ -19,7 +19,7 @@ from __future__ import annotations
 import inspect
 import re
 import warnings
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -461,7 +461,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         decoder_input_ids: np.ndarray | tf.Tensor | None = None,
         decoder_attention_mask: np.ndarray | tf.Tensor | None = None,
         encoder_outputs: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Tuple[Tuple[tf.Tensor]] | None = None,
+        past_key_values: tuple[tuple[tf.Tensor]] | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
         decoder_inputs_embeds: np.ndarray | tf.Tensor | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
@@ -471,7 +471,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs,
-    ) -> Union[TFSeq2SeqLMOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFSeq2SeqLMOutput, tuple[tf.Tensor]]:
         r"""
         Returns:
 

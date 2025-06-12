@@ -14,7 +14,7 @@
 # limitations under the License.
 """FLAVA model configurations"""
 
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -472,10 +472,10 @@ class FlavaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        image_config: Optional[Dict[str, Any]] = None,
-        text_config: Optional[Dict[str, Any]] = None,
-        multimodal_config: Optional[Dict[str, Any]] = None,
-        image_codebook_config: Optional[Dict[str, Any]] = None,
+        image_config: Optional[dict[str, Any]] = None,
+        text_config: Optional[dict[str, Any]] = None,
+        multimodal_config: Optional[dict[str, Any]] = None,
+        image_codebook_config: Optional[dict[str, Any]] = None,
         hidden_size: int = 768,
         layer_norm_eps: float = 1e-12,
         projection_dim: int = 768,

@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import random
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -268,11 +268,11 @@ class TFSpeech2TextAttention(keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         key_value_states: tf.Tensor | None = None,
-        past_key_value: Tuple[Tuple[tf.Tensor]] | None = None,
+        past_key_value: tuple[tuple[tf.Tensor]] | None = None,
         attention_mask: tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Tuple[tf.Tensor, tf.Tensor | None]:
+    ) -> tuple[tf.Tensor, tf.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -514,9 +514,9 @@ class TFSpeech2TextDecoderLayer(keras.layers.Layer):
         encoder_attention_mask: tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
         cross_attn_layer_head_mask: tf.Tensor | None = None,
-        past_key_value: Tuple[tf.Tensor] | None = None,
+        past_key_value: tuple[tf.Tensor] | None = None,
         training=False,
-    ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
+    ) -> tuple[tf.Tensor, tf.Tensor, tuple[tuple[tf.Tensor]]]:
         """
         Args:
             hidden_states (`tf.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -1346,7 +1346,7 @@ class TFSpeech2TextModel(TFSpeech2TextPreTrainedModel):
         decoder_head_mask: np.ndarray | tf.Tensor | None = None,
         cross_attn_head_mask: np.ndarray | tf.Tensor | None = None,
         encoder_outputs: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         decoder_inputs_embeds: np.ndarray | tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1354,7 +1354,7 @@ class TFSpeech2TextModel(TFSpeech2TextPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs,
-    ) -> Union[Tuple, TFSeq2SeqModelOutput]:
+    ) -> Union[tuple, TFSeq2SeqModelOutput]:
         outputs = self.model(
             input_features=input_features,
             attention_mask=attention_mask,
@@ -1445,7 +1445,7 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
         decoder_head_mask: np.ndarray | tf.Tensor | None = None,
         cross_attn_head_mask: np.ndarray | tf.Tensor | None = None,
         encoder_outputs: np.ndarray | tf.Tensor | None = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         decoder_inputs_embeds: np.ndarray | tf.Tensor | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
@@ -1454,7 +1454,7 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
         **kwargs,
-    ) -> Union[Tuple, TFSeq2SeqLMOutput]:
+    ) -> Union[tuple, TFSeq2SeqLMOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

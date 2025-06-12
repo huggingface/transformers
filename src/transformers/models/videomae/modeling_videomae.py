@@ -17,7 +17,7 @@
 import collections.abc
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Callable, Optional, Set, Tuple, Union
+from typing import Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -60,8 +60,8 @@ class VideoMAEDecoderOutput(ModelOutput):
     """
 
     logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -86,8 +86,8 @@ class VideoMAEForPreTrainingOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 # sin-cos position encoding
@@ -257,7 +257,7 @@ class VideoMAESelfAttention(nn.Module):
 
     def forward(
         self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         k_bias = torch.zeros_like(self.v_bias, requires_grad=False) if self.q_bias is not None else None
         keys = nn.functional.linear(input=hidden_states, weight=self.key.weight, bias=k_bias)
         values = nn.functional.linear(input=hidden_states, weight=self.value.weight, bias=self.v_bias)
@@ -323,7 +323,7 @@ class VideoMAEAttention(nn.Module):
         self.output = VideoMAESelfOutput(config)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads: Set[int]) -> None:
+    def prune_heads(self, heads: set[int]) -> None:
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -346,7 +346,7 @@ class VideoMAEAttention(nn.Module):
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         self_outputs = self.attention(hidden_states, head_mask, output_attentions)
 
         attention_output = self.output(self_outputs[0], hidden_states)
@@ -407,7 +407,7 @@ class VideoMAELayer(nn.Module):
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in VideoMAE, layernorm is applied before self-attention
             head_mask,
@@ -544,7 +544,7 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Each video in the
@@ -939,7 +939,7 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ImageClassifierOutput]:
+    ) -> Union[tuple, ImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,

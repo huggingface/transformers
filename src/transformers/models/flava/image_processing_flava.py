@@ -18,7 +18,7 @@ import math
 import random
 from collections.abc import Iterable
 from functools import lru_cache
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -60,7 +60,7 @@ LOGIT_LAPLACE_EPS: float = 0.1
 class FlavaMaskingGenerator:
     def __init__(
         self,
-        input_size: Union[int, Tuple[int, int]] = 14,
+        input_size: Union[int, tuple[int, int]] = 14,
         total_mask_patches: int = 75,
         mask_group_max_patches: Optional[int] = None,
         mask_group_min_patches: int = 16,
@@ -229,10 +229,10 @@ class FlavaImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_center_crop: bool = True,
-        crop_size: Optional[Dict[str, int]] = None,
+        crop_size: Optional[dict[str, int]] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -306,7 +306,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         self.codebook_image_std = codebook_image_std if codebook_image_std is not None else FLAVA_CODEBOOK_STD
 
     @classmethod
-    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
         """
         Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
         created using from_dict and kwargs e.g. `FlavaImageProcessor.from_pretrained(checkpoint, codebook_size=600)`
@@ -341,7 +341,7 @@ class FlavaImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -393,15 +393,15 @@ class FlavaImageProcessor(BaseImageProcessor):
         self,
         image: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_center_crop: Optional[bool] = None,
-        crop_size: Optional[Dict[str, int]] = None,
+        crop_size: Optional[dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_map_pixels: Optional[bool] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[ChannelDimension] = None,
@@ -458,15 +458,15 @@ class FlavaImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_center_crop: Optional[bool] = None,
-        crop_size: Optional[Dict[str, int]] = None,
+        crop_size: Optional[dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         # Mask related params
         return_image_mask: Optional[bool] = None,
         input_size_patches: Optional[int] = None,
@@ -478,10 +478,10 @@ class FlavaImageProcessor(BaseImageProcessor):
         # Codebook related params
         return_codebook_pixels: Optional[bool] = None,
         codebook_do_resize: Optional[bool] = None,
-        codebook_size: Optional[Dict[str, int]] = None,
+        codebook_size: Optional[dict[str, int]] = None,
         codebook_resample: Optional[int] = None,
         codebook_do_center_crop: Optional[bool] = None,
-        codebook_crop_size: Optional[Dict[str, int]] = None,
+        codebook_crop_size: Optional[dict[str, int]] = None,
         codebook_do_rescale: Optional[bool] = None,
         codebook_rescale_factor: Optional[float] = None,
         codebook_do_map_pixels: Optional[bool] = None,

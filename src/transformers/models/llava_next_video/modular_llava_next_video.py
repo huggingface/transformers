@@ -15,7 +15,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -252,7 +252,7 @@ class LlavaNextVideoModel(LlavaNextModel):
         self,
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
-        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
     ):
         """
@@ -327,7 +327,7 @@ class LlavaNextVideoModel(LlavaNextModel):
     def get_video_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
     ):
         """
@@ -387,9 +387,9 @@ class LlavaNextVideoModel(LlavaNextModel):
         image_sizes: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -397,7 +397,7 @@ class LlavaNextVideoModel(LlavaNextModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, LlavaNextVideoModelOutputWithPast]:
+    ) -> Union[tuple, LlavaNextVideoModelOutputWithPast]:
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, image_size, image_size)):
             The tensors corresponding to the input videos. Pixel values can be obtained using
@@ -499,7 +499,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
     def get_video_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
     ):
         return self.model.get_video_features(
@@ -516,9 +516,9 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         image_sizes: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -528,7 +528,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, LlavaNextVideoCausalLMOutputWithPast]:
+    ) -> Union[tuple, LlavaNextVideoCausalLMOutputWithPast]:
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, image_size, image_size)):
             The tensors corresponding to the input videos. Pixel values can be obtained using

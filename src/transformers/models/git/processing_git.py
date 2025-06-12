@@ -16,7 +16,7 @@
 Image/Text processor class for GIT
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -57,7 +57,7 @@ class GitProcessor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[GitProcessorKwargs],

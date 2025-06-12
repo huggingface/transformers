@@ -15,7 +15,6 @@
 
 import inspect
 import unittest
-from typing import List
 
 import numpy as np
 import torch
@@ -52,7 +51,7 @@ class TimesFmModelTester:
         num_heads: int = 2,
         tolerance: float = 1e-6,
         rms_norm_eps: float = 1e-6,
-        quantiles: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        quantiles: list[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         pad_val: float = 1123581321.0,
         use_positional_embedding: bool = True,
         initializer_factor: float = 0.0,

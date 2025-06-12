@@ -16,7 +16,7 @@
 
 import itertools
 import math
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
@@ -54,7 +54,7 @@ logger = logging.get_logger(__name__)
 
 # inspired by https://github.com/ViTAE-Transformer/ViTPose/blob/d5216452796c90c6bc29f5c5ec0bdba94366768a/mmpose/datasets/datasets/base/kpt_2d_sview_rgb_img_top_down_dataset.py#L132
 def box_to_center_and_scale(
-    box: Union[Tuple, List, np.ndarray],
+    box: Union[tuple, list, np.ndarray],
     image_width: int,
     image_height: int,
     normalize_factor: float = 200.0,
@@ -117,7 +117,7 @@ def coco_to_pascal_voc(bboxes: np.ndarray) -> np.ndarray:
     return bboxes
 
 
-def get_keypoint_predictions(heatmaps: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def get_keypoint_predictions(heatmaps: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Get keypoint predictions from score maps.
 
     Args:
@@ -353,12 +353,12 @@ class VitPoseImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_affine_transform: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -374,10 +374,10 @@ class VitPoseImageProcessor(BaseImageProcessor):
     def affine_transform(
         self,
         image: np.array,
-        center: Tuple[float],
-        scale: Tuple[float],
+        center: tuple[float],
+        scale: tuple[float],
         rotation: float,
-        size: Dict[str, int],
+        size: dict[str, int],
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.array:
@@ -423,14 +423,14 @@ class VitPoseImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        boxes: Union[List[List[float]], np.ndarray],
+        boxes: Union[list[list[float]], np.ndarray],
         do_affine_transform: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -597,10 +597,10 @@ class VitPoseImageProcessor(BaseImageProcessor):
     def post_process_pose_estimation(
         self,
         outputs: "VitPoseEstimatorOutput",
-        boxes: Union[List[List[List[float]]], np.ndarray],
+        boxes: Union[list[list[list[float]]], np.ndarray],
         kernel_size: int = 11,
         threshold: Optional[float] = None,
-        target_sizes: Union[TensorType, List[Tuple]] = None,
+        target_sizes: Union[TensorType, list[tuple]] = None,
     ):
         """
         Transform the heatmaps into keypoint predictions and transform them back to the image.
@@ -658,12 +658,12 @@ class VitPoseImageProcessor(BaseImageProcessor):
         labels = torch.arange(0, num_keypoints)
         bboxes_xyxy = torch.tensor(coco_to_pascal_voc(all_boxes))
 
-        results: List[List[Dict[str, torch.Tensor]]] = []
+        results: list[list[dict[str, torch.Tensor]]] = []
 
         pose_bbox_pairs = zip(poses, scores, bboxes_xyxy)
 
         for image_bboxes in boxes:
-            image_results: List[Dict[str, torch.Tensor]] = []
+            image_results: list[dict[str, torch.Tensor]] = []
             for _ in image_bboxes:
                 # Unpack the next pose and bbox_xyxy from the iterator
                 pose, score, bbox_xyxy = next(pose_bbox_pairs)

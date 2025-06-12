@@ -15,7 +15,7 @@
 
 import math
 from functools import lru_cache
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -50,7 +50,7 @@ logger = logging.get_logger(__name__)
 
 
 @lru_cache(maxsize=10)
-def get_all_supported_aspect_ratios(max_image_tiles: int) -> List[Tuple[int, int]]:
+def get_all_supported_aspect_ratios(max_image_tiles: int) -> list[tuple[int, int]]:
     """
     Computes all allowed aspect ratios for a given maximum number of input tiles.
 
@@ -85,7 +85,7 @@ def get_image_size_fit_to_canvas(
     canvas_height: int,
     canvas_width: int,
     tile_size: int,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     Calculates the new size of an image to fit within a canvas while maintaining aspect ratio.
 
@@ -136,7 +136,7 @@ def get_optimal_tiled_canvas(
     image_width: int,
     max_image_tiles: int,
     tile_size: int,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     r"""
     Determines the best canvas based on image and tile size and maximum number of tiles.
 
@@ -311,7 +311,7 @@ def split_to_tiles(image: np.ndarray, num_tiles_height: int, num_tiles_width: in
     return np.ascontiguousarray(image)
 
 
-def build_aspect_ratio_mask(aspect_ratios: List[List[Tuple[int, int]]], max_image_tiles: int) -> np.ndarray:
+def build_aspect_ratio_mask(aspect_ratios: list[list[tuple[int, int]]], max_image_tiles: int) -> np.ndarray:
     """
     Builds a mask for the aspect ratios of the images.
 
@@ -345,9 +345,9 @@ def build_aspect_ratio_mask(aspect_ratios: List[List[Tuple[int, int]]], max_imag
 
 
 def pack_images(
-    batch_images: List[List[np.ndarray]],
+    batch_images: list[list[np.ndarray]],
     max_image_tiles: int,
-) -> Tuple[np.ndarray, List[List[int]]]:
+) -> tuple[np.ndarray, list[list[int]]]:
     """
     Stack a list of lists of images with variable lengths into a numpy array, applying zero padding as needed.
     Each list in the input represents a batch sample, and each image within a list is expected to be
@@ -397,7 +397,7 @@ def pack_images(
     return stacked_images, all_num_tiles
 
 
-def pack_aspect_ratios(aspect_ratios: List[List[Tuple[int, int]]], pad_value: int = 1) -> np.ndarray:
+def pack_aspect_ratios(aspect_ratios: list[list[tuple[int, int]]], pad_value: int = 1) -> np.ndarray:
     """
     Stack a list of aspect ratios into a numpy array.
 
@@ -421,7 +421,7 @@ def pack_aspect_ratios(aspect_ratios: List[List[Tuple[int, int]]], pad_value: in
     return aspect_ratios_stacked
 
 
-def convert_aspect_ratios_to_ids(aspect_ratios: List[List[Tuple[int, int]]], max_image_tiles: int) -> np.ndarray:
+def convert_aspect_ratios_to_ids(aspect_ratios: list[list[tuple[int, int]]], max_image_tiles: int) -> np.ndarray:
     """
     Convert aspect ratio tuples to unique ids.
 
@@ -516,7 +516,7 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
     return alpha_composite
 
 
-def _validate_size(size: Dict[str, int]) -> None:
+def _validate_size(size: dict[str, int]) -> None:
     if not ("height" in size and "width" in size):
         raise ValueError(f"Argument `size` must be a dictionary with keys 'height' and 'width'. Got: {size}")
     if size["height"] != size["width"]:
@@ -572,13 +572,13 @@ class MllamaImageProcessor(BaseImageProcessor):
         self,
         do_convert_rgb: bool = True,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_pad: bool = True,
         max_image_tiles: int = 4,
         **kwargs,
@@ -603,13 +603,13 @@ class MllamaImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_convert_rgb: Optional[bool] = None,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_pad: Optional[bool] = None,
         max_image_tiles: Optional[int] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -788,8 +788,8 @@ class MllamaImageProcessor(BaseImageProcessor):
     def pad(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
-        aspect_ratio: Tuple[int, int],
+        size: dict[str, int],
+        aspect_ratio: tuple[int, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
@@ -835,12 +835,12 @@ class MllamaImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         max_image_tiles: int,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> Union[np.ndarray, Tuple[int, int]]:
+    ) -> Union[np.ndarray, tuple[int, int]]:
         """
         Resizes an image to fit within a tiled canvas while maintaining its aspect ratio.
         The optimal canvas size is calculated based on the maximum number of tiles and the tile size.

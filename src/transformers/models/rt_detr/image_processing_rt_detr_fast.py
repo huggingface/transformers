@@ -5,7 +5,7 @@
 #                          modular_rt_detr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import pathlib
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -75,7 +75,7 @@ class RTDetrFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     format: Optional[Union[str, AnnotationFormat]]
     do_convert_annotations: Optional[bool]
     do_pad: Optional[bool]
-    pad_size: Optional[Dict[str, int]]
+    pad_size: Optional[dict[str, int]]
     return_segmentation_masks: Optional[bool]
 
 
@@ -170,12 +170,12 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
     def prepare_annotation(
         self,
         image: torch.Tensor,
-        target: Dict,
+        target: dict,
         format: Optional[AnnotationFormat] = None,
         return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> Dict:
+    ) -> dict:
         """
         Prepare an annotation for feeding into RT_DETR model.
         """
@@ -246,9 +246,9 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
 
     def resize_annotation(
         self,
-        annotation: Dict[str, Any],
-        orig_size: Tuple[int, int],
-        target_size: Tuple[int, int],
+        annotation: dict[str, Any],
+        orig_size: tuple[int, int],
+        target_size: tuple[int, int],
         threshold: float = 0.5,
         interpolation: "F.InterpolationMode" = None,
     ):
@@ -297,7 +297,7 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
 
         return new_annotation
 
-    def normalize_annotation(self, annotation: Dict, image_size: Tuple[int, int]) -> Dict:
+    def normalize_annotation(self, annotation: dict, image_size: tuple[int, int]) -> dict:
         image_height, image_width = image_size
         norm_annotation = {}
         for key, value in annotation.items():
@@ -314,12 +314,12 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
 
     def _update_annotation_for_padded_image(
         self,
-        annotation: Dict,
-        input_image_size: Tuple[int, int],
-        output_image_size: Tuple[int, int],
+        annotation: dict,
+        input_image_size: tuple[int, int],
+        output_image_size: tuple[int, int],
         padding,
         update_bboxes,
-    ) -> Dict:
+    ) -> dict:
         """
         Update the annotation for a padded image.
         """
@@ -350,8 +350,8 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
     def pad(
         self,
         image: torch.Tensor,
-        padded_size: Tuple[int, int],
-        annotation: Optional[Dict[str, Any]] = None,
+        padded_size: tuple[int, int],
+        annotation: Optional[dict[str, Any]] = None,
         update_bboxes: bool = True,
         fill: int = 0,
     ):
@@ -381,7 +381,7 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
+        annotations: Optional[Union[AnnotationType, list[AnnotationType]]] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         **kwargs: Unpack[RTDetrFastImageProcessorKwargs],
     ) -> BatchFeature:
@@ -404,8 +404,8 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
-        annotations: Optional[Union[AnnotationType, List[AnnotationType]]],
+        images: list["torch.Tensor"],
+        annotations: Optional[Union[AnnotationType, list[AnnotationType]]],
         masks_path: Optional[Union[str, pathlib.Path]],
         return_segmentation_masks: bool,
         do_resize: bool,
@@ -415,10 +415,10 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
         rescale_factor: float,
         do_normalize: bool,
         do_convert_annotations: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         do_pad: bool,
-        pad_size: Optional[Dict[str, int]],
+        pad_size: Optional[dict[str, int]],
         format: Optional[Union[str, AnnotationFormat]],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
@@ -512,7 +512,7 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
         self,
         outputs,
         threshold: float = 0.5,
-        target_sizes: Union[TensorType, List[Tuple]] = None,
+        target_sizes: Union[TensorType, list[tuple]] = None,
         use_focal_loss: bool = True,
     ):
         """
@@ -544,7 +544,7 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                 raise ValueError(
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
-            if isinstance(target_sizes, List):
+            if isinstance(target_sizes, list):
                 img_h, img_w = torch.as_tensor(target_sizes).unbind(1)
             else:
                 img_h, img_w = target_sizes.unbind(1)

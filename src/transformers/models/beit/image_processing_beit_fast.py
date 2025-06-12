@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for Beit."""
 
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
 from torchvision.transforms import functional as F
@@ -72,7 +72,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         super().__init__(**kwargs)
 
     @classmethod
-    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
         """
         Overrides the `from_dict` method from the base class to save support of deprecated `reduce_labels` in old configs
         """
@@ -240,7 +240,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
 
         return BatchFeature(data=data)
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple]] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
         """
         Converts the output of [`BeitForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 

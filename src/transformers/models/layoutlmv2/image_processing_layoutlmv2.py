@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for LayoutLMv2."""
 
-from typing import Dict, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -129,7 +129,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         apply_ocr: bool = True,
         ocr_lang: Optional[str] = None,
@@ -151,7 +151,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -201,7 +201,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
         apply_ocr: Optional[bool] = None,
         ocr_lang: Optional[str] = None,

@@ -16,7 +16,7 @@
 Processor class for Blip.
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -66,7 +66,7 @@ class BlipProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Optional[Union[str, List[str], TextInput, PreTokenizedInput]] = None,
+        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[BlipProcessorKwargs],

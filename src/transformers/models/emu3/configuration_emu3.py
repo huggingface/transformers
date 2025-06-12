@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
@@ -84,9 +84,9 @@ class Emu3VQVAEConfig(PretrainedConfig):
         out_channels: int = 3,
         temporal_downsample_factor: int = 4,
         base_channels: int = 256,
-        channel_multiplier: List[int] = [1, 2, 2, 4],
+        channel_multiplier: list[int] = [1, 2, 2, 4],
         num_res_blocks: int = 2,
-        attn_resolutions: List[int] = [3],
+        attn_resolutions: list[int] = [3],
         hidden_size: int = 1024,
         num_attention_heads: int = 1,
         attention_dropout: float = 0.0,
@@ -302,9 +302,9 @@ class Emu3Config(PretrainedConfig):
 
     def __init__(
         self,
-        vq_config: Union[Dict, Emu3VQVAEConfig] = None,
-        text_config: Union[Dict, Emu3TextConfig] = None,
-        vocabulary_map: Optional[Dict[int, int]] = None,
+        vq_config: Union[dict, Emu3VQVAEConfig] = None,
+        text_config: Union[dict, Emu3TextConfig] = None,
+        vocabulary_map: Optional[dict[int, int]] = None,
         **kwargs,
     ):
         if vq_config is None:

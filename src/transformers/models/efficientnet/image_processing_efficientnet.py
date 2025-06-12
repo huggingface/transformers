@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for EfficientNet."""
 
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -87,16 +87,16 @@ class EfficientNetImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PIL.Image.NEAREST,
         do_center_crop: bool = False,
-        crop_size: Optional[Dict[str, int]] = None,
+        crop_size: Optional[dict[str, int]] = None,
         rescale_factor: Union[int, float] = 1 / 255,
         rescale_offset: bool = False,
         do_rescale: bool = True,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         include_top: bool = True,
         **kwargs,
     ) -> None:
@@ -123,7 +123,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.NEAREST,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -213,16 +213,16 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample=None,
         do_center_crop: Optional[bool] = None,
-        crop_size: Optional[Dict[str, int]] = None,
+        crop_size: Optional[dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         rescale_offset: Optional[bool] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         include_top: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,

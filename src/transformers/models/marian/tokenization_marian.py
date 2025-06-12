@@ -17,7 +17,7 @@ import re
 import warnings
 from pathlib import Path
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import sentencepiece
 
@@ -118,7 +118,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         pad_token="<pad>",
         model_max_length=512,
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        sp_model_kwargs: Optional[dict[str, Any]] = None,
         separate_vocabs=False,
         **kwargs,
     ) -> None:
@@ -190,7 +190,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         code: list = [match.group(0)] if match else []
         return code, self.language_code_re.sub("", text)
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         code, text = self.remove_language_code(text)
         pieces = self.current_spm.encode(text, out_type=str)
         return code + pieces
@@ -248,7 +248,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         """
         return super().decode(token_ids, **kwargs)
 
-    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+    def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """Uses source spm if _decode_use_source_tokenizer is True, and target spm otherwise"""
         sp_model = self.spm_source if self._decode_use_source_tokenizer else self.spm_target
         current_sub_tokens = []
@@ -264,7 +264,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         out_string = out_string.replace(SPIECE_UNDERLINE, " ")
         return out_string.strip()
 
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> list[int]:
         """Build model inputs from a sequence by appending eos_token_id."""
         if token_ids_1 is None:
             return token_ids_0 + [self.eos_token_id]
@@ -284,7 +284,7 @@ class MarianTokenizer(PreTrainedTokenizer):
     def vocab_size(self) -> int:
         return len(self.encoder)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -329,7 +329,7 @@ class MarianTokenizer(PreTrainedTokenizer):
 
         return tuple(saved_files)
 
-    def get_vocab(self) -> Dict:
+    def get_vocab(self) -> dict:
         return self.get_src_vocab()
 
     def get_src_vocab(self):
@@ -338,14 +338,14 @@ class MarianTokenizer(PreTrainedTokenizer):
     def get_tgt_vocab(self):
         return dict(self.target_encoder, **self.added_tokens_decoder)
 
-    def __getstate__(self) -> Dict:
+    def __getstate__(self) -> dict:
         state = self.__dict__.copy()
         state.update(
             dict.fromkeys(["spm_source", "spm_target", "current_spm", "punc_normalizer", "target_vocab_file"])
         )
         return state
 
-    def __setstate__(self, d: Dict) -> None:
+    def __setstate__(self, d: dict) -> None:
         self.__dict__ = d
 
         # for backward compatibility
@@ -366,8 +366,8 @@ class MarianTokenizer(PreTrainedTokenizer):
         return [1 if x in all_special_ids else 0 for x in seq]
 
     def get_special_tokens_mask(
-        self, token_ids_0: List, token_ids_1: Optional[List] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list, token_ids_1: Optional[list] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """Get list where entries are [1] if a token is [eos] or [pad] else 0."""
         if already_has_special_tokens:
             return self._special_token_mask(token_ids_0)
@@ -377,7 +377,7 @@ class MarianTokenizer(PreTrainedTokenizer):
             return self._special_token_mask(token_ids_0 + token_ids_1) + [1]
 
 
-def load_spm(path: str, sp_model_kwargs: Dict[str, Any]) -> sentencepiece.SentencePieceProcessor:
+def load_spm(path: str, sp_model_kwargs: dict[str, Any]) -> sentencepiece.SentencePieceProcessor:
     spm = sentencepiece.SentencePieceProcessor(**sp_model_kwargs)
     spm.Load(path)
     return spm
@@ -388,7 +388,7 @@ def save_json(data, path: str) -> None:
         json.dump(data, f, indent=2)
 
 
-def load_json(path: str) -> Union[Dict, List]:
+def load_json(path: str) -> Union[dict, list]:
     with open(path, "r") as f:
         return json.load(f)
 

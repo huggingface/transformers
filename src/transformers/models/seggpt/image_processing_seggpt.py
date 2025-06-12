@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for SegGPT."""
 
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -47,7 +47,7 @@ logger = logging.get_logger(__name__)
 
 # See https://huggingface.co/papers/2212.02499  at 3.1 Redefining Output Spaces as "Images" - Semantic Segmentation from PAINTER paper
 # Taken from https://github.com/Abdullah-Meda/Painter/blob/main/Painter/data/coco_semseg/gen_color_coco_panoptic_segm.py#L31
-def build_palette(num_labels: int) -> List[Tuple[int, int]]:
+def build_palette(num_labels: int) -> list[tuple[int, int]]:
     base = int(num_labels ** (1 / 3)) + 1
     margin = 256 // base
 
@@ -68,7 +68,7 @@ def build_palette(num_labels: int) -> List[Tuple[int, int]]:
 
 
 def mask_to_rgb(
-    mask: np.ndarray, palette: Optional[List[Tuple[int, int]]] = None, data_format: Optional[ChannelDimension] = None
+    mask: np.ndarray, palette: Optional[list[tuple[int, int]]] = None, data_format: Optional[ChannelDimension] = None
 ) -> np.ndarray:
     data_format = data_format if data_format is not None else ChannelDimension.FIRST
 
@@ -134,13 +134,13 @@ class SegGptImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: bool = True,
         **kwargs,
     ) -> None:
@@ -157,7 +157,7 @@ class SegGptImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_convert_rgb = do_convert_rgb
 
-    def get_palette(self, num_labels: int) -> List[Tuple[int, int]]:
+    def get_palette(self, num_labels: int) -> list[tuple[int, int]]:
         """Build a palette to map the prompt mask from a single channel to a 3 channel RGB.
 
         Args:
@@ -172,7 +172,7 @@ class SegGptImageProcessor(BaseImageProcessor):
     def mask_to_rgb(
         self,
         image: np.ndarray,
-        palette: Optional[List[Tuple[int, int]]] = None,
+        palette: Optional[list[tuple[int, int]]] = None,
         data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
         """Converts a segmentation map to RGB format.
@@ -198,7 +198,7 @@ class SegGptImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -247,13 +247,13 @@ class SegGptImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         do_convert_rgb: Optional[bool] = None,
@@ -394,13 +394,13 @@ class SegGptImageProcessor(BaseImageProcessor):
         prompt_images: Optional[ImageInput] = None,
         prompt_masks: Optional[ImageInput] = None,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: Optional[bool] = None,
         num_labels: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -540,7 +540,7 @@ class SegGptImageProcessor(BaseImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def post_process_semantic_segmentation(
-        self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None, num_labels: Optional[int] = None
+        self, outputs, target_sizes: Optional[list[tuple[int, int]]] = None, num_labels: Optional[int] = None
     ):
         """
         Converts the output of [`SegGptImageSegmentationOutput`] into segmentation maps. Only supports

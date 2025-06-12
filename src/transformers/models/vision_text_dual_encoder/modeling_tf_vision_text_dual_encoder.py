@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import re
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import tensorflow as tf
 
@@ -357,7 +357,7 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFCLIPOutput]:
+    ) -> Union[tuple[tf.Tensor], TFCLIPOutput]:
         r"""
         Returns:
 

@@ -17,7 +17,7 @@
 import math
 import os
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -141,9 +141,9 @@ class TrajectoryTransformerOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 class TrajectoryTransformerPreTrainedModel(PreTrainedModel):
@@ -286,8 +286,8 @@ class CausalSelfAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states: Optional[Tuple[torch.FloatTensor]],
-        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        hidden_states: Optional[tuple[torch.FloatTensor]],
+        layer_past: Optional[tuple[torch.Tensor]] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
     ):
@@ -361,8 +361,8 @@ class Block(nn.Module):
 
     def forward(
         self,
-        hidden_states: Optional[Tuple[torch.FloatTensor]],
-        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        hidden_states: Optional[tuple[torch.FloatTensor]],
+        layer_past: Optional[tuple[torch.Tensor]] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
     ):
@@ -463,14 +463,14 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
     def forward(
         self,
         trajectories: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         targets: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], TrajectoryTransformerOutput]:
+    ) -> Union[tuple[torch.Tensor], TrajectoryTransformerOutput]:
         r"""
         Returns:
 

@@ -13,7 +13,7 @@
 # limitations under the License.
 """Image processor class for SuperPoint."""
 
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
@@ -122,7 +122,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
         do_grayscale: bool = False,
@@ -141,7 +141,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
@@ -181,7 +181,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         self,
         images,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_grayscale: Optional[bool] = None,
@@ -290,8 +290,8 @@ class SuperPointImageProcessor(BaseImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def post_process_keypoint_detection(
-        self, outputs: "SuperPointKeypointDescriptionOutput", target_sizes: Union[TensorType, List[Tuple]]
-    ) -> List[Dict[str, "torch.Tensor"]]:
+        self, outputs: "SuperPointKeypointDescriptionOutput", target_sizes: Union[TensorType, list[tuple]]
+    ) -> list[dict[str, "torch.Tensor"]]:
         """
         Converts the raw output of [`SuperPointForKeypointDetection`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
@@ -310,7 +310,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         if len(outputs.mask) != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")
 
-        if isinstance(target_sizes, List):
+        if isinstance(target_sizes, list):
             image_sizes = torch.tensor(target_sizes, device=outputs.mask.device)
         else:
             if target_sizes.shape[1] != 2:

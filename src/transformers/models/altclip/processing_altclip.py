@@ -16,7 +16,7 @@
 Image/Text processor class for AltCLIP
 """
 
-from typing import List, Union
+from typing import Union
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -59,7 +59,7 @@ class AltCLIPProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[AltClipProcessorKwargs],

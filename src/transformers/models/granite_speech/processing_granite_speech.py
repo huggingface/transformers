@@ -14,7 +14,7 @@
 # limitations under the License.
 """Processor class for Granite Speech."""
 
-from typing import List, Union
+from typing import Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
@@ -46,8 +46,8 @@ class GraniteSpeechProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
-        audio: Union["torch.Tensor", List["torch.Tensor"]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
+        audio: Union["torch.Tensor", list["torch.Tensor"]] = None,
         device: str = "cpu",
         images=None,
         videos=None,
@@ -91,7 +91,7 @@ class GraniteSpeechProcessor(ProcessorMixin):
         text_inputs = self.tokenizer(prompt_strings, padding=True, **kwargs)
         return BatchFeature(data={**text_inputs, **audio_inputs})
 
-    def _get_validated_text(self, text: Union[str, list]) -> List[str]:
+    def _get_validated_text(self, text: Union[str, list]) -> list[str]:
         if isinstance(text, str):
             return [text]
         elif isinstance(text, list) and isinstance(text[0], str):

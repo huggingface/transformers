@@ -18,7 +18,7 @@ import os
 import pickle
 import time
 from collections.abc import Iterable
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 
@@ -47,7 +47,7 @@ class Index:
     A base class for the Indices encapsulated by the [`RagRetriever`].
     """
 
-    def get_doc_dicts(self, doc_ids: np.ndarray) -> List[dict]:
+    def get_doc_dicts(self, doc_ids: np.ndarray) -> list[dict]:
         """
         Returns a list of dictionaries, containing titles and text of the retrieved documents.
 
@@ -57,7 +57,7 @@ class Index:
         """
         raise NotImplementedError
 
-    def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> Tuple[np.ndarray, np.ndarray]:
+    def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> tuple[np.ndarray, np.ndarray]:
         """
         For each query in the batch, retrieves `n_docs` documents.
 
@@ -187,7 +187,7 @@ class LegacyIndex(Index):
             doc_dicts.append(doc_dict)
         return doc_dicts
 
-    def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> Tuple[np.ndarray, np.ndarray]:
+    def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> tuple[np.ndarray, np.ndarray]:
         aux_dim = np.zeros(len(question_hidden_states), dtype="float32").reshape(-1, 1)
         query_nhsw_vectors = np.hstack((question_hidden_states, aux_dim))
         _, docs_ids = self.index.search(query_nhsw_vectors, n_docs)
@@ -226,10 +226,10 @@ class HFIndexBase(Index):
     def is_initialized(self):
         return self._index_initialized
 
-    def get_doc_dicts(self, doc_ids: np.ndarray) -> List[dict]:
+    def get_doc_dicts(self, doc_ids: np.ndarray) -> list[dict]:
         return [self.dataset[doc_ids[i].tolist()] for i in range(doc_ids.shape[0])]
 
-    def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> Tuple[np.ndarray, np.ndarray]:
+    def get_top_docs(self, question_hidden_states: np.ndarray, n_docs=5) -> tuple[np.ndarray, np.ndarray]:
         _, ids = self.dataset.search_batch("embeddings", question_hidden_states, n_docs)
         docs = [self.dataset[[i for i in indices if i >= 0]] for indices in ids]
         vectors = [doc["embeddings"] for doc in docs]
@@ -541,10 +541,10 @@ class RagRetriever:
 
         return contextualized_inputs["input_ids"], contextualized_inputs["attention_mask"]
 
-    def _chunk_tensor(self, t: Iterable, chunk_size: int) -> List[Iterable]:
+    def _chunk_tensor(self, t: Iterable, chunk_size: int) -> list[Iterable]:
         return [t[i : i + chunk_size] for i in range(0, len(t), chunk_size)]
 
-    def _main_retrieve(self, question_hidden_states: np.ndarray, n_docs: int) -> Tuple[np.ndarray, np.ndarray]:
+    def _main_retrieve(self, question_hidden_states: np.ndarray, n_docs: int) -> tuple[np.ndarray, np.ndarray]:
         question_hidden_states_batched = self._chunk_tensor(question_hidden_states, self.batch_size)
         ids_batched = []
         vectors_batched = []
@@ -561,7 +561,7 @@ class RagRetriever:
             np.array(vectors_batched),
         )  # shapes (batch_size, n_docs) and (batch_size, n_docs, d)
 
-    def retrieve(self, question_hidden_states: np.ndarray, n_docs: int) -> Tuple[np.ndarray, np.ndarray, List[dict]]:
+    def retrieve(self, question_hidden_states: np.ndarray, n_docs: int) -> tuple[np.ndarray, np.ndarray, list[dict]]:
         """
         Retrieves documents for specified `question_hidden_states`.
 
@@ -590,7 +590,7 @@ class RagRetriever:
 
     def __call__(
         self,
-        question_input_ids: List[List[int]],
+        question_input_ids: list[list[int]],
         question_hidden_states: np.ndarray,
         prefix=None,
         n_docs=None,

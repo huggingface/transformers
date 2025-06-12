@@ -16,7 +16,7 @@
 # limitations under the License.
 """Pvt V2 model configuration"""
 
-from typing import Callable, List, Tuple, Union
+from typing import Callable, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -103,16 +103,16 @@ class PvtV2Config(BackboneConfigMixin, PretrainedConfig):
 
     def __init__(
         self,
-        image_size: Union[int, Tuple[int, int]] = 224,
+        image_size: Union[int, tuple[int, int]] = 224,
         num_channels: int = 3,
         num_encoder_blocks: int = 4,
-        depths: List[int] = [2, 2, 2, 2],
-        sr_ratios: List[int] = [8, 4, 2, 1],
-        hidden_sizes: List[int] = [32, 64, 160, 256],
-        patch_sizes: List[int] = [7, 3, 3, 3],
-        strides: List[int] = [4, 2, 2, 2],
-        num_attention_heads: List[int] = [1, 2, 5, 8],
-        mlp_ratios: List[int] = [8, 8, 4, 4],
+        depths: list[int] = [2, 2, 2, 2],
+        sr_ratios: list[int] = [8, 4, 2, 1],
+        hidden_sizes: list[int] = [32, 64, 160, 256],
+        patch_sizes: list[int] = [7, 3, 3, 3],
+        strides: list[int] = [4, 2, 2, 2],
+        num_attention_heads: list[int] = [1, 2, 5, 8],
+        mlp_ratios: list[int] = [8, 8, 4, 4],
         hidden_act: Union[str, Callable] = "gelu",
         hidden_dropout_prob: float = 0.0,
         attention_probs_dropout_prob: float = 0.0,

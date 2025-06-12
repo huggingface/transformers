@@ -17,7 +17,7 @@
 import math
 from dataclasses import dataclass
 from numbers import Number
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 import torch
@@ -109,8 +109,8 @@ class MaskFormerPixelLevelModuleOutput(ModelOutput):
 
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     decoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -133,8 +133,8 @@ class MaskFormerPixelDecoderOutput(ModelOutput):
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -173,11 +173,11 @@ class MaskFormerModelOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     pixel_decoder_last_hidden_state: Optional[torch.FloatTensor] = None
     transformer_decoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    pixel_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    transformer_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    pixel_decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    transformer_decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -233,11 +233,11 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     pixel_decoder_last_hidden_state: Optional[torch.FloatTensor] = None
     transformer_decoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    pixel_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    transformer_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    pixel_decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    transformer_decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 def upsample_like(pixel_values: Tensor, like: Tensor, mode: str = "bilinear") -> Tensor:
@@ -444,7 +444,7 @@ class DetrAttention(nn.Module):
         key_value_states: Optional[torch.Tensor] = None,
         spatial_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
@@ -829,7 +829,7 @@ class MaskFormerHungarianMatcher(nn.Module):
         self.cost_dice = cost_dice
 
     @torch.no_grad()
-    def forward(self, masks_queries_logits, class_queries_logits, mask_labels, class_labels) -> List[Tuple[Tensor]]:
+    def forward(self, masks_queries_logits, class_queries_logits, mask_labels, class_labels) -> list[tuple[Tensor]]:
         """Performs the matching
 
         Params:
@@ -854,7 +854,7 @@ class MaskFormerHungarianMatcher(nn.Module):
             For each batch element, it holds:
                 len(index_i) = len(index_j) = min(num_queries, num_target_boxes).
         """
-        indices: List[Tuple[np.array]] = []
+        indices: list[tuple[np.array]] = []
 
         preds_masks = masks_queries_logits
         preds_probs = class_queries_logits
@@ -878,7 +878,7 @@ class MaskFormerHungarianMatcher(nn.Module):
             # final cost matrix
             cost_matrix = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
             # do the assignment using the hungarian algorithm in scipy
-            assigned_indices: Tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
+            assigned_indices: tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
             indices.append(assigned_indices)
 
         # It could be stacked in one tensor
@@ -905,7 +905,7 @@ class MaskFormerLoss(nn.Module):
         self,
         num_labels: int,
         matcher: MaskFormerHungarianMatcher,
-        weight_dict: Dict[str, float],
+        weight_dict: dict[str, float],
         eos_coef: float,
     ):
         """
@@ -934,14 +934,14 @@ class MaskFormerLoss(nn.Module):
         empty_weight[-1] = self.eos_coef
         self.register_buffer("empty_weight", empty_weight)
 
-    def _max_by_axis(self, the_list: List[List[int]]) -> List[int]:
+    def _max_by_axis(self, the_list: list[list[int]]) -> list[int]:
         maxes = the_list[0]
         for sublist in the_list[1:]:
             for index, item in enumerate(sublist):
                 maxes[index] = max(maxes[index], item)
         return maxes
 
-    def _pad_images_to_max_in_batch(self, tensors: List[Tensor]) -> Tuple[Tensor, Tensor]:
+    def _pad_images_to_max_in_batch(self, tensors: list[Tensor]) -> tuple[Tensor, Tensor]:
         # get the maximum size in the batch
         max_size = self._max_by_axis([list(tensor.shape) for tensor in tensors])
         batch_size = len(tensors)
@@ -961,8 +961,8 @@ class MaskFormerLoss(nn.Module):
         return padded_tensors, padding_masks
 
     def loss_labels(
-        self, class_queries_logits: Tensor, class_labels: List[Tensor], indices: Tuple[np.array]
-    ) -> Dict[str, Tensor]:
+        self, class_queries_logits: Tensor, class_labels: list[Tensor], indices: tuple[np.array]
+    ) -> dict[str, Tensor]:
         """Compute the losses related to the labels using cross entropy.
 
         Args:
@@ -996,8 +996,8 @@ class MaskFormerLoss(nn.Module):
         return losses
 
     def loss_masks(
-        self, masks_queries_logits: Tensor, mask_labels: List[Tensor], indices: Tuple[np.array], num_masks: int
-    ) -> Dict[str, Tensor]:
+        self, masks_queries_logits: Tensor, mask_labels: list[Tensor], indices: tuple[np.array], num_masks: int
+    ) -> dict[str, Tensor]:
         """Compute the losses related to the masks using focal and dice loss.
 
         Args:
@@ -1053,10 +1053,10 @@ class MaskFormerLoss(nn.Module):
         self,
         masks_queries_logits: Tensor,
         class_queries_logits: Tensor,
-        mask_labels: List[Tensor],
-        class_labels: List[Tensor],
-        auxiliary_predictions: Optional[Dict[str, Tensor]] = None,
-    ) -> Dict[str, Tensor]:
+        mask_labels: list[Tensor],
+        class_labels: list[Tensor],
+        auxiliary_predictions: Optional[dict[str, Tensor]] = None,
+    ) -> dict[str, Tensor]:
         """
         This performs the loss computation.
 
@@ -1088,7 +1088,7 @@ class MaskFormerLoss(nn.Module):
         # compute the average number of target masks for normalization purposes
         num_masks: Number = self.get_num_masks(class_labels, device=class_labels[0].device)
         # get all the losses
-        losses: Dict[str, Tensor] = {
+        losses: dict[str, Tensor] = {
             **self.loss_masks(masks_queries_logits, mask_labels, indices, num_masks),
             **self.loss_labels(class_queries_logits, class_labels, indices),
         }
@@ -1181,7 +1181,7 @@ class MaskFormerFPNLayer(nn.Module):
 
 
 class MaskFormerFPNModel(nn.Module):
-    def __init__(self, in_features: int, lateral_widths: List[int], feature_size: int = 256):
+    def __init__(self, in_features: int, lateral_widths: list[int], feature_size: int = 256):
         """
         Feature Pyramid Network, given an input tensor and a set of feature map of different feature/spatial size, it
         creates a list of feature maps with the same feature size.
@@ -1200,7 +1200,7 @@ class MaskFormerFPNModel(nn.Module):
             *[MaskFormerFPNLayer(feature_size, lateral_width) for lateral_width in lateral_widths[::-1]]
         )
 
-    def forward(self, features: List[Tensor]) -> List[Tensor]:
+    def forward(self, features: list[Tensor]) -> list[Tensor]:
         fpn_features = []
         last_feature = features[-1]
         other_features = features[:-1]
@@ -1230,7 +1230,7 @@ class MaskFormerPixelDecoder(nn.Module):
         self.mask_projection = nn.Conv2d(feature_size, mask_feature_size, kernel_size=3, padding=1)
 
     def forward(
-        self, features: List[Tensor], output_hidden_states: bool = False, return_dict: bool = True
+        self, features: list[Tensor], output_hidden_states: bool = False, return_dict: bool = True
     ) -> MaskFormerPixelDecoderOutput:
         fpn_features = self.fpn(features)
         # we use the last feature map
@@ -1597,7 +1597,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
             cost_class=1.0, cost_dice=config.dice_weight, cost_mask=config.mask_weight
         )
 
-        self.weight_dict: Dict[str, float] = {
+        self.weight_dict: dict[str, float] = {
             "loss_cross_entropy": config.cross_entropy_weight,
             "loss_mask": config.mask_weight,
             "loss_dice": config.dice_weight,
@@ -1618,9 +1618,9 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         class_queries_logits: Tensor,
         mask_labels: Tensor,
         class_labels: Tensor,
-        auxiliary_logits: Dict[str, Tensor],
-    ) -> Dict[str, Tensor]:
-        loss_dict: Dict[str, Tensor] = self.criterion(
+        auxiliary_logits: dict[str, Tensor],
+    ) -> dict[str, Tensor]:
+        loss_dict: dict[str, Tensor] = self.criterion(
             masks_queries_logits, class_queries_logits, mask_labels, class_labels, auxiliary_logits
         )
         # weight each loss by `self.weight_dict[<LOSS_NAME>]` including auxiliary losses
@@ -1631,13 +1631,13 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
 
         return loss_dict
 
-    def get_loss(self, loss_dict: Dict[str, Tensor]) -> Tensor:
+    def get_loss(self, loss_dict: dict[str, Tensor]) -> Tensor:
         return sum(loss_dict.values())
 
-    def get_logits(self, outputs: MaskFormerModelOutput) -> Tuple[Tensor, Tensor, Dict[str, Tensor]]:
+    def get_logits(self, outputs: MaskFormerModelOutput) -> tuple[Tensor, Tensor, dict[str, Tensor]]:
         pixel_embeddings = outputs.pixel_decoder_last_hidden_state
         # get the auxiliary predictions (one for each decoder's layer)
-        auxiliary_logits: List[str, Tensor] = []
+        auxiliary_logits: list[str, Tensor] = []
 
         # This code is a little bit cumbersome, an improvement can be to return a list of predictions. If we have auxiliary loss then we are going to return more than one element in the list
         if self.config.use_auxiliary_loss:
@@ -1670,8 +1670,8 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
     def forward(
         self,
         pixel_values: Tensor,
-        mask_labels: Optional[List[Tensor]] = None,
-        class_labels: Optional[List[Tensor]] = None,
+        mask_labels: Optional[list[Tensor]] = None,
+        class_labels: Optional[list[Tensor]] = None,
         pixel_mask: Optional[Tensor] = None,
         output_auxiliary_logits: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1784,7 +1784,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         class_queries_logits, masks_queries_logits, auxiliary_logits = self.get_logits(outputs)
 
         if mask_labels is not None and class_labels is not None:
-            loss_dict: Dict[str, Tensor] = self.get_loss_dict(
+            loss_dict: dict[str, Tensor] = self.get_loss_dict(
                 masks_queries_logits, class_queries_logits, mask_labels, class_labels, auxiliary_logits
             )
             loss = self.get_loss(loss_dict)

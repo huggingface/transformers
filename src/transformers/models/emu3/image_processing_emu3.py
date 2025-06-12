@@ -16,7 +16,7 @@
 
 import math
 from collections.abc import Iterable
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -46,7 +46,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-def make_batched_images(images) -> List[List[ImageInput]]:
+def make_batched_images(images) -> list[list[ImageInput]]:
     """
     Accepts images in list or nested list format, and makes a list of images for preprocessing.
 
@@ -139,8 +139,8 @@ class Emu3ImageProcessor(BaseImageProcessor):
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: bool = True,
         do_pad: bool = True,
         min_pixels: int = 512 * 512,
@@ -170,8 +170,8 @@ class Emu3ImageProcessor(BaseImageProcessor):
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: Optional[bool] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -260,8 +260,8 @@ class Emu3ImageProcessor(BaseImageProcessor):
 
     def _pad_for_batching(
         self,
-        pixel_values: List[np.ndarray],
-        image_sizes: List[List[int]],
+        pixel_values: list[np.ndarray],
+        image_sizes: list[list[int]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
@@ -307,13 +307,13 @@ class Emu3ImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: Optional[bool] = None,
         do_pad: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -431,8 +431,8 @@ class Emu3ImageProcessor(BaseImageProcessor):
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         return_tensors: Union[str, TensorType] = "PIL.Image.Image",
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):

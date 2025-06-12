@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
@@ -138,7 +138,7 @@ class Llama4Processor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[Llama4ProcessorKwargs],

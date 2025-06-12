@@ -18,7 +18,7 @@ import json
 import os
 import re
 import unicodedata
-from typing import Optional, Tuple
+from typing import Optional
 
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import logging
@@ -363,7 +363,7 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
         out_string = "".join(tokens).replace("</w>", " ").strip()
         return out_string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return

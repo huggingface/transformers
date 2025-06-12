@@ -16,7 +16,7 @@
 
 import os
 from shutil import copyfile
-from typing import Optional, Tuple
+from typing import Optional
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
@@ -91,7 +91,7 @@ class ReformerTokenizerFast(PreTrainedTokenizerFast):
 
         self.vocab_file = vocab_file
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "

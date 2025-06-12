@@ -22,7 +22,7 @@ import os
 import pickle
 import re
 from collections import Counter, OrderedDict
-from typing import List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 
@@ -65,7 +65,7 @@ MATCH_NUMBERS = r"(?<=\d)[,.](?=\d)", r" @\g<0>@ "
 DETOKENIZE_NUMBERS = [(r" @\,@ ", r","), (r" @\.@ ", r".")]
 
 
-def tokenize_numbers(text_array: List[str]) -> List[str]:
+def tokenize_numbers(text_array: list[str]) -> list[str]:
     """
     Splits large comma-separated numbers and floating point values. This is done by replacing commas with ' @,@ ' and
     dots with ' @.@ '.
@@ -315,7 +315,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         else:
             raise ValueError("Token not in vocabulary and no <unk> token in vocabulary for replacement.")
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
                 save_directory,
@@ -425,7 +425,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             text, aggressive_dash_splits=True, return_str=False, escape=False, protected_patterns=self.never_split
         )
 
-    def moses_pipeline(self, text: str) -> List[str]:
+    def moses_pipeline(self, text: str) -> list[str]:
         """
         Does basic tokenization using [`sacremoses.MosesPunctNormalizer`] and [`sacremoses.MosesTokenizer`] with
         *aggressive_dash_splits=True* (see [`sacremoses.tokenize.MosesTokenizer.tokenize`]). Additionally, large

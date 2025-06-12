@@ -19,7 +19,7 @@ import json
 import os
 from collections.abc import Mapping
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import sentencepiece as spm
@@ -43,10 +43,10 @@ from ...utils.import_utils import requires
 
 logger = logging.get_logger(__name__)
 
-EntitySpan = Tuple[int, int]
-EntitySpanInput = List[EntitySpan]
+EntitySpan = tuple[int, int]
+EntitySpanInput = list[EntitySpan]
 Entity = str
-EntityInput = List[Entity]
+EntityInput = list[Entity]
 
 SPIECE_UNDERLINE = "▁"
 
@@ -238,7 +238,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
         entity_pad_token="[PAD]",
         entity_mask_token="[MASK]",
         entity_mask2_token="[MASK2]",
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        sp_model_kwargs: Optional[dict[str, Any]] = None,
         **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it
@@ -342,7 +342,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
         return vocab
 
     # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer._tokenize
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         # TODO check if the t5/llama PR also applies here
         return self.sp_model.encode(text, out_type=str)
 
@@ -387,12 +387,12 @@ class MLukeTokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.luke.tokenization_luke.LukeTokenizer.__call__
     def __call__(
         self,
-        text: Union[TextInput, List[TextInput]],
-        text_pair: Optional[Union[TextInput, List[TextInput]]] = None,
-        entity_spans: Optional[Union[EntitySpanInput, List[EntitySpanInput]]] = None,
-        entity_spans_pair: Optional[Union[EntitySpanInput, List[EntitySpanInput]]] = None,
-        entities: Optional[Union[EntityInput, List[EntityInput]]] = None,
-        entities_pair: Optional[Union[EntityInput, List[EntityInput]]] = None,
+        text: Union[TextInput, list[TextInput]],
+        text_pair: Optional[Union[TextInput, list[TextInput]]] = None,
+        entity_spans: Optional[Union[EntitySpanInput, list[EntitySpanInput]]] = None,
+        entity_spans_pair: Optional[Union[EntitySpanInput, list[EntitySpanInput]]] = None,
+        entities: Optional[Union[EntityInput, list[EntityInput]]] = None,
+        entities_pair: Optional[Union[EntityInput, list[EntityInput]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -619,12 +619,12 @@ class MLukeTokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.luke.tokenization_luke.LukeTokenizer._batch_encode_plus
     def _batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[List[TextInput], List[TextInputPair]],
+        batch_text_or_text_pairs: Union[list[TextInput], list[TextInputPair]],
         batch_entity_spans_or_entity_spans_pairs: Optional[
-            Union[List[EntitySpanInput], List[Tuple[EntitySpanInput, EntitySpanInput]]]
+            Union[list[EntitySpanInput], list[tuple[EntitySpanInput, EntitySpanInput]]]
         ] = None,
         batch_entities_or_entities_pairs: Optional[
-            Union[List[EntityInput], List[Tuple[EntityInput, EntityInput]]]
+            Union[list[EntityInput], list[tuple[EntityInput, EntityInput]]]
         ] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
@@ -756,7 +756,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
         entity_spans: Optional[EntitySpanInput] = None,
         entity_spans_pair: Optional[EntitySpanInput] = None,
         **kwargs,
-    ) -> Tuple[list, list, list, list, list, list]:
+    ) -> tuple[list, list, list, list, list, list]:
         def get_input_ids(text):
             tokens = self.tokenize(text, **kwargs)
             return self.convert_tokens_to_ids(tokens)
@@ -903,9 +903,9 @@ class MLukeTokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.luke.tokenization_luke.LukeTokenizer._batch_prepare_for_model
     def _batch_prepare_for_model(
         self,
-        batch_ids_pairs: List[Tuple[List[int], None]],
-        batch_entity_ids_pairs: List[Tuple[Optional[List[int]], Optional[List[int]]]],
-        batch_entity_token_spans_pairs: List[Tuple[Optional[List[Tuple[int, int]]], Optional[List[Tuple[int, int]]]]],
+        batch_ids_pairs: list[tuple[list[int], None]],
+        batch_entity_ids_pairs: list[tuple[Optional[list[int]], Optional[list[int]]]],
+        batch_entity_token_spans_pairs: list[tuple[Optional[list[tuple[int, int]]], Optional[list[tuple[int, int]]]]],
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -989,12 +989,12 @@ class MLukeTokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.luke.tokenization_luke.LukeTokenizer.prepare_for_model
     def prepare_for_model(
         self,
-        ids: List[int],
-        pair_ids: Optional[List[int]] = None,
-        entity_ids: Optional[List[int]] = None,
-        pair_entity_ids: Optional[List[int]] = None,
-        entity_token_spans: Optional[List[Tuple[int, int]]] = None,
-        pair_entity_token_spans: Optional[List[Tuple[int, int]]] = None,
+        ids: list[int],
+        pair_ids: Optional[list[int]] = None,
+        entity_ids: Optional[list[int]] = None,
+        pair_entity_ids: Optional[list[int]] = None,
+        entity_token_spans: Optional[list[tuple[int, int]]] = None,
+        pair_entity_token_spans: Optional[list[tuple[int, int]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -1223,10 +1223,10 @@ class MLukeTokenizer(PreTrainedTokenizer):
         self,
         encoded_inputs: Union[
             BatchEncoding,
-            List[BatchEncoding],
-            Dict[str, EncodedInput],
-            Dict[str, List[EncodedInput]],
-            List[Dict[str, EncodedInput]],
+            list[BatchEncoding],
+            dict[str, EncodedInput],
+            dict[str, list[EncodedInput]],
+            list[dict[str, EncodedInput]],
         ],
         padding: Union[bool, str, PaddingStrategy] = True,
         max_length: Optional[int] = None,
@@ -1388,7 +1388,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.luke.tokenization_luke.LukeTokenizer._pad
     def _pad(
         self,
-        encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
+        encoded_inputs: Union[dict[str, EncodedInput], BatchEncoding],
         max_length: Optional[int] = None,
         max_entity_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
@@ -1530,7 +1530,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
 
         return encoded_inputs
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str, str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str, str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -1557,8 +1557,8 @@ class MLukeTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. An XLM-RoBERTa sequence has the following format:
@@ -1584,8 +1584,8 @@ class MLukeTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
@@ -1613,8 +1613,8 @@ class MLukeTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. XLM-RoBERTa does
         not make use of token type ids, therefore a list of zeros is returned.

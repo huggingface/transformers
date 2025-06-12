@@ -16,7 +16,7 @@
 
 import os
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import sentencepiece as spm
 
@@ -241,7 +241,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         pad_token_box=[0, 0, 0, 0],
         pad_token_label=-100,
         only_label_first_subword=True,
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        sp_model_kwargs: Optional[dict[str, Any]] = None,
         **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it
@@ -309,8 +309,8 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         self.sp_model.LoadFromSerializedProto(self.sp_model_proto)
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. An XLM-RoBERTa sequence has the following format:
@@ -335,8 +335,8 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         return cls + token_ids_0 + sep + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
@@ -363,8 +363,8 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. XLM-RoBERTa does
         not make use of token type ids, therefore a list of zeros is returned.
@@ -396,7 +396,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _tokenize(self, text: str) -> list[str]:
         return self.sp_model.encode(text, out_type=str)
 
     def _convert_token_to_id(self, token):
@@ -419,7 +419,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -439,10 +439,10 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
     @add_end_docstrings(LAYOUTXLM_ENCODE_KWARGS_DOCSTRING)
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
-        text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
-        boxes: Optional[Union[List[List[int]], List[List[List[int]]]]] = None,
-        word_labels: Optional[Union[List[int], List[List[int]]]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
+        text_pair: Optional[Union[PreTokenizedInput, list[PreTokenizedInput]]] = None,
+        boxes: Optional[Union[list[list[int]], list[list[list[int]]]]] = None,
+        word_labels: Optional[Union[list[int], list[list[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -591,13 +591,13 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
     def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
-            List[TextInput],
-            List[TextInputPair],
-            List[PreTokenizedInput],
+            list[TextInput],
+            list[TextInputPair],
+            list[PreTokenizedInput],
         ],
         is_pair: Optional[bool] = None,
-        boxes: Optional[List[List[List[int]]]] = None,
-        word_labels: Optional[List[List[int]]] = None,
+        boxes: Optional[list[list[list[int]]]] = None,
+        word_labels: Optional[list[list[int]]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -650,8 +650,8 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         self,
         batch_text_or_text_pairs,
         is_pair: Optional[bool] = None,
-        boxes: Optional[List[List[int]]] = None,
-        word_labels: Optional[List[List[int]]] = None,
+        boxes: Optional[list[list[int]]] = None,
+        word_labels: Optional[list[list[int]]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -723,8 +723,8 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         self,
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[PreTokenizedInput] = None,
-        boxes: Optional[List[List[int]]] = None,
-        word_labels: Optional[List[int]] = None,
+        boxes: Optional[list[list[int]]] = None,
+        word_labels: Optional[list[int]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -778,8 +778,8 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         self,
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[PreTokenizedInput] = None,
-        boxes: Optional[List[List[int]]] = None,
-        word_labels: Optional[List[int]] = None,
+        boxes: Optional[list[list[int]]] = None,
+        word_labels: Optional[list[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -975,15 +975,15 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
 
     def truncate_sequences(
         self,
-        ids: List[int],
-        token_boxes: List[List[int]],
-        pair_ids: Optional[List[int]] = None,
-        pair_token_boxes: Optional[List[List[int]]] = None,
-        labels: Optional[List[int]] = None,
+        ids: list[int],
+        token_boxes: list[list[int]],
+        pair_ids: Optional[list[int]] = None,
+        pair_token_boxes: Optional[list[list[int]]] = None,
+        labels: Optional[list[int]] = None,
         num_tokens_to_remove: int = 0,
         truncation_strategy: Union[str, TruncationStrategy] = "longest_first",
         stride: int = 0,
-    ) -> Tuple[List[int], List[int], List[int]]:
+    ) -> tuple[list[int], list[int], list[int]]:
         """
         Truncates a sequence pair in-place following the strategy.
 
@@ -1100,7 +1100,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
 
     def _pad(
         self,
-        encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
+        encoded_inputs: Union[dict[str, EncodedInput], BatchEncoding],
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,

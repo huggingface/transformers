@@ -15,7 +15,7 @@
 
 import os
 from shutil import copyfile
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from tokenizers import processors
 
@@ -67,8 +67,8 @@ class MBartTokenizerFast(PreTrainedTokenizerFast):
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = MBartTokenizer
 
-    prefix_tokens: List[int] = []
-    suffix_tokens: List[int] = []
+    prefix_tokens: list[int] = []
+    suffix_tokens: list[int] = []
 
     def __init__(
         self,
@@ -133,8 +133,8 @@ class MBartTokenizerFast(PreTrainedTokenizerFast):
         self.set_src_lang_special_tokens(self._src_lang)
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. The special tokens depend on calling set_lang.
@@ -162,8 +162,8 @@ class MBartTokenizerFast(PreTrainedTokenizerFast):
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. mBART does not
         make use of token type ids, therefore a list of zeros is returned.
@@ -200,9 +200,9 @@ class MBartTokenizerFast(PreTrainedTokenizerFast):
 
     def prepare_seq2seq_batch(
         self,
-        src_texts: List[str],
+        src_texts: list[str],
         src_lang: str = "en_XX",
-        tgt_texts: Optional[List[str]] = None,
+        tgt_texts: Optional[list[str]] = None,
         tgt_lang: str = "ro_RO",
         **kwargs,
     ) -> BatchEncoding:
@@ -246,7 +246,7 @@ class MBartTokenizerFast(PreTrainedTokenizerFast):
             special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
         )
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "

@@ -15,7 +15,7 @@
 """Image processor class for OWLv2."""
 
 import warnings
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
@@ -248,11 +248,11 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         rescale_factor: Union[int, float] = 1 / 255,
         do_pad: bool = True,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -301,7 +301,7 @@ class Owlv2ImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         anti_aliasing: bool = True,
         anti_aliasing_sigma=None,
         data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -371,12 +371,12 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_pad: Optional[bool] = None,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -504,7 +504,7 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         self,
         outputs: "Owlv2ObjectDetectionOutput",
         threshold: float = 0.1,
-        target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
+        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
     ):
         """
         Converts the raw output of [`Owlv2ForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,

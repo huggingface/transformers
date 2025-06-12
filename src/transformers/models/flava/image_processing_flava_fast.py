@@ -18,7 +18,7 @@ import math
 import random
 from collections.abc import Iterable
 from functools import lru_cache
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -60,7 +60,7 @@ if is_torchvision_available():
 class FlavaMaskingGenerator:
     def __init__(
         self,
-        input_size: Union[int, Tuple[int, int]] = 14,
+        input_size: Union[int, tuple[int, int]] = 14,
         total_mask_patches: int = 75,
         mask_group_max_patches: Optional[int] = None,
         mask_group_min_patches: int = 16,
@@ -261,7 +261,7 @@ class FlavaImageProcessorFast(BaseImageProcessorFast):
         return super().preprocess(images, **kwargs)
 
     @classmethod
-    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
         """
         Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
         created using from_dict and kwargs e.g. `FlavaImageProcessor.from_pretrained(checkpoint, codebook_size=600)`

@@ -16,7 +16,7 @@
 
 import math
 from collections.abc import Iterable, Iterator
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -369,7 +369,7 @@ class GraphormerMultiheadAttention(nn.Module):
         attn_mask: Optional[torch.Tensor] = None,
         before_softmax: bool = False,
         need_head_weights: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Args:
             key_padding_mask (Bytetorch.Tensor, optional): mask to exclude
@@ -530,7 +530,7 @@ class GraphormerGraphEncoderLayer(nn.Module):
         self_attn_bias: Optional[torch.Tensor] = None,
         self_attn_mask: Optional[torch.Tensor] = None,
         self_attn_padding_mask: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         nn.LayerNorm is applied either before or after the self-attention/ffn modules similar to the original
         Transformer implementation.
@@ -628,7 +628,7 @@ class GraphormerGraphEncoder(nn.Module):
         last_state_only: bool = False,
         token_embeddings: Optional[torch.Tensor] = None,
         attn_mask: Optional[torch.Tensor] = None,
-    ) -> Tuple[Union[torch.Tensor, List[torch.LongTensor]], torch.Tensor]:
+    ) -> tuple[Union[torch.Tensor, list[torch.LongTensor]], torch.Tensor]:
         # compute padding mask. This is needed for multi-head attention
         data_x = input_nodes
         n_graph, n_node = data_x.size()[:2]
@@ -808,7 +808,7 @@ class GraphormerModel(GraphormerPreTrainedModel):
         masked_tokens: None = None,
         return_dict: Optional[bool] = None,
         **unused,
-    ) -> Union[Tuple[torch.LongTensor], BaseModelOutputWithNoAttention]:
+    ) -> Union[tuple[torch.LongTensor], BaseModelOutputWithNoAttention]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         inner_states, graph_rep = self.graph_encoder(
@@ -872,7 +872,7 @@ class GraphormerForGraphClassification(GraphormerPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
         **unused,
-    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
+    ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         encoder_outputs = self.encoder(

@@ -15,7 +15,7 @@
 """Image processor class for OwlViT"""
 
 import warnings
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
@@ -203,7 +203,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -241,7 +241,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
     def center_crop(
         self,
         image: np.ndarray,
-        crop_size: Dict[str, int],
+        crop_size: dict[str, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
@@ -306,15 +306,15 @@ class OwlViTImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_center_crop: Optional[bool] = None,
-        crop_size: Optional[Dict[str, int]] = None,
+        crop_size: Optional[dict[str, int]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -495,7 +495,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         self,
         outputs: "OwlViTObjectDetectionOutput",
         threshold: float = 0.1,
-        target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
+        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
     ):
         """
         Converts the raw output of [`OwlViTForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,

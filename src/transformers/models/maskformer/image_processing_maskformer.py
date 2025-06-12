@@ -17,7 +17,7 @@
 import math
 import warnings
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import numpy as np
 
@@ -68,7 +68,7 @@ if is_torch_available():
 
 
 # Copied from transformers.models.detr.image_processing_detr.max_across_indices
-def max_across_indices(values: Iterable[Any]) -> List[Any]:
+def max_across_indices(values: Iterable[Any]) -> list[Any]:
     """
     Return the maximum value across all indices of an iterable of values.
     """
@@ -77,8 +77,8 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
 
 # Copied from transformers.models.detr.image_processing_detr.get_max_height_width
 def get_max_height_width(
-    images: List[np.ndarray], input_data_format: Optional[Union[str, ChannelDimension]] = None
-) -> List[int]:
+    images: list[np.ndarray], input_data_format: Optional[Union[str, ChannelDimension]] = None
+) -> list[int]:
     """
     Get the maximum height and width across all images in a batch.
     """
@@ -96,7 +96,7 @@ def get_max_height_width(
 
 # Copied from transformers.models.detr.image_processing_detr.make_pixel_mask
 def make_pixel_mask(
-    image: np.ndarray, output_size: Tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    image: np.ndarray, output_size: tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
 ) -> np.ndarray:
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -213,14 +213,14 @@ def compute_segments(
     pred_labels,
     mask_threshold: float = 0.5,
     overlap_mask_area_threshold: float = 0.8,
-    label_ids_to_fuse: Optional[Set[int]] = None,
-    target_size: Optional[Tuple[int, int]] = None,
+    label_ids_to_fuse: Optional[set[int]] = None,
+    target_size: Optional[tuple[int, int]] = None,
 ):
     height = mask_probs.shape[1] if target_size is None else target_size[0]
     width = mask_probs.shape[2] if target_size is None else target_size[1]
 
     segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
-    segments: List[Dict] = []
+    segments: list[dict] = []
 
     if target_size is not None:
         mask_probs = nn.functional.interpolate(
@@ -234,7 +234,7 @@ def compute_segments(
     mask_labels = mask_probs.argmax(0)  # [height, width]
 
     # Keep track of instances of each class
-    stuff_memory_list: Dict[str, int] = {}
+    stuff_memory_list: dict[str, int] = {}
     for k in range(pred_labels.shape[0]):
         pred_class = pred_labels[k].item()
         should_fuse = pred_class in label_ids_to_fuse
@@ -270,7 +270,7 @@ def compute_segments(
 # TODO: (Amy) Move to image_transforms
 def convert_segmentation_map_to_binary_masks(
     segmentation_map: "np.ndarray",
-    instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
+    instance_id_to_semantic_id: Optional[dict[int, int]] = None,
     ignore_index: Optional[int] = None,
     do_reduce_labels: bool = False,
 ):
@@ -311,12 +311,12 @@ def convert_segmentation_map_to_binary_masks(
 
 def get_maskformer_resize_output_image_size(
     image: np.ndarray,
-    size: Union[int, Tuple[int, int], List[int], Tuple[int]],
+    size: Union[int, tuple[int, int], list[int], tuple[int]],
     max_size: Optional[int] = None,
     size_divisor: int = 0,
     default_to_square: bool = True,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     Computes the output size given the desired size.
 
@@ -411,14 +411,14 @@ class MaskFormerImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         size_divisor: int = 32,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         ignore_index: Optional[int] = None,
         do_reduce_labels: bool = False,
         num_labels: Optional[int] = None,
@@ -447,7 +447,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         self.num_labels = num_labels
 
     @classmethod
-    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
         """
         Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
         created using from_dict and kwargs e.g. `MaskFormerImageProcessor.from_pretrained(checkpoint, max_size=800)`
@@ -461,7 +461,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
         return super().from_dict(image_processor_dict, **kwargs)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. This method calls the superclass method and then removes the
         `_max_size` attribute from the dictionary.
@@ -474,7 +474,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         size_divisor: int = 0,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format=None,
@@ -560,7 +560,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
     def convert_segmentation_map_to_binary_masks(
         self,
         segmentation_map: "np.ndarray",
-        instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
+        instance_id_to_semantic_id: Optional[dict[int, int]] = None,
         ignore_index: Optional[int] = None,
         do_reduce_labels: bool = False,
     ):
@@ -580,14 +580,14 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         self,
         image: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         size_divisor: Optional[int] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         if do_resize:
@@ -604,14 +604,14 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         self,
         image: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         size_divisor: Optional[int] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
@@ -646,7 +646,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         self,
         segmentation_map: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         size_divisor: int = 0,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
@@ -685,16 +685,16 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
-        instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
+        instance_id_to_semantic_id: Optional[dict[int, int]] = None,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         size_divisor: Optional[int] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         ignore_index: Optional[int] = None,
         do_reduce_labels: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -784,7 +784,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
     def _pad_image(
         self,
         image: np.ndarray,
-        output_size: Tuple[int, int],
+        output_size: tuple[int, int],
         constant_values: Union[float, Iterable[float]] = 0,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -811,7 +811,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
     # Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor.pad
     def pad(
         self,
-        images: List[np.ndarray],
+        images: list[np.ndarray],
         constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -866,9 +866,9 @@ class MaskFormerImageProcessor(BaseImageProcessor):
 
     def encode_inputs(
         self,
-        pixel_values_list: List[ImageInput],
+        pixel_values_list: list[ImageInput],
         segmentation_maps: ImageInput = None,
-        instance_id_to_semantic_id: Optional[Union[List[Dict[int, int]], Dict[int, int]]] = None,
+        instance_id_to_semantic_id: Optional[Union[list[dict[int, int]], dict[int, int]]] = None,
         ignore_index: Optional[int] = None,
         do_reduce_labels: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -974,7 +974,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         return encoded_inputs
 
     def post_process_segmentation(
-        self, outputs: "MaskFormerForInstanceSegmentationOutput", target_size: Optional[Tuple[int, int]] = None
+        self, outputs: "MaskFormerForInstanceSegmentationOutput", target_size: Optional[tuple[int, int]] = None
     ) -> "torch.Tensor":
         """
         Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image segmentation predictions. Only
@@ -1022,7 +1022,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         return segmentation
 
     def post_process_semantic_segmentation(
-        self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None
+        self, outputs, target_sizes: Optional[list[tuple[int, int]]] = None
     ) -> "torch.Tensor":
         """
         Converts the output of [`MaskFormerForInstanceSegmentation`] into semantic segmentation maps. Only supports
@@ -1077,10 +1077,10 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        target_sizes: Optional[List[Tuple[int, int]]] = None,
+        target_sizes: Optional[list[tuple[int, int]]] = None,
         return_coco_annotation: Optional[bool] = False,
         return_binary_maps: Optional[bool] = False,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into instance segmentation predictions. Only
         supports PyTorch. If instances could overlap, set either return_coco_annotation or return_binary_maps
@@ -1128,7 +1128,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         num_queries = class_queries_logits.shape[-2]
 
         # Loop over items in batch size
-        results: List[Dict[str, TensorType]] = []
+        results: list[dict[str, TensorType]] = []
 
         for i in range(class_queries_logits.shape[0]):
             mask_pred = masks_queries_logits[i]
@@ -1193,9 +1193,9 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        label_ids_to_fuse: Optional[Set[int]] = None,
-        target_sizes: Optional[List[Tuple[int, int]]] = None,
-    ) -> List[Dict]:
+        label_ids_to_fuse: Optional[set[int]] = None,
+        target_sizes: Optional[list[tuple[int, int]]] = None,
+    ) -> list[dict]:
         """
         Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image panoptic segmentation
         predictions. Only supports PyTorch.
@@ -1248,7 +1248,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
 
         # Loop over items in batch size
-        results: List[Dict[str, TensorType]] = []
+        results: list[dict[str, TensorType]] = []
 
         for i in range(batch_size):
             mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(

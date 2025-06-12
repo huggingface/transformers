@@ -14,7 +14,7 @@
 
 import math
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 
 if TYPE_CHECKING:
@@ -72,7 +72,7 @@ def _get_resize_output_image_size(
     keep_aspect_ratio: bool,
     multiple: int,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     output_size = (output_size, output_size) if isinstance(output_size, int) else output_size
 
     input_height, input_width = get_image_size(input_image, input_data_format)
@@ -143,15 +143,15 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_pad: bool = False,
         size_divisor: Optional[int] = None,
         prompt_scale_to_meter: float = 0.001,  # default unit is mm
@@ -177,7 +177,7 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
@@ -287,8 +287,8 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_pad: Optional[bool] = None,
         size_divisor: Optional[int] = None,
         prompt_scale_to_meter: Optional[float] = None,
@@ -463,8 +463,8 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
     def post_process_depth_estimation(
         self,
         outputs: "DepthEstimatorOutput",
-        target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
-    ) -> List[Dict[str, TensorType]]:
+        target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
+    ) -> list[dict[str, TensorType]]:
         """
         Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.
         Only supports PyTorch.

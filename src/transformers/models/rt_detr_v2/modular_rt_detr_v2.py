@@ -14,7 +14,7 @@
 # limitations under the License.
 import warnings
 from functools import partial
-from typing import List, Optional
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -392,7 +392,7 @@ def multi_scale_deformable_attention_v2(
     value_spatial_shapes: Tensor,
     sampling_locations: Tensor,
     attention_weights: Tensor,
-    num_points_list: List[int],
+    num_points_list: list[int],
     method="default",
 ) -> Tensor:
     batch_size, _, num_heads, hidden_dim = value.shape

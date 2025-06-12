@@ -18,7 +18,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -68,7 +68,7 @@ class AriaProcessor(ProcessorMixin):
         image_processor=None,
         tokenizer: Union[AutoTokenizer, str] = None,
         chat_template: Optional[str] = None,
-        size_conversion: Optional[Dict[Union[float, int], int]] = None,
+        size_conversion: Optional[dict[Union[float, int], int]] = None,
     ):
         if size_conversion is None:
             size_conversion = {490: 128, 980: 256}
@@ -83,7 +83,7 @@ class AriaProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
         images: Optional[ImageInput] = None,
         audio=None,
         videos=None,

@@ -17,7 +17,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -1215,9 +1215,9 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
         start_idx: int,
         vision_idx: int,
         spatial_merge_size: int,
-        t_index: List[int],
-        grid_hs: List[int],
-        grid_ws: List[int],
+        t_index: list[int],
+        grid_hs: list[int],
+        grid_ws: list[int],
     ):
         llm_pos_ids_list = []
         llm_grid_h = grid_hs[vision_idx] // spatial_merge_size
@@ -1276,7 +1276,7 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
         use_audio_in_video: bool = False,
         audio_seqlens: Optional[torch.LongTensor] = None,
         second_per_grids: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Calculate the 3D rope index based on image and video's temporal, height and width in LLM.
 
@@ -1592,9 +1592,9 @@ class Qwen2_5OmniThinkerCausalLMOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[list[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
     rope_deltas: Optional[torch.LongTensor] = None
 
 
@@ -1630,7 +1630,7 @@ class Qwen2_5OmniAudioAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         seq_length, _ = hidden_states.size()
@@ -1686,7 +1686,7 @@ class Qwen2_5OmniAudioFlashAttention2(Qwen2_5OmniAudioAttention):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         seq_length, all_dim = hidden_states.size()
         query_states = self.q_proj(hidden_states)
         query_states = query_states.reshape(seq_length, self.num_heads, -1)
@@ -1711,7 +1711,7 @@ class Qwen2_5OmniAudioSdpaAttention(Qwen2_5OmniAudioAttention):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         seq_length, _ = hidden_states.size()
@@ -2351,7 +2351,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         feature_attention_mask: Optional[torch.Tensor] = None,
         audio_feature_lengths: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         rope_deltas: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -2362,7 +2362,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         use_audio_in_video: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         video_second_per_grid: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, Qwen2_5OmniThinkerCausalLMOutputWithPast]:
+    ) -> Union[tuple, Qwen2_5OmniThinkerCausalLMOutputWithPast]:
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, feature_sequence_length)`):
             Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
@@ -2628,9 +2628,9 @@ class Qwen2_5OmniTalkerCausalLMOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[list[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
     rope_deltas: Optional[torch.LongTensor] = None
     thinker_reply_part: torch.FloatTensor = None
 
@@ -2683,7 +2683,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[list[torch.FloatTensor]] = None,
         thinker_reply_part: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         rope_deltas: Optional[torch.LongTensor] = None,
@@ -2698,7 +2698,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Qwen2_5OmniTalkerCausalLMOutputWithPast]:
+    ) -> Union[tuple, Qwen2_5OmniTalkerCausalLMOutputWithPast]:
         r"""
         rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
             The rope index difference between sequence length and multimodal rope.
@@ -2875,10 +2875,10 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
     def _update_model_kwargs_for_generation(
         self,
         outputs: ModelOutput,
-        model_kwargs: Dict[str, Any],
+        model_kwargs: dict[str, Any],
         is_encoder_decoder: bool = False,
         num_new_tokens: int = 1,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         model_kwargs = super()._update_model_kwargs_for_generation(
             outputs, model_kwargs, is_encoder_decoder, num_new_tokens
         )

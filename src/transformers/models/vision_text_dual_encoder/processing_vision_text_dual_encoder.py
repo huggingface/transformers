@@ -17,7 +17,7 @@ Processor class for VisionTextDualEncoder
 """
 
 import warnings
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
@@ -70,7 +70,7 @@ class VisionTextDualEncoderProcessor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[VisionTextDualEncoderProcessorKwargs],

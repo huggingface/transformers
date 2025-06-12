@@ -22,7 +22,7 @@ from argparse import Namespace
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import List, Literal, Optional, Union, get_args, get_origin
+from typing import Literal, Optional, Union, get_args, get_origin
 
 import yaml
 
@@ -121,7 +121,7 @@ class StringLiteralAnnotationExample:
     required_enum: "BasicEnum" = field()
     opt: "Optional[bool]" = None
     baz: "str" = field(default="toto", metadata={"help": "help message"})
-    foo_str: "List[str]" = list_field(default=["Hallo", "Bonjour", "Hello"])
+    foo_str: "list[str]" = list_field(default=["Hallo", "Bonjour", "Hello"])
 
 
 if is_python_no_less_than_3_10:

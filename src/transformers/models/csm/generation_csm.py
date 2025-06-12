@@ -15,7 +15,7 @@
 
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -68,7 +68,7 @@ class CsmGenerateOutput(GenerateDecoderOnlyOutput):
             The generated audio.
     """
 
-    audio: Optional[List[torch.Tensor]] = None
+    audio: Optional[list[torch.Tensor]] = None
 
 
 class CsmGenerationMixin(GenerationMixin):
@@ -90,8 +90,8 @@ class CsmGenerationMixin(GenerationMixin):
         return kept_criteria
 
     def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: Dict
-    ) -> Tuple[GenerationConfig, Dict]:
+        self, generation_config: Optional[GenerationConfig], use_model_defaults: Optional[bool] = None, **kwargs: dict
+    ) -> tuple[GenerationConfig, dict]:
         """
         This method overrides [~generation.utils.GenerationMixin._prepare_generation_config].
         It ensures that the depth decoder generation config is initialized and that passed args as depth_decoder_* are properly handled.

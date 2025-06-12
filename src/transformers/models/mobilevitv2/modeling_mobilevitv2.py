@@ -16,7 +16,7 @@
 # Original license: https://github.com/apple/ml-cvnets/blob/main/LICENSE
 """PyTorch MobileViTV2 model."""
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -417,7 +417,7 @@ class MobileViTV2Layer(nn.Module):
             use_activation=False,
         )
 
-    def unfolding(self, feature_map: torch.Tensor) -> Tuple[torch.Tensor, Tuple[int, int]]:
+    def unfolding(self, feature_map: torch.Tensor) -> tuple[torch.Tensor, tuple[int, int]]:
         batch_size, in_channels, img_height, img_width = feature_map.shape
         patches = nn.functional.unfold(
             feature_map,
@@ -428,7 +428,7 @@ class MobileViTV2Layer(nn.Module):
 
         return patches, (img_height, img_width)
 
-    def folding(self, patches: torch.Tensor, output_size: Tuple[int, int]) -> torch.Tensor:
+    def folding(self, patches: torch.Tensor, output_size: tuple[int, int]) -> torch.Tensor:
         batch_size, in_dim, patch_size, n_patches = patches.shape
         patches = patches.reshape(batch_size, in_dim * patch_size, n_patches)
 

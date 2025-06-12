@@ -18,7 +18,7 @@ import io
 import pathlib
 from collections import defaultdict
 from collections.abc import Iterable
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Optional, Union
 
 import numpy as np
 
@@ -89,7 +89,7 @@ SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationForma
 
 
 # Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
-def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, int]:
+def get_size_with_aspect_ratio(image_size, size, max_size=None) -> tuple[int, int]:
     """
     Computes the output image size given the input image size and the desired output size.
 
@@ -131,10 +131,10 @@ def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, in
 # Copied from transformers.models.detr.image_processing_detr.get_resize_output_image_size
 def get_resize_output_image_size(
     input_image: np.ndarray,
-    size: Union[int, Tuple[int, int], List[int]],
+    size: Union[int, tuple[int, int], list[int]],
     max_size: Optional[int] = None,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     Computes the output image size given the input image size and the desired output size. If the desired output size
     is a tuple or list, the output image size is returned as is. If the desired output size is an integer, the output
@@ -163,7 +163,7 @@ def get_image_size_for_max_height_width(
     max_height: int,
     max_width: int,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.
     Important, even if image_height < max_height and image_width < max_width, the image will be resized
@@ -233,7 +233,7 @@ def safe_squeeze(arr: np.ndarray, axis: Optional[int] = None) -> np.ndarray:
 
 
 # Copied from transformers.models.detr.image_processing_detr.normalize_annotation
-def normalize_annotation(annotation: Dict, image_size: Tuple[int, int]) -> Dict:
+def normalize_annotation(annotation: dict, image_size: tuple[int, int]) -> dict:
     image_height, image_width = image_size
     norm_annotation = {}
     for key, value in annotation.items():
@@ -248,7 +248,7 @@ def normalize_annotation(annotation: Dict, image_size: Tuple[int, int]) -> Dict:
 
 
 # Copied from transformers.models.detr.image_processing_detr.max_across_indices
-def max_across_indices(values: Iterable[Any]) -> List[Any]:
+def max_across_indices(values: Iterable[Any]) -> list[Any]:
     """
     Return the maximum value across all indices of an iterable of values.
     """
@@ -257,8 +257,8 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
 
 # Copied from transformers.models.detr.image_processing_detr.get_max_height_width
 def get_max_height_width(
-    images: List[np.ndarray], input_data_format: Optional[Union[str, ChannelDimension]] = None
-) -> List[int]:
+    images: list[np.ndarray], input_data_format: Optional[Union[str, ChannelDimension]] = None
+) -> list[int]:
     """
     Get the maximum height and width across all images in a batch.
     """
@@ -276,7 +276,7 @@ def get_max_height_width(
 
 # Copied from transformers.models.detr.image_processing_detr.make_pixel_mask
 def make_pixel_mask(
-    image: np.ndarray, output_size: Tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    image: np.ndarray, output_size: tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
 ) -> np.ndarray:
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -427,11 +427,11 @@ def masks_to_boxes(masks: np.ndarray) -> np.ndarray:
 # Copied from transformers.models.detr.image_processing_detr.prepare_coco_panoptic_annotation with DETR->ConditionalDetr
 def prepare_coco_panoptic_annotation(
     image: np.ndarray,
-    target: Dict,
+    target: dict,
     masks_path: Union[str, pathlib.Path],
     return_masks: bool = True,
     input_data_format: Union[ChannelDimension, str] = None,
-) -> Dict:
+) -> dict:
     """
     Prepare a coco panoptic annotation for ConditionalDetr.
     """
@@ -468,7 +468,7 @@ def prepare_coco_panoptic_annotation(
 
 # Copied from transformers.models.detr.image_processing_detr.get_segmentation_image
 def get_segmentation_image(
-    masks: np.ndarray, input_size: Tuple, target_size: Tuple, stuff_equiv_classes, deduplicate=False
+    masks: np.ndarray, input_size: tuple, target_size: tuple, stuff_equiv_classes, deduplicate=False
 ):
     h, w = input_size
     final_h, final_w = target_size
@@ -493,7 +493,7 @@ def get_segmentation_image(
 
 
 # Copied from transformers.models.detr.image_processing_detr.get_mask_area
-def get_mask_area(seg_img: np.ndarray, target_size: Tuple[int, int], n_classes: int) -> np.ndarray:
+def get_mask_area(seg_img: np.ndarray, target_size: tuple[int, int], n_classes: int) -> np.ndarray:
     final_h, final_w = target_size
     np_seg_img = seg_img.astype(np.uint8)
     np_seg_img = np_seg_img.reshape(final_h, final_w, 3)
@@ -503,7 +503,7 @@ def get_mask_area(seg_img: np.ndarray, target_size: Tuple[int, int], n_classes: 
 
 
 # Copied from transformers.models.detr.image_processing_detr.score_labels_from_class_probabilities
-def score_labels_from_class_probabilities(logits: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def score_labels_from_class_probabilities(logits: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     probs = scipy.special.softmax(logits, axis=-1)
     labels = probs.argmax(-1, keepdims=True)
     scores = np.take_along_axis(probs, labels, axis=-1)
@@ -516,11 +516,11 @@ def post_process_panoptic_sample(
     out_logits: np.ndarray,
     masks: np.ndarray,
     boxes: np.ndarray,
-    processed_size: Tuple[int, int],
-    target_size: Tuple[int, int],
-    is_thing_map: Dict,
+    processed_size: tuple[int, int],
+    target_size: tuple[int, int],
+    is_thing_map: dict,
     threshold=0.85,
-) -> Dict:
+) -> dict:
     """
     Converts the output of [`ConditionalDetrForSegmentation`] into panoptic segmentation predictions for a single sample.
 
@@ -599,9 +599,9 @@ def post_process_panoptic_sample(
 
 # Copied from transformers.models.detr.image_processing_detr.resize_annotation
 def resize_annotation(
-    annotation: Dict[str, Any],
-    orig_size: Tuple[int, int],
-    target_size: Tuple[int, int],
+    annotation: dict[str, Any],
+    orig_size: tuple[int, int],
+    target_size: tuple[int, int],
     threshold: float = 0.5,
     resample: PILImageResampling = PILImageResampling.NEAREST,
 ):
@@ -749,14 +749,14 @@ def compute_segments(
     pred_labels,
     mask_threshold: float = 0.5,
     overlap_mask_area_threshold: float = 0.8,
-    label_ids_to_fuse: Optional[Set[int]] = None,
-    target_size: Optional[Tuple[int, int]] = None,
+    label_ids_to_fuse: Optional[set[int]] = None,
+    target_size: Optional[tuple[int, int]] = None,
 ):
     height = mask_probs.shape[1] if target_size is None else target_size[0]
     width = mask_probs.shape[2] if target_size is None else target_size[1]
 
     segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
-    segments: List[Dict] = []
+    segments: list[dict] = []
 
     if target_size is not None:
         mask_probs = nn.functional.interpolate(
@@ -770,7 +770,7 @@ def compute_segments(
     mask_labels = mask_probs.argmax(0)  # [height, width]
 
     # Keep track of instances of each class
-    stuff_memory_list: Dict[str, int] = {}
+    stuff_memory_list: dict[str, int] = {}
     for k in range(pred_labels.shape[0]):
         pred_class = pred_labels[k].item()
         should_fuse = pred_class in label_ids_to_fuse
@@ -864,16 +864,16 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         self,
         format: Union[str, AnnotationFormat] = AnnotationFormat.COCO_DETECTION,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_convert_annotations: Optional[bool] = None,
         do_pad: bool = True,
-        pad_size: Optional[Dict[str, int]] = None,
+        pad_size: Optional[dict[str, int]] = None,
         **kwargs,
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
@@ -932,7 +932,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
 
     @classmethod
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.from_dict with Detr->ConditionalDetr
-    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
         """
         Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
         created using from_dict and kwargs e.g. `ConditionalDetrImageProcessor.from_pretrained(checkpoint, size=600,
@@ -949,12 +949,12 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
     def prepare_annotation(
         self,
         image: np.ndarray,
-        target: Dict,
+        target: dict,
         format: Optional[AnnotationFormat] = None,
         return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> Dict:
+    ) -> dict:
         """
         Prepare an annotation for feeding into ConditionalDetr model.
         """
@@ -982,7 +982,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -1054,7 +1054,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         orig_size,
         size,
         resample: PILImageResampling = PILImageResampling.NEAREST,
-    ) -> Dict:
+    ) -> dict:
         """
         Resize the annotation to match the resized image. If size is an int, smaller edge of the mask will be matched
         to this number.
@@ -1091,7 +1091,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         return rescale(image, rescale_factor, data_format=data_format, input_data_format=input_data_format)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.normalize_annotation
-    def normalize_annotation(self, annotation: Dict, image_size: Tuple[int, int]) -> Dict:
+    def normalize_annotation(self, annotation: dict, image_size: tuple[int, int]) -> dict:
         """
         Normalize the boxes in the annotation from `[top_left_x, top_left_y, bottom_right_x, bottom_right_y]` to
         `[center_x, center_y, width, height]` format and from absolute to relative pixel values.
@@ -1101,12 +1101,12 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._update_annotation_for_padded_image
     def _update_annotation_for_padded_image(
         self,
-        annotation: Dict,
-        input_image_size: Tuple[int, int],
-        output_image_size: Tuple[int, int],
+        annotation: dict,
+        input_image_size: tuple[int, int],
+        output_image_size: tuple[int, int],
         padding,
         update_bboxes,
-    ) -> Dict:
+    ) -> dict:
         """
         Update the annotation for a padded image.
         """
@@ -1146,8 +1146,8 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
     def _pad_image(
         self,
         image: np.ndarray,
-        output_size: Tuple[int, int],
-        annotation: Optional[Dict[str, Any]] = None,
+        output_size: tuple[int, int],
+        annotation: Optional[dict[str, Any]] = None,
         constant_values: Union[float, Iterable[float]] = 0,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -1179,15 +1179,15 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad
     def pad(
         self,
-        images: List[np.ndarray],
-        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
+        images: list[np.ndarray],
+        annotations: Optional[Union[AnnotationType, list[AnnotationType]]] = None,
         constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         update_bboxes: bool = True,
-        pad_size: Optional[Dict[str, int]] = None,
+        pad_size: Optional[dict[str, int]] = None,
     ) -> BatchFeature:
         """
         Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
@@ -1266,24 +1266,24 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
+        annotations: Optional[Union[AnnotationType, list[AnnotationType]]] = None,
         return_segmentation_masks: Optional[bool] = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample=None,  # PILImageResampling
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[Union[int, float]] = None,
         do_normalize: Optional[bool] = None,
         do_convert_annotations: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_pad: Optional[bool] = None,
         format: Optional[Union[str, AnnotationFormat]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        pad_size: Optional[Dict[str, int]] = None,
+        pad_size: Optional[dict[str, int]] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -1575,7 +1575,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
 
     # Copied from transformers.models.deformable_detr.image_processing_deformable_detr.DeformableDetrImageProcessor.post_process_object_detection with DeformableDetr->ConditionalDetr
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None, top_k: int = 100
+        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, list[tuple]] = None, top_k: int = 100
     ):
         """
         Converts the raw output of [`ConditionalDetrForObjectDetection`] into final bounding boxes in (top_left_x,
@@ -1616,7 +1616,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
 
         # and from relative [0, 1] to absolute [0, height] coordinates
         if target_sizes is not None:
-            if isinstance(target_sizes, List):
+            if isinstance(target_sizes, list):
                 img_h = torch.Tensor([i[0] for i in target_sizes])
                 img_w = torch.Tensor([i[1] for i in target_sizes])
             else:
@@ -1634,7 +1634,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         return results
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.post_process_semantic_segmentation with Detr->ConditionalDetr
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple[int, int]]] = None):
         """
         Converts the output of [`ConditionalDetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
@@ -1688,9 +1688,9 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        target_sizes: Optional[List[Tuple[int, int]]] = None,
+        target_sizes: Optional[list[tuple[int, int]]] = None,
         return_coco_annotation: Optional[bool] = False,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         Converts the output of [`ConditionalDetrForSegmentation`] into instance segmentation predictions. Only supports PyTorch.
 
@@ -1732,7 +1732,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
 
         # Loop over items in batch size
-        results: List[Dict[str, TensorType]] = []
+        results: list[dict[str, TensorType]] = []
 
         for i in range(batch_size):
             mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
@@ -1772,9 +1772,9 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        label_ids_to_fuse: Optional[Set[int]] = None,
-        target_sizes: Optional[List[Tuple[int, int]]] = None,
-    ) -> List[Dict]:
+        label_ids_to_fuse: Optional[set[int]] = None,
+        target_sizes: Optional[list[tuple[int, int]]] = None,
+    ) -> list[dict]:
         """
         Converts the output of [`ConditionalDetrForSegmentation`] into image panoptic segmentation predictions. Only supports
         PyTorch.
@@ -1825,7 +1825,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
 
         # Loop over items in batch size
-        results: List[Dict[str, TensorType]] = []
+        results: list[dict[str, TensorType]] = []
 
         for i in range(batch_size):
             mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(

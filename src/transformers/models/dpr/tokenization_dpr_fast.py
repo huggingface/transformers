@@ -15,7 +15,7 @@
 """Tokenization classes for DPR."""
 
 import collections
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, add_end_docstrings, add_start_docstrings, logging
@@ -197,7 +197,7 @@ class CustomDPRReaderTokenizerMixin:
         num_spans: int = 16,
         max_answer_length: int = 64,
         num_spans_per_passage: int = 4,
-    ) -> List[DPRSpanPrediction]:
+    ) -> list[DPRSpanPrediction]:
         """
         Get the span predictions for the extractive Q&A model.
 
@@ -233,7 +233,7 @@ class CustomDPRReaderTokenizerMixin:
         start_logits, end_logits, relevance_logits = reader_output[:3]
         n_passages = len(relevance_logits)
         sorted_docs = sorted(range(n_passages), reverse=True, key=relevance_logits.__getitem__)
-        nbest_spans_predictions: List[DPRReaderOutput] = []
+        nbest_spans_predictions: list[DPRReaderOutput] = []
         for doc_id in sorted_docs:
             sequence_ids = list(input_ids[doc_id])
             # assuming question & title information is at the beginning of the sequence
@@ -268,11 +268,11 @@ class CustomDPRReaderTokenizerMixin:
 
     def _get_best_spans(
         self,
-        start_logits: List[int],
-        end_logits: List[int],
+        start_logits: list[int],
+        end_logits: list[int],
         max_answer_length: int,
         top_spans: int,
-    ) -> List[DPRSpanPrediction]:
+    ) -> list[DPRSpanPrediction]:
         """
         Finds the best answer span for the extractive Q&A model for one passage. It returns the best span by descending
         `span_score` order and keeping max `top_spans` spans. Spans longer that `max_answer_length` are ignored.

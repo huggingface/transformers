@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for GLPN."""
 
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from ...utils.import_utils import requires
 
@@ -137,7 +137,7 @@ class GLPNImageProcessor(BaseImageProcessor):
     @filter_out_non_signature_kwargs()
     def preprocess(
         self,
-        images: Union["PIL.Image.Image", TensorType, List["PIL.Image.Image"], List[TensorType]],
+        images: Union["PIL.Image.Image", TensorType, list["PIL.Image.Image"], list[TensorType]],
         do_resize: Optional[bool] = None,
         size_divisor: Optional[int] = None,
         resample=None,
@@ -234,8 +234,8 @@ class GLPNImageProcessor(BaseImageProcessor):
     def post_process_depth_estimation(
         self,
         outputs: "DepthEstimatorOutput",
-        target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
-    ) -> List[Dict[str, TensorType]]:
+        target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
+    ) -> list[dict[str, TensorType]]:
         """
         Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.
         Only supports PyTorch.

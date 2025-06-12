@@ -24,7 +24,7 @@ import typing
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional, TypedDict, Union
+from typing import Any, Optional, TypedDict, Union
 
 import numpy as np
 import typing_extensions
@@ -190,7 +190,7 @@ class ImagesKwargs(TypedDict, total=False):
     do_resize: Optional[bool]
     size: Optional[dict[str, int]]
     size_divisor: Optional[int]
-    crop_size: Optional[Dict[str, int]]
+    crop_size: Optional[dict[str, int]]
     resample: Optional[Union["PILImageResampling", int]]
     do_rescale: Optional[bool]
     rescale_factor: Optional[float]
@@ -265,7 +265,7 @@ class VideosKwargs(TypedDict, total=False):
     image_std: Optional[Union[float, list[float]]]
     do_pad: Optional[bool]
     do_center_crop: Optional[bool]
-    crop_size: Optional[Dict[str, int]]
+    crop_size: Optional[dict[str, int]]
     data_format: Optional[ChannelDimension]
     input_data_format: Optional[Union[str, ChannelDimension]]
     device: Optional[str]

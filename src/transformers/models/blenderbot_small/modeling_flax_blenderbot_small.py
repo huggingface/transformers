@@ -17,7 +17,7 @@
 import math
 import random
 from functools import partial
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional
 
 import flax.linen as nn
 import jax
@@ -308,7 +308,7 @@ class FlaxBlenderbotSmallAttention(nn.Module):
         attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
         deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ) -> tuple[jnp.ndarray]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -429,7 +429,7 @@ class FlaxBlenderbotSmallEncoderLayer(nn.Module):
         attention_mask: jnp.ndarray,
         output_attentions: bool = True,
         deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ) -> tuple[jnp.ndarray]:
         residual = hidden_states
         hidden_states, attn_weights = self.self_attn(hidden_states=hidden_states, attention_mask=attention_mask)
 
@@ -555,7 +555,7 @@ class FlaxBlenderbotSmallDecoderLayer(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = True,
         deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ) -> tuple[jnp.ndarray]:
         residual = hidden_states
 
         # Self Attention
@@ -880,7 +880,7 @@ class FlaxBlenderbotSmallPreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: BlenderbotSmallConfig,
-        input_shape: Tuple[int] = (1, 1),
+        input_shape: tuple[int] = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
@@ -889,7 +889,7 @@ class FlaxBlenderbotSmallPreTrainedModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         # make sure initialization pass will work for FlaxBlenderbotSmallForSequenceClassificationModule

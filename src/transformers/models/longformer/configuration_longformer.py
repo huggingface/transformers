@@ -16,7 +16,7 @@
 
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
@@ -97,7 +97,7 @@ class LongformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        attention_window: Union[List[int], int] = 512,
+        attention_window: Union[list[int], int] = 512,
         sep_token_id: int = 2,
         pad_token_id: int = 1,
         bos_token_id: int = 0,
@@ -141,7 +141,7 @@ class LongformerConfig(PretrainedConfig):
 
 class LongformerOnnxConfig(OnnxConfig):
     def __init__(
-        self, config: "PretrainedConfig", task: str = "default", patching_specs: "Optional[List[PatchingSpec]]" = None
+        self, config: "PretrainedConfig", task: str = "default", patching_specs: "Optional[list[PatchingSpec]]" = None
     ):
         super().__init__(config, task, patching_specs)
         config.onnx_export = True

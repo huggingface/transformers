@@ -19,7 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any, Dict, Optional, Union
+from typing import Any, Optional, Union
 
 from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
@@ -302,8 +302,8 @@ class Gemma3Config(PretrainedConfig):
 
     def __init__(
         self,
-        text_config: Optional[Union[Gemma3TextConfig, Dict[str, Any]]] = None,
-        vision_config: Optional[Union[SiglipVisionConfig, Dict[str, Any]]] = None,
+        text_config: Optional[Union[Gemma3TextConfig, dict[str, Any]]] = None,
+        vision_config: Optional[Union[SiglipVisionConfig, dict[str, Any]]] = None,
         mm_tokens_per_image: int = 256,
         boi_token_index: int = 255_999,
         eoi_token_index: int = 256_000,

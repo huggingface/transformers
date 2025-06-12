@@ -14,7 +14,7 @@
 # limitations under the License.
 """OneFormer model configuration"""
 
-from typing import Dict, Optional
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -150,11 +150,11 @@ class OneFormerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        backbone_config: Optional[Dict] = None,
+        backbone_config: Optional[dict] = None,
         backbone: Optional[str] = None,
         use_pretrained_backbone: bool = False,
         use_timm_backbone: bool = False,
-        backbone_kwargs: Optional[Dict] = None,
+        backbone_kwargs: Optional[dict] = None,
         ignore_value: int = 255,
         num_queries: int = 150,
         no_object_weight: int = 0.1,

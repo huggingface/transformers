@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -37,7 +37,7 @@ class GotOcr2TextKwargs(TextKwargs, total=False):
 
 
 class GotOcr2ImagesKwargs(ImagesKwargs, total=False):
-    box: Optional[Union[List, Tuple[float, float], Tuple[float, float, float, float]]]
+    box: Optional[Union[list, tuple[float, float], tuple[float, float, float, float]]]
     color: Optional[str]
     num_image_tokens: Optional[int]
     multi_page: Optional[bool]
@@ -64,7 +64,7 @@ class GotOcr2ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-def preprocess_box_annotation(box: Union[List, Tuple], image_size: Tuple[int, int]) -> List:
+def preprocess_box_annotation(box: Union[list, tuple], image_size: tuple[int, int]) -> list:
     """
     Convert box annotation to the format [x1, y1, x2, y2] in the range [0, 1000].
     """
@@ -135,7 +135,7 @@ class GotOcr2Processor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[GotOcr2ProcessorKwargs],

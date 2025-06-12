@@ -18,7 +18,7 @@ Processor class for LLaVa-Onevision.
 
 import math
 from collections.abc import Iterable
-from typing import List, Union
+from typing import Union
 
 import numpy as np
 
@@ -113,7 +113,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos: VideoInput = None,
         **kwargs: Unpack[LlavaOnevisionProcessorKwargs],
@@ -204,8 +204,8 @@ class LlavaOnevisionProcessor(ProcessorMixin):
 
     def _expand_image_tokens(
         self,
-        text: List[TextInput],
-        image_sizes: Iterable[Union[List[int], int]],
+        text: list[TextInput],
+        image_sizes: Iterable[Union[list[int], int]],
         height: int,
         width: int,
         special_token: str,

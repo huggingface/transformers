@@ -18,7 +18,7 @@
 
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import Callable, List
+from typing import Callable
 
 from packaging import version
 
@@ -101,13 +101,13 @@ class PvtConfig(PretrainedConfig):
         image_size: int = 224,
         num_channels: int = 3,
         num_encoder_blocks: int = 4,
-        depths: List[int] = [2, 2, 2, 2],
-        sequence_reduction_ratios: List[int] = [8, 4, 2, 1],
-        hidden_sizes: List[int] = [64, 128, 320, 512],
-        patch_sizes: List[int] = [4, 2, 2, 2],
-        strides: List[int] = [4, 2, 2, 2],
-        num_attention_heads: List[int] = [1, 2, 5, 8],
-        mlp_ratios: List[int] = [8, 8, 4, 4],
+        depths: list[int] = [2, 2, 2, 2],
+        sequence_reduction_ratios: list[int] = [8, 4, 2, 1],
+        hidden_sizes: list[int] = [64, 128, 320, 512],
+        patch_sizes: list[int] = [4, 2, 2, 2],
+        strides: list[int] = [4, 2, 2, 2],
+        num_attention_heads: list[int] = [1, 2, 5, 8],
+        mlp_ratios: list[int] = [8, 8, 4, 4],
         hidden_act: Mapping[str, Callable] = "gelu",
         hidden_dropout_prob: float = 0.0,
         attention_probs_dropout_prob: float = 0.0,

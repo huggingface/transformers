@@ -18,7 +18,7 @@ Processor class for Grounding DINO.
 
 import pathlib
 import warnings
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import center_to_corners_format
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput
 
 
-AnnotationType = Dict[str, Union[int, str, List[Dict]]]
+AnnotationType = dict[str, Union[int, str, list[dict]]]
 
 
 def get_phrases_from_posmap(posmaps, input_ids):
@@ -74,7 +74,7 @@ def _is_list_of_candidate_labels(text) -> bool:
     return False
 
 
-def _merge_candidate_labels_text(text: List[str]) -> str:
+def _merge_candidate_labels_text(text: list[str]) -> str:
     """
     Merge candidate labels text into a single string. Ensure all labels are lowercase.
     For example, ["A cat", "a dog"] -> "a cat. a dog."
@@ -102,7 +102,7 @@ class DictWithDeprecationWarning(dict):
 
 
 class GroundingDinoImagesKwargs(ImagesKwargs, total=False):
-    annotations: Optional[Union[AnnotationType, List[AnnotationType]]]
+    annotations: Optional[Union[AnnotationType, list[AnnotationType]]]
     return_segmentation_masks: Optional[bool]
     masks_path: Optional[Union[str, pathlib.Path]]
     do_convert_annotations: Optional[bool]
@@ -152,7 +152,7 @@ class GroundingDinoProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[GroundingDinoProcessorKwargs],
@@ -246,8 +246,8 @@ class GroundingDinoProcessor(ProcessorMixin):
         input_ids: Optional[TensorType] = None,
         threshold: float = 0.25,
         text_threshold: float = 0.25,
-        target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
-        text_labels: Optional[List[List[str]]] = None,
+        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
+        text_labels: Optional[list[list[str]]] = None,
     ):
         """
         Converts the raw output of [`GroundingDinoForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -291,7 +291,7 @@ class GroundingDinoProcessor(ProcessorMixin):
 
         # Convert from relative [0, 1] to absolute [0, height] coordinates
         if target_sizes is not None:
-            if isinstance(target_sizes, List):
+            if isinstance(target_sizes, list):
                 img_h = torch.Tensor([i[0] for i in target_sizes])
                 img_w = torch.Tensor([i[1] for i in target_sizes])
             else:

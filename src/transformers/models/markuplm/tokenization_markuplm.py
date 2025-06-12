@@ -17,7 +17,7 @@
 import json
 import os
 from functools import lru_cache
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import regex as re
 
@@ -367,7 +367,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
         return text
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -405,8 +405,8 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         return (text, kwargs)
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A RoBERTa sequence has the following format:
@@ -428,24 +428,24 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
     def build_xpath_tags_with_special_tokens(
-        self, xpath_tags_0: List[int], xpath_tags_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, xpath_tags_0: list[int], xpath_tags_1: Optional[list[int]] = None
+    ) -> list[int]:
         pad = [self.pad_xpath_tags_seq]
         if len(xpath_tags_1) == 0:
             return pad + xpath_tags_0 + pad
         return pad + xpath_tags_0 + pad + xpath_tags_1 + pad
 
     def build_xpath_subs_with_special_tokens(
-        self, xpath_subs_0: List[int], xpath_subs_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, xpath_subs_0: list[int], xpath_subs_1: Optional[list[int]] = None
+    ) -> list[int]:
         pad = [self.pad_xpath_subs_seq]
         if len(xpath_subs_1) == 0:
             return pad + xpath_subs_0 + pad
         return pad + xpath_subs_0 + pad + xpath_subs_1 + pad
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Args:
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -469,8 +469,8 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. RoBERTa does not
         make use of token type ids, therefore a list of zeros is returned.
@@ -492,10 +492,10 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
-        text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
-        xpaths: Optional[Union[List[List[int]], List[List[List[int]]]]] = None,
-        node_labels: Optional[Union[List[int], List[List[int]]]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
+        text_pair: Optional[Union[PreTokenizedInput, list[PreTokenizedInput]]] = None,
+        xpaths: Optional[Union[list[list[int]], list[list[list[int]]]]] = None,
+        node_labels: Optional[Union[list[int], list[list[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -641,13 +641,13 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
     def batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
-            List[TextInput],
-            List[TextInputPair],
-            List[PreTokenizedInput],
+            list[TextInput],
+            list[TextInputPair],
+            list[PreTokenizedInput],
         ],
         is_pair: Optional[bool] = None,
-        xpaths: Optional[List[List[List[int]]]] = None,
-        node_labels: Optional[Union[List[int], List[List[int]]]] = None,
+        xpaths: Optional[list[list[list[int]]]] = None,
+        node_labels: Optional[Union[list[int], list[list[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -701,13 +701,13 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
     def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
-            List[TextInput],
-            List[TextInputPair],
-            List[PreTokenizedInput],
+            list[TextInput],
+            list[TextInputPair],
+            list[PreTokenizedInput],
         ],
         is_pair: Optional[bool] = None,
-        xpaths: Optional[List[List[List[int]]]] = None,
-        node_labels: Optional[List[List[int]]] = None,
+        xpaths: Optional[list[list[list[int]]]] = None,
+        node_labels: Optional[list[list[int]]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -760,8 +760,8 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         self,
         batch_text_or_text_pairs,
         is_pair: Optional[bool] = None,
-        xpaths: Optional[List[List[int]]] = None,
-        node_labels: Optional[List[List[int]]] = None,
+        xpaths: Optional[list[list[int]]] = None,
+        node_labels: Optional[list[list[int]]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -834,8 +834,8 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         self,
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[PreTokenizedInput] = None,
-        xpaths: Optional[List[List[int]]] = None,
-        node_labels: Optional[List[int]] = None,
+        xpaths: Optional[list[list[int]]] = None,
+        node_labels: Optional[list[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -852,7 +852,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         return_length: bool = False,
         verbose: bool = True,
         **kwargs,
-    ) -> List[int]:
+    ) -> list[int]:
         encoded_inputs = self.encode_plus(
             text=text,
             text_pair=text_pair,
@@ -883,8 +883,8 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         self,
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[PreTokenizedInput] = None,
-        xpaths: Optional[List[List[int]]] = None,
-        node_labels: Optional[List[int]] = None,
+        xpaths: Optional[list[list[int]]] = None,
+        node_labels: Optional[list[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -951,8 +951,8 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         self,
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[PreTokenizedInput] = None,
-        xpaths: Optional[List[List[int]]] = None,
-        node_labels: Optional[List[int]] = None,
+        xpaths: Optional[list[list[int]]] = None,
+        node_labels: Optional[list[int]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -1006,8 +1006,8 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         self,
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[PreTokenizedInput] = None,
-        xpaths: Optional[List[List[int]]] = None,
-        node_labels: Optional[List[int]] = None,
+        xpaths: Optional[list[list[int]]] = None,
+        node_labels: Optional[list[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -1234,17 +1234,17 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
 
     def truncate_sequences(
         self,
-        ids: List[int],
-        xpath_tags_seq: List[List[int]],
-        xpath_subs_seq: List[List[int]],
-        pair_ids: Optional[List[int]] = None,
-        pair_xpath_tags_seq: Optional[List[List[int]]] = None,
-        pair_xpath_subs_seq: Optional[List[List[int]]] = None,
-        labels: Optional[List[int]] = None,
+        ids: list[int],
+        xpath_tags_seq: list[list[int]],
+        xpath_subs_seq: list[list[int]],
+        pair_ids: Optional[list[int]] = None,
+        pair_xpath_tags_seq: Optional[list[list[int]]] = None,
+        pair_xpath_subs_seq: Optional[list[list[int]]] = None,
+        labels: Optional[list[int]] = None,
         num_tokens_to_remove: int = 0,
         truncation_strategy: Union[str, TruncationStrategy] = "longest_first",
         stride: int = 0,
-    ) -> Tuple[List[int], List[int], List[int]]:
+    ) -> tuple[list[int], list[int], list[int]]:
         """
         Args:
         Truncates a sequence pair in-place following the strategy.
@@ -1370,7 +1370,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
 
     def _pad(
         self,
-        encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
+        encoded_inputs: Union[dict[str, EncodedInput], BatchEncoding],
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,

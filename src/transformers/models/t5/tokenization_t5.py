@@ -18,7 +18,7 @@ import os
 import re
 import warnings
 from shutil import copyfile
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Optional
 
 import sentencepiece as spm
 
@@ -132,7 +132,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         extra_ids=100,
         additional_special_tokens=None,
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        sp_model_kwargs: Optional[dict[str, Any]] = None,
         legacy=None,
         add_prefix_space=True,
         **kwargs,
@@ -248,8 +248,8 @@ class T5Tokenizer(PreTrainedTokenizer):
         return vocab
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
@@ -283,7 +283,7 @@ class T5Tokenizer(PreTrainedTokenizer):
     def get_sentinel_token_ids(self):
         return [self.convert_tokens_to_ids(token) for token in self.get_sentinel_tokens()]
 
-    def _add_eos_if_not_present(self, token_ids: List[int]) -> List[int]:
+    def _add_eos_if_not_present(self, token_ids: list[int]) -> list[int]:
         """Do not add eos again if user already added it."""
         if len(token_ids) > 0 and token_ids[-1] == self.eos_token_id:
             warnings.warn(
@@ -295,8 +295,8 @@ class T5Tokenizer(PreTrainedTokenizer):
             return token_ids + [self.eos_token_id]
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. T5 does not make
         use of token type ids, therefore a list of zeros is returned.
@@ -317,8 +317,8 @@ class T5Tokenizer(PreTrainedTokenizer):
         return len(token_ids_0 + eos + token_ids_1 + eos) * [0]
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A sequence has the following format:
@@ -357,7 +357,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
-    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
+    def tokenize(self, text: "TextInput", **kwargs) -> list[str]:
         """
         Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
         first token is special.
@@ -429,7 +429,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         out_string += self.sp_model.decode(current_sub_tokens)
         return out_string.strip()
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return

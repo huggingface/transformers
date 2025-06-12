@@ -16,7 +16,7 @@
 Processor class for PaliGemma.
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -42,7 +42,7 @@ EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i i
 
 
 class PaliGemmaTextKwargs(TextKwargs):
-    suffix: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
+    suffix: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]]
 
 
 class PaliGemmaImagesKwargs(ImagesKwargs):
@@ -154,7 +154,7 @@ class PaliGemmaProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[PaliGemmaProcessorKwargs],
@@ -250,7 +250,7 @@ class PaliGemmaProcessor(ProcessorMixin):
                     "each text has and add special tokens."
                 )
 
-                if isinstance(text, List) and isinstance(images, List):
+                if isinstance(text, list) and isinstance(images, list):
                     if len(images) != len(text):
                         raise ValueError(
                             f"Received {len(images)} images for {len(text)} prompts. Each prompt should be associated with an image or list of images."

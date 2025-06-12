@@ -18,7 +18,7 @@ and _encode_plus, in which the Rust tokenizer is used.
 """
 
 import json
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from tokenizers import processors
 
@@ -199,10 +199,10 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
     # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast.__call__
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
-        text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
-        boxes: Optional[Union[List[List[int]], List[List[List[int]]]]] = None,
-        word_labels: Optional[Union[List[int], List[List[int]]]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
+        text_pair: Optional[Union[PreTokenizedInput, list[PreTokenizedInput]]] = None,
+        boxes: Optional[Union[list[list[int]], list[list[list[int]]]]] = None,
+        word_labels: Optional[Union[list[int], list[list[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -353,13 +353,13 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
     def batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
-            List[TextInput],
-            List[TextInputPair],
-            List[PreTokenizedInput],
+            list[TextInput],
+            list[TextInputPair],
+            list[PreTokenizedInput],
         ],
         is_pair: Optional[bool] = None,
-        boxes: Optional[List[List[List[int]]]] = None,
-        word_labels: Optional[Union[List[int], List[List[int]]]] = None,
+        boxes: Optional[list[list[list[int]]]] = None,
+        word_labels: Optional[Union[list[int], list[list[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -411,7 +411,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         )
 
     # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast.tokenize
-    def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
+    def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> list[str]:
         batched_input = [(text, pair)] if pair else [text]
         encodings = self._tokenizer.encode_batch(
             batched_input, add_special_tokens=add_special_tokens, is_pretokenized=False, **kwargs
@@ -425,8 +425,8 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         self,
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[PreTokenizedInput] = None,
-        boxes: Optional[List[List[int]]] = None,
-        word_labels: Optional[List[int]] = None,
+        boxes: Optional[list[list[int]]] = None,
+        word_labels: Optional[list[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -492,13 +492,13 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
     def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
-            List[TextInput],
-            List[TextInputPair],
-            List[PreTokenizedInput],
+            list[TextInput],
+            list[TextInputPair],
+            list[PreTokenizedInput],
         ],
         is_pair: Optional[bool] = None,
-        boxes: Optional[List[List[List[int]]]] = None,
-        word_labels: Optional[List[List[int]]] = None,
+        boxes: Optional[list[list[list[int]]]] = None,
+        word_labels: Optional[list[list[int]]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -657,8 +657,8 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         self,
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[PreTokenizedInput] = None,
-        boxes: Optional[List[List[int]]] = None,
-        word_labels: Optional[List[int]] = None,
+        boxes: Optional[list[list[int]]] = None,
+        word_labels: Optional[list[int]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -724,7 +724,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
     # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast._pad
     def _pad(
         self,
-        encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
+        encoded_inputs: Union[dict[str, EncodedInput], BatchEncoding],
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
@@ -812,7 +812,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         return encoded_inputs
 
     # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 
@@ -824,8 +824,8 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         return output + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Args:
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. RoBERTa does not:

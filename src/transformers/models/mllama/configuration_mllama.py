@@ -13,7 +13,7 @@
 # limitations under the License.
 """Mllama model configuration"""
 
-from typing import Dict, List, Optional
+from typing import Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
@@ -103,8 +103,8 @@ class MllamaVisionConfig(PretrainedConfig):
         patch_size: int = 14,
         norm_eps: float = 1e-5,
         max_num_tiles: int = 4,
-        intermediate_layers_indices: Optional[List[int]] = None,
-        supported_aspect_ratios: Optional[List[List[int]]] = None,
+        intermediate_layers_indices: Optional[list[int]] = None,
+        supported_aspect_ratios: Optional[list[list[int]]] = None,
         initializer_range: float = 0.02,
         **kwargs,
     ):
@@ -254,13 +254,13 @@ class MllamaTextConfig(PretrainedConfig):
         num_key_value_heads: int = 8,
         intermediate_size: int = 14_336,
         rope_theta: float = 500_000,
-        rope_scaling: Optional[Dict] = None,
+        rope_scaling: Optional[dict] = None,
         rms_norm_eps: float = 1e-5,
         max_position_embeddings: int = 131_072,
         initializer_range: float = 0.02,
         use_cache: bool = True,
         tie_word_embeddings: bool = False,
-        cross_attention_layers: Optional[List[int]] = None,
+        cross_attention_layers: Optional[list[int]] = None,
         dropout: float = 0,
         bos_token_id: int = 128000,
         eos_token_id: int = 128001,

@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import math
-from typing import Optional, Tuple
+from typing import Optional
 
 import tensorflow as tf
 
@@ -337,7 +337,7 @@ class TFBlipTextAttention(keras.layers.Layer):
         head_mask: tf.Tensor | None = None,
         encoder_hidden_states: tf.Tensor | None = None,
         encoder_attention_mask: tf.Tensor | None = None,
-        past_key_value: Tuple[Tuple[tf.Tensor]] | None = None,
+        past_key_value: tuple[tuple[tf.Tensor]] | None = None,
         output_attentions: Optional[bool] = False,
         training: Optional[bool] = None,
     ):
@@ -751,7 +751,7 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
 
     @tf.function
     def get_extended_attention_mask(
-        self, attention_mask: tf.Tensor, input_shape: Tuple[int], is_decoder: bool
+        self, attention_mask: tf.Tensor, input_shape: tuple[int], is_decoder: bool
     ) -> tf.Tensor:
         """
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
@@ -826,14 +826,14 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
         encoder_embeds: tf.Tensor | None = None,
         encoder_hidden_states: tf.Tensor | None = None,
         encoder_attention_mask: tf.Tensor | None = None,
-        past_key_values: Tuple[Tuple[tf.Tensor]] | None = None,
+        past_key_values: tuple[tuple[tf.Tensor]] | None = None,
         use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         is_decoder: bool = False,
         training: bool = False,
-    ) -> Tuple[tf.Tensor] | TFBaseModelOutputWithPoolingAndCrossAttentions:
+    ) -> tuple[tf.Tensor] | TFBaseModelOutputWithPoolingAndCrossAttentions:
         r"""
         encoder_hidden_states  (`tf.Tensor`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if

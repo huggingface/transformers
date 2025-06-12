@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import re
 import warnings
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -462,8 +462,8 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         pixel_values: np.ndarray | tf.Tensor | None = None,
         decoder_input_ids: np.ndarray | tf.Tensor | None = None,
         decoder_attention_mask: np.ndarray | tf.Tensor | None = None,
-        encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
-        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        encoder_outputs: Optional[Union[tuple, TFBaseModelOutput]] = None,
+        past_key_values: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         decoder_inputs_embeds: np.ndarray | tf.Tensor | None = None,
         labels: np.ndarray | tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
@@ -472,7 +472,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs,
-    ) -> Union[TFSeq2SeqLMOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFSeq2SeqLMOutput, tuple[tf.Tensor]]:
         r"""
         Returns:
 

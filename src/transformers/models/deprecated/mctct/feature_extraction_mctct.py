@@ -16,7 +16,7 @@
 Feature extractor class for M-CTC-T
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -153,14 +153,14 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         return x
 
     def normalize(
-        self, input_features: List[np.ndarray], attention_mask: Optional[np.ndarray] = None
-    ) -> List[np.ndarray]:
+        self, input_features: list[np.ndarray], attention_mask: Optional[np.ndarray] = None
+    ) -> list[np.ndarray]:
         lengths = attention_mask.sum(-1) if attention_mask is not None else [x.shape[0] for x in input_features]
         return [self._normalize_one(x, n, self.padding_value) for x, n in zip(input_features, lengths)]
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         padding: Union[bool, str, PaddingStrategy] = False,
         max_length: Optional[int] = None,
         truncation: bool = False,

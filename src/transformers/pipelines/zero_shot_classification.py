@@ -1,5 +1,5 @@
 import inspect
-from typing import List, Union
+from typing import Union
 
 import numpy as np
 
@@ -162,7 +162,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
 
     def __call__(
         self,
-        sequences: Union[str, List[str]],
+        sequences: Union[str, list[str]],
         *args,
         **kwargs,
     ):

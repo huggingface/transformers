@@ -16,7 +16,7 @@
 
 import collections
 import math
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -693,7 +693,7 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, token_sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -942,7 +942,7 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         pixel_values: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
+    ) -> Union[tuple, TokenClassifierOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -1044,7 +1044,7 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
         return_dict: Optional[bool] = None,
         bbox: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
+    ) -> Union[tuple, QuestionAnsweringModelOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -1164,7 +1164,7 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
         return_dict: Optional[bool] = None,
         bbox: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple, SequenceClassifierOutput]:
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,

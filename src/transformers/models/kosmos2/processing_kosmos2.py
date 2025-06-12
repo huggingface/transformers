@@ -17,7 +17,7 @@
 import copy
 import math
 import re
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, is_batched
@@ -27,15 +27,15 @@ from ...tokenization_utils_base import BatchEncoding, TextInput
 
 
 BboxInput = Union[
-    List[Tuple[int, int]],
-    List[Tuple[float, float, float, float]],
-    List[List[Tuple[int, int]]],
-    List[List[Tuple[float, float, float]]],
+    list[tuple[int, int]],
+    list[tuple[float, float, float, float]],
+    list[list[tuple[int, int]]],
+    list[list[tuple[float, float, float]]],
 ]
 
 
 class Kosmos2ImagesKwargs(ImagesKwargs, total=False):
-    bboxes: Optional[List[float]]
+    bboxes: Optional[list[float]]
     num_image_tokens: Optional[int]
     first_image_token_id: Optional[int]
 
@@ -135,7 +135,7 @@ class Kosmos2Processor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, List[TextInput]] = None,
+        text: Union[TextInput, list[TextInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[Kosmos2ProcessorKwargs],
@@ -341,11 +341,11 @@ class Kosmos2Processor(ProcessorMixin):
 
     def preprocess_examples(
         self,
-        texts: Union[TextInput, List[TextInput]],
+        texts: Union[TextInput, list[TextInput]],
         images: ImageInput = None,
         bboxes: BboxInput = None,
         num_image_tokens: Optional[int] = 64,
-    ) -> Union[str, List[str]]:
+    ) -> Union[str, list[str]]:
         """Add image and bounding box information to `texts` as image and patch index tokens.
 
         Args:
@@ -453,7 +453,7 @@ class Kosmos2Processor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
-    def _insert_patch_index_tokens(self, text: str, bboxes: Union[List[Tuple[int]], List[Tuple[float]]]) -> str:
+    def _insert_patch_index_tokens(self, text: str, bboxes: Union[list[tuple[int]], list[tuple[float]]]) -> str:
         if bboxes is None or len(bboxes) == 0:
             return text
 
@@ -499,8 +499,8 @@ class Kosmos2Processor(ProcessorMixin):
         return text
 
     def _convert_bbox_to_patch_index_tokens(
-        self, bbox: Union[Tuple[int, int], Tuple[float, float, float, float]]
-    ) -> Tuple[str, str]:
+        self, bbox: Union[tuple[int, int], tuple[float, float, float, float]]
+    ) -> tuple[str, str]:
         # already computed patch indices
         if len(bbox) == 2:
             idx_1, idx_2 = bbox
@@ -516,7 +516,7 @@ class Kosmos2Processor(ProcessorMixin):
         return token_1, token_2
 
 
-def coordinate_to_patch_index(bbox: Tuple[float, float, float, float], num_patches_per_side: int) -> Tuple[int, int]:
+def coordinate_to_patch_index(bbox: tuple[float, float, float, float], num_patches_per_side: int) -> tuple[int, int]:
     """Convert a bounding box to a pair of patch indices.
 
     Args:

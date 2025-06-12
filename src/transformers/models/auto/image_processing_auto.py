@@ -19,7 +19,7 @@ import json
 import os
 import warnings
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 # Build the list of all image processors
 from ...configuration_utils import PretrainedConfig
@@ -52,7 +52,7 @@ logger = logging.get_logger(__name__)
 if TYPE_CHECKING:
     # This significantly improves completion suggestion performance when
     # the transformers package is used with Microsoft's Pylance language server.
-    IMAGE_PROCESSOR_MAPPING_NAMES: OrderedDict[str, Tuple[Optional[str], Optional[str]]] = OrderedDict()
+    IMAGE_PROCESSOR_MAPPING_NAMES: OrderedDict[str, tuple[Optional[str], Optional[str]]] = OrderedDict()
 else:
     IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
@@ -223,7 +223,7 @@ def get_image_processor_config(
     cache_dir: Optional[Union[str, os.PathLike]] = None,
     force_download: bool = False,
     resume_download: Optional[bool] = None,
-    proxies: Optional[Dict[str, str]] = None,
+    proxies: Optional[dict[str, str]] = None,
     token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,

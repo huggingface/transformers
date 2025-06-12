@@ -14,7 +14,7 @@
 # limitations under the License.
 """ALIGN model configuration"""
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
@@ -214,13 +214,13 @@ class AlignVisionConfig(PretrainedConfig):
         width_coefficient: float = 2.0,
         depth_coefficient: float = 3.1,
         depth_divisor: int = 8,
-        kernel_sizes: List[int] = [3, 3, 5, 3, 5, 5, 3],
-        in_channels: List[int] = [32, 16, 24, 40, 80, 112, 192],
-        out_channels: List[int] = [16, 24, 40, 80, 112, 192, 320],
-        depthwise_padding: List[int] = [],
-        strides: List[int] = [1, 2, 2, 2, 1, 2, 1],
-        num_block_repeats: List[int] = [1, 2, 2, 3, 3, 4, 1],
-        expand_ratios: List[int] = [1, 6, 6, 6, 6, 6, 6],
+        kernel_sizes: list[int] = [3, 3, 5, 3, 5, 5, 3],
+        in_channels: list[int] = [32, 16, 24, 40, 80, 112, 192],
+        out_channels: list[int] = [16, 24, 40, 80, 112, 192, 320],
+        depthwise_padding: list[int] = [],
+        strides: list[int] = [1, 2, 2, 2, 1, 2, 1],
+        num_block_repeats: list[int] = [1, 2, 2, 3, 3, 4, 1],
+        expand_ratios: list[int] = [1, 6, 6, 6, 6, 6, 6],
         squeeze_expansion_ratio: float = 0.25,
         hidden_act: str = "swish",
         hidden_dim: int = 2560,

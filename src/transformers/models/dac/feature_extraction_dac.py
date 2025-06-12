@@ -14,7 +14,7 @@
 # limitations under the License.
 """Feature extractor class for DAC"""
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -59,7 +59,7 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        raw_audio: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         padding: Optional[Union[bool, str, PaddingStrategy]] = None,
         truncation: Optional[bool] = False,
         max_length: Optional[int] = None,

@@ -19,7 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
@@ -93,7 +93,7 @@ class ColQwen2Processor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[ColQwen2ProcessorKwargs],
@@ -209,7 +209,7 @@ class ColQwen2Processor(ProcessorMixin):
             if suffix is None:
                 suffix = self.query_augmentation_token * 10
 
-            texts_query: List[str] = []
+            texts_query: list[str] = []
 
             for query in text:
                 augmented_query = self.query_prefix + query + suffix
@@ -308,7 +308,7 @@ class ColQwen2Processor(ProcessorMixin):
 
     def process_queries(
         self,
-        text: Union[TextInput, List[TextInput]],
+        text: Union[TextInput, list[TextInput]],
         **kwargs: Unpack[ColQwen2ProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -342,8 +342,8 @@ class ColQwen2Processor(ProcessorMixin):
 
     def score_retrieval(
         self,
-        query_embeddings: Union["torch.Tensor", List["torch.Tensor"]],
-        passage_embeddings: Union["torch.Tensor", List["torch.Tensor"]],
+        query_embeddings: Union["torch.Tensor", list["torch.Tensor"]],
+        passage_embeddings: Union["torch.Tensor", list["torch.Tensor"]],
         batch_size: int = 128,
         output_dtype: Optional["torch.dtype"] = None,
         output_device: Union["torch.device", str] = "cpu",
@@ -386,10 +386,10 @@ class ColQwen2Processor(ProcessorMixin):
         if output_dtype is None:
             output_dtype = query_embeddings[0].dtype
 
-        scores: List[torch.Tensor] = []
+        scores: list[torch.Tensor] = []
 
         for i in range(0, len(query_embeddings), batch_size):
-            batch_scores: List[torch.Tensor] = []
+            batch_scores: list[torch.Tensor] = []
             batch_queries = torch.nn.utils.rnn.pad_sequence(
                 query_embeddings[i : i + batch_size], batch_first=True, padding_value=0
             )

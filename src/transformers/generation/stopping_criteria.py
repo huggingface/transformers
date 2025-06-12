@@ -3,7 +3,7 @@ import warnings
 from abc import ABC
 from collections import OrderedDict
 from copy import deepcopy
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -239,10 +239,10 @@ class StopStringCriteria(StoppingCriteria):
     ```
     """
 
-    def __init__(self, tokenizer: PreTrainedTokenizerBase, stop_strings: Union[str, List[str]]):
+    def __init__(self, tokenizer: PreTrainedTokenizerBase, stop_strings: Union[str, list[str]]):
         if isinstance(stop_strings, str):
             stop_strings = [stop_strings]
-        self.stop_strings: Tuple[str, ...] = tuple(stop_strings)
+        self.stop_strings: tuple[str, ...] = tuple(stop_strings)
         vocab = tokenizer.get_vocab()
         token_list, token_indices = tuple(vocab.keys()), tuple(vocab.values())
         self.embedding_vec, self.max_valid_positions, self.max_valid_end_lens = self.clean_and_embed_tokens_with_cache(
@@ -298,7 +298,7 @@ class StopStringCriteria(StoppingCriteria):
     @staticmethod
     def _stop_string_get_matching_positions(
         token_list, token_indices, stop_strings
-    ) -> Tuple[Dict[str, Dict[str, List[int]]], Dict[str, Dict[str, List[int]]]]:
+    ) -> tuple[dict[str, dict[str, list[int]]], dict[str, dict[str, list[int]]]]:
         """This function preprocesses stop strings and the tokenizer vocabulary to determine where tokens can
         validly appear in the stop strings. For each token, it computes a list of positions in the stop string where the
         token appears, as well as a list of the possible "end overlaps" for that token - that is, the number of characters
@@ -337,7 +337,7 @@ class StopStringCriteria(StoppingCriteria):
         return token_valid_positions, token_end_overlaps
 
     @staticmethod
-    def _stop_string_create_embedding_vec(token_list, token_indices, stop_strings) -> Dict[str, torch.tensor]:
+    def _stop_string_create_embedding_vec(token_list, token_indices, stop_strings) -> dict[str, torch.tensor]:
         """This function precomputes everything needed for the run-time checks in StopStringCriteria, and packs
         them into an embedding tensor that can be accessed with pure tensor operations. For the specifics of the values
         that are precomputed and what they are used for, please refer to the StopStringCriteria docstring!"""
@@ -459,7 +459,7 @@ class EosTokenCriteria(StoppingCriteria):
             The id(s) of the *end-of-sequence* token.
     """
 
-    def __init__(self, eos_token_id: Union[int, List[int], torch.Tensor]):
+    def __init__(self, eos_token_id: Union[int, list[int], torch.Tensor]):
         if not isinstance(eos_token_id, torch.Tensor):
             if isinstance(eos_token_id, int):
                 eos_token_id = [eos_token_id]

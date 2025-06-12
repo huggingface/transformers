@@ -17,7 +17,7 @@
 import math
 import random
 from functools import partial
-from typing import Optional, Tuple
+from typing import Optional
 
 import flax.linen as nn
 import jax
@@ -230,7 +230,7 @@ class FlaxWhisperAttention(nn.Module):
         attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
         deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ) -> tuple[jnp.ndarray]:
         is_cross_attention = key_value_states is not None
         batch_size = hidden_states.shape[0]
 
@@ -318,7 +318,7 @@ class FlaxWhisperAttention(nn.Module):
         return hidden_state.reshape(hidden_state.shape[:2] + (self.embed_dim,))
 
     @nn.compact
-    def _concatenate_to_cache(self, key, value, query, attention_mask) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    def _concatenate_to_cache(self, key, value, query, attention_mask) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         # detect if we're initializing by absence of existing cache data.
         is_initialized = self.has_variable("cache", "cached_key")
         cached_key = self.variable("cache", "cached_key", jnp.zeros, key.shape, key.dtype)
@@ -382,7 +382,7 @@ class FlaxWhisperEncoderLayer(nn.Module):
         attention_mask: jnp.ndarray,
         output_attentions: bool = True,
         deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ) -> tuple[jnp.ndarray]:
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, attn_weights = self.self_attn(hidden_states=hidden_states, attention_mask=attention_mask)
@@ -514,7 +514,7 @@ class FlaxWhisperDecoderLayer(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = True,
         deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ) -> tuple[jnp.ndarray]:
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
@@ -680,7 +680,7 @@ class FlaxWhisperEncoder(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ) -> tuple[jnp.ndarray]:
         if input_features.shape[1:] != (self.config.num_mel_bins, self.config.max_source_positions * 2):
             raise ValueError(
                 "input_features.shape[1:], must be equal to (self.config.num_mel_bins,"
@@ -756,7 +756,7 @@ class FlaxWhisperDecoder(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
         deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ) -> tuple[jnp.ndarray]:
         input_embeds = self.embed_tokens(input_ids)
         position_embeds = self.embed_positions(position_ids)
 
@@ -867,7 +867,7 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: WhisperConfig,
-        input_shape: Optional[Tuple[int]] = None,
+        input_shape: Optional[tuple[int]] = None,
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
@@ -886,7 +886,7 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
             gradient_checkpointing=True,
         )
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_features = jnp.zeros(input_shape, dtype="f4")
         input_features = input_features.at[(..., -1)].set(self.config.eos_token_id)
@@ -1599,7 +1599,7 @@ class FlaxWhisperForAudioClassification(FlaxWhisperPreTrainedModel):
     module_class = FlaxWhisperForAudioClassificationModule
     dtype: jnp.dtype = jnp.float32
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_features = jnp.zeros(input_shape, dtype="f4")
         input_features = input_features.at[(..., -1)].set(self.config.eos_token_id)

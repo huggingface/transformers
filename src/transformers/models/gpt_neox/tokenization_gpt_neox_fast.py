@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for GPTNeoX."""
 
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from tokenizers import processors
 
@@ -168,8 +168,8 @@ class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
 
     # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
@@ -216,7 +216,7 @@ class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
 
         return output
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 

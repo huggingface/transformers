@@ -16,7 +16,7 @@
 Processor class for BLIP-2.
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -80,7 +80,7 @@ class Blip2Processor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Optional[Union[str, List[str], TextInput, PreTokenizedInput]] = None,
+        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[Blip2ProcessorKwargs],
