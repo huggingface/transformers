@@ -393,6 +393,11 @@ def get_torch_version():
     return _torch_version
 
 
+def get_torch_major_and_minor_version() -> str:
+    parsed_version = version.parse(_torch_version)
+    return str(parsed_version.major) + "." + str(parsed_version.minor)
+
+
 def is_torch_sdpa_available():
     if not is_torch_available():
         return False

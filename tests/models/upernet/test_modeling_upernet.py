@@ -19,7 +19,6 @@ from huggingface_hub import hf_hub_download
 
 from transformers import ConvNextConfig, UperNetConfig
 from transformers.testing_utils import (
-    is_torch_greater_or_equal,
     require_timm,
     require_torch,
     require_torch_multi_gpu,
@@ -28,6 +27,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils.import_utils import get_torch_major_and_minor_version
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
@@ -158,7 +158,7 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_torchscript = False
     has_attentions = False
     test_torch_exportable = True
-    test_torch_exportable_strictly = not is_torch_greater_or_equal("2.7.0") or is_torch_greater_or_equal("2.8.0")
+    test_torch_exportable_strictly = not get_torch_major_and_minor_version() == "2.7"
 
     def setUp(self):
         self.model_tester = UperNetModelTester(self)
