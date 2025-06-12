@@ -997,16 +997,7 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn_2 = True
 
-    def _init_weights(
-        self,
-        module: Union[
-            nn.Linear,
-            nn.Conv2d,
-            nn.LayerNorm,
-            VJEPA2Embeddings,
-            VJEPA2PredictorEmbeddings,
-        ],
-    ):
+    def _init_weights(self, module):
         """Initialize the weights"""
 
         init_std = self.config.initializer_range
