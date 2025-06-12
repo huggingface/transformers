@@ -121,7 +121,6 @@ processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-
 model = LlavaOnevisionForConditionalGeneration.from_pretrained(
     "llava-hf/llava-onevision-qwen2-7b-ov-hf",
     torch_dtype=torch.float16,
-    low_cpu_mem_usage=True,
     device_map="cuda:0"
 )
 
@@ -286,7 +285,6 @@ from transformers import LlavaOnevisionForConditionalGeneration
 model = LlavaOnevisionForConditionalGeneration.from_pretrained(
     model_id,
     torch_dtype=torch.float16,
-    low_cpu_mem_usage=True,
     use_flash_attention_2=True
 ).to(0)
 ```
