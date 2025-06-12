@@ -33,7 +33,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs, is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
@@ -437,6 +437,89 @@ class Glm4vVisionBlock(nn.Module):
         return hidden_states
 
 
+class Glm4vDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: Glm4vTextConfig, layer_idx: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.self_attn = Glm4vAttention(config, layer_idx)
+        self.mlp = Glm4vMLP(config)
+        self.input_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_self_attn_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_mlp_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.attention_type = "full_attention"
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        **kwargs,
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
+                `(batch, sequence_length)` where padding elements are indicated by 0.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence.
+            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
+            kwargs (`dict`, *optional*):
+                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
+                into the model
+        """
+
+        residual = hidden_states
+
+        hidden_states = self.input_layernorm(hidden_states)
+
+        # Self Attention
+        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings,
+        )
+
+        hidden_states = self.post_self_attn_layernorm(hidden_states)
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.post_mlp_layernorm(hidden_states)
+        hidden_states = residual + hidden_states
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (self_attn_weights,)
+
+        if use_cache:
+            outputs += (present_key_value,)
+
+        return outputs
+
+
 @auto_docstring
 class Glm4vPreTrainedModel(PreTrainedModel):
     config_class = Glm4vConfig
@@ -657,6 +740,51 @@ class Glm4vRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+def rotate_half_llm(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., 0::2]
+    x2 = x[..., 1::2]
+    return torch.stack((-x2, x1), dim=-1).flatten(-2)
+
+
 def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim=1):
     """Applies Rotary Position Embedding with Multimodal Sections to the query and key tensors (https://qwenlm.github.io/blog/qwen2-vl/).
 
@@ -714,54 +842,9 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     return q_embed, k_embed
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-def rotate_half_llm(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., 0::2]
-    x2 = x[..., 1::2]
-    return torch.stack((-x2, x1), dim=-1).flatten(-2)
-
-
 class Glm4vAttention(nn.Module):
     """
-    Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
+    Multi-headed attention from 'Attention Is All You Need' paper.
     and "Generating Long Sequences with Sparse Transformers".
     """
 
@@ -795,8 +878,6 @@ class Glm4vAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
-
         self.rotary_emb = Glm4vRotaryEmbedding(config=config)
 
     def forward(
@@ -842,7 +923,6 @@ class Glm4vAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=self.sliding_window,
             **kwargs,
         )
 
@@ -851,99 +931,7 @@ class Glm4vAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class Glm4vDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: Glm4vTextConfig, layer_idx: int):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-
-        if config.use_sliding_window and config._attn_implementation != "flash_attention_2":
-            logger.warning_once(
-                f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
-                "unexpected results may be encountered."
-            )
-        self.self_attn = Glm4vAttention(config, layer_idx)
-        self.mlp = Glm4vMLP(config)
-        self.input_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attention_type = config.layer_types[layer_idx]
-        self.post_self_attn_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_mlp_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch, sequence_length)` where padding elements are indicated by 0.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
-                with `head_dim` being the embedding dimension of each attention head.
-            kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
-        """
-
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_value=past_key_value,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings,
-        )
-
-        hidden_states = self.post_self_attn_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_mlp_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        if use_cache:
-            outputs += (present_key_value,)
-
-        return outputs
-
-
-@auto_docstring
 class Glm4vTextModel(Glm4vPreTrainedModel):
-    config_class = Glm4vTextConfig
-
     def __init__(self, config: Glm4vTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -956,7 +944,6 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
         self._attn_implementation = config._attn_implementation
         self.norm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Glm4vRotaryEmbedding(config=config)
-        self.has_sliding_layers = "sliding_attention" in self.config.layer_types
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -968,7 +955,6 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1034,9 +1020,6 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
             }
-            # The sliding window alternating layers are not always activated depending on the config
-            if self.has_sliding_layers:
-                causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
 
         hidden_states = inputs_embeds
 

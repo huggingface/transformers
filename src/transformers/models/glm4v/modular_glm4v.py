@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import itertools
-from typing import List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -22,18 +22,16 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch.nn import LayerNorm
 
-from transformers.models.glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm
+from transformers.models.glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm, eager_attention_forward
 from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig
 from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
     Qwen2_5_VisionRotaryEmbedding,
     Qwen2_5_VLCausalLMOutputWithPast,
-    Qwen2_5_VLDecoderLayer,
     Qwen2_5_VLForConditionalGeneration,
     Qwen2_5_VLMLP,
     Qwen2_5_VLModelOutputWithPast,
     Qwen2_5_VLPreTrainedModel,
-    Qwen2_5_VLTextModel,
     Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionBlock,
     Qwen2_5_VLVisionFlashAttention2,
@@ -46,15 +44,23 @@ from transformers.models.qwen2_5_vl.processing_qwen2_5_vl import (
 )
 
 from ...activations import ACT2FN
-from ...configuration_utils import PretrainedConfig, layer_type_validation
+from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
+from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update, rope_config_validation
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ImagesKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import LossKwargs, is_torchdynamo_compiling
+from ...utils import LossKwargs, is_torchdynamo_compiling, logging
 from ...video_utils import VideoInput
+
+
+logger = logging.get_logger(__name__)
 
 
 class Glm4vVisionConfig(PretrainedConfig):
@@ -237,9 +243,6 @@ class Glm4vTextConfig(PretrainedConfig):
         self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
         self.rope_scaling = rope_scaling
-
-        self.layer_types = ["full_attention" for i in range(self.num_hidden_layers)]
-        layer_type_validation(self.layer_types)
 
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, move it to 'rope_type'.
@@ -552,6 +555,89 @@ class Glm4vVisionBlock(Qwen2_5_VLVisionBlock):
         self.mlp = Glm4VisionMlp(config, bias=False)
 
 
+class Glm4vDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: Glm4vTextConfig, layer_idx: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.self_attn = Glm4vAttention(config, layer_idx)
+        self.mlp = Glm4vMLP(config)
+        self.input_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_self_attn_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_mlp_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.attention_type = "full_attention"
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        **kwargs,
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
+                `(batch, sequence_length)` where padding elements are indicated by 0.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence.
+            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
+            kwargs (`dict`, *optional*):
+                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
+                into the model
+        """
+
+        residual = hidden_states
+
+        hidden_states = self.input_layernorm(hidden_states)
+
+        # Self Attention
+        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings,
+        )
+
+        hidden_states = self.post_self_attn_layernorm(hidden_states)
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.post_mlp_layernorm(hidden_states)
+        hidden_states = residual + hidden_states
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (self_attn_weights,)
+
+        if use_cache:
+            outputs += (present_key_value,)
+
+        return outputs
+
+
 class Glm4vPreTrainedModel(Qwen2_5_VLPreTrainedModel):
     config_class = Glm4vConfig
     _no_split_modules = ["Glm4vDecoderLayer", "Glm4vVisionBlock"]
@@ -696,90 +782,284 @@ class Glm4vModelOutputWithPast(Qwen2_5_VLModelOutputWithPast):
     pass
 
 
-class Glm4vDecoderLayer(Qwen2_5_VLDecoderLayer):
-    def __init__(self, config: Glm4vTextConfig, layer_idx: int):
+class Glm4vRotaryEmbedding(nn.Module):
+    def __init__(self, config: Glm4vTextConfig, device=None):
         super().__init__()
-        self.mlp = Glm4vMLP(config)
-        self.input_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_self_attn_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_mlp_layernorm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        # In contrast to other models, Glm4v has different position ids for the grids
+        # So we expand the inv_freq to shape (3, ...)
+        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
+        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+class Glm4vAttention(nn.Module):
+    """
+    Multi-headed attention from 'Attention Is All You Need' paper.
+    and "Generating Long Sequences with Sparse Transformers".
+    """
+
+    def __init__(self, config: Glm4vTextConfig, layer_idx: Optional[int] = None):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        if layer_idx is None:
+            logger.warning_once(
+                f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will "
+                "to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
+
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.hidden_size // self.num_heads
+        self.num_key_value_heads = config.num_key_value_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.is_causal = True
+        self.attention_dropout = config.attention_dropout
+        self.rope_scaling = config.rope_scaling
+        self.scaling = self.head_dim**-0.5
+
+        if (self.head_dim * self.num_heads) != self.hidden_size:
+            raise ValueError(
+                f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
+                f" and `num_heads`: {self.num_heads})."
+            )
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+        self.rotary_emb = Glm4vRotaryEmbedding(config=config)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch, sequence_length)` where padding elements are indicated by 0.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
-                with `head_dim` being the embedding dimension of each attention head.
-            kwargs (`dict`, *optional*):
-                Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
-                into the model
-        """
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        bsz, q_len, _ = hidden_states.size()
 
-        residual = hidden_states
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
 
-        hidden_states = self.input_layernorm(hidden_states)
+        query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
-        # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_value=past_key_value,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings,
+        cos, sin = position_embeddings
+        query_states, key_states = apply_multimodal_rotary_pos_emb(
+            query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
         )
 
-        hidden_states = self.post_self_attn_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
+        if past_key_value is not None:
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_mlp_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        outputs = (hidden_states,)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
 
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        if use_cache:
-            outputs += (present_key_value,)
-
-        return outputs
+        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights, past_key_value
 
 
-class Glm4vTextModel(Qwen2_5_VLTextModel):
+class Glm4vTextModel(Glm4vPreTrainedModel):
     def __init__(self, config: Glm4vTextConfig):
         super().__init__(config)
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.layers = nn.ModuleList(
+            [Glm4vDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self._attn_implementation = config._attn_implementation
         self.norm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = Glm4vRotaryEmbedding(config=config)
+
+        self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Union[Tuple, BaseModelOutputWithPast]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
+        # torch.jit.trace() doesn't support cache objects in the output
+        if use_cache and past_key_values is None and not torch.jit.is_tracing():
+            past_key_values = DynamicCache()
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+
+        # the hard coded `3` is for temporal, height and width.
+        if position_ids is None:
+            position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
+        elif position_ids.dim() == 2:
+            position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
+
+        # It may already have been prepared by e.g. `generate`
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "input_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "cache_position": cache_position,
+                "past_key_values": past_key_values,
+            }
+            # Create the masks
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+            }
+
+        hidden_states = inputs_embeds
+
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        # decoder layers
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
+        next_decoder_cache = None
+
+        for decoder_layer in self.layers:
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    decoder_layer.__call__,
+                    hidden_states,
+                    causal_mask_mapping[decoder_layer.attention_type],
+                    position_ids,
+                    past_key_values,
+                    output_attentions,
+                    use_cache,
+                    cache_position,
+                    position_embeddings,
+                )
+            else:
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask=causal_mask_mapping[decoder_layer.attention_type],
+                    position_ids=position_ids,
+                    past_key_value=past_key_values,
+                    output_attentions=output_attentions,
+                    use_cache=use_cache,
+                    cache_position=cache_position,
+                    position_embeddings=position_embeddings,
+                    **kwargs,
+                )
+
+            hidden_states = layer_outputs[0]
+
+            if use_cache:
+                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
+
+            if output_attentions:
+                all_self_attns += (layer_outputs[1],)
+
+        hidden_states = self.norm(hidden_states)
+
+        # add hidden states from the last decoder layer
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
+
+        next_cache = next_decoder_cache if use_cache else None
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=next_cache,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+        )
 
 
 class Glm4vModel(Glm4vPreTrainedModel):
