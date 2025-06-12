@@ -40,6 +40,7 @@ if is_torch_available():
 
 class PerceptionLMFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     vision_input_type: str = "thumb+tile"
+    tile_size: int = 448
     max_num_tiles: int = 36
 
 
@@ -61,9 +62,9 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs]) -> None:
         super().__init__(**kwargs)
         self.image_transform = get_image_transform(
-            vision_input_type=kwargs.get("vision_input_type", "thumb+tile"),
-            image_res=kwargs.get("tile_size", 448),
-            max_num_tiles=kwargs.get("max_num_tiles", 36),
+            vision_input_type=self.vision_input_type,
+            image_res=self.tile_size,
+            max_num_tiles=self.max_num_tiles,
         )
 
     def to_dict(self):
