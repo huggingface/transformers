@@ -60,9 +60,6 @@ def generate(
 ) -> list[list[int]]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    assert (
-        model.patch_in_forward
-    ), "generate requires model.patch_in_forward=True"
     model.eval()
     prompt_tokens = [tokenizer.encode(t, add_eos=False) for t in prompts]
     # Truncation
@@ -81,8 +78,7 @@ def generate(
 
     for i, curr_pos in enumerate(range(start_pos, end_pos)):
         current_tokens = tokens[:, :curr_pos]
-        patch_lengths, _ = model.patch(current_tokens, include_next_token=True)
-        logits = model(current_tokens, patch_lengths=patch_lengths)[:, -1]
+        logits = model(current_tokens)[:, -1]
 
         if use_sampling:
             probs = torch.softmax(logits / temp, dim=-1)
