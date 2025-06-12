@@ -394,6 +394,8 @@ def get_torch_version():
 
 
 def get_torch_major_and_minor_version() -> str:
+    if _torch_version == "N/A":
+        return "N/A"
     parsed_version = version.parse(_torch_version)
     return str(parsed_version.major) + "." + str(parsed_version.minor)
 
