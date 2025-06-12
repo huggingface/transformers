@@ -19,7 +19,7 @@ Processor class for Idefics3.
 import math
 import re
 from itertools import accumulate
-from typing import TYPE_CHECKING, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
@@ -90,7 +90,7 @@ def get_image_prompt_string(
 
 class Idefics3ImagesKwargs(ImagesKwargs, total=False):
     return_row_col_info: Optional[bool]
-    max_image_size: Optional[Dict[str, int]]
+    max_image_size: Optional[dict[str, int]]
 
 
 class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
@@ -186,8 +186,8 @@ class Idefics3Processor(ProcessorMixin):
 
     def __call__(
         self,
-        images: Union[ImageInput, List[ImageInput], List[List[ImageInput]]] = None,
-        text: Union[TextInput, "PreTokenizedInput", List[TextInput], List["PreTokenizedInput"]] = None,
+        images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
+        text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
         audio=None,
         videos=None,
         image_seq_len: Optional[int] = None,

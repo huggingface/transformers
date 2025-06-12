@@ -16,7 +16,7 @@
 
 import math
 import warnings
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -506,7 +506,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[tuple[torch.FloatTensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -516,7 +516,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithPast]:
+    ) -> Union[tuple[torch.Tensor], CausalLMOutputWithPast]:
         r"""
         input_embeds (`torch.FloatTensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
@@ -659,8 +659,8 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
 
     @staticmethod
     def _reorder_cache(
-        past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
-    ) -> Tuple[Tuple[torch.Tensor]]:
+        past_key_values: tuple[tuple[torch.Tensor]], beam_idx: torch.Tensor
+    ) -> tuple[tuple[torch.Tensor]]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
         [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
@@ -687,7 +687,7 @@ class BarkSemanticModel(BarkCausalModel):
         self,
         input_ids: torch.Tensor,
         semantic_generation_config: BarkSemanticGenerationConfig = None,
-        history_prompt: Optional[Dict[str, torch.Tensor]] = None,
+        history_prompt: Optional[dict[str, torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> torch.LongTensor:
@@ -801,7 +801,7 @@ class BarkCoarseModel(BarkCausalModel):
         batch_size: int,
         semantic_generation_config: int,
         codebook_size: int,
-        history_prompt: Optional[Dict[str, torch.Tensor]] = None,
+        history_prompt: Optional[dict[str, torch.Tensor]] = None,
     ):
         """
         Preprocess the optional `Bark` speaker prompts before `self.generate`.
@@ -874,10 +874,10 @@ class BarkCoarseModel(BarkCausalModel):
         semantic_generation_config: BarkSemanticGenerationConfig = None,
         coarse_generation_config: BarkCoarseGenerationConfig = None,
         codebook_size: int = 1024,
-        history_prompt: Optional[Dict[str, torch.Tensor]] = None,
+        history_prompt: Optional[dict[str, torch.Tensor]] = None,
         return_output_lengths: Optional[bool] = None,
         **kwargs,
-    ) -> Union[torch.LongTensor, Tuple[torch.LongTensor, torch.LongTensor]]:
+    ) -> Union[torch.LongTensor, tuple[torch.LongTensor, torch.LongTensor]]:
         """
         Generates coarse acoustics tokens from input text semantic tokens and an additional optional `Bark` speaker
         prompt.
@@ -1179,7 +1179,7 @@ class BarkFineModel(BarkPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
+    ) -> Union[tuple[torch.Tensor], MaskedLMOutput]:
         r"""
         codebook_idx (`int`):
             Index of the codebook that will be predicted.
@@ -1295,7 +1295,7 @@ class BarkFineModel(BarkPreTrainedModel):
         coarse_generation_config: BarkCoarseGenerationConfig = None,
         fine_generation_config: BarkFineGenerationConfig = None,
         codebook_size: int = 1024,
-        history_prompt: Optional[Dict[str, torch.Tensor]] = None,
+        history_prompt: Optional[dict[str, torch.Tensor]] = None,
         **kwargs,
     ) -> torch.LongTensor:
         """
@@ -1563,7 +1563,7 @@ class BarkModel(BarkPreTrainedModel):
     def generate(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        history_prompt: Optional[Dict[str, torch.Tensor]] = None,
+        history_prompt: Optional[dict[str, torch.Tensor]] = None,
         return_output_lengths: Optional[bool] = None,
         **kwargs,
     ) -> torch.LongTensor:
@@ -1710,7 +1710,7 @@ class BarkModel(BarkPreTrainedModel):
         cls,
         config,
         torch_dtype: Optional[torch.dtype] = None,
-        device_map: Optional[Union[str, Dict[str, int]]] = None,
+        device_map: Optional[Union[str, dict[str, int]]] = None,
         hard_check_only: bool = False,
         check_device_map: bool = False,
     ):

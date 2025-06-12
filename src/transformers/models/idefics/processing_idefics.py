@@ -16,7 +16,7 @@
 Processor class for IDEFICS.
 """
 
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, Optional, Union
 from urllib.parse import urlparse
 
 from ...feature_extraction_utils import BatchFeature
@@ -45,9 +45,9 @@ IMAGE_TOKEN = "<image>"
 
 class IdeficsImagesKwargs(ImagesKwargs, total=False):
     transform: Optional[Callable]
-    image_size: Optional[Dict[str, int]]
-    image_mean: Optional[Union[float, List[float]]]
-    image_std: Optional[Union[float, List[float]]]
+    image_size: Optional[dict[str, int]]
+    image_mean: Optional[Union[float, list[float]]]
+    image_std: Optional[Union[float, list[float]]]
 
 
 class IdeficsTextKwargs(TextKwargs, total=False):
@@ -243,14 +243,14 @@ class IdeficsProcessor(ProcessorMixin):
     @deprecate_kwarg(old_name="prompts", version="5.0.0", new_name="text", raise_if_both_names=True)
     def __call__(
         self,
-        images: Union[ImageInput, List[ImageInput], str, List[str], List[List[str]]] = None,
+        images: Union[ImageInput, list[ImageInput], str, list[str], list[list[str]]] = None,
         text: Union[
             TextInput,
             PreTokenizedInput,
-            List[TextInput],
-            List[PreTokenizedInput],
-            List[List[TextInput]],
-            List[List[PreTokenizedInput]],
+            list[TextInput],
+            list[PreTokenizedInput],
+            list[list[TextInput]],
+            list[list[PreTokenizedInput]],
         ] = None,
         audio=None,
         videos=None,

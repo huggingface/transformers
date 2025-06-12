@@ -27,7 +27,7 @@ import re
 import warnings
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 import h5py
 import numpy as np
@@ -106,10 +106,10 @@ except (ModuleNotFoundError, ImportError):
 tf_logger = tf.get_logger()
 
 TFModelInputType = Union[
-    List[tf.Tensor],
-    List[np.ndarray],
-    Dict[str, tf.Tensor],
-    Dict[str, np.ndarray],
+    list[tf.Tensor],
+    list[np.ndarray],
+    dict[str, tf.Tensor],
+    dict[str, np.ndarray],
     tf.Tensor,
     np.ndarray,
 ]
@@ -1142,7 +1142,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
     _requires_load_weight_prefix = False
 
     @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+    def dummy_inputs(self) -> dict[str, tf.Tensor]:
         """
         Dummy inputs to build the network.
 
@@ -1296,7 +1296,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         return self.serving_output(output)
 
     @property
-    def input_signature(self) -> Dict[str, tf.TensorSpec]:
+    def input_signature(self) -> dict[str, tf.TensorSpec]:
         """
         This property should return a dict mapping input names to tf.TensorSpec objects, representing the expected
         shape and dtype for model inputs. It is used for both serving and for generating dummy inputs.
@@ -1414,7 +1414,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         shuffle: bool = True,
         tokenizer: Optional["PreTrainedTokenizerBase"] = None,
         collate_fn: Optional[Callable] = None,
-        collate_fn_args: Optional[Dict[str, Any]] = None,
+        collate_fn_args: Optional[dict[str, Any]] = None,
         drop_remainder: Optional[bool] = None,
         prefetch: bool = True,
     ):
@@ -1816,9 +1816,9 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         tags: Optional[str] = None,
         finetuned_from: Optional[str] = None,
         tasks: Optional[str] = None,
-        dataset_tags: Optional[Union[str, List[str]]] = None,
-        dataset: Optional[Union[str, List[str]]] = None,
-        dataset_args: Optional[Union[str, List[str]]] = None,
+        dataset_tags: Optional[Union[str, list[str]]] = None,
+        dataset: Optional[Union[str, list[str]]] = None,
+        dataset_args: Optional[Union[str, list[str]]] = None,
     ):
         """
         Creates a draft of a model card using the information available to the `Trainer`.
@@ -1947,7 +1947,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return None
 
-    def get_bias(self) -> Union[None, Dict[str, tf.Variable]]:
+    def get_bias(self) -> Union[None, dict[str, tf.Variable]]:
         """
         Dict of bias attached to an LM head. The key represents the name of the bias attribute.
 
@@ -2174,8 +2174,8 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         return new_lm_head_bias
 
     def _v2_get_resized_lm_head_bias(
-        self, old_lm_head_bias: Dict[str, tf.Variable], new_num_tokens: int
-    ) -> Dict[str, tf.Tensor]:
+        self, old_lm_head_bias: dict[str, tf.Variable], new_num_tokens: int
+    ) -> dict[str, tf.Tensor]:
         """
         Build a resized bias from the old ones. Increasing the size will add newly initialized vectors at the end.
         Reducing the size will remove vectors from the end

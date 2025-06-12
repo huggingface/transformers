@@ -15,7 +15,7 @@
 """Classes to support Vision-Encoder-Text-Decoder architectures"""
 
 import os
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import flax.linen as nn
 import jax
@@ -280,7 +280,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: VisionEncoderDecoderConfig,
-        input_shape: Optional[Tuple] = None,
+        input_shape: Optional[tuple] = None,
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
@@ -310,7 +310,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         encoder_input_shape, decoder_input_shape = input_shape
 
         # init input tensors

@@ -15,7 +15,7 @@
 """Feature extractor class for TVLT."""
 
 from math import ceil
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -115,7 +115,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_attention_mask: Optional[bool] = True,
         sampling_rate: Optional[int] = None,
@@ -197,7 +197,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         audio_features = [
             self._np_extract_fbank_features(waveform.squeeze()).T[: self.spectrogram_length] for waveform in raw_speech
         ]
-        if isinstance(audio_features[0], List):
+        if isinstance(audio_features[0], list):
             audio_features = [np.asarray(feature, dtype=np.float32) for feature in audio_features]
 
         # Create audio attention mask

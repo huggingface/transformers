@@ -16,7 +16,7 @@
 
 import io
 import math
-from typing import Dict, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 from huggingface_hub import hf_hub_download
@@ -213,7 +213,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         self,
         do_convert_rgb: bool = True,
         do_normalize: bool = True,
-        patch_size: Optional[Dict[str, int]] = None,
+        patch_size: Optional[dict[str, int]] = None,
         max_patches: int = 2048,
         is_vqa: bool = False,
         **kwargs,
@@ -352,7 +352,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         do_convert_rgb: Optional[bool] = None,
         do_normalize: Optional[bool] = None,
         max_patches: Optional[int] = None,
-        patch_size: Optional[Dict[str, int]] = None,
+        patch_size: Optional[dict[str, int]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,

@@ -23,7 +23,7 @@ import os
 from dataclasses import dataclass, is_dataclass
 from enum import Enum
 from inspect import Parameter, signature
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 from packaging import version
 
@@ -149,7 +149,7 @@ class QuantizationConfigMixin:
 
             writer.write(json_string)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
@@ -304,7 +304,7 @@ class HqqConfig(QuantizationConfigMixin):
         view_as_float: bool = False,
         axis: Optional[int] = None,
         dynamic_config: Optional[dict] = None,
-        skip_modules: List[str] = ["lm_head"],
+        skip_modules: list[str] = ["lm_head"],
         **kwargs,
     ):
         if is_hqq_available():
@@ -353,7 +353,7 @@ class HqqConfig(QuantizationConfigMixin):
         pass
 
     @classmethod
-    def from_dict(cls, config: Dict[str, Any]):
+    def from_dict(cls, config: dict[str, Any]):
         """
         Override from_dict, used in AutoQuantizationConfig.from_dict in quantizers/auto.py
         """
@@ -362,7 +362,7 @@ class HqqConfig(QuantizationConfigMixin):
         instance.skip_modules = config["skip_modules"]
         return instance
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
@@ -377,7 +377,7 @@ class HqqConfig(QuantizationConfigMixin):
         config_dict = self.to_dict()
         return f"{self.__class__.__name__} {json.dumps(config_dict, indent=2, sort_keys=True)}\n"
 
-    def to_diff_dict(self) -> Dict[str, Any]:
+    def to_diff_dict(self) -> dict[str, Any]:
         """
         Removes all attributes from config which correspond to the default config attributes for better readability and
         serializes to a Python dictionary.
@@ -590,7 +590,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         else:
             return None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
@@ -607,7 +607,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         config_dict = self.to_dict()
         return f"{self.__class__.__name__} {json.dumps(config_dict, indent=2, sort_keys=True)}\n"
 
-    def to_diff_dict(self) -> Dict[str, Any]:
+    def to_diff_dict(self) -> dict[str, Any]:
         """
         Removes all attributes from config which correspond to the default config attributes for better readability and
         serializes to a Python dictionary.
@@ -709,26 +709,26 @@ class GPTQConfig(QuantizationConfigMixin):
         self,
         bits: int,
         tokenizer: Any = None,
-        dataset: Optional[Union[List[str], str]] = None,
+        dataset: Optional[Union[list[str], str]] = None,
         group_size: int = 128,
         damp_percent: float = 0.1,
         desc_act: bool = False,
         sym: bool = True,
         true_sequential: bool = True,
         checkpoint_format: str = "gptq",
-        meta: Optional[Dict[str, Any]] = None,
+        meta: Optional[dict[str, Any]] = None,
         backend: Optional[str] = None,
         use_cuda_fp16: bool = False,
         model_seqlen: Optional[int] = None,
         block_name_to_quantize: Optional[str] = None,
-        module_name_preceding_first_block: Optional[List[str]] = None,
+        module_name_preceding_first_block: Optional[list[str]] = None,
         batch_size: int = 1,
         pad_token_id: Optional[int] = None,
         use_exllama: Optional[bool] = None,
         max_input_length: Optional[int] = None,
-        exllama_config: Optional[Dict[str, Any]] = None,
+        exllama_config: Optional[dict[str, Any]] = None,
         cache_block_outputs: bool = True,
-        modules_in_block_to_quantize: Optional[List[List[str]]] = None,
+        modules_in_block_to_quantize: Optional[list[list[str]]] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.GPTQ
@@ -917,8 +917,8 @@ class AwqConfig(QuantizationConfigMixin):
         do_fuse: Optional[bool] = None,
         fuse_max_seq_len: Optional[int] = None,
         modules_to_fuse: Optional[dict] = None,
-        modules_to_not_convert: Optional[List] = None,
-        exllama_config: Optional[Dict[str, int]] = None,
+        modules_to_not_convert: Optional[list] = None,
+        exllama_config: Optional[dict[str, int]] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.AWQ
@@ -1075,7 +1075,7 @@ class AqlmConfig(QuantizationConfigMixin):
         out_group_size: int = 1,
         num_codebooks: int = 1,
         nbits_per_codebook: int = 16,
-        linear_weights_not_to_quantize: Optional[List[str]] = None,
+        linear_weights_not_to_quantize: Optional[list[str]] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.AQLM
@@ -1183,15 +1183,15 @@ class VptqConfig(QuantizationConfigMixin):
     def __init__(
         self,
         enable_proxy_error: bool = False,
-        config_for_layers: Dict[str, Any] = {},
-        shared_layer_config: Dict[str, Any] = {},
-        modules_to_not_convert: Optional[List] = None,
+        config_for_layers: dict[str, Any] = {},
+        shared_layer_config: dict[str, Any] = {},
+        modules_to_not_convert: Optional[list] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.VPTQ
         self.enable_proxy_error = enable_proxy_error
-        self.config_for_layers: Dict[str, Any] = config_for_layers
-        self.shared_layer_config: Dict[str, Any] = shared_layer_config
+        self.config_for_layers: dict[str, Any] = config_for_layers
+        self.shared_layer_config: dict[str, Any] = shared_layer_config
         self.modules_to_not_convert = modules_to_not_convert
         self.post_init()
 
@@ -1225,7 +1225,7 @@ class QuantoConfig(QuantizationConfigMixin):
         self,
         weights="int8",
         activations=None,
-        modules_to_not_convert: Optional[List] = None,
+        modules_to_not_convert: Optional[list] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.QUANTO
@@ -1263,7 +1263,7 @@ class EetqConfig(QuantizationConfigMixin):
     def __init__(
         self,
         weights: str = "int8",
-        modules_to_not_convert: Optional[List] = None,
+        modules_to_not_convert: Optional[list] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.EETQ
@@ -1308,13 +1308,13 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
     def __init__(
         self,
-        config_groups: Optional[Dict[str, Union["QuantizationScheme", List[str]]]] = None,  # noqa: F821
+        config_groups: Optional[dict[str, Union["QuantizationScheme", list[str]]]] = None,  # noqa: F821
         format: str = "dense",
         quantization_status: "QuantizationStatus" = "initialized",  # noqa: F821
         kv_cache_scheme: Optional["QuantizationArgs"] = None,  # noqa: F821
         global_compression_ratio: Optional[float] = None,
-        ignore: Optional[List[str]] = None,
-        sparsity_config: Optional[Dict[str, Any]] = None,
+        ignore: Optional[list[str]] = None,
+        sparsity_config: Optional[dict[str, Any]] = None,
         quant_method: str = "compressed-tensors",
         run_compressed: bool = True,
         **kwargs,
@@ -1396,7 +1396,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
         return super().from_dict(config_dict, return_unused_kwargs=return_unused_kwargs, **kwargs)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Quantization config to be added to config.json
 
@@ -1416,7 +1416,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
         return quantization_config
 
-    def to_diff_dict(self) -> Dict[str, Any]:
+    def to_diff_dict(self) -> dict[str, Any]:
         """
         Removes all attributes from config which correspond to the default config attributes for better readability and
         serializes to a Python dictionary.
@@ -1480,7 +1480,7 @@ class FbgemmFp8Config(QuantizationConfigMixin):
     def __init__(
         self,
         activation_scale_ub: float = 1200.0,
-        modules_to_not_convert: Optional[List] = None,
+        modules_to_not_convert: Optional[list] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.FBGEMM_FP8
@@ -1518,10 +1518,10 @@ class HiggsConfig(QuantizationConfigMixin):
         self,
         bits: int = 4,
         p: int = 2,
-        modules_to_not_convert: Optional[List[str]] = None,
+        modules_to_not_convert: Optional[list[str]] = None,
         hadamard_size: int = 512,
         group_size: int = 256,
-        tune_metadata: Optional[Dict[str, Any]] = None,
+        tune_metadata: Optional[dict[str, Any]] = None,
         **kwargs,
     ):
         if tune_metadata is None:
@@ -1554,8 +1554,8 @@ class HiggsConfig(QuantizationConfigMixin):
 class TorchAoConfig(QuantizationConfigMixin):
     quant_method: QuantizationMethod
     quant_type: Union[str, "AOBaseConfig"]  # noqa: F821
-    modules_to_not_convert: Optional[List]
-    quant_type_kwargs: Dict[str, Any]
+    modules_to_not_convert: Optional[list]
+    quant_type_kwargs: dict[str, Any]
     include_input_output_embeddings: bool
     untie_embedding_weights: bool
 
@@ -1618,7 +1618,7 @@ class TorchAoConfig(QuantizationConfigMixin):
     def __init__(
         self,
         quant_type: Union[str, "AOBaseConfig"],  # noqa: F821
-        modules_to_not_convert: Optional[List] = None,
+        modules_to_not_convert: Optional[list] = None,
         include_input_output_embeddings: bool = False,
         untie_embedding_weights: bool = False,
         **kwargs,
@@ -1819,7 +1819,7 @@ class BitNetQuantConfig(QuantizationConfigMixin):
 
     def __init__(
         self,
-        modules_to_not_convert: Optional[List] = None,
+        modules_to_not_convert: Optional[list] = None,
         linear_class: Optional[str] = "bitlinear",
         quantization_mode: Optional[str] = "offline",
         use_rms_norm: Optional[bool] = False,
@@ -1873,8 +1873,8 @@ class SpQRConfig(QuantizationConfigMixin):
         bits: int = 3,
         beta1: int = 16,
         beta2: int = 16,
-        shapes: Optional[Dict[str, int]] = None,
-        modules_to_not_convert: Optional[List[str]] = None,
+        shapes: Optional[dict[str, int]] = None,
+        modules_to_not_convert: Optional[list[str]] = None,
         **kwargs,
     ):
         if shapes is None:
@@ -1925,8 +1925,8 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
     def __init__(
         self,
         activation_scheme: str = "dynamic",
-        weight_block_size: Tuple[int, int] = (128, 128),
-        modules_to_not_convert: Optional[List] = None,
+        weight_block_size: tuple[int, int] = (128, 128),
+        modules_to_not_convert: Optional[list] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.FP8

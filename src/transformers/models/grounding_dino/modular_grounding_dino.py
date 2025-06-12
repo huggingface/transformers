@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
 
@@ -53,7 +53,7 @@ class GroundingDinoImageProcessorFast(DetrImageProcessorFast):
         self,
         outputs: "GroundingDinoObjectDetectionOutput",
         threshold: float = 0.1,
-        target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
+        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
     ):
         """
         Converts the raw output of [`GroundingDinoForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,

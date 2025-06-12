@@ -17,7 +17,7 @@ import copy
 import json
 import os
 import warnings
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -295,7 +295,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         video_metadata: VideoMetadata = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         device: Optional["torch.device"] = None,
-    ) -> List["torch.Tensor"]:
+    ) -> list["torch.Tensor"]:
         """
         Prepare the input videos for processing.
         """
@@ -359,8 +359,8 @@ class BaseVideoProcessor(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        videos: List["torch.Tensor"],
-        video_metadata: Union[List[VideoMetadata], List[dict]],
+        videos: list["torch.Tensor"],
+        video_metadata: Union[list[VideoMetadata], list[dict]],
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
@@ -372,8 +372,8 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         do_pad: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         do_sample_frames: Optional[bool] = None,
         fps: Optional[int] = None,
         num_frames: Optional[int] = None,
@@ -595,7 +595,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
     @classmethod
     def get_video_processor_dict(
         cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
-    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
         video processor of type [`~video_processing_utils.VideoProcessorBase`] using `from_dict`.
@@ -723,7 +723,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         return video_processor_dict, kwargs
 
     @classmethod
-    def from_dict(cls, video_processor_dict: Dict[str, Any], **kwargs):
+    def from_dict(cls, video_processor_dict: dict[str, Any], **kwargs):
         """
         Instantiates a type of [`~video_processing_utils.VideoProcessorBase`] from a Python dictionary of parameters.
 
@@ -767,7 +767,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
         else:
             return video_processor
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
 
@@ -859,7 +859,7 @@ class BaseVideoProcessor(BaseImageProcessorFast):
 
         cls._auto_class = auto_class
 
-    def fetch_videos(self, video_url_or_urls: Union[str, List[str]]):
+    def fetch_videos(self, video_url_or_urls: Union[str, list[str]]):
         """
         Convert a single or a list of urls into the corresponding `np.array` objects.
 

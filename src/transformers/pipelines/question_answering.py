@@ -2,7 +2,7 @@ import inspect
 import types
 import warnings
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
@@ -45,7 +45,7 @@ if is_torch_available():
 
 def decode_spans(
     start: np.ndarray, end: np.ndarray, topk: int, max_answer_len: int, undesired_tokens: np.ndarray
-) -> Tuple:
+) -> tuple:
     """
     Take the output of any `ModelForQuestionAnswering` and will generate probabilities for each span to be the actual
     answer.
@@ -285,8 +285,8 @@ class QuestionAnsweringPipeline(ChunkPipeline):
 
     @staticmethod
     def create_sample(
-        question: Union[str, List[str]], context: Union[str, List[str]]
-    ) -> Union[SquadExample, List[SquadExample]]:
+        question: Union[str, list[str]], context: Union[str, list[str]]
+    ) -> Union[SquadExample, list[SquadExample]]:
         """
         QuestionAnsweringPipeline leverages the [`SquadExample`] internally. This helper method encapsulate all the
         logic for converting question(s) and context(s) to [`SquadExample`].
@@ -632,7 +632,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
 
     def get_indices(
         self, enc: "tokenizers.Encoding", s: int, e: int, sequence_index: int, align_to_words: bool
-    ) -> Tuple[int, int]:
+    ) -> tuple[int, int]:
         if align_to_words:
             try:
                 start_word = enc.token_to_word(s)
@@ -648,7 +648,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             end_index = enc.offsets[e][1]
         return start_index, end_index
 
-    def span_to_answer(self, text: str, start: int, end: int) -> Dict[str, Union[str, int]]:
+    def span_to_answer(self, text: str, start: int, end: int) -> dict[str, Union[str, int]]:
         """
         When decoding from token probabilities, this method maps token indexes to actual word in the initial context.
 

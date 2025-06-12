@@ -17,7 +17,7 @@ Feature extractor class for Musicgen Melody
 """
 
 import copy
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -182,7 +182,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        audio: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         truncation: bool = True,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -315,7 +315,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
 
         return padded_inputs
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.

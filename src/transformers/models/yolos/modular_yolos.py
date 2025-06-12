@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
 
@@ -18,8 +18,8 @@ logger = logging.get_logger(__name__)
 
 
 def get_size_with_aspect_ratio(
-    image_size: Tuple[int, int], size: int, max_size: Optional[int] = None, mod_size: int = 16
-) -> Tuple[int, int]:
+    image_size: tuple[int, int], size: int, max_size: Optional[int] = None, mod_size: int = 16
+) -> tuple[int, int]:
     """
     Computes the output image size given the input image size and the desired output size with multiple of divisible_size.
 
@@ -113,7 +113,7 @@ class YolosImageProcessorFast(DetrImageProcessorFast):
         return results
 
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None, top_k: int = 100
+        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, list[tuple]] = None, top_k: int = 100
     ):
         """
         Converts the raw output of [`YolosForObjectDetection`] into final bounding boxes in (top_left_x,
@@ -154,7 +154,7 @@ class YolosImageProcessorFast(DetrImageProcessorFast):
 
         # and from relative [0, 1] to absolute [0, height] coordinates
         if target_sizes is not None:
-            if isinstance(target_sizes, List):
+            if isinstance(target_sizes, list):
                 img_h = torch.Tensor([i[0] for i in target_sizes])
                 img_w = torch.Tensor([i[1] for i in target_sizes])
             else:

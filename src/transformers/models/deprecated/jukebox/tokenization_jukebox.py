@@ -19,7 +19,7 @@ import os
 import re
 import unicodedata
 from json.encoder import INFINITY
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import regex
@@ -184,7 +184,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
 
     def prepare_for_tokenization(
         self, artists: str, genres: str, lyrics: str, is_split_into_words: bool = False
-    ) -> Tuple[str, str, str, Dict[str, Any]]:
+    ) -> tuple[str, str, str, dict[str, Any]]:
         """
         Performs any necessary transformations before tokenization.
 
@@ -259,7 +259,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         text = pattern.sub("_", text).strip("_")
         return text
 
-    def convert_lyric_tokens_to_string(self, lyrics: List[str]) -> str:
+    def convert_lyric_tokens_to_string(self, lyrics: list[str]) -> str:
         return " ".join(lyrics)
 
     def convert_to_tensors(
@@ -350,7 +350,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         ]
         return BatchEncoding({"input_ids": input_ids, "attention_masks": attention_masks})
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         """
         Saves the tokenizer's vocabulary dictionary to the provided save_directory.
 

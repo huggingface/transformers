@@ -22,7 +22,7 @@ from collections.abc import Iterable
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from multiprocessing import Pool, get_context, get_start_method
-from typing import TYPE_CHECKING, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from ...tokenization_utils import PreTrainedTokenizerBase
 
 
-ListOfDict = List[Dict[str, Union[int, str]]]
+ListOfDict = list[dict[str, Union[int, str]]]
 
 
 @dataclass
@@ -60,10 +60,10 @@ class Wav2Vec2DecoderWithLMOutput(ModelOutput):
             can be used to compute time stamps for each word.
     """
 
-    text: Union[List[List[str]], List[str], str]
-    logit_score: Union[List[List[float]], List[float], float] = None
-    lm_score: Union[List[List[float]], List[float], float] = None
-    word_offsets: Union[List[List[ListOfDict]], List[ListOfDict], ListOfDict] = None
+    text: Union[list[list[str]], list[str], str]
+    logit_score: Union[list[list[float]], list[float], float] = None
+    lm_score: Union[list[list[float]], list[float], float] = None
+    word_offsets: Union[list[list[ListOfDict]], list[ListOfDict], ListOfDict] = None
 
 
 class Wav2Vec2ProcessorWithLM(ProcessorMixin):

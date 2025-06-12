@@ -16,7 +16,7 @@ import importlib
 import inspect
 import re
 import warnings
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 from packaging import version
 
@@ -100,11 +100,11 @@ class PeftAdapterMixin:
         max_memory: Optional[str] = None,
         offload_folder: Optional[str] = None,
         offload_index: Optional[int] = None,
-        peft_config: Optional[Dict[str, Any]] = None,
-        adapter_state_dict: Optional[Dict[str, "torch.Tensor"]] = None,
+        peft_config: Optional[dict[str, Any]] = None,
+        adapter_state_dict: Optional[dict[str, "torch.Tensor"]] = None,
         low_cpu_mem_usage: bool = False,
         is_trainable: bool = False,
-        adapter_kwargs: Optional[Dict[str, Any]] = None,
+        adapter_kwargs: Optional[dict[str, Any]] = None,
     ) -> None:
         """
         Load adapter weights from file or remote Hub folder. If you are not familiar with adapters and PEFT methods, we
@@ -348,7 +348,7 @@ class PeftAdapterMixin:
 
         self.set_adapter(adapter_name)
 
-    def set_adapter(self, adapter_name: Union[List[str], str]) -> None:
+    def set_adapter(self, adapter_name: Union[list[str], str]) -> None:
         """
         If you are not familiar with adapters and PEFT methods, we invite you to read more about them on the PEFT
         official documentation: https://huggingface.co/docs/peft
@@ -438,7 +438,7 @@ class PeftAdapterMixin:
                 else:
                     module.disable_adapters = False
 
-    def active_adapters(self) -> List[str]:
+    def active_adapters(self) -> list[str]:
         """
         If you are not familiar with adapters and PEFT methods, we invite you to read more about them on the PEFT
         official documentation: https://huggingface.co/docs/peft
@@ -562,7 +562,7 @@ class PeftAdapterMixin:
             **dispatch_model_kwargs,
         )
 
-    def delete_adapter(self, adapter_names: Union[List[str], str]) -> None:
+    def delete_adapter(self, adapter_names: Union[list[str], str]) -> None:
         """
         Delete an adapter's LoRA layers from the underlying model.
 

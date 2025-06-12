@@ -16,7 +16,7 @@
 Processor class for Janus.
 """
 
-from typing import List, Union
+from typing import Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -79,7 +79,7 @@ class JanusProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         images: ImageInput = None,
         videos=None,
         audio=None,

@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import tensorflow as tf
 from tensorflow_text import pad_model_inputs
@@ -32,8 +32,8 @@ class TFGPT2Tokenizer(keras.layers.Layer):
 
     def __init__(
         self,
-        vocab: Dict[str, int],
-        merges: List[str],
+        vocab: dict[str, int],
+        merges: list[str],
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
     ):

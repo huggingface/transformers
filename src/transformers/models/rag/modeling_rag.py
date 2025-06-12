@@ -16,7 +16,7 @@
 
 import copy
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 from torch import nn
@@ -112,20 +112,20 @@ class RetrievAugLMMarginOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     doc_scores: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
+    past_key_values: Optional[list[torch.FloatTensor]] = None
     retrieved_doc_embeds: Optional[torch.FloatTensor] = None
     retrieved_doc_ids: Optional[torch.LongTensor] = None
     context_input_ids: Optional[torch.LongTensor] = None
     context_attention_mask: Optional[torch.LongTensor] = None
     question_encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    question_enc_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    question_enc_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    question_enc_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    question_enc_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     generator_enc_last_hidden_state: Optional[torch.FloatTensor] = None
-    generator_enc_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    generator_enc_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    generator_dec_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    generator_dec_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    generator_cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_enc_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    generator_enc_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    generator_dec_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    generator_dec_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    generator_cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -202,20 +202,20 @@ class RetrievAugLMOutput(ModelOutput):
 
     logits: Optional[torch.FloatTensor] = None
     doc_scores: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
+    past_key_values: Optional[list[torch.FloatTensor]] = None
     retrieved_doc_embeds: Optional[torch.FloatTensor] = None
     retrieved_doc_ids: Optional[torch.LongTensor] = None
     context_input_ids: Optional[torch.LongTensor] = None
     context_attention_mask: Optional[torch.LongTensor] = None
     question_encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    question_enc_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    question_enc_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    question_enc_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    question_enc_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     generator_enc_last_hidden_state: Optional[torch.FloatTensor] = None
-    generator_enc_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    generator_enc_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    generator_dec_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    generator_dec_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    generator_cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_enc_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    generator_enc_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    generator_dec_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    generator_dec_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    generator_cross_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @auto_docstring(
@@ -432,10 +432,10 @@ class RagModel(RagPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         doc_scores: Optional[torch.FloatTensor] = None,
         context_input_ids: Optional[torch.LongTensor] = None,
         context_attention_mask: Optional[torch.LongTensor] = None,
@@ -444,7 +444,7 @@ class RagModel(RagPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_retrieved: Optional[bool] = None,
         n_docs: Optional[int] = None,
-    ) -> Union[Tuple[torch.Tensor], RetrievAugLMOutput]:
+    ) -> Union[tuple[torch.Tensor], RetrievAugLMOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. [`RagConfig`], used to initialize the model, specifies
@@ -706,10 +706,10 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.Tensor]]] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         context_input_ids: Optional[torch.LongTensor] = None,
         context_attention_mask: Optional[torch.LongTensor] = None,
         doc_scores: Optional[torch.FloatTensor] = None,
@@ -1216,10 +1216,10 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        encoder_outputs: Optional[tuple[tuple[torch.Tensor]]] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         context_input_ids: Optional[torch.LongTensor] = None,
         context_attention_mask: Optional[torch.LongTensor] = None,
         doc_scores: Optional[torch.FloatTensor] = None,
@@ -1394,7 +1394,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
         doc_scores: Optional[torch.FloatTensor] = None,
         n_docs: Optional[int] = None,
         generation_config: Optional[GenerationConfig] = None,
-        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
+        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], list[int]]] = None,
         logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
         stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
         **kwargs,

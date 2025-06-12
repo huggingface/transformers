@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for DepthPro."""
 
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from ...image_processing_base import BatchFeature
 from ...image_processing_utils_fast import (
@@ -74,7 +74,7 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
     # which makes it different from BaseImageProcessorFast._preprocess
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
@@ -83,8 +83,8 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:
         # Group images by size for batched scaling
@@ -113,8 +113,8 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
     def post_process_depth_estimation(
         self,
         outputs: "DepthProDepthEstimatorOutput",
-        target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
-    ) -> Dict[str, List[TensorType]]:
+        target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
+    ) -> dict[str, list[TensorType]]:
         """
         Post-processes the raw depth predictions from the model to generate
         final depth predictions which is caliberated using the field of view if provided

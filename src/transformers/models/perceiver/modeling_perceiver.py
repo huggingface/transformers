@@ -20,7 +20,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import reduce
 from operator import __add__
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -37,7 +37,7 @@ from .configuration_perceiver import PerceiverConfig
 
 
 ModalitySizeType = Mapping[str, int]
-PreprocessorOutputType = Tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor]
+PreprocessorOutputType = tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor]
 PreprocessorType = Callable[..., PreprocessorOutputType]
 PostprocessorType = Callable[..., Any]
 
@@ -70,9 +70,9 @@ class PerceiverModelOutput(ModelOutput):
 
     logits: Optional[torch.FloatTensor] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -90,7 +90,7 @@ class PerceiverDecoderOutput(ModelOutput):
     """
 
     logits: Optional[torch.FloatTensor] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -119,9 +119,9 @@ class PerceiverMaskedLMOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -151,9 +151,9 @@ class PerceiverClassifierOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 class PerceiverEmbeddings(nn.Module):
@@ -224,7 +224,7 @@ class PerceiverSelfAttention(nn.Module):
         inputs: Optional[torch.FloatTensor] = None,
         inputs_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         hidden_states = self.layernorm1(hidden_states)
         inputs = self.layernorm2(inputs)
 
@@ -369,7 +369,7 @@ class PerceiverAttention(nn.Module):
         inputs: Optional[torch.FloatTensor] = None,
         inputs_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
             attention_mask,
@@ -448,7 +448,7 @@ class PerceiverLayer(nn.Module):
         inputs: Optional[torch.FloatTensor] = None,
         inputs_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         attention_outputs = self.attention(
             hidden_states,
             attention_mask,
@@ -537,7 +537,7 @@ class PerceiverEncoder(nn.Module):
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, BaseModelOutputWithCrossAttentions]:
+    ) -> Union[tuple, BaseModelOutputWithCrossAttentions]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions else None
@@ -684,13 +684,13 @@ class PerceiverModel(PerceiverPreTrainedModel):
         self,
         inputs: torch.FloatTensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        subsampled_output_points: Optional[Dict[str, torch.Tensor]] = None,
+        subsampled_output_points: Optional[dict[str, torch.Tensor]] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, PerceiverModelOutput]:
+    ) -> Union[tuple, PerceiverModelOutput]:
         r"""
         inputs (`torch.FloatTensor`):
             Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
@@ -934,7 +934,7 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
         input_ids: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, PerceiverMaskedLMOutput]:
+    ) -> Union[tuple, PerceiverMaskedLMOutput]:
         r"""
         inputs (`torch.FloatTensor`):
             Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
@@ -1061,7 +1061,7 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
         input_ids: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, PerceiverClassifierOutput]:
+    ) -> Union[tuple, PerceiverClassifierOutput]:
         r"""
         inputs (`torch.FloatTensor`):
             Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
@@ -1195,7 +1195,7 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
         pixel_values: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, PerceiverClassifierOutput]:
+    ) -> Union[tuple, PerceiverClassifierOutput]:
         r"""
         inputs (`torch.FloatTensor`):
             Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
@@ -1338,7 +1338,7 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
         pixel_values: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, PerceiverClassifierOutput]:
+    ) -> Union[tuple, PerceiverClassifierOutput]:
         r"""
         inputs (`torch.FloatTensor`):
             Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
@@ -1480,7 +1480,7 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
         pixel_values: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, PerceiverClassifierOutput]:
+    ) -> Union[tuple, PerceiverClassifierOutput]:
         r"""
         inputs (`torch.FloatTensor`):
             Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
@@ -1638,7 +1638,7 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, PerceiverClassifierOutput]:
+    ) -> Union[tuple, PerceiverClassifierOutput]:
         r"""
         inputs (`torch.FloatTensor`):
             Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
@@ -1842,13 +1842,13 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
         self,
         inputs: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        subsampled_output_points: Optional[Dict[str, torch.Tensor]] = None,
+        subsampled_output_points: Optional[dict[str, torch.Tensor]] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, PerceiverClassifierOutput]:
+    ) -> Union[tuple, PerceiverClassifierOutput]:
         r"""
         inputs (`torch.FloatTensor`):
             Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
@@ -2293,7 +2293,7 @@ class PerceiverBasicVideoAutoencodingDecoder(PerceiverAbstractDecoder):
     """
 
     def __init__(
-        self, config: PerceiverConfig, output_shape: List[int], position_encoding_type: str, **decoder_kwargs
+        self, config: PerceiverConfig, output_shape: list[int], position_encoding_type: str, **decoder_kwargs
     ) -> None:
         super().__init__()
         if len(output_shape) != 4:  # B, T, H, W
@@ -2384,11 +2384,11 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
     def __init__(
         self,
         config: PerceiverConfig,
-        modalities: Dict[str, PerceiverAbstractDecoder],
+        modalities: dict[str, PerceiverAbstractDecoder],
         num_outputs: int,
         output_num_channels: int,
         min_padding_size: Optional[int] = 2,
-        subsampled_index_dims: Optional[Dict[str, PerceiverAbstractDecoder]] = None,
+        subsampled_index_dims: Optional[dict[str, PerceiverAbstractDecoder]] = None,
         **decoder_kwargs,
     ) -> None:
         super().__init__()
@@ -2783,7 +2783,7 @@ class PerceiverFourierPositionEncoding(PerceiverAbstractPositionEncoding):
 
     def forward(
         self,
-        index_dims: List[int],
+        index_dims: list[int],
         batch_size: int,
         device: torch.device,
         dtype: torch.dtype,

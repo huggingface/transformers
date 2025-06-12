@@ -19,7 +19,7 @@ Fast tokenizer class for Nougat.
 import re
 from functools import partial
 from multiprocessing import Pool
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -582,10 +582,10 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
 
     def post_process_generation(
         self,
-        generation: Union[str, List[str]],
+        generation: Union[str, list[str]],
         fix_markdown: bool = True,
         num_workers: Optional[int] = None,
-    ) -> Union[str, List[str]]:
+    ) -> Union[str, list[str]]:
         """
         Postprocess a generated text or a list of generated texts.
 

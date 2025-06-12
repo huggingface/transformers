@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Union
 
 import tensorflow as tf
 
@@ -555,7 +555,7 @@ class TFMobileViTLayer(keras.layers.Layer):
         )
         self.hidden_size = hidden_size
 
-    def unfolding(self, features: tf.Tensor) -> Tuple[tf.Tensor, Dict]:
+    def unfolding(self, features: tf.Tensor) -> tuple[tf.Tensor, dict]:
         patch_width, patch_height = self.patch_width, self.patch_height
         patch_area = tf.cast(patch_width * patch_height, "int32")
 
@@ -599,7 +599,7 @@ class TFMobileViTLayer(keras.layers.Layer):
         }
         return patches, info_dict
 
-    def folding(self, patches: tf.Tensor, info_dict: Dict) -> tf.Tensor:
+    def folding(self, patches: tf.Tensor, info_dict: dict) -> tf.Tensor:
         patch_width, patch_height = self.patch_width, self.patch_height
         patch_area = int(patch_width * patch_height)
 
@@ -833,7 +833,7 @@ class TFMobileViTMainLayer(keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFBaseModelOutputWithPooling]:
+    ) -> Union[tuple[tf.Tensor], TFBaseModelOutputWithPooling]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1001,7 +1001,7 @@ class TFMobileViTModel(TFMobileViTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFBaseModelOutputWithPooling]:
+    ) -> Union[tuple[tf.Tensor], TFBaseModelOutputWithPooling]:
         output = self.mobilevit(pixel_values, output_hidden_states, return_dict, training=training)
         return output
 

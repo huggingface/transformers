@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -78,7 +78,7 @@ def _scatter_values_on_batch_indices(values, batch_indices, output_shape):
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2._compute_mask_indices
 def _compute_mask_indices(
-    shape: Tuple[int, int],
+    shape: tuple[int, int],
     mask_prob: float,
     mask_length: int,
     min_masks: int = 0,
@@ -698,11 +698,11 @@ class TFHubertAttention(keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         key_value_states: tf.Tensor | None = None,
-        past_key_value: Tuple[Tuple[tf.Tensor]] | None = None,
+        past_key_value: tuple[tuple[tf.Tensor]] | None = None,
         attention_mask: tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Tuple[tf.Tensor, tf.Tensor | None]:
+    ) -> tuple[tf.Tensor, tf.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -898,7 +898,7 @@ class TFHubertEncoderLayer(keras.layers.Layer):
         attention_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = False,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         attn_residual = hidden_states
         hidden_states, attn_weights, _ = self.attention(
             hidden_states, attention_mask=attention_mask, training=training
@@ -958,7 +958,7 @@ class TFHubertEncoderLayerStableLayerNorm(keras.layers.Layer):
         attention_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = False,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         attn_residual = hidden_states
         hidden_states = self.layer_norm(hidden_states)
         hidden_states, attn_weights, _ = self.attention(
@@ -1011,7 +1011,7 @@ class TFHubertEncoder(keras.layers.Layer):
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
         training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutput, tuple[tf.Tensor]]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -1094,7 +1094,7 @@ class TFHubertEncoderStableLayerNorm(keras.layers.Layer):
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
         training: Optional[bool] = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutput, tuple[tf.Tensor]]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -1449,7 +1449,7 @@ class TFHubertModel(TFHubertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutput, tuple[tf.Tensor]]:
         """
 
         Returns:
@@ -1556,7 +1556,7 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[TFCausalLMOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFCausalLMOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,

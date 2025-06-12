@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for Pixtral."""
 
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
@@ -64,7 +64,7 @@ class PixtralFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         Size of the patches in the model, used to calculate the output image size. Can be overridden by `patch_size` in the `preprocess` method.
     """
 
-    patch_size: Optional[Dict[str, int]]
+    patch_size: Optional[dict[str, int]]
 
 
 @auto_docstring
@@ -129,8 +129,8 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
     # Adapted from transformers.models.pixtral.image_processing_pixtral.PixtralImageProcessor._pad_for_batching
     def _pad_for_batching(
         self,
-        pixel_values: List[torch.Tensor],
-        image_sizes: List[List[int]],
+        pixel_values: list[torch.Tensor],
+        image_sizes: list[list[int]],
     ):
         """
         Pads images on the `num_of_patches` dimension with zeros to form a batch of same number of patches.
@@ -152,18 +152,18 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        patch_size: Dict[str, int],
+        patch_size: dict[str, int],
         interpolation: Optional["F.InterpolationMode"],
         do_center_crop: bool,
-        crop_size: Dict[str, int],
+        crop_size: dict[str, int],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:
         patch_size = get_size_dict(patch_size, default_to_square=True)

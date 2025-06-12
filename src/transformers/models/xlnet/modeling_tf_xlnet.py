@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -864,9 +864,9 @@ class TFXLNetModelOutput(ModelOutput):
     """
 
     last_hidden_state: Optional[tf.Tensor] = None
-    mems: List[tf.Tensor] | None = None
-    hidden_states: Tuple[tf.Tensor, ...] | None = None
-    attentions: Tuple[tf.Tensor, ...] | None = None
+    mems: list[tf.Tensor] | None = None
+    hidden_states: tuple[tf.Tensor, ...] | None = None
+    attentions: tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -901,9 +901,9 @@ class TFXLNetLMHeadModelOutput(ModelOutput):
 
     loss: tf.Tensor | None = None
     logits: Optional[tf.Tensor] = None
-    mems: List[tf.Tensor] | None = None
-    hidden_states: Tuple[tf.Tensor, ...] | None = None
-    attentions: Tuple[tf.Tensor, ...] | None = None
+    mems: list[tf.Tensor] | None = None
+    hidden_states: tuple[tf.Tensor, ...] | None = None
+    attentions: tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -935,9 +935,9 @@ class TFXLNetForSequenceClassificationOutput(ModelOutput):
 
     loss: tf.Tensor | None = None
     logits: Optional[tf.Tensor] = None
-    mems: List[tf.Tensor] | None = None
-    hidden_states: Tuple[tf.Tensor, ...] | None = None
-    attentions: Tuple[tf.Tensor, ...] | None = None
+    mems: list[tf.Tensor] | None = None
+    hidden_states: tuple[tf.Tensor, ...] | None = None
+    attentions: tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -969,9 +969,9 @@ class TFXLNetForTokenClassificationOutput(ModelOutput):
 
     loss: tf.Tensor | None = None
     logits: Optional[tf.Tensor] = None
-    mems: List[tf.Tensor] | None = None
-    hidden_states: Tuple[tf.Tensor, ...] | None = None
-    attentions: Tuple[tf.Tensor, ...] | None = None
+    mems: list[tf.Tensor] | None = None
+    hidden_states: tuple[tf.Tensor, ...] | None = None
+    attentions: tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -1005,9 +1005,9 @@ class TFXLNetForMultipleChoiceOutput(ModelOutput):
 
     loss: tf.Tensor | None = None
     logits: Optional[tf.Tensor] = None
-    mems: List[tf.Tensor] | None = None
-    hidden_states: Tuple[tf.Tensor, ...] | None = None
-    attentions: Tuple[tf.Tensor, ...] | None = None
+    mems: list[tf.Tensor] | None = None
+    hidden_states: tuple[tf.Tensor, ...] | None = None
+    attentions: tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -1042,9 +1042,9 @@ class TFXLNetForQuestionAnsweringSimpleOutput(ModelOutput):
     loss: tf.Tensor | None = None
     start_logits: Optional[tf.Tensor] = None
     end_logits: Optional[tf.Tensor] = None
-    mems: List[tf.Tensor] | None = None
-    hidden_states: Tuple[tf.Tensor, ...] | None = None
-    attentions: Tuple[tf.Tensor, ...] | None = None
+    mems: list[tf.Tensor] | None = None
+    hidden_states: tuple[tf.Tensor, ...] | None = None
+    attentions: tuple[tf.Tensor, ...] | None = None
 
 
 XLNET_START_DOCSTRING = r"""
@@ -1194,7 +1194,7 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFXLNetModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFXLNetModelOutput, tuple[tf.Tensor]]:
         outputs = self.transformer(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1303,7 +1303,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[TFXLNetLMHeadModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFXLNetLMHeadModelOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the cross entropy classification loss. Indices should be in `[0, ...,
@@ -1438,7 +1438,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
         return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[TFXLNetForSequenceClassificationOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFXLNetForSequenceClassificationOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1539,7 +1539,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
         return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[TFXLNetForMultipleChoiceOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFXLNetForMultipleChoiceOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
@@ -1653,7 +1653,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
         return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[TFXLNetForTokenClassificationOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFXLNetForTokenClassificationOutput, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1744,7 +1744,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
         start_positions: np.ndarray | tf.Tensor | None = None,
         end_positions: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
-    ) -> Union[TFXLNetForQuestionAnsweringSimpleOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFXLNetForQuestionAnsweringSimpleOutput, tuple[tf.Tensor]]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.

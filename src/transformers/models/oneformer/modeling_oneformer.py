@@ -18,7 +18,7 @@ import copy
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -57,7 +57,7 @@ def _get_clones(module, N):
 
 def multi_scale_deformable_attention(
     value: Tensor,
-    value_spatial_shapes: Union[Tensor, List[Tuple]],
+    value_spatial_shapes: Union[Tensor, list[tuple]],
     sampling_locations: Tensor,
     attention_weights: Tensor,
 ) -> Tensor:
@@ -262,7 +262,7 @@ class OneFormerHungarianMatcher(nn.Module):
         self.num_points = num_points
 
     @torch.no_grad()
-    def forward(self, masks_queries_logits, class_queries_logits, mask_labels, class_labels) -> List[Tuple[Tensor]]:
+    def forward(self, masks_queries_logits, class_queries_logits, mask_labels, class_labels) -> list[tuple[Tensor]]:
         """Performs the matching
 
         Params:
@@ -287,7 +287,7 @@ class OneFormerHungarianMatcher(nn.Module):
             For each batch element, it holds:
                 len(index_i) = len(index_j) = min(num_queries, num_targets).
         """
-        indices: List[Tuple[np.array]] = []
+        indices: list[tuple[np.array]] = []
 
         num_queries = class_queries_logits.shape[1]
 
@@ -332,7 +332,7 @@ class OneFormerHungarianMatcher(nn.Module):
                 cost_matrix = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
                 cost_matrix = cost_matrix.reshape(num_queries, -1).cpu()
                 # do the assigmented using the hungarian algorithm in scipy
-                assigned_indices: Tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
+                assigned_indices: tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
                 indices.append(assigned_indices)
 
         # It could be stacked in one tensor
@@ -347,7 +347,7 @@ class OneFormerLoss(nn.Module):
         self,
         num_classes: int,
         matcher: OneFormerHungarianMatcher,
-        weight_dict: Dict[str, float],
+        weight_dict: dict[str, float],
         eos_coef: float,
         num_points: int,
         oversample_ratio: float,
@@ -397,14 +397,14 @@ class OneFormerLoss(nn.Module):
         if self.contrastive_temperature is not None:
             self.logit_scale = nn.Parameter(torch.tensor(np.log(1 / contrastive_temperature)))
 
-    def _max_by_axis(self, the_list: List[List[int]]) -> List[int]:
+    def _max_by_axis(self, the_list: list[list[int]]) -> list[int]:
         maxes = the_list[0]
         for sublist in the_list[1:]:
             for index, item in enumerate(sublist):
                 maxes[index] = max(maxes[index], item)
         return maxes
 
-    def _pad_images_to_max_in_batch(self, tensors: List[Tensor]) -> Tuple[Tensor, Tensor]:
+    def _pad_images_to_max_in_batch(self, tensors: list[Tensor]) -> tuple[Tensor, Tensor]:
         # get the maximum size in the batch
         max_size = self._max_by_axis([list(tensor.shape) for tensor in tensors])
         batch_size = len(tensors)
@@ -461,8 +461,8 @@ class OneFormerLoss(nn.Module):
         return losses
 
     def loss_labels(
-        self, class_queries_logits: Tensor, class_labels: List[Tensor], indices: Tuple[np.array]
-    ) -> Dict[str, Tensor]:
+        self, class_queries_logits: Tensor, class_labels: list[Tensor], indices: tuple[np.array]
+    ) -> dict[str, Tensor]:
         """Compute the losses related to the labels using cross entropy.
 
         Args:
@@ -496,8 +496,8 @@ class OneFormerLoss(nn.Module):
         return losses
 
     def loss_masks(
-        self, masks_queries_logits: Tensor, mask_labels: List[Tensor], indices: Tuple[np.array], num_masks: int
-    ) -> Dict[str, Tensor]:
+        self, masks_queries_logits: Tensor, mask_labels: list[Tensor], indices: tuple[np.array], num_masks: int
+    ) -> dict[str, Tensor]:
         """Compute the losses related to the masks using focal and dice loss.
 
         Args:
@@ -643,12 +643,12 @@ class OneFormerLoss(nn.Module):
         masks_queries_logits: Tensor,
         class_queries_logits: Tensor,
         contrastive_queries_logits: Tensor,
-        mask_labels: List[Tensor],
-        class_labels: List[Tensor],
+        mask_labels: list[Tensor],
+        class_labels: list[Tensor],
         text_queries: Tensor,
-        auxiliary_predictions: Optional[Dict[str, Tensor]] = None,
+        auxiliary_predictions: Optional[dict[str, Tensor]] = None,
         calculate_contrastive_loss: bool = True,
-    ) -> Dict[str, Tensor]:
+    ) -> dict[str, Tensor]:
         """
         This performs the loss computation.
 
@@ -687,7 +687,7 @@ class OneFormerLoss(nn.Module):
         # compute the average number of target masks for normalization purposes
         num_masks = self.get_num_masks(class_labels, device=class_labels[0].device)
         # get all the losses
-        losses: Dict[str, Tensor] = {
+        losses: dict[str, Tensor] = {
             **self.loss_masks(masks_queries_logits, mask_labels, indices, num_masks),
             **self.loss_labels(class_queries_logits, class_labels, indices),
         }
@@ -752,7 +752,7 @@ class OneFormerTransformerDecoderOutput(BaseModelOutput):
     contrastive_logits: Optional[torch.FloatTensor] = None
     prediction_masks: Optional[torch.FloatTensor] = None
     prediction_class: Optional[torch.FloatTensor] = None
-    auxiliary_predictions: Optional[Tuple[Dict[str, torch.FloatTensor]]] = None
+    auxiliary_predictions: Optional[tuple[dict[str, torch.FloatTensor]]] = None
 
 
 @dataclass
@@ -775,9 +775,9 @@ class OneFormerPixelDecoderOutput(ModelOutput):
             or when `config.output_attentions=True`
     """
 
-    multi_scale_features: Tuple[torch.FloatTensor] = None
+    multi_scale_features: tuple[torch.FloatTensor] = None
     mask_features: Optional[torch.FloatTensor] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -798,8 +798,8 @@ class OneFormerPixelLevelModuleOutput(ModelOutput):
             1/4 scale features from the last Pixel Decoder Layer.
     """
 
-    encoder_features: List[torch.FloatTensor] = None
-    decoder_features: List[torch.FloatTensor] = None
+    encoder_features: list[torch.FloatTensor] = None
+    decoder_features: list[torch.FloatTensor] = None
     decoder_last_feature: Optional[torch.FloatTensor] = None
 
 
@@ -840,17 +840,17 @@ class OneFormerModelOutput(ModelOutput):
             sequence_length)`. Self and Cross Attentions weights from transformer decoder.
     """
 
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    pixel_decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    pixel_decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
     transformer_decoder_hidden_states: Optional[torch.FloatTensor] = None
     transformer_decoder_object_queries: Optional[torch.FloatTensor] = None
     transformer_decoder_contrastive_queries: Optional[torch.FloatTensor] = None
     transformer_decoder_mask_predictions: Optional[torch.FloatTensor] = None
     transformer_decoder_class_predictions: Optional[torch.FloatTensor] = None
-    transformer_decoder_auxiliary_predictions: Optional[Tuple[Dict[str, torch.FloatTensor]]] = None
+    transformer_decoder_auxiliary_predictions: Optional[tuple[dict[str, torch.FloatTensor]]] = None
     text_queries: Optional[torch.FloatTensor] = None
     task_token: Optional[torch.FloatTensor] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -908,18 +908,18 @@ class OneFormerForUniversalSegmentationOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     class_queries_logits: Optional[torch.FloatTensor] = None
     masks_queries_logits: Optional[torch.FloatTensor] = None
-    auxiliary_predictions: List[Dict[str, torch.FloatTensor]] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    pixel_decoder_hidden_states: Optional[List[torch.FloatTensor]] = None
+    auxiliary_predictions: list[dict[str, torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    pixel_decoder_hidden_states: Optional[list[torch.FloatTensor]] = None
     transformer_decoder_hidden_states: Optional[torch.FloatTensor] = None
     transformer_decoder_object_queries: Optional[torch.FloatTensor] = None
     transformer_decoder_contrastive_queries: Optional[torch.FloatTensor] = None
     transformer_decoder_mask_predictions: Optional[torch.FloatTensor] = None
     transformer_decoder_class_predictions: Optional[torch.FloatTensor] = None
-    transformer_decoder_auxiliary_predictions: Optional[List[Dict[str, torch.FloatTensor]]] = None
+    transformer_decoder_auxiliary_predictions: Optional[list[dict[str, torch.FloatTensor]]] = None
     text_queries: Optional[torch.FloatTensor] = None
     task_token: Optional[torch.FloatTensor] = None
-    attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
 
 
 # Modified from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrFrozenBatchNorm2d with DeformableDetr->OneFormerPixelDecoder
@@ -1485,7 +1485,7 @@ class OneFormerPixelLevelModule(nn.Module):
         self.decoder = OneFormerPixelDecoder(config, feature_channels=self.encoder.channels)
 
     def forward(self, pixel_values: Tensor, output_hidden_states: bool = False) -> OneFormerPixelLevelModuleOutput:
-        features: List[Tensor] = self.encoder(pixel_values).feature_maps
+        features: list[Tensor] = self.encoder(pixel_values).feature_maps
         decoder_output: OneFormerPixelDecoderOutput = self.decoder(features, output_hidden_states=output_hidden_states)
         return OneFormerPixelLevelModuleOutput(
             encoder_features=tuple(features),
@@ -1540,7 +1540,7 @@ class OneFormerAttention(nn.Module):
         key_value_states: Optional[torch.Tensor] = None,
         key_value_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         hidden_states = hidden_states.permute(1, 0, 2) if hidden_states is not None else None
@@ -1869,8 +1869,8 @@ class OneFormerTransformerDecoderLayer(nn.Module):
         self,
         index: int,
         output: torch.Tensor,
-        multi_stage_features: List[torch.Tensor],
-        multi_stage_positional_embeddings: List[torch.Tensor],
+        multi_stage_features: list[torch.Tensor],
+        multi_stage_positional_embeddings: list[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         query_embeddings: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
@@ -2327,7 +2327,7 @@ class OneFormerTransformerModule(nn.Module):
 
     def forward(
         self,
-        multi_scale_features: List[Tensor],
+        multi_scale_features: list[Tensor],
         mask_features: Tensor,
         task_token: Tensor,
         output_attentions: bool = False,
@@ -3011,7 +3011,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
             num_points=config.train_num_points,
         )
 
-        self.weight_dict: Dict[str, float] = {
+        self.weight_dict: dict[str, float] = {
             "loss_cross_entropy": config.class_weight,
             "loss_mask": config.mask_weight,
             "loss_dice": config.dice_weight,
@@ -3039,10 +3039,10 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         mask_labels: Tensor,
         class_labels: Tensor,
         text_queries: Tensor,
-        auxiliary_predictions: Dict[str, Tensor],
+        auxiliary_predictions: dict[str, Tensor],
         calculate_contrastive_loss: bool,
-    ) -> Dict[str, Tensor]:
-        loss_dict: Dict[str, Tensor] = self.criterion(
+    ) -> dict[str, Tensor]:
+        loss_dict: dict[str, Tensor] = self.criterion(
             masks_queries_logits=masks_queries_logits,
             class_queries_logits=class_queries_logits,
             contrastive_queries_logits=contrastive_queries_logits,
@@ -3061,7 +3061,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
 
         return loss_dict
 
-    def get_loss(self, loss_dict: Dict[str, Tensor]) -> Tensor:
+    def get_loss(self, loss_dict: dict[str, Tensor]) -> Tensor:
         return sum(loss_dict.values())
 
     @auto_docstring
@@ -3070,8 +3070,8 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         pixel_values: Tensor,
         task_inputs: Tensor,
         text_inputs: Optional[Tensor] = None,
-        mask_labels: Optional[List[Tensor]] = None,
-        class_labels: Optional[List[Tensor]] = None,
+        mask_labels: Optional[list[Tensor]] = None,
+        class_labels: Optional[list[Tensor]] = None,
         pixel_mask: Optional[Tensor] = None,
         output_auxiliary_logits: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -3189,7 +3189,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         text_queries = outputs.text_queries
 
         if mask_labels is not None and class_labels is not None:
-            loss_dict: Dict[str, Tensor] = self.get_loss_dict(
+            loss_dict: dict[str, Tensor] = self.get_loss_dict(
                 masks_queries_logits=masks_queries_logits,
                 class_queries_logits=class_queries_logits,
                 contrastive_queries_logits=contrastive_queries_logits,

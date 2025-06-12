@@ -16,7 +16,7 @@
 Text/audio processor class for MusicGen Melody
 """
 
-from typing import List, Optional
+from typing import Optional
 
 import numpy as np
 
@@ -123,7 +123,7 @@ class MusicgenMelodyProcessor(ProcessorMixin):
         return self.tokenizer.decode(*args, **kwargs)
 
     # Copied from transformers.models.musicgen.processing_musicgen.MusicgenProcessor._decode_audio with padding_mask->attention_mask
-    def _decode_audio(self, audio_values, attention_mask: Optional = None) -> List[np.ndarray]:
+    def _decode_audio(self, audio_values, attention_mask: Optional = None) -> list[np.ndarray]:
         """
         This method strips any padding from the audio values to return a list of numpy audio arrays.
         """

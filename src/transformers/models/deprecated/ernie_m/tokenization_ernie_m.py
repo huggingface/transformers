@@ -17,7 +17,7 @@
 import io
 import os
 import unicodedata
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import sentencepiece as spm
 
@@ -67,7 +67,7 @@ class ErnieMTokenizer(PreTrainedTokenizer):
     """
 
     # Ernie-M model doesn't have token_type embedding.
-    model_input_names: List[str] = ["input_ids"]
+    model_input_names: list[str] = ["input_ids"]
 
     vocab_files_names = VOCAB_FILES_NAMES
     resource_files_names = RESOURCE_FILES_NAMES
@@ -83,7 +83,7 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         pad_token="[PAD]",
         cls_token="[CLS]",
         mask_token="[MASK]",
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        sp_model_kwargs: Optional[dict[str, Any]] = None,
         **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it and
@@ -312,8 +312,8 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         return [1] + ([0] * len(token_ids_0)) + [1]
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Create the token type IDs corresponding to the sequences passed. [What are token type
         IDs?](../glossary#token-type-ids) Should be overridden in a subclass if the model has a special way of
@@ -380,7 +380,7 @@ class ErnieMTokenizer(PreTrainedTokenizer):
 
         return token_to_idx
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         index = 0
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(

@@ -14,7 +14,7 @@
 """PyTorch UnivNetModel model."""
 
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -474,7 +474,7 @@ class UnivNetModel(PreTrainedModel):
         padding_mask: Optional[torch.FloatTensor] = None,
         generator: Optional[torch.Generator] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], UnivNetModelOutput]:
+    ) -> Union[tuple[torch.FloatTensor], UnivNetModelOutput]:
         r"""
         input_features (`torch.FloatTensor`):
             Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,

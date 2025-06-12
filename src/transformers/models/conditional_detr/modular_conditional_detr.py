@@ -1,4 +1,4 @@
-from typing import List, Tuple, Union
+from typing import Union
 
 from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
 
@@ -66,7 +66,7 @@ class ConditionalDetrImageProcessorFast(DetrImageProcessorFast):
         return results
 
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None, top_k: int = 100
+        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, list[tuple]] = None, top_k: int = 100
     ):
         """
         Converts the raw output of [`ConditionalDetrForObjectDetection`] into final bounding boxes in (top_left_x,
@@ -107,7 +107,7 @@ class ConditionalDetrImageProcessorFast(DetrImageProcessorFast):
 
         # and from relative [0, 1] to absolute [0, height] coordinates
         if target_sizes is not None:
-            if isinstance(target_sizes, List):
+            if isinstance(target_sizes, list):
                 img_h = torch.Tensor([i[0] for i in target_sizes])
                 img_w = torch.Tensor([i[1] for i in target_sizes])
             else:

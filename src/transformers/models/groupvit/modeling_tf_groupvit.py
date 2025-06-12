@@ -19,7 +19,7 @@ from __future__ import annotations
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -189,7 +189,7 @@ def resize_attention_map(attentions: tf.Tensor, height: int, width: int, align_c
     return attentions
 
 
-def get_grouping_from_attentions(attentions: Tuple[tf.Tensor], hw_shape: Tuple[int]) -> tf.Tensor:
+def get_grouping_from_attentions(attentions: tuple[tf.Tensor], hw_shape: tuple[int]) -> tf.Tensor:
     """
     Args:
         attentions (`tuple(tf.Tensor)`: tuple of attention maps returned by `TFGroupViTVisionTransformer`
@@ -261,7 +261,7 @@ class TFGroupViTModelOutput(ModelOutput):
     text_model_output: TFBaseModelOutputWithPooling = None
     vision_model_output: TFBaseModelOutputWithPooling = None
 
-    def to_tuple(self) -> Tuple[Any]:
+    def to_tuple(self) -> tuple[Any]:
         return tuple(
             self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
@@ -761,7 +761,7 @@ class TFGroupViTStage(keras.layers.Layer):
         prev_group_token: tf.Tensor | None = None,
         output_attentions: bool = False,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         """
         Args:
             hidden_states (`tf.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -903,7 +903,7 @@ class TFGroupViTAttention(keras.layers.Layer):
         output_attentions: Optional[bool] = None,
         encoder_hidden_states: Optional[tf.Tensor] = None,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size = shape_list(hidden_states)[0]
@@ -992,7 +992,7 @@ class TFGroupViTEncoderLayer(keras.layers.Layer):
         causal_attention_mask: tf.Tensor,
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         """
         Args:
             hidden_states (`tf.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -1060,7 +1060,7 @@ class TFGroupViTTextEncoder(keras.layers.Layer):
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-    ) -> Union[Tuple, TFBaseModelOutput]:
+    ) -> Union[tuple, TFBaseModelOutput]:
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -1180,7 +1180,7 @@ class TFGroupViTTextTransformer(keras.layers.Layer):
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPooling, tuple[tf.Tensor]]:
         input_shape = shape_list(input_ids)
 
         embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids)
@@ -1292,7 +1292,7 @@ class TFGroupViTVisionTransformer(keras.layers.Layer):
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-    ) -> Union[Tuple, TFBaseModelOutputWithPooling]:
+    ) -> Union[tuple, TFBaseModelOutputWithPooling]:
         embedding_output = self.embeddings(pixel_values)
 
         encoder_outputs = self.encoder(
@@ -1360,7 +1360,7 @@ class TFGroupViTTextMainLayer(keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPooling, tuple[tf.Tensor]]:
         if input_ids is None:
             raise ValueError("You have to specify input_ids")
 
@@ -1411,7 +1411,7 @@ class TFGroupViTVisionMainLayer(keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPooling, tuple[tf.Tensor]]:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -1588,7 +1588,7 @@ class TFGroupViTMainLayer(keras.layers.Layer):
         output_segmentation: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFGroupViTModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFGroupViTModelOutput, tuple[tf.Tensor]]:
         if input_ids is None:
             raise ValueError("You have to specify either input_ids")
         if pixel_values is None:
@@ -1871,7 +1871,7 @@ class TFGroupViTTextModel(TFGroupViTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPooling, tuple[tf.Tensor]]:
         r"""
         Returns:
 
@@ -1930,7 +1930,7 @@ class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPooling, tuple[tf.Tensor]]:
         r"""
         Returns:
 
@@ -2081,7 +2081,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
         output_segmentation: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFGroupViTModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFGroupViTModelOutput, tuple[tf.Tensor]]:
         r"""
         Returns:
 

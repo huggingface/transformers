@@ -16,7 +16,6 @@
 Image/Text processor class for OneFormer
 """
 
-from typing import List
 
 from ...processing_utils import ProcessorMixin
 from ...utils import is_torch_available
@@ -121,7 +120,7 @@ class OneFormerProcessor(ProcessorMixin):
         if isinstance(task_inputs, str):
             task_inputs = [task_inputs]
 
-        if isinstance(task_inputs, List) and all(isinstance(task_input, str) for task_input in task_inputs):
+        if isinstance(task_inputs, list) and all(isinstance(task_input, str) for task_input in task_inputs):
             task_token_inputs = []
             for task in task_inputs:
                 task_input = f"the task is {task}"
@@ -161,7 +160,7 @@ class OneFormerProcessor(ProcessorMixin):
         if isinstance(task_inputs, str):
             task_inputs = [task_inputs]
 
-        if isinstance(task_inputs, List) and all(isinstance(task_input, str) for task_input in task_inputs):
+        if isinstance(task_inputs, list) and all(isinstance(task_input, str) for task_input in task_inputs):
             task_token_inputs = []
             for task in task_inputs:
                 task_input = f"the task is {task}"

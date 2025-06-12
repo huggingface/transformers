@@ -16,7 +16,7 @@
 Image/Text processor class for SigLIP2.
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -69,8 +69,8 @@ class Siglip2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        images: Optional[Union[ImageInput, List[ImageInput], List[List[ImageInput]]]] = None,
-        text: Optional[Union[TextInput, "PreTokenizedInput", List[TextInput], List["PreTokenizedInput"]]] = None,
+        images: Optional[Union[ImageInput, list[ImageInput], list[list[ImageInput]]]] = None,
+        text: Optional[Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[Siglip2ProcessorKwargs],

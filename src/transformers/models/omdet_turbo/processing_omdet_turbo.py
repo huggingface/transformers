@@ -17,7 +17,7 @@ Processor class for OmDet-Turbo.
 """
 
 import warnings
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import center_to_corners_format
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 
 
 class OmDetTurboTextKwargs(TextKwargs, total=False):
-    task: Optional[Union[str, List[str], TextInput, PreTokenizedInput]]
+    task: Optional[Union[str, list[str], TextInput, PreTokenizedInput]]
 
 
 if is_torch_available():
@@ -89,7 +89,7 @@ class DictWithDeprecationWarning(dict):
         return super().get(key, *args, **kwargs)
 
 
-def clip_boxes(box, box_size: Tuple[int, int]):
+def clip_boxes(box, box_size: tuple[int, int]):
     """
     Clip the boxes by limiting x coordinates to the range [0, width]
     and y coordinates to the range [0, height].
@@ -128,11 +128,11 @@ def _post_process_boxes_for_image(
     scores: "torch.Tensor",
     labels: "torch.Tensor",
     image_num_classes: int,
-    image_size: Tuple[int, int],
+    image_size: tuple[int, int],
     threshold: float,
     nms_threshold: float,
     max_num_det: Optional[int] = None,
-) -> Tuple["torch.Tensor", "torch.Tensor", "torch.Tensor"]:
+) -> tuple["torch.Tensor", "torch.Tensor", "torch.Tensor"]:
     """
     Filter predicted results using given thresholds and NMS.
 
@@ -227,7 +227,7 @@ class OmDetTurboProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Optional[Union[List[str], List[List[str]]]] = None,
+        text: Optional[Union[list[str], list[list[str]]]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[OmDetTurboProcessorKwargs],
@@ -306,7 +306,7 @@ class OmDetTurboProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-    def _get_default_image_size(self) -> Tuple[int, int]:
+    def _get_default_image_size(self) -> tuple[int, int]:
         height = (
             self.image_processor.size["height"]
             if "height" in self.image_processor.size
@@ -324,10 +324,10 @@ class OmDetTurboProcessor(ProcessorMixin):
     def post_process_grounded_object_detection(
         self,
         outputs: "OmDetTurboObjectDetectionOutput",
-        text_labels: Optional[Union[List[str], List[List[str]]]] = None,
+        text_labels: Optional[Union[list[str], list[list[str]]]] = None,
         threshold: float = 0.3,
         nms_threshold: float = 0.5,
-        target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
+        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
         max_num_det: Optional[int] = None,
     ):
         """

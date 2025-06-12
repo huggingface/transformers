@@ -15,10 +15,7 @@
 """Fast Image processor class for ZoeDepth."""
 
 from typing import (
-    Dict,
-    List,
     Optional,
-    Tuple,
     Union,
 )
 
@@ -189,8 +186,8 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: Optional[float],
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchFeature:
@@ -218,11 +215,11 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
     def post_process_depth_estimation(
         self,
         outputs: "ZoeDepthDepthEstimatorOutput",
-        source_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
-        target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
+        source_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
+        target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
         outputs_flipped: Optional[Union["ZoeDepthDepthEstimatorOutput", None]] = None,
         do_remove_padding: Optional[Union[bool, None]] = None,
-    ) -> List[Dict[str, TensorType]]:
+    ) -> list[dict[str, TensorType]]:
         """
         Converts the raw output of [`ZoeDepthDepthEstimatorOutput`] into final depth predictions and depth PIL images.
         Only supports PyTorch.

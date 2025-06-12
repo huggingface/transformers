@@ -17,7 +17,7 @@
 import math
 from collections import defaultdict
 from functools import lru_cache
-from typing import List, Optional, Set, Tuple, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -47,7 +47,7 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-def get_factors(dividend: int) -> Set[int]:
+def get_factors(dividend: int) -> set[int]:
     """
     Calculate all factors of a given number, i.e. a divisor that leaves
     no remainder. For example, if dividend=12, it will return {1, 2, 3, 4, 6, 12}.
@@ -68,9 +68,9 @@ def get_factors(dividend: int) -> Set[int]:
 
 
 def get_max_res_without_distortion(
-    image_size: Tuple[int, int],
-    target_size: Tuple[int, int],
-) -> Tuple[int, int]:
+    image_size: tuple[int, int],
+    target_size: tuple[int, int],
+) -> tuple[int, int]:
     """
     Determines the maximum resolution to which an image can be resized to without distorting its
     aspect ratio, based on the target resolution.
@@ -186,8 +186,8 @@ def find_supported_resolutions(max_num_chunks: int, patch_size: SizeDict) -> tor
 
 def pad_to_best_fit(
     images: "torch.Tensor",
-    target_size: Tuple[int, int],
-    background_color: Union[int, Tuple[int, int, int]] = 0,
+    target_size: tuple[int, int],
+    background_color: Union[int, tuple[int, int, int]] = 0,
 ) -> "torch.Tensor":
     """
     Pads an image to fit the target size.
@@ -221,10 +221,10 @@ def pad_to_best_fit(
 
 
 def get_best_fit(
-    image_size: Tuple[int, int],
+    image_size: tuple[int, int],
     possible_resolutions: torch.Tensor,
     resize_to_max_canvas: bool = False,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     Determines the best canvas possible from a list of possible resolutions to, without distortion,
     resize an image to.
@@ -360,8 +360,8 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Union[float, List[float]],
-        image_std: Union[float, List[float]],
+        image_mean: Union[float, list[float]],
+        image_std: Union[float, list[float]],
     ) -> "torch.Tensor":
         """
         Rescale and normalize images.
@@ -383,7 +383,7 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         size: SizeDict,
         max_patches: int,
         resize_to_max_canvas: bool,
@@ -391,8 +391,8 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         return_tensors: Optional[Union[str, TensorType]],
         **kwargs,
     ) -> BatchFeature:

@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import random
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -176,11 +176,11 @@ class TFBlenderbotSmallAttention(keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         key_value_states: tf.Tensor | None = None,
-        past_key_value: Tuple[Tuple[tf.Tensor]] | None = None,
+        past_key_value: tuple[tuple[tf.Tensor]] | None = None,
         attention_mask: tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Tuple[tf.Tensor, tf.Tensor | None]:
+    ) -> tuple[tf.Tensor, tf.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -424,9 +424,9 @@ class TFBlenderbotSmallDecoderLayer(keras.layers.Layer):
         encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
         layer_head_mask: tf.Tensor | None = None,
         cross_attn_layer_head_mask: tf.Tensor | None = None,
-        past_key_value: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_value: Optional[tuple[tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         training: Optional[bool] = False,
-    ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
+    ) -> tuple[tf.Tensor, tf.Tensor, tuple[tuple[tf.Tensor]]]:
         """
         Args:
             hidden_states (`tf.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -1129,7 +1129,7 @@ class TFBlenderbotSmallMainLayer(keras.layers.Layer):
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
-        encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
+        encoder_outputs: Optional[Union[tuple, TFBaseModelOutput]] = None,
         past_key_values=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
@@ -1247,8 +1247,8 @@ class TFBlenderbotSmallModel(TFBlenderbotSmallPreTrainedModel):
         head_mask: tf.Tensor | None = None,
         decoder_head_mask: tf.Tensor | None = None,
         cross_attn_head_mask: tf.Tensor | None = None,
-        encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
-        past_key_values: List[tf.Tensor] | None = None,
+        encoder_outputs: Optional[Union[tuple, TFBaseModelOutput]] = None,
+        past_key_values: list[tf.Tensor] | None = None,
         inputs_embeds: tf.Tensor | None = None,
         decoder_inputs_embeds: tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
@@ -1257,7 +1257,7 @@ class TFBlenderbotSmallModel(TFBlenderbotSmallPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
         **kwargs,
-    ) -> Union[Tuple[tf.Tensor], TFSeq2SeqModelOutput]:
+    ) -> Union[tuple[tf.Tensor], TFSeq2SeqModelOutput]:
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1384,7 +1384,7 @@ class TFBlenderbotSmallForConditionalGeneration(TFBlenderbotSmallPreTrainedModel
         decoder_head_mask: tf.Tensor | None = None,
         cross_attn_head_mask: tf.Tensor | None = None,
         encoder_outputs: Optional[TFBaseModelOutput] = None,
-        past_key_values: List[tf.Tensor] | None = None,
+        past_key_values: list[tf.Tensor] | None = None,
         inputs_embeds: tf.Tensor | None = None,
         decoder_inputs_embeds: tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
@@ -1393,7 +1393,7 @@ class TFBlenderbotSmallForConditionalGeneration(TFBlenderbotSmallPreTrainedModel
         return_dict: Optional[bool] = None,
         labels: tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[Tuple[tf.Tensor], TFSeq2SeqLMOutput]:
+    ) -> Union[tuple[tf.Tensor], TFSeq2SeqLMOutput]:
         r"""
         labels (`tf.tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

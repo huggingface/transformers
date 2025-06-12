@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for ImageGPT."""
 
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -87,9 +87,9 @@ class ImageGPTImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         # clusters is a first argument to maintain backwards compatibility with the old ImageGPTImageProcessor
-        clusters: Optional[Union[List[List[int]], np.ndarray]] = None,
+        clusters: Optional[Union[list[list[int]], np.ndarray]] = None,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_normalize: bool = True,
         do_color_quantize: bool = True,
@@ -109,7 +109,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -180,11 +180,11 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_normalize: Optional[bool] = None,
         do_color_quantize: Optional[bool] = None,
-        clusters: Optional[Union[List[List[int]], np.ndarray]] = None,
+        clusters: Optional[Union[list[list[int]], np.ndarray]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,

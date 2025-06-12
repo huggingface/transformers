@@ -15,7 +15,7 @@
 
 """Processor class for Mllama."""
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -39,7 +39,7 @@ class MllamaProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-def get_cross_attention_token_mask(input_ids: List[int], image_token_id: int) -> List[List[int]]:
+def get_cross_attention_token_mask(input_ids: list[int], image_token_id: int) -> list[list[int]]:
     """
     Generate a cross-attention token mask for image tokens in the input sequence.
 
@@ -88,8 +88,8 @@ def get_cross_attention_token_mask(input_ids: List[int], image_token_id: int) ->
 
 
 def convert_sparse_cross_attention_mask_to_dense(
-    cross_attention_token_mask: List[List[List[int]]],
-    num_tiles: List[List[int]],
+    cross_attention_token_mask: list[list[list[int]]],
+    num_tiles: list[list[int]],
     max_num_tiles: int,
     length: int,
 ) -> np.ndarray:
@@ -224,7 +224,7 @@ class MllamaProcessor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[MllamaProcessorKwargs],

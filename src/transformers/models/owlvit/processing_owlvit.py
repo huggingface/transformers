@@ -17,7 +17,7 @@ Image/Text processor class for OWL-ViT
 """
 
 import warnings
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
@@ -95,7 +95,7 @@ class OwlViTProcessor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         # The following is to capture `query_images` argument that may be passed as a positional argument.
         # See transformers.processing_utils.ProcessorMixin.prepare_and_validate_optional_call_args for more details,
         # or this conversation for more context: https://github.com/huggingface/transformers/pull/32544#discussion_r1720208116
@@ -160,10 +160,10 @@ class OwlViTProcessor(ProcessorMixin):
 
         data = {}
         if text is not None:
-            if isinstance(text, str) or (isinstance(text, List) and not isinstance(text[0], List)):
+            if isinstance(text, str) or (isinstance(text, list) and not isinstance(text[0], list)):
                 encodings = [self.tokenizer(text, **output_kwargs["text_kwargs"])]
 
-            elif isinstance(text, List) and isinstance(text[0], List):
+            elif isinstance(text, list) and isinstance(text[0], list):
                 encodings = []
 
                 # Maximum number of queries across batch
@@ -241,8 +241,8 @@ class OwlViTProcessor(ProcessorMixin):
         self,
         outputs: "OwlViTObjectDetectionOutput",
         threshold: float = 0.1,
-        target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
-        text_labels: Optional[List[List[str]]] = None,
+        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
+        text_labels: Optional[list[list[str]]] = None,
     ):
         """
         Converts the raw output of [`OwlViTForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -290,7 +290,7 @@ class OwlViTProcessor(ProcessorMixin):
         outputs: "OwlViTImageGuidedObjectDetectionOutput",
         threshold: float = 0.0,
         nms_threshold: float = 0.3,
-        target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
+        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
     ):
         """
         Converts the output of [`OwlViTForObjectDetection.image_guided_detection`] into the format expected by the COCO

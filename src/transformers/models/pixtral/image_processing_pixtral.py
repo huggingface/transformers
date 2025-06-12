@@ -15,7 +15,7 @@
 """Image processor class for Pixtral."""
 
 import math
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -76,7 +76,7 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
     return new_image
 
 
-def _num_image_tokens(image_size: Tuple[int, int], patch_size: Tuple[int, int]) -> int:
+def _num_image_tokens(image_size: tuple[int, int], patch_size: tuple[int, int]) -> int:
     """
     Calculate the number of image tokens given the image size and patch size.
 
@@ -98,8 +98,8 @@ def _num_image_tokens(image_size: Tuple[int, int], patch_size: Tuple[int, int]) 
 
 def get_resize_output_image_size(
     input_image: ImageInput,
-    size: Union[int, Tuple[int, int], List[int], Tuple[int]],
-    patch_size: Union[int, Tuple[int, int], List[int], Tuple[int]],
+    size: Union[int, tuple[int, int], list[int], tuple[int]],
+    patch_size: Union[int, tuple[int, int], list[int], tuple[int]],
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> tuple:
     """
@@ -175,14 +175,14 @@ class PixtralImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
-        patch_size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
+        patch_size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: bool = True,
         **kwargs,
     ) -> None:
@@ -221,8 +221,8 @@ class PixtralImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
-        patch_size: Dict[str, int],
+        size: dict[str, int],
+        patch_size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -275,8 +275,8 @@ class PixtralImageProcessor(BaseImageProcessor):
 
     def _pad_for_batching(
         self,
-        pixel_values: List[np.ndarray],
-        image_sizes: List[List[int]],
+        pixel_values: list[np.ndarray],
+        image_sizes: list[list[int]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
@@ -320,14 +320,14 @@ class PixtralImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
-        patch_size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
+        patch_size: Optional[dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,

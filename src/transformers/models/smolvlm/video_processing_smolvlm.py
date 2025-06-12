@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -68,7 +68,7 @@ FRAME_TIMESTAMP_MESSAGE = "\nFrame from {timestamp}:"
 MAX_IMAGE_SIZE = 4096  # 4k resolution as absolute maximum
 
 
-def get_max_height_width(videos: list["torch.Tensor"]) -> List[int]:
+def get_max_height_width(videos: list["torch.Tensor"]) -> list[int]:
     """
     Get the maximum height and width across all videos in a batch.
     """
@@ -315,8 +315,8 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
 
     def _preprocess(
         self,
-        videos: List["torch.Tensor"],
-        video_metadata: Union[List[VideoMetadata], List[dict]],
+        videos: list["torch.Tensor"],
+        video_metadata: Union[list[VideoMetadata], list[dict]],
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
@@ -326,8 +326,8 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         do_normalize: bool,
         do_pad: bool,
         do_sample_frames: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         fps: Optional[int] = None,
         num_frames: Optional[int] = None,
         skip_secs: Optional[int] = 0,

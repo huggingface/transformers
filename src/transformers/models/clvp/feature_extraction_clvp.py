@@ -17,7 +17,7 @@
 Feature extractor class for CLVP
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -130,7 +130,7 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         sampling_rate: Optional[int] = None,
         truncation: bool = True,
         pad_to_multiple_of: Optional[int] = None,
@@ -230,7 +230,7 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
             self._np_extract_fbank_features(waveform).astype(np.float32) for waveform in input_features[0]
         ]
 
-        if isinstance(input_features[0], List):
+        if isinstance(input_features[0], list):
             padded_inputs["input_features"] = [np.asarray(feature) for feature in input_features]
         else:
             padded_inputs["input_features"] = input_features

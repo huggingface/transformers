@@ -19,7 +19,7 @@ and remove unnecessary dependencies.
 import os
 import warnings
 from io import BytesIO
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import requests
@@ -70,7 +70,7 @@ def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None)
 
 
 AudioInput = Union[
-    np.ndarray, "torch.Tensor", List[np.ndarray], Tuple[np.ndarray], List["torch.Tensor"], Tuple["torch.Tensor"]  # noqa: F821
+    np.ndarray, "torch.Tensor", list[np.ndarray], tuple[np.ndarray], list["torch.Tensor"], tuple["torch.Tensor"]  # noqa: F821
 ]
 
 

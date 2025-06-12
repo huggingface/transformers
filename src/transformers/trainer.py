@@ -34,7 +34,7 @@ import warnings
 from collections.abc import Mapping
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Iterator, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Optional, Union
 
 
 # Integrations must be imported before ML frameworks:
@@ -5282,7 +5282,7 @@ class Trainer:
 
     def get_batch_samples(
         self, epoch_iterator: Iterator, num_batches: int, device: torch.device
-    ) -> Tuple[list, Optional[torch.Tensor]]:
+    ) -> tuple[list, Optional[torch.Tensor]]:
         """
         Collects a specified number of batches from the epoch iterator and optionally counts the number of items in the batches to properly scale the loss.
         """

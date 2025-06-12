@@ -17,7 +17,7 @@ Processor class for SmolVLM.
 """
 
 from datetime import timedelta
-from typing import TYPE_CHECKING, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
@@ -105,7 +105,7 @@ def get_image_prompt_string(
 
 class SmolVLMImagesKwargs(ImagesKwargs, total=False):
     return_row_col_info: Optional[bool]
-    max_image_size: Optional[Dict[str, int]]
+    max_image_size: Optional[dict[str, int]]
 
 
 class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
@@ -264,8 +264,8 @@ class SmolVLMProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: Union[ImageInput, List[ImageInput], List[List[ImageInput]]] = None,
-        text: Union[TextInput, "PreTokenizedInput", List[TextInput], List["PreTokenizedInput"]] = None,
+        images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
+        text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
         audio=None,
         videos: VideoInput = None,
         **kwargs: Unpack[SmolVLMProcessorKwargs],

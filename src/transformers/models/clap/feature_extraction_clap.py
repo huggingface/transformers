@@ -15,7 +15,7 @@
 """Feature extractor class for CLAP."""
 
 import copy
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import torch
@@ -136,7 +136,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             mel_scale="slaney",
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
 
@@ -259,7 +259,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         truncation: Optional[str] = None,
         padding: Optional[str] = None,
         max_length: Optional[int] = None,
@@ -349,7 +349,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             rand_idx = np.random.randint(0, len(input_mel))
             is_longer[rand_idx] = True
 
-        if isinstance(input_mel[0], List):
+        if isinstance(input_mel[0], list):
             input_mel = [np.asarray(feature, dtype=np.float64) for feature in input_mel]
 
         # is_longer is a list of bool

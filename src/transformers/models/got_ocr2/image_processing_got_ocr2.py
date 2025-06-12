@@ -15,7 +15,7 @@
 """Image processor class for Got-OCR-2."""
 
 from functools import lru_cache
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -50,7 +50,7 @@ logger = logging.get_logger(__name__)
 
 # Similar to image_processing_mllama.get_all_supported_aspect_ratios
 @lru_cache(maxsize=10)
-def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> List[Tuple[int, int]]:
+def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> list[tuple[int, int]]:
     """
     Computes all allowed aspect ratios for a given minimum and maximum number of input tiles.
 
@@ -86,11 +86,11 @@ def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) 
 
 @lru_cache(maxsize=100)
 def get_optimal_tiled_canvas(
-    original_image_size: Tuple[int, int],
-    target_tile_size: Tuple[int, int],
+    original_image_size: tuple[int, int],
+    target_tile_size: tuple[int, int],
     min_image_tiles: int,
     max_image_tiles: int,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     """
     Given a minimum and maximum number of tiles, find the canvas with the closest aspect ratio to the
     original image aspect ratio.
@@ -172,7 +172,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         crop_to_patches: bool = False,
         min_patches: int = 1,
         max_patches: int = 12,
@@ -180,8 +180,8 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         do_convert_rgb: bool = True,
         **kwargs,
     ) -> None:
@@ -205,7 +205,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -255,7 +255,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         crop_to_patches: Optional[bool] = None,
         min_patches: Optional[int] = None,
         max_patches: Optional[int] = None,
@@ -263,8 +263,8 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         do_convert_rgb: Optional[bool] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
@@ -419,7 +419,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         min_patches: int,
         max_patches: int,
         use_thumbnail: bool = True,
-        patch_size: Optional[Union[Tuple, int, dict]] = None,
+        patch_size: Optional[Union[tuple, int, dict]] = None,
         data_format: ChannelDimension = None,
     ):
         """

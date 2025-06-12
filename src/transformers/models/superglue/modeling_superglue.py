@@ -15,7 +15,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -31,7 +31,7 @@ from ..auto import AutoModelForKeypointDetection
 logger = logging.get_logger(__name__)
 
 
-def concat_pairs(tensor_tuple0: Tuple[torch.Tensor], tensor_tuple1: Tuple[torch.Tensor]) -> Tuple[torch.Tensor]:
+def concat_pairs(tensor_tuple0: tuple[torch.Tensor], tensor_tuple1: tuple[torch.Tensor]) -> tuple[torch.Tensor]:
     """
     Concatenate two tuples of tensors pairwise
 
@@ -180,8 +180,8 @@ class KeypointMatchingOutput(ModelOutput):
     matching_scores: Optional[torch.FloatTensor] = None
     keypoints: Optional[torch.FloatTensor] = None
     mask: Optional[torch.IntTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 class SuperGlueMultiLayerPerceptron(nn.Module):
@@ -220,7 +220,7 @@ class SuperGlueKeypointEncoder(nn.Module):
         keypoints: torch.Tensor,
         scores: torch.Tensor,
         output_hidden_states: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor]]]:
         scores = scores.unsqueeze(2)
         hidden_state = torch.cat([keypoints, scores], dim=2)
         all_hidden_states = () if output_hidden_states else None
@@ -271,9 +271,9 @@ class SuperGlueSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         mixed_query_layer = self.query(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -416,9 +416,9 @@ class SuperGlueAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_value: Optional[tuple[tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
             attention_mask,
@@ -454,7 +454,7 @@ class SuperGlueAttentionalPropagation(nn.Module):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor]], Optional[tuple[torch.Tensor]]]:
         attention_outputs = self.attention(
             descriptors,
             attention_mask=attention_mask,
@@ -489,7 +489,7 @@ class SuperGlueAttentionalGNN(nn.Module):
         mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[Tuple], Optional[Tuple]]:
+    ) -> tuple[torch.Tensor, Optional[tuple], Optional[tuple]]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -609,7 +609,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, Tuple, Tuple]:
+    ) -> tuple[torch.Tensor, torch.Tensor, tuple, tuple]:
         """
         Perform keypoint matching between two images.
 
@@ -752,7 +752,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, KeypointMatchingOutput]:
+    ) -> Union[tuple, KeypointMatchingOutput]:
         r"""
         Examples:
 
