@@ -1,0 +1,345 @@
+name: Self-hosted runner (scheduled-intel-gaudi)
+
+on:
+  workflow_call:
+    inputs:
+      job:
+        required: true
+        type: string
+      slack_report_channel:
+        required: true
+        type: string
+      runner_scale_set:
+        required: true
+        type: string
+      docker:
+        required: true
+        type: string
+      ci_event:
+        required: true
+        type: string
+      report_repo_id:
+        required: true
+        type: string
+
+env:
+  HF_HOME: /mnt/cache
+  TRANSFORMERS_IS_CI: yes
+  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
+  OMP_NUM_THREADS: 8
+  MKL_NUM_THREADS: 8
+  NUM_SLICES: 2
+  RUN_SLOW: yes
+
+jobs:
+  check_runners:
+    name: Check Runners
+    strategy:
+      matrix:
+        machine_type: [1gaudi, 2gaudi]
+    runs-on: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
+    container:
+      image: ${{ inputs.docker }}
+      options: --runtime=habana --shm-size=64G --env HABANA_VISIBLE_DEVICES --env HABANA_VISIBLE_MODULES --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      env:
+        OMPI_MCA_btl_vader_single_copy_mechanism: none
+    steps:
+      - name: HL-SMI
+        run: |
+          hl-smi
+          echo "HABANA_VISIBLE_DEVICES=${HABANA_VISIBLE_DEVICES}"
+          echo "HABANA_VISIBLE_MODULES=${HABANA_VISIBLE_MODULES}"
+
+  setup:
+    if: contains(fromJSON('["run_models_gaudi"]'), inputs.job)
+    name: Setup
+    needs: check_runners
+    strategy:
+      matrix:
+        machine_type: [1gaudi, 2gaudi]
+    runs-on: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
+    container:
+      image: ${{ inputs.docker }}
+      options: --runtime=habana --shm-size=64G --env HABANA_VISIBLE_DEVICES --env HABANA_VISIBLE_MODULES --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      env:
+        OMPI_MCA_btl_vader_single_copy_mechanism: none
+    outputs:
+      folder_slices: ${{ steps.set-matrix.outputs.folder_slices }}
+      slice_ids: ${{ steps.set-matrix.outputs.slice_ids }}
+    steps:
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Cleanup
+        working-directory: /transformers
+        run: |
+          rm -rf tests/__pycache__
+          rm -rf tests/models/__pycache__
+          rm -rf reports
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
+      - id: set-matrix
+        name: Identify models to test
+        working-directory: /transformers/tests
+        run: |
+          echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
+          echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
+
+      - name: HL-SMI
+        run: |
+          hl-smi
+          echo "HABANA_VISIBLE_DEVICES=${HABANA_VISIBLE_DEVICES}"
+          echo "HABANA_VISIBLE_MODULES=${HABANA_VISIBLE_MODULES}"
+
+      - name: Environment
+        working-directory: /transformers
+        run: python3 utils/print_env.py
+
+  run_models_gaudi:
+    if: ${{ inputs.job == 'run_models_gaudi' }}
+    name: Single Intel Gaudi tests
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        machine_type: [1gaudi, 2gaudi]
+        slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
+    uses: ./.github/workflows/transformers_amd_model_jobs_arc_scale_set.yaml
+    with:
+      folder_slices: ${{ needs.setup.outputs.folder_slices }}
+      machine_type: ${{ matrix.machine_type }}
+      slice_id: ${{ matrix.slice_id }}
+      runner_scale_set: ${{ inputs.runner_scale_set }}
+      docker: ${{ inputs.docker }}
+    secrets: inherit
+
+  run_pipelines_gaudi:
+    if: ${{ inputs.job == 'run_pipelines_gaudi' }}
+    name: Pipelines
+    needs: check_runners
+    strategy:
+      fail-fast: false
+      matrix:
+        machine_type: [1gaudi, 2gaudi]
+    runs-on: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
+    container:
+      image: ${{ inputs.docker }}
+      options: --runtime=habana --shm-size=64G --env HABANA_VISIBLE_DEVICES --env HABANA_VISIBLE_MODULES --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      env:
+        OMPI_MCA_btl_vader_single_copy_mechanism: none
+    steps:
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
+      - name: HL-SMI
+        run: |
+          hl-smi
+          echo "HABANA_VISIBLE_DEVICES=${HABANA_VISIBLE_DEVICES}"
+          echo "HABANA_VISIBLE_MODULES=${HABANA_VISIBLE_MODULES}"
+
+      - name: Environment
+        working-directory: /transformers
+        run: python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
+      - name: Set `machine_type` for report and artifact names
+        working-directory: /transformers
+        shell: bash
+        run: |
+          if [ "${{ matrix.machine_type }}" = "1gaudi" ]; then
+            machine_type=single-gaudi
+          elif [ "${{ matrix.machine_type }}" = "2gaudi" ]; then
+            machine_type=multi-gaudi
+          else
+            machine_type=${{ matrix.machine_type }}
+          fi
+          echo "machine_type=$machine_type" >> $GITHUB_ENV
+
+      - name: Run all pipeline tests on Intel Gaudi
+        working-directory: /transformers
+        run: python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ env.machine_type }}_run_pipelines_gaudi_test_reports tests/pipelines -m "not not_device_test"
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat /transformers/reports/${{ env.machine_type }}_run_pipelines_gaudi_test_reports/failures_short.txt
+
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_pipelines_gaudi_test_reports"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.machine_type }}_run_pipelines_gaudi_test_reports
+          path: /transformers/reports/${{ env.machine_type }}_run_pipelines_gaudi_test_reports
+
+  run_examples_gaudi:
+    if: ${{ inputs.job == 'run_examples_gaudi' }}
+    name: Examples directory
+    needs: check_runners
+    strategy:
+      fail-fast: false
+      matrix:
+        machine_type: [1gaudi]
+    runs-on: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
+    container:
+      image: ${{ inputs.docker }}
+      options: --runtime=habana --shm-size=64G --env HABANA_VISIBLE_DEVICES --env HABANA_VISIBLE_MODULES --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      env:
+        OMPI_MCA_btl_vader_single_copy_mechanism: none
+    steps:
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
+      - name: HL-SMI
+        run: |
+          hl-smi
+          echo "HABANA_VISIBLE_DEVICES=${HABANA_VISIBLE_DEVICES}"
+          echo "HABANA_VISIBLE_MODULES=${HABANA_VISIBLE_MODULES}"
+
+      - name: Environment
+        working-directory: /transformers
+        run: python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
+      - name: Set `machine_type` for report and artifact names
+        working-directory: /transformers
+        shell: bash
+        run: |
+          if [ "${{ matrix.machine_type }}" = "1gaudi" ]; then
+            machine_type=single-gaudi
+          elif [ "${{ matrix.machine_type }}" = "2gaudi" ]; then
+            machine_type=multi-gaudi
+          else
+            machine_type=${{ matrix.machine_type }}
+          fi
+          echo "machine_type=$machine_type" >> $GITHUB_ENV
+
+      - name: Run examples tests on Intel Gaudi
+        working-directory: /transformers
+        run: |
+          pip install -r examples/pytorch/_tests_requirements.txt
+          python3 -m pytest -v --make-reports=${{ env.machine_type }}_run_examples_gaudi_test_reports examples/pytorch -m "not not_device_test"
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat /transformers/reports/${{ env.machine_type }}_run_examples_gaudi_test_reports/failures_short.txt
+
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_examples_gaudi_test_reports"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.machine_type }}_run_examples_gaudi_test_reports
+          path: /transformers/reports/${{ env.machine_type }}_run_examples_gaudi_test_reports
+
+  run_deepspeed_gaudi:
+    if: ${{ inputs.job == 'run_deepspeed_gaudi' }}
+    name: Intel Gaudi deepspeed tests
+    needs: check_runners
+    strategy:
+      fail-fast: false
+      matrix:
+        machine_type: [1gaudi, 2gaudi]
+    runs-on: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
+    container:
+      image: ${{ inputs.docker }}
+      options: --runtime=habana --shm-size=64G --env HABANA_VISIBLE_DEVICES --env HABANA_VISIBLE_MODULES --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      env:
+        OMPI_MCA_btl_vader_single_copy_mechanism: none
+    steps:
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
+      - name: HL-SMI
+        run: |
+          hl-smi
+          echo "HABANA_VISIBLE_DEVICES=${HABANA_VISIBLE_DEVICES}"
+          echo "HABANA_VISIBLE_MODULES=${HABANA_VISIBLE_MODULES}"
+
+      - name: Environment
+        working-directory: /transformers
+        run: python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
+      - name: Set `machine_type` for report and artifact names
+        working-directory: /transformers
+        shell: bash
+        run: |
+          if [ "${{ matrix.machine_type }}" = "1gaudi" ]; then
+            machine_type=single-gaudi
+          elif [ "${{ matrix.machine_type }}" = "2gaudi" ]; then
+            machine_type=multi-gaudi
+          else
+            machine_type=${{ matrix.machine_type }}
+          fi
+          echo "machine_type=$machine_type" >> $GITHUB_ENV
+
+      - name: Run all tests on intel Gaudi
+        working-directory: /transformers
+        run: python3 -m pytest -v --make-reports=${{ env.machine_type }}_run_deepspeed_gaudi_test_reports tests/deepspeed tests/extended -m "not not_device_test"
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat /transformers/reports/${{ env.machine_type }}_run_deepspeed_gaudi_test_reports/failures_short.txt
+
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_deepspeed_gaudi_test_reports"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.machine_type }}_run_deepspeed_gaudi_test_reports
+          path: /transformers/reports/${{ env.machine_type }}_run_deepspeed_gaudi_test_reports
+
+  send_results:
+    name: Slack Report
+    needs:
+      [
+        check_runners,
+        setup,
+        run_models_gaudi,
+        run_pipelines_gaudi,
+        run_examples_gaudi,
+        run_deepspeed_gaudi,
+      ]
+    if: ${{ always() }}
+    uses: huggingface/transformers/.github/workflows/slack-report.yml@main
+    with:
+      job: ${{ inputs.job }}
+      # This would be `skipped` if `setup` is skipped.
+      setup_status: ${{ needs.setup.result }}
+      slack_report_channel: ${{ inputs.slack_report_channel }}
+      # This would be an empty string if `setup` is skipped.
+      folder_slices: ${{ needs.setup.outputs.folder_slices }}
+      quantization_matrix: ${{ needs.setup.outputs.quantization_matrix }}
+      ci_event: ${{ inputs.ci_event }}
+      report_repo_id: ${{ inputs.report_repo_id }}
+
+    secrets: inherit

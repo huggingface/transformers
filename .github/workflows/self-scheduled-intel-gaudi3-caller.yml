@@ -1,0 +1,51 @@
+name: Self-hosted runner (Intel Gaudi3 scheduled CI caller)
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 2 * * *"
+  push:
+    branches:
+      - run_intel_gaudi_scheduled_ci*
+
+jobs:
+  model-ci:
+    name: Model CI
+    uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
+    with:
+      job: run_models_gaudi
+      slack_report_channel: "#intel-gaudi-hf-ci"
+      ci_event: Scheduled CI (Intel Gaudi3)
+      report_repo_id: optimum-habana/transformers_daily_ci
+    secrets: inherit
+
+  pipeline:
+    name: Pipeline CI
+    uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
+    with:
+      job: run_pipelines_gaudi
+      slack_report_channel: "#intel-gaudi-hf-ci"
+      ci_event: Scheduled CI (Intel Gaudi3)
+      report_repo_id: optimum-habana/transformers_daily_ci
+    secrets: inherit
+
+  example-ci:
+    name: Example CI
+    uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
+    with:
+      job: run_examples_gaudi
+      slack_report_channel: "#intel-gaudi-hf-ci"
+      ci_event: Scheduled CI (Intel Gaudi3)
+      report_repo_id: optimum-habana/transformers_daily_ci
+    secrets: inherit
+
+  deepspeed-ci:
+    name: DeepSpeed CI
+    uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
+    with:
+      job: run_deepspeed_gaudi
+      slack_report_channel: "#intel-gaudi-hf-ci"
+      ci_event: Scheduled CI (Intel Gaudi3)
+      report_repo_id: optimum-habana/transformers_daily_ci
+    secrets: inherit
