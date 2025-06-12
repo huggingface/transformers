@@ -1,11 +1,13 @@
-import pytest
-import torch
-import time
 import gc
-import requests
-from PIL import Image
 from io import BytesIO
+
+import pytest
+import requests
+import torch
+from PIL import Image
+
 from transformers import AutoProcessor
+
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="Test requires CUDA GPU")
 def test_auto_processor_does_not_leak_gpu_memory():
@@ -30,7 +32,7 @@ def test_auto_processor_does_not_leak_gpu_memory():
         images=[image],
         return_tensors="pt",
         padding=True,
-        device="cuda"
+        device="cuda",
     )
 
     del result
@@ -41,5 +43,6 @@ def test_auto_processor_does_not_leak_gpu_memory():
     end_memory = torch.cuda.memory_allocated()
 
     # Allow up to 20MB tolerance due to internal caching
-    assert (end_memory - start_memory) < 20 * 1024 * 1024, \
-        f"Expected <20MB memory leak, but got: {(end_memory - start_memory) / (1024*1024):.2f}MB"
+    assert (end_memory - start_memory) < 20 * 1024 * 1024, (
+        f"Expected <20MB memory leak, but got: {(end_memory - start_memory) / (1024 * 1024):.2f}MB"
+    )
