@@ -992,16 +992,13 @@ class GgufModelTests(unittest.TestCase):
             return
 
         # You need to have an FP16 version of your GGUF model for accurate comparison
-        try:
-            converted_model = AutoModelForCausalLM.from_pretrained(
-                self.deci_model_id,
-                gguf_file=self.fp16_deci_model_id,
-                torch_dtype=torch.float16,
-                device_map="auto",
-            )
-        except Exception as e:
-            self.skipTest(f"GGUF FP16 model not available: {e}")
-            return
+
+        converted_model = AutoModelForCausalLM.from_pretrained(
+            self.deci_model_id,
+            gguf_file=self.fp16_deci_model_id,
+            torch_dtype=torch.float16,
+            device_map="auto",
+        )
 
         converted_state_dict = converted_model.state_dict()
         original_state_dict = original_model.state_dict()
