@@ -187,6 +187,7 @@ class QAPipelineTests(unittest.TestCase):
             question="Where was HuggingFace founded ?",
             context="HuggingFace was founded in Paris.",
             top_k=20,
+            align_to_words=False
         )
         self.assertEqual(
             outputs,
