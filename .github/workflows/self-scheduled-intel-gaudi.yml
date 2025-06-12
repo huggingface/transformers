@@ -40,7 +40,7 @@ jobs:
         machine_type: [1gaudi, 2gaudi]
     runs-on: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
     container:
-      image: ${{ inputs.docker }}
+      image: vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
       options: --runtime=habana --shm-size=64G --env HABANA_VISIBLE_DEVICES --env HABANA_VISIBLE_MODULES
       env:
         OMPI_MCA_btl_vader_single_copy_mechanism: none
@@ -112,9 +112,9 @@ jobs:
     uses: ./.github/workflows/model_jobs_intel_gaudi.yml
     with:
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
+      runner_scale_set: ${{ inputs.runner_scale_set }}
       machine_type: ${{ matrix.machine_type }}
       slice_id: ${{ matrix.slice_id }}
-      runner_scale_set: ${{ inputs.runner_scale_set }}
       docker: ${{ inputs.docker }}
     secrets: inherit
 
