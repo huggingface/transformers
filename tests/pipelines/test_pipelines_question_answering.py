@@ -138,7 +138,11 @@ class QAPipelineTests(unittest.TestCase):
             question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris.", top_k=20
         )
         self.assertEqual(
-            outputs, [{"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)} for i in range(len(outputs))]
+            outputs,
+            [
+                {"answer": ANY(str), "start": ANY(int), "end": ANY(int), "score": ANY(float)}
+                for i in range(len(outputs))
+            ],
         )
         for single_output in outputs:
             compare_pipeline_output_to_hub_spec(single_output, QuestionAnsweringOutputElement)

@@ -606,7 +606,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                     answer = self.get_answer(answers, target_answer)
 
                     if answer:
-                        answer['score'] += score.item()
+                        answer["score"] += score.item()
                     else:
                         answers.append(
                             {
@@ -626,7 +626,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
 
     def get_answer(self, answers: List[Dict], target: str) -> Optional[Dict]:
         for answer in answers:
-            if answer['answer'].lower() == target.lower():
+            if answer["answer"].lower() == target.lower():
                 return answer
         return None
 
