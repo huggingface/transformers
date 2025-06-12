@@ -233,7 +233,6 @@ def flex_attention_forward(
     scaling: Optional[float] = None,
     softcap: Optional[float] = None,
     head_mask: Optional[torch.Tensor] = None,
-    score_mod: Optional[callable] = None,
     **kwargs,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     if head_mask is not None:
@@ -257,15 +256,14 @@ def flex_attention_forward(
     if score_mask is not None:
         score_mask = score_mask[:, :, :, : key.shape[-2]]
 
-    if score_mod is not None:
-        def score_mod(score, batch_idx, head_idx, q_idx, kv_idx):
-            if softcap is not None:
-                score = softcap * torch.tanh(score / softcap)
-            if score_mask is not None:
-                score = score + score_mask[batch_idx][0][q_idx][kv_idx]
-            if head_mask is not None:
-                score = score + head_mask[batch_idx][head_idx][0][0]
-            return score
+    def score_mod(score, batch_idx, head_idx, q_idx, kv_idx):
+        if softcap is not None:
+            score = softcap * torch.tanh(score / softcap)
+        if score_mask is not None:
+            score = score + score_mask[batch_idx][0][q_idx][kv_idx]
+        if head_mask is not None:
+            score = score + head_mask[batch_idx][head_idx][0][0]
+        return score
 
     enable_gqa = True
     num_local_query_heads = query.shape[1]
@@ -292,7 +290,7 @@ def flex_attention_forward(
         training=module.training,
     )
     # lse is returned in float32
-    attention_weights = attention_weights.to(value.dtype)[:, :, :, : key.shape[-2]] # potential sink
+    attention_weights = attention_weights.to(value.dtype)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attention_weights

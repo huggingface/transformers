@@ -1,10 +1,5 @@
 # coding=utf-8
-# Copyright 2025 EleutherAI and the HuggingFace Inc. team. All rights reserved.
-#
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
+# Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,21 +18,22 @@ from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 
 
-class OpenaiConfig(PretrainedConfig):
+class OpenAIMoeConfig(PretrainedConfig):
     r"""
     This will yield a configuration to that of the BERT
     [google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased) architecture.
 
     """
-    model_type = "openai-moe"
+
+    model_type = "openai_moe"
     # Default tensor parallel plan for base model `OpenaiModel`
     # a bit special, but this seems to work alright
     base_model_tp_plan = {
-        # "layers.*.self_attn.q_proj": "colwise",
-        # "layers.*.self_attn.k_proj": "colwise",
-        # "layers.*.self_attn.v_proj": "colwise",
-        # "layers.*.self_attn.o_proj": "rowwise",
-        # "layers.*.self_attn.sinks": "local_rowwise",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.sinks": "local_rowwise",
         "layers.*.mlp.experts.gate_up_proj": "local_packed_rowwise",
         "layers.*.mlp.experts.gate_up_proj_bias": "local_rowwise",
         "layers.*.mlp.experts.down_proj": "local_colwise",
@@ -65,11 +61,12 @@ class OpenaiConfig(PretrainedConfig):
         tie_word_embeddings=False,
         hidden_act: str = "silu",
         initializer_range: float = 0.02,
+        max_position_embeddings=131072,
         rms_norm_eps: float = 1e-5,
         pad_token_id: int = 0,
         bos_token_id: int = 1,
         eos_token_id: int = 2,
-        rope_scaling=None,
+        rope_scaling={"rope_type": "yarn", "factor": 32.0, "beta_fast": 32.0, "beta_slow": 1.0, "truncate": False},
         attention_dropout: float = 0.0,
         num_experts_per_tok=4,
         router_aux_loss_coef: float = 0.9,
@@ -110,10 +107,10 @@ class OpenaiConfig(PretrainedConfig):
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
-        
-        self.attention_bias = True 
+
+        self.attention_bias = True
         self.mlp_bias = False
-        self.max_position_embeddings = 8192
+        self.max_position_embeddings = max_position_embeddings
         self.router_aux_loss_coef = router_aux_loss_coef
         self.output_router_logits = output_router_logits
         self.use_cache = use_cache
@@ -126,4 +123,4 @@ class OpenaiConfig(PretrainedConfig):
         )
 
 
-__all__ = ["OpenaiConfig"]
+__all__ = ["OpenAIMoeConfig"]

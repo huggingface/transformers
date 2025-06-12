@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,14 +19,14 @@ import os
 from typing import List, Optional
 
 import regex as re
+import tiktoken
 import torch
-from tqdm import tqdm
 from safetensors.torch import load_file as safe_load
 
 from transformers import (
     GenerationConfig,
-    OpenaiConfig,
-    OpenaiForCausalLM,
+    OpenAIMoeConfig,
+    OpenAIMoeForCausalLM,
     PreTrainedTokenizerFast,
 )
 from transformers.convert_slow_tokenizer import TikTokenConverter
@@ -43,7 +43,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # special key, wqkv needs to be split afterwards
     r"block.(\d+).attn.qkv":        r"layers.\1.self_attn.qkv_proj",
     r"block.(\d+).attn.out":        r"layers.\1.self_attn.o_proj",
-    r"block.(\d+).attn.sdpa.sinks":      r"layers.\1.self_attn.sinks",
+    r"block.(\d+).attn.sinks":      r"layers.\1.self_attn.sinks",
     r"block.(\d+).attn.norm.scale":       r"layers.\1.input_layernorm.weight",
 
     r"block.(\d+).mlp.mlp1_weight": r"layers.\1.mlp.experts.gate_up_proj",
@@ -54,7 +54,6 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"block.(\d+).mlp.gate":        r"layers.\1.mlp.router",
 }
 # fmt: on
-
 
 
 def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
@@ -75,7 +74,6 @@ def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
     return output_dict
 
 
-
 def write_model(
     model_path,
     input_base_path,
@@ -87,13 +85,13 @@ def write_model(
     eos_token_id = 199999 if not instruct else [199999, 200018]
     pad_token_id = 128004
 
-    config = OpenaiConfig()
+    config = OpenAIMoeConfig()
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}...")
     final_ = {}
     for file in list(os.listdir(input_base_path)):
         if file.endswith(".safetensors"):
-            final_.update(safe_load(os.path.join(input_base_path,file)) )
+            final_.update(safe_load(os.path.join(input_base_path, file)))
 
     print("Converting ..")
     all_keys = final_.keys()
@@ -109,7 +107,11 @@ def write_model(
         if re.search("qkv_proj", new_key):
             q_len = config.head_dim * config.num_attention_heads
             k_len = config.head_dim * config.num_key_value_heads
-            q, k, v = final_[key][:q_len, ...], final_[key][q_len:k_len+q_len, ...], final_[key][k_len+q_len:, ...]
+            q, k, v = (
+                final_[key][:q_len, ...],
+                final_[key][q_len : k_len + q_len, ...],
+                final_[key][k_len + q_len :, ...],
+            )
             q_key = re.sub(r"qkv_proj", "q_proj", new_key)
             k_key = re.sub(r"qkv_proj", "k_proj", new_key)
             v_key = re.sub(r"qkv_proj", "v_proj", new_key)
@@ -117,31 +119,31 @@ def write_model(
             state_dict[k_key] = k.contiguous().to(torch.bfloat16)
             state_dict[v_key] = v.contiguous().to(torch.bfloat16)
         elif re.search("gate_up_proj|down_proj", new_key) and "bias" not in new_key:
-            state_dict[new_key] = final_[key].permute(0,2,1).contiguous() # einsum in orignal, I use bmm
+            state_dict[new_key] = final_[key].permute(0, 2, 1).contiguous()  # einsum in orignal, I use bmm
         else:
             weight = final_[key]
             if not re.search("norm", new_key):
-                weight = weight.to(torch.bfloat16) # norms are the only ones in float32
+                weight = weight.to(torch.bfloat16)  # norms are the only ones in float32
             state_dict[new_key] = weight
 
     del final_
     gc.collect()
 
-    print("Loading the checkpoint in a OpenAI ")
+    print("Loading the checkpoint in a OpenAIMoe model")
     with torch.device("meta"):
-        model = OpenaiForCausalLM(config)
+        model = OpenAIMoeForCausalLM(config)
     model.load_state_dict(state_dict, strict=True, assign=True)
     print("Checkpoint loaded successfully.")
     del config._name_or_path
 
-    print("Saving the ")
+    print("Saving the model")
     model.save_pretrained(model_path, safe_serialization=safe_serialization)
     del state_dict, model
 
     # Safety check: reload the converted model
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
-    OpenaiForCausalLM.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
+    OpenAIMoeForCausalLM.from_pretrained(model_path, torch_dtype=torch.bfloat16, device_map="auto")
     print("Model reloaded successfully.")
 
     # generation config
@@ -182,8 +184,8 @@ def bytes_to_unicode():
     cs = [chr(n) for n in cs]
     return dict(zip(bs, cs))
 
-import tiktoken
-class OpenaiConverter(TikTokenConverter):
+
+class OpenAIMoeConverter(TikTokenConverter):
     def extract_vocab_merges_from_model(self, tiktoken_url: str):
         tokenizer = tiktoken.get_encoding(tiktoken_url)
         self.pattern = tokenizer._pat_str
@@ -224,7 +226,7 @@ class OpenaiConverter(TikTokenConverter):
         self.additional_special_tokens = {}
         # 199998 is not defined either
         self.additional_special_tokens["<|reserved_199998|>"] = 199998
-        self.additional_special_tokens = {'<|endoftext|>': 199999, '<|endofprompt|>': 200018}
+        self.additional_special_tokens = {"<|endoftext|>": 199999, "<|endofprompt|>": 200018}
         for k in range(199999, 200018):
             self.additional_special_tokens[f"<|reserved_{k}|>"] = k
         sorted_list = sorted(self.additional_special_tokens.items(), key=lambda x: x[1])
@@ -266,7 +268,7 @@ def write_tokenizer(tokenizer_path: str, save_dir: str, instruct: bool = False):
         "{% endif %}"
     )
 
-    converter = OpenaiConverter(
+    converter = OpenAIMoeConverter(
         vocab_file=tokenizer_path,
         model_max_length=None,
         chat_template=chat_template if instruct else None,
@@ -309,12 +311,12 @@ def main():
         help="Whether the model is an instruct model",
     )
     args = parser.parse_args()
-    # write_model(
-    #     model_path=args.output_dir,
-    #     input_base_path=args.input_dir,
-    #     safe_serialization=args.safe_serialization,
-    #     instruct=args.instruct,
-    # )
+    write_model(
+        model_path=args.output_dir,
+        input_base_path=args.input_dir,
+        safe_serialization=args.safe_serialization,
+        instruct=args.instruct,
+    )
 
     write_tokenizer(
         tokenizer_path="o200k_base",

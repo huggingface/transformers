@@ -5,12 +5,7 @@
 #                          modular_openai_moe.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2025 EleutherAI and the HuggingFace Inc. team. All rights reserved.
-#
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
+# Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,18 +18,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from functools import partial
 from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...integrations.flex_attention import flex_attention_forward
-from ...masking_utils import create_sliding_window_causal_mask, create_causal_mask
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -42,17 +34,17 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import LossKwargs, auto_docstring, can_return_tuple, logging
-from .configuration_openai_moe import OpenaiConfig
-import math
+from .configuration_openai_moe import OpenAIMoeConfig
+
 
 logger = logging.get_logger(__name__)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
-class OpenaiRMSNorm(nn.Module):
+class OpenAIMoeRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        OpenaiRMSNorm is equivalent to T5LayerNorm
+        OpenAIMoeRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -63,13 +55,13 @@ class OpenaiRMSNorm(nn.Module):
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return (self.weight * hidden_states).to(input_dtype)
+        return (self.weight * hidden_states).to(input_dtype)  # main diff with Llama
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class OpenaiExperts(nn.Module):
+class OpenAIMoeExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.num_experts = config.num_local_experts
@@ -80,12 +72,12 @@ class OpenaiExperts(nn.Module):
         self.gate_up_proj_bias = nn.Parameter(torch.empty(self.num_experts, 2 * self.expert_dim))
         self.down_proj = nn.Parameter(torch.empty((self.num_experts, self.expert_dim, self.hidden_size)))
         self.down_proj_bias = nn.Parameter(torch.empty(self.num_experts, self.hidden_size))
-        self.alpha =  1.702
+        self.alpha = 1.702
 
-    def forward(self, hidden_states: torch.Tensor, router_indices = None, routing_weights=None) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, router_indices=None, routing_weights=None) -> torch.Tensor:
         """
         When training is is more efficient to just loop over the experts and compute the output for each expert
-        as otherwise the memory would explode. 
+        as otherwise the memory would explode.
 
         For inference we can sacrifice some memory and compute the output for all experts at once. By repeating the inputs.
 
@@ -97,22 +89,28 @@ class OpenaiExperts(nn.Module):
             torch.Tensor
         """
         if self.training:
-            next_states = torch.zeros_like(
-                hidden_states, dtype=hidden_states.dtype, device=hidden_states.device
-            )
+            next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
             with torch.no_grad():
-                expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=self.num_experts).permute(2, 1, 0)
+                expert_mask = torch.nn.functional.one_hot(router_indices, num_classes=self.num_experts).permute(
+                    2, 1, 0
+                )
                 expert_hitted = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
             for expert_idx in expert_hitted:
                 with torch.no_grad():
-                    idx, top_x = torch.where(expert_mask[expert_idx][0])  # idx: top-1/top-2 indicator, top_x: token indices
+                    idx, top_x = torch.where(
+                        expert_mask[expert_idx][0]
+                    )  # idx: top-1/top-2 indicator, top_x: token indices
                 current_state = hidden_states[top_x]  # (num_tokens, hidden_dim)
-                gate_up = current_state @ self.gate_up_proj[expert_idx] + self.gate_up_proj_bias[expert_idx]  # (num_tokens, 2 * interm_dim)
+                gate_up = (
+                    current_state @ self.gate_up_proj[expert_idx] + self.gate_up_proj_bias[expert_idx]
+                )  # (num_tokens, 2 * interm_dim)
                 gate, up = gate_up.chunk(2, dim=-1)  # (num_tokens, interm_dim)
                 glu = gate * torch.sigmoid(gate * self.alpha)  # (num_tokens, interm_dim)
                 gated_output = (up + 1) * glu  # (num_tokens, interm_dim)
-                out = gated_output @ self.down_proj[expert_idx] + self.down_proj_bias[expert_idx]  # (num_tokens, hidden_dim)
-                weighted_output = out * routing_weights[top_x, idx, None]  # (num_tokens, hidden_dim) 
+                out = (
+                    gated_output @ self.down_proj[expert_idx] + self.down_proj_bias[expert_idx]
+                )  # (num_tokens, hidden_dim)
+                weighted_output = out * routing_weights[top_x, idx, None]  # (num_tokens, hidden_dim)
                 next_states.index_add_(0, top_x, weighted_output.to(hidden_states.dtype)[0])
         else:
             hidden_states = hidden_states.repeat(self.num_experts, 1)
@@ -125,14 +123,13 @@ class OpenaiExperts(nn.Module):
         return next_states
 
 
-
-class OpenaiMLP(nn.Module):
+class OpenAIMoeMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.hidden_dim = config.hidden_size
         self.num_local_experts = config.num_local_experts
-        self.experts = OpenaiExperts(config)
+        self.experts = OpenAIMoeExperts(config)
         self.router = nn.Linear(config.hidden_size, config.num_local_experts, bias=True)
 
     def forward(self, hidden_states):
@@ -142,29 +139,31 @@ class OpenaiMLP(nn.Module):
         router_logits = self.router(hidden_states)
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)
         router_top_value = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
-        router_scores = (
-            torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value).transpose(0, 1)
-        )
+        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value).transpose(0, 1)
         routed_out = self.experts(hidden_states, router_indices, router_top_value)
         if self.training:
-            output_states =  routed_out.view(batch_size, -1, self.hidden_dim)
+            output_states = routed_out.view(batch_size, -1, self.hidden_dim)
         else:
             routed_out = routed_out.view(self.num_local_experts, -1, self.hidden_dim) * router_scores[..., None]
             output_states = routed_out.view(self.num_local_experts, batch_size, -1, self.hidden_dim).sum(dim=0)
         return output_states, router_scores
 
 
-class OpenaiRotaryEmbedding(nn.Module):
-    rope_type = "default"
-    def __init__(self, config: OpenaiConfig, device=None):
+class OpenAIMoeRotaryEmbedding(nn.Module):
+    def __init__(self, config: OpenAIMoeConfig, device=None):
         super().__init__()
-        self.attention_scaling = 1.0
-        with torch.device("cpu"):
-            inv_freq = 1.0 / (config.rope_theta ** ( torch.arange(0, config.head_dim, 2, dtype=torch.float32)/ config.head_dim))
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
-        self.config = config        
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
@@ -180,25 +179,9 @@ class OpenaiRotaryEmbedding(nn.Module):
             emb = freqs
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
- 
+
         return cos.to(x.dtype), sin.to(x.dtype)
 
-def _apply_rotary_emb(
-    x: torch.Tensor,
-    cos: torch.Tensor,
-    sin: torch.Tensor,
-) -> torch.Tensor:
-    first_half, second_half = torch.chunk(x, 2, dim=-1)
-    first_ = first_half * cos - second_half * sin
-    second_ = second_half * cos + first_half * sin
-    return torch.cat((first_, second_), dim=-1)
-
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = _apply_rotary_emb(q, cos, sin)
-    k_embed = _apply_rotary_emb(k, cos, sin)
-    return q_embed, k_embed
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
@@ -210,6 +193,25 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
         return hidden_states
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def _apply_rotary_emb(
+    x: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+) -> torch.Tensor:
+    first_half, second_half = torch.chunk(x, 2, dim=-1)
+    first_ = first_half * cos - second_half * sin
+    second_ = second_half * cos + first_half * sin
+    return torch.cat((first_, second_), dim=-1)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = _apply_rotary_emb(q, cos, sin)
+    k_embed = _apply_rotary_emb(k, cos, sin)
+    return q_embed, k_embed
 
 
 def eager_attention_forward(
@@ -224,67 +226,35 @@ def eager_attention_forward(
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
-    sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1) # TODO make sure the sink is like a new token
+    sinks = module.sinks.reshape(1, -1, 1, 1).expand(
+        query.shape[0], -1, query.shape[-2], -1
+    )  # TODO make sure the sink is like a new token
+
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
+
     attn_weights = torch.cat([attn_weights, sinks], dim=-1)
     attn_weights = torch.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights[...,:-1], value_states) # ignore the sinks
+    attn_output = torch.matmul(attn_weights[..., :-1], value_states)  # ignore the sinks
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
 
 
-def openai_flex_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    sinks = module.sinks.view(1, -1, 1, 1).expand(-1, -1, key.shape[-2],-1)
-
-    def attention_sink(score, b, h, q_idx, kv_idx):
-        score = torch.cat([score, sinks], dim=-1)
-        return score
-
-    # TODO I need to remove the -1 sinks
-    return flex_attention_forward(
-        module,
-        query,
-        key,
-        value,
-        attention_mask,
-        scaling=scaling,
-        dropout=dropout,
-        attention_sink=attention_sink,
-        score_mod=attention_sink,
-        **kwargs,
-    )
-
-
-ALL_ATTENTION_FUNCTIONS.register("openai_flex_attention", openai_flex_attention_forward)
-
-
-
-class OpenaiAttention(nn.Module):
+class OpenAIMoeAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: OpenaiConfig, layer_idx: int):
+    def __init__(self, config: OpenAIMoeConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling =  1 / math.sqrt(self.head_dim)
+        self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
@@ -297,8 +267,8 @@ class OpenaiAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
+        self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
 
     def forward(
         self,
@@ -336,6 +306,7 @@ class OpenaiAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            sliding_window=self.sliding_window,  # main diff with Llama
             **kwargs,
         )
 
@@ -344,15 +315,14 @@ class OpenaiAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class OpenaiDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: OpenaiConfig, layer_idx: int):
+class OpenAIMoeDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: OpenAIMoeConfig, layer_idx: int):
         super().__init__()
-        self.layer_idx = layer_idx
         self.hidden_size = config.hidden_size
-        self.self_attn = OpenaiAttention(config=config, layer_idx=layer_idx)
-        self.mlp = OpenaiMLP(config)
-        self.input_layernorm = OpenaiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = OpenaiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = OpenAIMoeAttention(config=config, layer_idx=layer_idx)
+        self.mlp = OpenAIMoeMLP(config)
+        self.input_layernorm = OpenAIMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = OpenAIMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attention_type = config.layer_types[layer_idx]
 
     def forward(
@@ -399,12 +369,11 @@ class OpenaiDecoderLayer(GradientCheckpointingLayer):
 
 
 @auto_docstring
-class OpenaiPreTrainedModel(PreTrainedModel):
-    config_class = OpenaiConfig
+class OpenAIMoePreTrainedModel(PreTrainedModel):
+    config_class = OpenAIMoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["OpenaiDecoderLayer"]
-    _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
+    _no_split_modules = ["OpenAIMoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -413,6 +382,7 @@ class OpenaiPreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
+    _keep_in_fp32_modules = ["post_attention_layernorm", "input_layernorm", "norm"]
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -424,27 +394,33 @@ class OpenaiPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, OpenaiRMSNorm):
+        elif isinstance(module, OpenAIMoeRMSNorm):
             module.weight.data.fill_(1.0)
+        elif isinstance(module, OpenAIMoeExperts):
+            module.gate_up_proj.data.normal_(mean=0.0, std=std)
+            module.gate_up_proj_bias.data.zero_()
+            module.down_proj.data.normal_(mean=0.0, std=std)
+            module.down_proj_bias.data.zero_()
+        elif isinstance(module, OpenAIMoeAttention):
+            module.sinks.data.normal_(mean=0.0, std=std)
 
 
 @auto_docstring
-class OpenaiModel(OpenaiPreTrainedModel):
-    _no_split_modules = ["OpenaiDecoderLayer"]
+class OpenAIMoeModel(OpenAIMoePreTrainedModel):
+    _no_split_modules = ["OpenAIMoeDecoderLayer"]
 
-    def __init__(self, config: OpenaiConfig):
+    def __init__(self, config: OpenAIMoeConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [OpenaiDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [OpenAIMoeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = OpenaiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = OpenaiRotaryEmbedding(config=config)
+        self.norm = OpenAIMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = OpenAIMoeRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        self.rope = OpenaiRotaryEmbedding(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -569,8 +545,7 @@ class OpenaiModel(OpenaiPreTrainedModel):
         )
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs):
-    ...
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 def load_balancing_loss_func(
@@ -656,14 +631,14 @@ def load_balancing_loss_func(
 
 
 @auto_docstring
-class OpenaiForCausalLM(OpenaiPreTrainedModel, GenerationMixin):
+class OpenAIMoeForCausalLM(OpenAIMoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config: OpenaiConfig):
+    def __init__(self, config):
         super().__init__(config)
-        self.model = OpenaiModel(config)
+        self.model = OpenAIMoeModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.router_aux_loss_coef = config.router_aux_loss_coef
@@ -718,10 +693,10 @@ class OpenaiForCausalLM(OpenaiPreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, OpenaiForCausalLM
+        >>> from transformers import AutoTokenizer, OpenAIMoeForCausalLM
 
-        >>> model = OpenaiForCausalLM.from_pretrained("mistralai/Openai-8x7B-v0.1")
-        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Openai-8x7B-v0.1")
+        >>> model = OpenAIMoeForCausalLM.from_pretrained("mistralai/OpenAIMoe-8x7B-v0.1")
+        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/OpenAIMoe-8x7B-v0.1")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -787,4 +762,4 @@ class OpenaiForCausalLM(OpenaiPreTrainedModel, GenerationMixin):
         )
 
 
-__all__ = ["OpenaiForCausalLM", "OpenaiModel", "OpenaiPreTrainedModel"]
+__all__ = ["OpenAIMoeForCausalLM", "OpenAIMoeModel", "OpenAIMoePreTrainedModel"]
