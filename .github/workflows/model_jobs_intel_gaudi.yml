@@ -61,23 +61,22 @@ jobs:
           echo "$matrix_folders"
           echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
 
-      - name: Update clone
-        working-directory: /transformers
-        run: git fetch && git checkout ${{ github.sha }}
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
-        working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+        run: |
+          python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
       - name: Update / Install some packages (for Past CI)
         if: ${{ contains(inputs.docker, '-past-') }}
-        working-directory: /transformers
         run: |
           python3 -m pip install -U datasets
 
       - name: Update / Install some packages (for Past CI)
         if: ${{ contains(inputs.docker, '-past-') && contains(inputs.docker, '-pytorch-') }}
-        working-directory: /transformers
         run: |
           python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
@@ -88,16 +87,14 @@ jobs:
           echo "HABANA_VISIBLE_MODULES=${HABANA_VISIBLE_MODULES}"
 
       - name: Environment
-        working-directory: /transformers
         run: |
           python3 utils/print_env.py
 
       - name: Show installed libraries and their versions
-        working-directory: /transformers
-        run: pip freeze
+        run: |
+          pip freeze
 
       - name: Set `machine_type` for report and artifact names
-        working-directory: /transformers
         shell: bash
         run: |
           echo "${{ inputs.machine_type }}"
@@ -113,24 +110,25 @@ jobs:
           echo "machine_type=$machine_type" >> $GITHUB_ENV
 
       - name: Run all tests on Gaudi
-        working-directory: /transformers
-        run: python3 -m pytest -rsfE -v --make-reports=${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}  -m "not not_device_test"
+        run: |
+          python3 -m pytest -rsfE -v --make-reports=${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}  -m "not not_device_test"
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports/failures_short.txt
+        run: |
+          cat reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports/failures_short.txt
 
       - name: Run test
         shell: bash
         run: |
-          mkdir -p /transformers/reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports
-          echo "hello" > /transformers/reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports/hello.txt
+          mkdir -p reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports
+          echo "hello" > reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports/hello.txt
           echo "${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports"
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports"
-        if: ${{ always() }}
         uses: actions/upload-artifact@v4
+        if: ${{ always() }}
         with:
           name: ${{ env.machine_type }}_run_models_gaudi_${{ env.matrix_folders }}_test_reports
-          path: /transformers/reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports
+          path: reports/${{ env.machine_type }}_run_models_gaudi_${{ matrix.folders }}_test_reports

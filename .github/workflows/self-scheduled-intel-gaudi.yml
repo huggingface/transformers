@@ -74,17 +74,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          path: /transformers
 
       - name: Show installed libraries and their versions
-        working-directory: /transformers
         run: pip freeze
 
       - id: set-matrix
         name: Identify models to test
-        working-directory: /transformers/tests
         run: |
-          echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
+          echo "folder_slices=$(python3 utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
           echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
 
       - name: HL-SMI
@@ -94,7 +91,6 @@ jobs:
           echo "HABANA_VISIBLE_MODULES=${HABANA_VISIBLE_MODULES}"
 
       - name: Environment
-        working-directory: /transformers
         run: python3 utils/print_env.py
 
   run_models_gaudi:
