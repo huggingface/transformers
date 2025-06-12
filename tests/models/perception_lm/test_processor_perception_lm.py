@@ -19,7 +19,6 @@ import unittest
 from transformers import (
     AutoProcessor,
     AutoTokenizer,
-    LlamaTokenizerFast,
     PerceptionLMProcessor,
 )
 from transformers.testing_utils import require_vision
@@ -46,9 +45,11 @@ class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdirname = tempfile.mkdtemp()
 
-        image_processor = PerceptionLMImageProcessorFast()
+        image_processor = PerceptionLMImageProcessorFast(
+            tile_size=448, max_num_tiles=4, vision_input_type="thumb+tile"
+        )
         video_processor = PerceptionLMVideoProcessor()
-        tokenizer = LlamaTokenizerFast.from_pretrained(TEST_MODEL_PATH)
+        tokenizer = AutoTokenizer.from_pretrained(TEST_MODEL_PATH)
         tokenizer.add_special_tokens(
             {"additional_special_tokens": ["<|image|>", "<|video|>"]}
         )
@@ -77,8 +78,8 @@ class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def prepare_processor_dict():
         return {
             "chat_template": CHAT_TEMPLATE,
-            "pooling_ratio": 1,
             "patch_size": 14,
+            "pooling_ratio": 2,
             "processor_class": "PerceptionLMProcessor",
         }  # fmt: skip
 
@@ -97,13 +98,11 @@ class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_image_token_filling(self):
         processor = self.processor_class.from_pretrained(self.tmpdirname)
-        processor.patch_size = 14
-        processor.image_processor.tile_size = 448
-        processor.image_processor.max_num_tiles = 36
-        processor.image_processor.vision_input_type = "thumb+tile"
         # Important to check with non square image
-        image = torch.randint(0, 2, (1, 3, 503, 316))
-        expected_image_tokens = 1525
+        image = torch.randn((1, 3, 450, 500))
+        #  5 tiles (thumbnail tile + 4 tiles)
+        #  448/patch_size/pooling_ratio = 16 => 16*16 tokens per tile
+        expected_image_tokens = 16 * 16 * 5
         image_token_index = processor.image_token_id
 
         messages = [
@@ -122,6 +121,7 @@ class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         image_tokens = (inputs["input_ids"] == image_token_index).sum().item()
         self.assertEqual(expected_image_tokens, image_tokens)
+
 
 CHAT_TEMPLATE = (
     "{{- bos_token }}"
