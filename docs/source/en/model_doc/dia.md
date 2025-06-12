@@ -16,8 +16,6 @@ rendered properly in your Markdown viewer.
 
 # Dia
 
-# Dia
-
 ## Overview
 
 The Dia model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
@@ -50,6 +48,11 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 ## DiaTokenizer
 
 [[autodoc]] DiaTokenizer
+
+## DiaFeatureExtractor
+
+[[autodoc]] DiaFeatureExtractor
+    - __call__
 
 ## DiaProcessor
 
