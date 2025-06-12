@@ -20,12 +20,11 @@ import torch
 from typing import List, Union, Iterable
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, get_image_size, to_numpy_array
+from ...image_utils import ImageInput, PILImageResampling, get_image_size, to_numpy_array, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...video_utils import VideoInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -35,7 +34,15 @@ class PerceptionLMProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": False,
         },
-        "images_kwargs": {},
+        "images_kwargs": {
+            "do_resize": True,
+            "do_rescale": False,
+            "do_normalize": True,
+            "size": 448,
+            "resample": PILImageResampling.BICUBIC,
+            "image_mean": IMAGENET_STANDARD_MEAN,
+            "image_std": IMAGENET_STANDARD_STD,
+        },
     }
 
 
@@ -83,16 +90,11 @@ class PerceptionLMProcessor(ProcessorMixin):
         image_processor=None,
         tokenizer=None,
         patch_size=None,
-        vision_feature_select_strategy=None,
         chat_template=None,
-        media_token="<|image|>", 
-        num_additional_image_tokens=0,
         pooling_ratio=2,
         **kwargs,
     ):
         self.patch_size = patch_size
-        self.num_additional_image_tokens = num_additional_image_tokens
-        self.vision_feature_select_strategy = vision_feature_select_strategy
         self.pooling_ratio = pooling_ratio
         self.image_token = tokenizer.image_token
         self.video_token = tokenizer.video_token

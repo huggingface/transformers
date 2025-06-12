@@ -553,20 +553,19 @@ def write_tokenizer(
         "patch_size": params["model"]["vision_model"]["patch_size"],
         "processor_class": "PerceptionLMProcessor",
     }
-    image_res = params["model"]["vision_model"]["image_size"]
+    tile_size = params["model"]["vision_model"]["image_size"]
 
     image_preprocessor_config = {
         "image_processor_type": "PerceptionLMImageProcessorFast",
         "vision_input_type": params["data"]["vision_input_type"],
-        "image_res": image_res,
+        "tile_size": tile_size,
         "max_num_tiles": params["data"]["max_num_tiles"],
         "max_frame_tiles": 1,
-        "normalize_img": True,
     }
     image_preprocessor = PerceptionLMImageProcessorFast(**image_preprocessor_config)
     video_preprocessor_config = {
         "video_processor_type": "PerceptionLMVideoProcessor",
-        "size": {"height": image_res, "width": image_res},
+        "size": {"height": tile_size, "width": tile_size},
     }
     video_preprocessor = PerceptionLMVideoProcessor(**video_preprocessor_config)
     processor = PerceptionLMProcessor(
