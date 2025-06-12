@@ -39,6 +39,7 @@ def get_video():
 
 
 CLASSIFIERS = {
+    # Something-Something-v2 dataset
     "vjepa2-vitl-fpc16-256-ssv2": {
         "base_model": "facebook/vjepa2-vitl-fpc64-256",
         "checkpoint": "https://dl.fbaipublicfiles.com/vjepa2/evals/ssv2-vitl-16x2x3.pt",
@@ -55,7 +56,7 @@ CLASSIFIERS = {
         "dataset": "something-something-v2",
         "result": (112, 0.26408, "Putting [something] onto [something]"),
     },
-    # Diving dataset
+    # Diving48 dataset
     "vjepa2-vitl-fpc32-256-diving48": {
         "base_model": "facebook/vjepa2-vitl-fpc64-256",
         "checkpoint": "https://dl.fbaipublicfiles.com/vjepa2/evals/diving48-vitl-256.pt",
@@ -80,7 +81,6 @@ def get_id2label_mapping(dataset_name: str) -> dict[int, str]:
         repo_id="huggingface/label-files",
         filename=f"{dataset_name}-id2label.json",
         repo_type="dataset",
-        revision="pr/13",
     )
     with open(path, "r") as f:
         id2label = json.load(f)
