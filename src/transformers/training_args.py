@@ -1692,7 +1692,7 @@ class TrainingArguments:
                     # cpu
                     raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")
                 elif not self.use_cpu:
-                    if not is_torch_bf16_gpu_available():
+                    if not is_torch_bf16_gpu_available() and not is_torch_xla_available():  # added for tpu support
                         error_message = "Your setup doesn't support bf16/gpu."
                         if is_torch_cuda_available():
                             error_message += " You need Ampere+ GPU with cuda>=11.0"
@@ -1762,9 +1762,8 @@ class TrainingArguments:
         if self.average_tokens_across_devices:
             try:
                 if self.world_size == 1:
-                    logger.warning(
-                        "average_tokens_across_devices is set to True but it is invalid when world size is"
-                        "1. Turn it to False automatically."
+                    logger.info(
+                        "average_tokens_across_devices is True but world size is 1. Setting it to False automatically."
                     )
                     self.average_tokens_across_devices = False
             except ImportError as e:

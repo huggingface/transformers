@@ -236,7 +236,7 @@ flush()
 Let's see what peak GPU memory consumption 4-bit quantization gives. Quantizing the model to 4-bit can be done with the same API as before - this time by passing `load_in_4bit=True` instead of `load_in_8bit=True`.
 
 ```python
-model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", load_in_4bit=True, low_cpu_mem_usage=True, pad_token_id=0)
+model = AutoModelForCausalLM.from_pretrained("bigcode/octocoder", load_in_4bit=True, pad_token_id=0)
 
 pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
 

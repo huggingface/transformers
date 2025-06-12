@@ -422,11 +422,13 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         output_ids = model.generate(input_ids, do_sample=True, num_beams=1)
         output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_STR = (
-            "Today is a nice day and the water is still cold. We just stopped off for some fresh coffee. This place"
-            " looks like a"
-        )
-        self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
+        EXPECTED_OUTPUT_STRS = [
+            # torch 2.6
+            "Today is a nice day and the water is still cold. We just stopped off for some fresh coffee. This place looks like a",
+            # torch 2.7
+            "Today is a nice day and the sun is shining. A nice day with warm rainy and windy weather today.",
+        ]
+        self.assertIn(output_str, EXPECTED_OUTPUT_STRS)
 
     @require_torch_accelerator
     @require_torch_fp16
