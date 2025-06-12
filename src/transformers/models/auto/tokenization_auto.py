@@ -57,6 +57,13 @@ logger = logging.get_logger(__name__)
 TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
     [
         (
+            "aimv2",
+            (
+                "CLIPTokenizer",
+                "CLIPTokenizerFast" if is_tokenizers_available() else None,
+            ),
+        ),
+        (
             "albert",
             (
                 "AlbertTokenizer" if is_sentencepiece_available() else None,
