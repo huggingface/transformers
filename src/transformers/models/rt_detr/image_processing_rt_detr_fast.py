@@ -64,7 +64,7 @@ class RTDetrFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         method. If `True`, padding will be applied to the bottom and right of the image with zeros.
         If `pad_size` is provided, the image will be padded to the specified dimensions.
         Otherwise, the image will be padded to the maximum height and width of the batch.
-    pad_size (`Dict[str, int]`, *optional*):
+    pad_size (`dict[str, int]`, *optional*):
         The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
         provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
         height and width in the batch.
@@ -256,11 +256,11 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
         Resizes an annotation to a target size.
 
         Args:
-            annotation (`Dict[str, Any]`):
+            annotation (`dict[str, Any]`):
                 The annotation dictionary.
-            orig_size (`Tuple[int, int]`):
+            orig_size (`tuple[int, int]`):
                 The original size of the input image.
-            target_size (`Tuple[int, int]`):
+            target_size (`tuple[int, int]`):
                 The target size of the image, as returned by the preprocessing `resize` step.
             threshold (`float`, *optional*, defaults to 0.5):
                 The threshold used to binarize the segmentation masks.
@@ -386,15 +386,15 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
         **kwargs: Unpack[RTDetrFastImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
-        annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
+        annotations (`AnnotationType` or `list[AnnotationType]`, *optional*):
             List of annotations associated with the image or batch of images. If annotation is for object
             detection, the annotations should be a dictionary with the following keys:
             - "image_id" (`int`): The image id.
-            - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a
+            - "annotations" (`list[Dict]`): List of annotations for an image. Each annotation should be a
                 dictionary. An image can have no annotations, in which case the list should be empty.
             If annotation is for segmentation, the annotations should be a dictionary with the following keys:
             - "image_id" (`int`): The image id.
-            - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
+            - "segments_info" (`list[Dict]`): List of segments for an image. Each segment should be a dictionary.
                 An image can have no segments, in which case the list should be empty.
             - "file_name" (`str`): The file name of the image.
         masks_path (`str` or `pathlib.Path`, *optional*):
@@ -524,15 +524,15 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                 Raw outputs of the model.
             threshold (`float`, *optional*, defaults to 0.5):
                 Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
             use_focal_loss (`bool` defaults to `True`):
                 Variable informing if the focal loss was used to predict the outputs. If `True`, a sigmoid is applied
                 to compute the scores of each detection, otherwise, a softmax function is used.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
         requires_backends(self, ["torch"])

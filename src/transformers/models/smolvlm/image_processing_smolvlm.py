@@ -100,7 +100,7 @@ def _resize_output_size_scale_below_upper_bound(
             Height of the input image.
         width (`int`):
             Width of the input image.
-        max_len (`Dict[str, int]`, *optional*, defaults to the maximum size of the image):
+        max_len (`dict[str, int]`, *optional*, defaults to the maximum size of the image):
             Defines the maximum dimensions of the image.
     Returns:
         The output size of the image after resizing.
@@ -174,7 +174,7 @@ def make_pixel_mask(
     Args:
         image (`np.ndarray`):
             Image to make the pixel mask for.
-        output_size (`Tuple[int, int]`):
+        output_size (`tuple[int, int]`):
             Output size of the mask.
     """
     input_height, input_width = get_image_size(image, channel_dim=input_data_format)
@@ -194,7 +194,7 @@ def convert_to_rgb(
     Args:
         image (`np.ndarray`):
             The image to convert.
-        palette (List[int], *optional*):
+        palette (list[int], *optional*):
             The palette to use if given.
         data_format (ChannelDimension or str, *optional*):
             The channel dimension format for the output image. If not provided, it will be the same as the input image.
@@ -274,11 +274,11 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. If set to `True`, the image is normalized to have a mean of `image_mean` and
             a standard deviation of `image_std`.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
             overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IDEFICS_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
@@ -334,7 +334,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
                 Resampling filter to use when resizing the image.
@@ -395,7 +395,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Images to split.
-            max_image_size (`Dict[str, int]`):
+            max_image_size (`dict[str, int]`):
                 Maximum size of the output image. If the image is larger than this size, it will be split into
                 patches of this size, and the original image will be concatenated with the patches, resized to max_size.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
@@ -534,7 +534,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
         For a list of images, for each images, pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width.
         For each sample in the batch, pads the sample with empty images to the max_number of images per sample in the batch. Optionally returns a pixel mask.
         Args:
-            images (`List[np.ndarray]`):
+            images (`list[np.ndarray]`):
                 List of list of images to pad. Pads to the largest height and width in the batch.
             constant_values (`float` or `Iterable[float]`, *optional*):
                 The value to use for the padding if `mode` is `"constant"`.
@@ -626,7 +626,7 @@ class SmolVLMImageProcessor(BaseImageProcessor):
                 Whether to convert the image to RGB.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after resizing. With the longest edge resized to keep the input aspect ratio.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
@@ -642,9 +642,9 @@ class SmolVLMImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
                 `True`.
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):

@@ -150,13 +150,13 @@ class FunnelTokenizerFast(PreTrainedTokenizerFast):
         - pair of sequences: `[CLS] A [SEP] B [SEP]`
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         output = [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
 
@@ -180,13 +180,13 @@ class FunnelTokenizerFast(PreTrainedTokenizerFast):
         If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
+            `list[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]

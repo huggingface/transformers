@@ -98,11 +98,11 @@ class Wav2Vec2CTCTokenizerOutput(ModelOutput):
     Args:
         text (list of `str` or `str`):
             Decoded logits in text from. Usually the speech transcription.
-        char_offsets (list of `List[Dict[str, Union[int, str]]]` or `List[Dict[str, Union[int, str]]]`):
+        char_offsets (list of `list[dict[str, Union[int, str]]]` or `list[dict[str, Union[int, str]]]`):
             Offsets of the decoded characters. In combination with sampling rate and model downsampling rate char
             offsets can be used to compute time stamps for each character. Total logit score of the beam associated with
             produced text.
-        word_offsets (list of `List[Dict[str, Union[int, str]]]` or `List[Dict[str, Union[int, str]]]`):
+        word_offsets (list of `list[dict[str, Union[int, str]]]` or `list[dict[str, Union[int, str]]]`):
             Offsets of the decoded words. In combination with sampling rate and model downsampling rate word offsets
             can be used to compute time stamps for each word.
     """
@@ -468,7 +468,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         Convert a list of lists of token ids into a list of strings by calling decode.
 
         Args:
-            sequences (`Union[List[int], List[List[int]], np.ndarray, torch.Tensor, tf.Tensor]`):
+            sequences (`Union[list[int], list[list[int]], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
@@ -502,7 +502,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
                 Will be passed to the underlying model specific decode method.
 
         Returns:
-            `List[str]` or [`~models.wav2vec2.tokenization_wav2vec2.Wav2Vec2CTCTokenizerOutput`]: The list of decoded
+            `list[str]` or [`~models.wav2vec2.tokenization_wav2vec2.Wav2Vec2CTCTokenizerOutput`]: The list of decoded
             sentences. Will be a [`~models.wav2vec2.tokenization_wav2vec2.Wav2Vec2CTCTokenizerOutput`] when
             `output_char_offsets == True` or `output_word_offsets == True`.
         """
@@ -541,7 +541,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         Similar to doing `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`.
 
         Args:
-            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
@@ -791,7 +791,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         sequences.
 
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy array or a list of list of float values. Must be mono channel audio, not
                 stereo, i.e. single float per timestep.

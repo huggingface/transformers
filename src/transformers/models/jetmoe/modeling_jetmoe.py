@@ -664,13 +664,13 @@ class JetMoeFlashAttention2(JetMoeAttention):
         Args:
             hidden_states (Optional[torch.FloatTensor]): Input hidden states.
             attention_mask (Optional[torch.FloatTensor]): Attention mask.
-            layer_past (Optional[Tuple[torch.Tensor]]): Past layer state.
+            layer_past (Optional[tuple[torch.Tensor]]): Past layer state.
             use_cache (Optional[bool]): Whether to use cached states.
             output_attentions (Optional[bool]): Whether to output attention weights.
             cache_position (Optional[torch.LongTensor]): Position of the cache.
 
         Returns:
-            Union[Tuple[torch.Tensor, Tuple[torch.Tensor]], Optional[Tuple[...]]]: Tuple containing outputs.
+            Union[tuple[torch.Tensor, tuple[torch.Tensor]], Optional[tuple[...]]]: Tuple containing outputs.
         """
         output_attentions = False
         bsz, q_len, hidden_size = hidden_states.size()

@@ -108,7 +108,7 @@ class CpmTokenizer(PreTrainedTokenizer):
             mask_token (`str`, *optional*, defaults to `"<mask>"`):
                 The token used for masking values. This is the token used when training this model with masked language
                 modeling. This is the token which the model will try to predict.
-            additional_special_tokens (`List[str]`, *optional*, defaults to `["<eop>", "<eod>"]`):
+            additional_special_tokens (`list[str]`, *optional*, defaults to `["<eop>", "<eod>"]`):
                 Additional special tokens used by the tokenizer.
 
         Attributes:
@@ -249,13 +249,13 @@ class CpmTokenizer(PreTrainedTokenizer):
         - pair of sequences: `A <sep> B <sep> <cls>`
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -272,15 +272,15 @@ class CpmTokenizer(PreTrainedTokenizer):
         special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
@@ -308,13 +308,13 @@ class CpmTokenizer(PreTrainedTokenizer):
         If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
+            `list[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
         sep = [self.sep_token_id]
         cls_segment_id = [2]

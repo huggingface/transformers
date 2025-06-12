@@ -41,7 +41,7 @@ PROCESS_INPUTS_DOCSTRING = r"""
             Beam indices indicating to which beam hypothesis the `next_tokens` correspond.
         pad_token_id (`int`, *optional*):
             The id of the *padding* token.
-        eos_token_id (`Union[int, List[int]]`, *optional*):
+        eos_token_id (`Union[int, list[int]]`, *optional*):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
         beam_indices (`torch.LongTensor`, *optional*):
             Beam indices indicating to which beam hypothesis each token correspond.
@@ -77,7 +77,7 @@ FINALIZE_INPUTS_DOCSTRING = r"""
             The beam indices indicating to which beam the `final_beam_tokens` shall be added.
         pad_token_id (`int`, *optional*):
             The id of the *padding* token.
-        eos_token_id (`Union[int, List[int]]`, *optional*):
+        eos_token_id (`Union[int, list[int]]`, *optional*):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
 
     Return:
@@ -426,7 +426,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
             Batch Size of `input_ids` for which standard beam search decoding is run in parallel.
         num_beams (`int`):
             Number of beams for beam search.
-        constraints (`List[Constraint]`):
+        constraints (`list[Constraint]`):
             A list of positive constraints represented as `Constraint` objects that must be fulfilled in the generation
             output. For more information, the documentation of [`Constraint`] should be read.
         device (`torch.device`):
@@ -541,7 +541,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 The scores of all tokens in the vocabulary for each of the beam hypotheses.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`Union[int, List[int]]`, *optional*):
+            eos_token_id (`Union[int, list[int]]`, *optional*):
                 The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
             beam_indices (`torch.LongTensor`, *optional*):
                 Beam indices indicating to which beam hypothesis each token correspond.

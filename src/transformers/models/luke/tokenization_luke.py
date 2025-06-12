@@ -480,13 +480,13 @@ class LukeTokenizer(PreTrainedTokenizer):
         - pair of sequences: `<s> A </s></s> B </s>`
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
@@ -503,15 +503,15 @@ class LukeTokenizer(PreTrainedTokenizer):
         special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
@@ -531,13 +531,13 @@ class LukeTokenizer(PreTrainedTokenizer):
         make use of token type ids, therefore a list of zeros is returned.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of zeros.
+            `list[int]`: List of zeros.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -586,31 +586,31 @@ class LukeTokenizer(PreTrainedTokenizer):
         sequences, depending on the task you want to prepare them for.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence must be a string. Note that this
                 tokenizer does not support tokenization based on pretokenized strings.
-            text_pair (`str`, `List[str]`, `List[List[str]]`):
+            text_pair (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence must be a string. Note that this
                 tokenizer does not support tokenization based on pretokenized strings.
-            entity_spans (`List[Tuple[int, int]]`, `List[List[Tuple[int, int]]]`, *optional*):
+            entity_spans (`list[tuple[int, int]]`, `list[list[tuple[int, int]]]`, *optional*):
                 The sequence or batch of sequences of entity spans to be encoded. Each sequence consists of tuples each
                 with two integers denoting character-based start and end positions of entities. If you specify
                 `"entity_classification"` or `"entity_pair_classification"` as the `task` argument in the constructor,
                 the length of each sequence must be 1 or 2, respectively. If you specify `entities`, the length of each
                 sequence must be equal to the length of each sequence of `entities`.
-            entity_spans_pair (`List[Tuple[int, int]]`, `List[List[Tuple[int, int]]]`, *optional*):
+            entity_spans_pair (`list[tuple[int, int]]`, `list[list[tuple[int, int]]]`, *optional*):
                 The sequence or batch of sequences of entity spans to be encoded. Each sequence consists of tuples each
                 with two integers denoting character-based start and end positions of entities. If you specify the
                 `task` argument in the constructor, this argument is ignored. If you specify `entities_pair`, the
                 length of each sequence must be equal to the length of each sequence of `entities_pair`.
-            entities (`List[str]`, `List[List[str]]`, *optional*):
+            entities (`list[str]`, `list[list[str]]`, *optional*):
                 The sequence or batch of sequences of entities to be encoded. Each sequence consists of strings
                 representing entities, i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., Los
                 Angeles). This argument is ignored if you specify the `task` argument in the constructor. The length of
                 each sequence must be equal to the length of each sequence of `entity_spans`. If you specify
                 `entity_spans` without specifying this argument, the entity sequence or the batch of entity sequences
                 is automatically constructed by filling it with the [MASK] entity.
-            entities_pair (`List[str]`, `List[List[str]]`, *optional*):
+            entities_pair (`list[str]`, `list[list[str]]`, *optional*):
                 The sequence or batch of sequences of entities to be encoded. Each sequence consists of strings
                 representing entities, i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., Los
                 Angeles). This argument is ignored if you specify the `task` argument in the constructor. The length of
@@ -624,14 +624,14 @@ class LukeTokenizer(PreTrainedTokenizer):
         is_valid_single_text = isinstance(text, str)
         is_valid_batch_text = isinstance(text, (list, tuple)) and (len(text) == 0 or (isinstance(text[0], str)))
         if not (is_valid_single_text or is_valid_batch_text):
-            raise ValueError("text input must be of type `str` (single example) or `List[str]` (batch).")
+            raise ValueError("text input must be of type `str` (single example) or `list[str]` (batch).")
 
         is_valid_single_text_pair = isinstance(text_pair, str)
         is_valid_batch_text_pair = isinstance(text_pair, (list, tuple)) and (
             len(text_pair) == 0 or isinstance(text_pair[0], str)
         )
         if not (text_pair is None or is_valid_single_text_pair or is_valid_batch_text_pair):
-            raise ValueError("text_pair input must be of type `str` (single example) or `List[str]` (batch).")
+            raise ValueError("text_pair input must be of type `str` (single example) or `list[str]` (batch).")
 
         is_batched = bool(isinstance(text, (list, tuple)))
 
@@ -1186,17 +1186,17 @@ class LukeTokenizer(PreTrainedTokenizer):
         error.
 
         Args:
-            ids (`List[int]`):
+            ids (`list[int]`):
                 Tokenized input ids of the first sequence.
-            pair_ids (`List[int]`, *optional*):
+            pair_ids (`list[int]`, *optional*):
                 Tokenized input ids of the second sequence.
-            entity_ids (`List[int]`, *optional*):
+            entity_ids (`list[int]`, *optional*):
                 Entity ids of the first sequence.
-            pair_entity_ids (`List[int]`, *optional*):
+            pair_entity_ids (`list[int]`, *optional*):
                 Entity ids of the second sequence.
-            entity_token_spans (`List[Tuple[int, int]]`, *optional*):
+            entity_token_spans (`list[tuple[int, int]]`, *optional*):
                 Entity spans of the first sequence.
-            pair_entity_token_spans (`List[Tuple[int, int]]`, *optional*):
+            pair_entity_token_spans (`list[tuple[int, int]]`, *optional*):
                 Entity spans of the second sequence.
             max_entity_length (`int`, *optional*):
                 The maximum length of the entity sequence.
@@ -1408,11 +1408,11 @@ class LukeTokenizer(PreTrainedTokenizer):
         specific device of your tensors however.
 
         Args:
-            encoded_inputs ([`BatchEncoding`], list of [`BatchEncoding`], `Dict[str, List[int]]`, `Dict[str, List[List[int]]` or `List[Dict[str, List[int]]]`):
-                Tokenized inputs. Can represent one input ([`BatchEncoding`] or `Dict[str, List[int]]`) or a batch of
-                tokenized inputs (list of [`BatchEncoding`], *Dict[str, List[List[int]]]* or *List[Dict[str,
-                List[int]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
-                collate function. Instead of `List[int]` you can have tensors (numpy arrays, PyTorch tensors or
+            encoded_inputs ([`BatchEncoding`], list of [`BatchEncoding`], `dict[str, list[int]]`, `dict[str, list[list[int]]` or `list[dict[str, list[int]]]`):
+                Tokenized inputs. Can represent one input ([`BatchEncoding`] or `dict[str, list[int]]`) or a batch of
+                tokenized inputs (list of [`BatchEncoding`], *dict[str, list[list[int]]]* or *list[dict[str,
+                list[int]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
+                collate function. Instead of `list[int]` you can have tensors (numpy arrays, PyTorch tensors or
                 TensorFlow tensors), see the note above for the return type.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
@@ -1563,7 +1563,7 @@ class LukeTokenizer(PreTrainedTokenizer):
 
         Args:
             encoded_inputs:
-                Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
+                Dictionary of tokenized inputs (`list[int]`) or batch of tokenized inputs (`list[list[int]]`).
             max_length: maximum length of the returned list and optionally padding length (see below).
                 Will truncate by taking into account the special tokens.
             max_entity_length: The maximum length of the entity sequence.

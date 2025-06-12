@@ -97,7 +97,7 @@ def read_init() -> dict[str, list[str]]:
     Read the init and extract backend-specific objects.
 
     Returns:
-        Dict[str, List[str]]: A dictionary mapping backend name to the list of object names requiring that backend.
+        dict[str, list[str]]: A dictionary mapping backend name to the list of object names requiring that backend.
     """
     with open(os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"), "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
@@ -161,12 +161,12 @@ def create_dummy_files(backend_specific_objects: Optional[dict[str, list[str]]] 
     Create the content of the dummy files.
 
     Args:
-        backend_specific_objects (`Dict[str, List[str]]`, *optional*):
+        backend_specific_objects (`dict[str, list[str]]`, *optional*):
             The mapping backend name to list of backend-specific objects. If not passed, will be obtained by calling
             `read_init()`.
 
     Returns:
-        `Dict[str, str]`: A dictionary mapping backend name to code of the corresponding backend file.
+        `dict[str, str]`: A dictionary mapping backend name to code of the corresponding backend file.
     """
     if backend_specific_objects is None:
         backend_specific_objects = read_init()

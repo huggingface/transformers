@@ -77,7 +77,7 @@ def get_size_with_aspect_ratio(image_size, size, max_size=None) -> tuple[int, in
     Computes the output image size given the input image size and the desired output size.
 
     Args:
-        image_size (`Tuple[int, int]`):
+        image_size (`tuple[int, int]`):
             The input image size.
         size (`int`):
             The desired output size.
@@ -126,7 +126,7 @@ def get_resize_output_image_size(
     Args:
         input_image (`np.ndarray`):
             The image to resize.
-        size (`int` or `Tuple[int, int]` or `List[int]`):
+        size (`int` or `tuple[int, int]` or `list[int]`):
             The desired output size.
         max_size (`int`, *optional*):
             The maximum allowed output size.
@@ -265,7 +265,7 @@ def make_pixel_mask(
     Args:
         image (`np.ndarray`):
             Image to make the pixel mask for.
-        output_size (`Tuple[int, int]`):
+        output_size (`tuple[int, int]`):
             Output size of the mask.
     """
     input_height, input_width = get_image_size(image, channel_dim=input_data_format)
@@ -341,11 +341,11 @@ def resize_annotation(
     Resizes an annotation to a target size.
 
     Args:
-        annotation (`Dict[str, Any]`):
+        annotation (`dict[str, Any]`):
             The annotation dictionary.
-        orig_size (`Tuple[int, int]`):
+        orig_size (`tuple[int, int]`):
             The original size of the input image.
-        target_size (`Tuple[int, int]`):
+        target_size (`tuple[int, int]`):
             The target size of the image, as returned by the preprocessing `resize` step.
         threshold (`float`, *optional*, defaults to 0.5):
             The threshold used to binarize the segmentation masks.
@@ -391,7 +391,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be
             overridden by the `do_resize` parameter in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"height": 640, "width": 640}`):
+        size (`dict[str, int]` *optional*, defaults to `{"height": 640, "width": 640}`):
             Size of the image's `(height, width)` dimensions after resizing. Can be overridden by the `size` parameter
             in the `preprocess` method. Available options are:
                 - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
@@ -414,10 +414,10 @@ class RTDetrImageProcessor(BaseImageProcessor):
             `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `False`):
             Whether to normalize the image.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
             Mean values to use when normalizing the image. Can be a single value or a list of values, one for each
             channel. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
             Standard deviation values to use when normalizing the image. Can be a single value or a list of values, one
             for each channel. Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_annotations (`bool`, *optional*, defaults to `True`):
@@ -429,7 +429,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
             method. If `True`, padding will be applied to the bottom and right of the image with zeros.
             If `pad_size` is provided, the image will be padded to the specified dimensions.
             Otherwise, the image will be padded to the maximum height and width of the batch.
-        pad_size (`Dict[str, int]`, *optional*):
+        pad_size (`dict[str, int]`, *optional*):
             The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
             provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
             height and width in the batch.
@@ -513,7 +513,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the image's `(height, width)` dimensions after resizing. Available options are:
                     - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
                         Do NOT keep the aspect ratio.
@@ -712,9 +712,9 @@ class RTDetrImageProcessor(BaseImageProcessor):
         in the batch and optionally returns their corresponding pixel mask.
 
         Args:
-            images (List[`np.ndarray`]):
+            images (list[`np.ndarray`]):
                 Images to pad.
-            annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
+            annotations (`AnnotationType` or `list[AnnotationType]`, *optional*):
                 Annotations to transform according to the padding that is applied to the images.
             constant_values (`float` or `Iterable[float]`, *optional*):
                 The value to use for the padding if `mode` is `"constant"`.
@@ -735,7 +735,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
                 Whether to update the bounding boxes in the annotations to match the padded images. If the
                 bounding boxes have not been converted to relative coordinates and `(centre_x, centre_y, width, height)`
                 format, the bounding boxes will not be updated.
-            pad_size (`Dict[str, int]`, *optional*):
+            pad_size (`dict[str, int]`, *optional*):
                 The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
                 provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
                 height and width in the batch.
@@ -810,15 +810,15 @@ class RTDetrImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image or batch of images to preprocess. Expects a single or batch of images with pixel values ranging
                 from 0 to 255. If passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
+            annotations (`AnnotationType` or `list[AnnotationType]`, *optional*):
                 List of annotations associated with the image or batch of images. If annotation is for object
                 detection, the annotations should be a dictionary with the following keys:
                 - "image_id" (`int`): The image id.
-                - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a
+                - "annotations" (`list[Dict]`): List of annotations for an image. Each annotation should be a
                   dictionary. An image can have no annotations, in which case the list should be empty.
                 If annotation is for segmentation, the annotations should be a dictionary with the following keys:
                 - "image_id" (`int`): The image id.
-                - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
+                - "segments_info" (`list[Dict]`): List of segments for an image. Each segment should be a dictionary.
                   An image can have no segments, in which case the list should be empty.
                 - "file_name" (`str`): The file name of the image.
             return_segmentation_masks (`bool`, *optional*, defaults to self.return_segmentation_masks):
@@ -827,7 +827,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
                 Path to the directory containing the segmentation masks.
             do_resize (`bool`, *optional*, defaults to self.do_resize):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to self.size):
+            size (`dict[str, int]`, *optional*, defaults to self.size):
                 Size of the image's `(height, width)` dimensions after resizing. Available options are:
                     - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
                         Do NOT keep the aspect ratio.
@@ -849,9 +849,9 @@ class RTDetrImageProcessor(BaseImageProcessor):
                 Whether to convert the annotations to the format expected by the model. Converts the bounding
                 boxes from the format `(top_left_x, top_left_y, width, height)` to `(center_x, center_y, width, height)`
                 and in relative coordinates.
-            image_mean (`float` or `List[float]`, *optional*, defaults to self.image_mean):
+            image_mean (`float` or `list[float]`, *optional*, defaults to self.image_mean):
                 Mean to use when normalizing the image.
-            image_std (`float` or `List[float]`, *optional*, defaults to self.image_std):
+            image_std (`float` or `list[float]`, *optional*, defaults to self.image_std):
                 Standard deviation to use when normalizing the image.
             do_pad (`bool`, *optional*, defaults to self.do_pad):
                 Whether to pad the image. If `True`, padding will be applied to the bottom and right of
@@ -872,7 +872,7 @@ class RTDetrImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            pad_size (`Dict[str, int]`, *optional*):
+            pad_size (`dict[str, int]`, *optional*):
                 The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
                 provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
                 height and width in the batch.
@@ -1043,15 +1043,15 @@ class RTDetrImageProcessor(BaseImageProcessor):
                 Raw outputs of the model.
             threshold (`float`, *optional*, defaults to 0.5):
                 Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
             use_focal_loss (`bool` defaults to `True`):
                 Variable informing if the focal loss was used to predict the outputs. If `True`, a sigmoid is applied
                 to compute the scores of each detection, otherwise, a softmax function is used.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
         requires_backends(self, ["torch"])

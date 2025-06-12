@@ -759,7 +759,7 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
         Arguments:
             attention_mask (`tf.Tensor`):
                 Mask with ones indicating tokens to attend to, zeros for tokens to ignore.
-            input_shape (`Tuple[int]`):
+            input_shape (`tuple[int]`):
                 The shape of the input to the model.
             is_decoder (`bool`):
                 Whether the model is used as a decoder.

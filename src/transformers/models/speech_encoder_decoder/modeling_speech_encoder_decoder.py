@@ -339,7 +339,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         r"""
         inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, feature_dim)`, *optional*):
             Float values of input raw speech waveform or speech features. Values can be obtained by loading a `.flac`
-            or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile
+            or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile
             library (`pip install soundfile`). To prepare the array into `inputs`, either the [`Wav2Vec2Processor`] or
             [`Speech2TextProcessor`] should be used for padding and conversion into a tensor of type
             `torch.FloatTensor`.
@@ -369,12 +369,12 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
+            into an array of type *list[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
             soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should be used for padding
             and conversion into a tensor of type *torch.FloatTensor*. See [`Wav2Vec2Processor.__call__`] for details.
         input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
             Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
-            by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.*
+            by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.*
             via the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
             [`Speech2TextFeatureExtractor`] should be used for extracting the fbank features, padding and conversion
             into a tensor of type `torch.FloatTensor`. See [`~Speech2TextFeatureExtractor.__call__`]

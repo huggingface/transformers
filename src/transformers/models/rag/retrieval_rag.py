@@ -572,12 +572,12 @@ class RagRetriever:
                 The number of docs retrieved per query.
 
         Return:
-            `Tuple[np.ndarray, np.ndarray, List[dict]]`: A tuple with the following objects:
+            `tuple[np.ndarray, np.ndarray, list[dict]]`: A tuple with the following objects:
 
             - **retrieved_doc_embeds** (`np.ndarray` of shape `(batch_size, n_docs, dim)`) -- The retrieval embeddings
               of the retrieved docs per query.
             - **doc_ids** (`np.ndarray` of shape `(batch_size, n_docs)`) -- The ids of the documents in the index
-            - **doc_dicts** (`List[dict]`): The `retrieved_doc_embeds` examples per query.
+            - **doc_dicts** (`list[dict]`): The `retrieved_doc_embeds` examples per query.
         """
 
         doc_ids, retrieved_doc_embeds = self._main_retrieve(question_hidden_states, n_docs)
@@ -600,7 +600,7 @@ class RagRetriever:
         Retrieves documents for specified `question_hidden_states`.
 
         Args:
-            question_input_ids (`List[List[int]]`) batch of input ids
+            question_input_ids (`list[list[int]]`) batch of input ids
             question_hidden_states (`np.ndarray` of shape `(batch_size, vector_size)`:
                 A batch of query vectors to retrieve with.
             prefix (`str`, *optional*):

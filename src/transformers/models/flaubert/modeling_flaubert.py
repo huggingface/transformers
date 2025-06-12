@@ -819,7 +819,7 @@ class FlaubertModel(FlaubertPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use `attention_mask` for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`:
-        cache (`Dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.FloatTensor]`, *optional*):
             Dictionary strings to `torch.FloatTensor` that contains precomputed hidden-states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
             decoding. The dictionary object will be modified in-place during the forward pass to add newly computed
@@ -1044,7 +1044,7 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use `attention_mask` for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`:
-        cache (`Dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.FloatTensor]`, *optional*):
             Dictionary strings to `torch.FloatTensor` that contains precomputed hidden-states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
             decoding. The dictionary object will be modified in-place during the forward pass to add newly computed
@@ -1142,7 +1142,7 @@ class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`Dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.FloatTensor]`, *optional*):
             Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
             decoding.
@@ -1253,7 +1253,7 @@ class FlaubertForTokenClassification(FlaubertPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`Dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.FloatTensor]`, *optional*):
             Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
             decoding.
@@ -1350,7 +1350,7 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`Dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.FloatTensor]`, *optional*):
             Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
             decoding.
@@ -1502,7 +1502,7 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`Dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.FloatTensor]`, *optional*):
             Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
             decoding.
@@ -1643,7 +1643,7 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`Dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.FloatTensor]`, *optional*):
             Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
             decoding.

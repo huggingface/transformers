@@ -435,7 +435,7 @@ class OnnxConfig(ABC):
             field: The structure to, potentially, be flattened
 
         Returns:
-            (Dict[str, Any]): Outputs with flattened structure and key mapping this new structure.
+            (dict[str, Any]): Outputs with flattened structure and key mapping this new structure.
 
         """
         from itertools import chain

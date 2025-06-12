@@ -111,7 +111,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to `(size["height"], size["width"])`. Can be
             overridden by `do_resize` in `preprocess`.
-        size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
+        size (`dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
             Size of the image after resizing. Can be overridden by `size` in `preprocess`.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
@@ -191,7 +191,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
@@ -252,7 +252,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Desired size of the output image after applying `resize`.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the `PILImageResampling` filters.

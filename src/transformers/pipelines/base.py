@@ -661,7 +661,7 @@ class CsvPipelineDataFormat(PipelineDataFormat):
         Save the provided data object with the representation for the current [`~pipelines.PipelineDataFormat`].
 
         Args:
-            data (`List[dict]`): The data to store.
+            data (`list[dict]`): The data to store.
         """
         with open(self.output_path, "w") as f:
             if len(data) > 0:
@@ -1109,7 +1109,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 A path to the directory where to saved. It will be created if it doesn't exist.
             safe_serialization (`str`):
                 Whether to save the model using `safetensors` or the traditional way for PyTorch or Tensorflow.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         use_auth_token = kwargs.pop("use_auth_token", None)
@@ -1231,7 +1231,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             Recursive on lists **only**.
 
         Return:
-            `Dict[str, torch.Tensor]`: The same as `inputs` but on the proper device.
+            `dict[str, torch.Tensor]`: The same as `inputs` but on the proper device.
         """
         return self._ensure_tensor_on_device(inputs, self.device)
 
@@ -1258,7 +1258,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         Check if the model class is in supported by the pipeline.
 
         Args:
-            supported_models (`List[str]` or `dict`):
+            supported_models (`list[str]` or `dict`):
                 The list of models supported by the pipeline, or a dictionary with model class values.
         """
         if not isinstance(supported_models, list):  # Create from a model mapping

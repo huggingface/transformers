@@ -256,7 +256,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                 broadcasted to multiple questions.
             question (`str`):
                 A question to ask of the document.
-            word_boxes (`List[str, Tuple[float, float, float, float]]`, *optional*):
+            word_boxes (`list[str, tuple[float, float, float, float]]`, *optional*):
                 A list of words and bounding boxes (normalized 0->1000). If you provide this optional input, then the
                 pipeline will use these words and boxes instead of running OCR on the image to derive them for models
                 that need them (e.g. LayoutLM). This allows you to reuse OCR'd results across many invocations of the

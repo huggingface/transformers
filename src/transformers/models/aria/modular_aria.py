@@ -175,11 +175,11 @@ class AriaTextConfig(LlamaConfig):
                 `beta_slow` (`float`, *optional*):
                     Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
                     ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
+                `short_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to short contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
+                `long_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to long contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
@@ -786,7 +786,7 @@ class AriaImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 The image to pad.
-            padding (`int` or `Tuple[int, int]` or `Iterable[Tuple[int, int]]`):
+            padding (`int` or `tuple[int, int]` or `Iterable[tuple[int, int]]`):
                 Padding to apply to the edges of the height, width axes. Can be one of three formats:
                 - `((before_height, after_height), (before_width, after_width))` unique pad widths for each axis.
                 - `((before, after),)` yields same before and after pad for height and width.
@@ -850,7 +850,7 @@ class AriaImageProcessor(BaseImageProcessor):
         Args:
             image (`np.array`):
                 The input image to be processed.
-            grid_pinpoints (List[Tuple[int, int]]):
+            grid_pinpoints (list[tuple[int, int]]):
                 A list of possible resolutions as tuples.
             patch_size (`int`):
                 Size of the patches to divide the image into.
@@ -862,7 +862,7 @@ class AriaImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image.
 
         Returns:
-            `List[np.array]`: A list of NumPy arrays containing the processed image patches.
+            `list[np.array]`: A list of NumPy arrays containing the processed image patches.
         """
         if not isinstance(grid_pinpoints, list):
             raise TypeError("grid_pinpoints must be a list of possible resolutions.")
@@ -970,7 +970,7 @@ class AriaProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s).
 
         Args:
-            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`):
+            text (`TextInput`, `PreTokenizedInput`, `list[TextInput]`, `list[PreTokenizedInput]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -1030,7 +1030,7 @@ class AriaProcessor(ProcessorMixin):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
         Args:
-            image_sizes (`List[List[int]]`, *optional*):
+            image_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
         Returns:
             `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
@@ -1392,7 +1392,7 @@ class AriaModel(LlavaModel):
                The tensors corresponding to the input images.
             pixel_mask (`torch.FloatTensor]`, *optional*):
                 The tensors corresponding to the input image mask.
-            vision_feature_layer (`Union[int, List[int]]`, *optional*):
+            vision_feature_layer (`Union[int, list[int]]`, *optional*):
                 The index of the layer to select the vision feature. If multiple indices are provided,
                 the vision feature of the corresponding indices will be concatenated to form the
                 vision features.

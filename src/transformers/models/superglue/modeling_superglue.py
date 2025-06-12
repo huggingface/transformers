@@ -36,13 +36,13 @@ def concat_pairs(tensor_tuple0: tuple[torch.Tensor], tensor_tuple1: tuple[torch.
     Concatenate two tuples of tensors pairwise
 
     Args:
-        tensor_tuple0 (`Tuple[torch.Tensor]`):
+        tensor_tuple0 (`tuple[torch.Tensor]`):
             Tuple of tensors.
-        tensor_tuple1 (`Tuple[torch.Tensor]`):
+        tensor_tuple1 (`tuple[torch.Tensor]`):
             Tuple of tensors.
 
     Returns:
-        (`Tuple[torch.Tensor]`): Tuple of concatenated tensors.
+        (`tuple[torch.Tensor]`): Tuple of concatenated tensors.
     """
     return tuple([torch.cat([tensor0, tensor1]) for tensor0, tensor1 in zip(tensor_tuple0, tensor_tuple1)])
 
@@ -166,11 +166,11 @@ class KeypointMatchingOutput(ModelOutput):
             Scores of predicted matches.
         keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
             Absolute (x, y) coordinates of predicted keypoints in a given image.
-        hidden_states (`Tuple[torch.FloatTensor, ...]`, *optional*):
+        hidden_states (`tuple[torch.FloatTensor, ...]`, *optional*):
             Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, 2, num_channels,
             num_keypoints)`, returned when `output_hidden_states=True` is passed or when
             `config.output_hidden_states=True`)
-        attentions (`Tuple[torch.FloatTensor, ...]`, *optional*):
+        attentions (`tuple[torch.FloatTensor, ...]`, *optional*):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, 2, num_heads, num_keypoints,
             num_keypoints)`, returned when `output_attentions=True` is passed or when `config.output_attentions=True`)
     """

@@ -81,13 +81,13 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         </Tip>
 
         Args:
-            processed_features ([`BatchFeature`], list of [`BatchFeature`], `Dict[str, List[float]]`, `Dict[str, List[List[float]]` or `List[Dict[str, List[float]]]`):
-                Processed inputs. Can represent one input ([`BatchFeature`] or `Dict[str, List[float]]`) or a batch of
-                input values / vectors (list of [`BatchFeature`], *Dict[str, List[List[float]]]* or *List[Dict[str,
-                List[float]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
+            processed_features ([`BatchFeature`], list of [`BatchFeature`], `dict[str, list[float]]`, `dict[str, list[list[float]]` or `list[dict[str, list[float]]]`):
+                Processed inputs. Can represent one input ([`BatchFeature`] or `dict[str, list[float]]`) or a batch of
+                input values / vectors (list of [`BatchFeature`], *dict[str, list[list[float]]]* or *list[dict[str,
+                list[float]]]*) so you can use this method during preprocessing as well as in a PyTorch Dataloader
                 collate function.
 
-                Instead of `List[float]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors),
+                Instead of `list[float]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors),
                 see the note above for the return type.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
@@ -235,9 +235,9 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Pad inputs (on left/right and up to predefined length or max length in the batch)
 
         Args:
-            processed_features (`Union[Dict[str, np.ndarray], BatchFeature]`):
-                Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch
-                of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
+            processed_features (`Union[dict[str, np.ndarray], BatchFeature]`):
+                Dictionary of input values (`np.ndarray[float]`) / input vectors (`list[np.ndarray[float]]`) or batch
+                of inputs values (`list[np.ndarray[int]]`) / input vectors (`list[np.ndarray[int]]`)
             max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see below)
             padding_strategy (`PaddingStrategy`, *optional*, default to `PaddingStrategy.DO_NOT_PAD`):
@@ -306,9 +306,9 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Truncate inputs to predefined length or max length in the batch
 
         Args:
-            processed_features(`Union[Dict[str, np.ndarray], BatchFeature]`):
-                Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch
-                of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
+            processed_features(`Union[dict[str, np.ndarray], BatchFeature]`):
+                Dictionary of input values (`np.ndarray[float]`) / input vectors (`list[np.ndarray[float]]`) or batch
+                of inputs values (`list[np.ndarray[int]]`) / input vectors (`list[np.ndarray[int]]`)
             max_length (`int`, *optional*):
                 maximum length of the returned list and optionally padding length (see below)
             pad_to_multiple_of (`int`, *optional*) :

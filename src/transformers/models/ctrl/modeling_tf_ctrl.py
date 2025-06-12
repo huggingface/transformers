@@ -522,7 +522,7 @@ CTRL_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        past (`List[tf.Tensor]` of length `config.n_layers`):
+        past (`list[tf.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model (see
             `past` output below). Can be used to speed up sequential decoding. The token ids which have their past
             given to this model should not be passed as input ids as they have already been computed.

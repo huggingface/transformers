@@ -155,7 +155,7 @@ class Gemma3Processor(ProcessorMixin):
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
-            image_sizes (`List[List[int]]`, *optional*):
+            image_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
 
         Returns:

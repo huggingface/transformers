@@ -1613,7 +1613,7 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
             soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
             conversion into a tensor of type `torch.FloatTensor`. See [`SEWDProcessor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

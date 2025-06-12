@@ -993,7 +993,7 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
         Arguments:
             attention_mask (`torch.Tensor`):
                 Mask with ones indicating tokens to attend to, zeros for tokens to ignore.
-            input_shape (`Tuple[int]`):
+            input_shape (`tuple[int]`):
                 The shape of the input to the model.
             device: (`torch.device`):
                 The device of the input to the model.
@@ -1539,7 +1539,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         ...     Decode the video with PyAV decoder.
         ...     Args:
         ...         container (`av.container.input.InputContainer`): PyAV container.
-        ...         indices (`List[int]`): List of frame indices to decode.
+        ...         indices (`list[int]`): List of frame indices to decode.
         ...     Returns:
         ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
         ...     '''

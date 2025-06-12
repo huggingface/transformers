@@ -110,9 +110,9 @@ class EsmTokenizer(PreTrainedTokenizer):
         special tokens using the tokenizer `prepare_for_model` or `encode_plus` methods.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of ids of the first sequence.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 List of ids of the second sequence.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.

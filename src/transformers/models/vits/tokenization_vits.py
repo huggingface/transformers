@@ -159,11 +159,11 @@ class VitsTokenizer(PreTrainedTokenizer):
                 Whether or not to apply punctuation and casing normalization to the text inputs. Typically, VITS is
                 trained on lower-cased and un-punctuated text. Hence, normalization is used to ensure that the input
                 text consists only of lower-case characters.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Keyword arguments to use for the tokenization.
 
         Returns:
-            `Tuple[str, Dict[str, Any]]`: The prepared text and the unused kwargs.
+            `tuple[str, dict[str, Any]]`: The prepared text and the unused kwargs.
         """
         normalize = normalize if normalize is not None else self.normalize
 

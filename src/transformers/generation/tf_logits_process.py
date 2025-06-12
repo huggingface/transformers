@@ -41,7 +41,7 @@ TF_LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
         cur_len (`int`):
             The current length of valid input sequence tokens. In the TF implementation, the input_ids' sequence length
             is the maximum length generate can produce, and we need to know which of its tokens are valid.
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             Additional logits processor specific kwargs.
 
     Return:
@@ -289,7 +289,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
     [`TFLogitsProcessor`] that enforces that specified sequences will never be sampled.
 
     Args:
-        bad_words_ids (`List[List[int]]`):
+        bad_words_ids (`list[list[int]]`):
             List of list of token ids that are not allowed to be generated. In order to get the tokens of the words
             that should not appear in the generated text, make sure to set `add_prefix_space=True` when initializing
             the tokenizer, and use `tokenizer(bad_words, add_special_tokens=False).input_ids`. The `add_prefix_space`

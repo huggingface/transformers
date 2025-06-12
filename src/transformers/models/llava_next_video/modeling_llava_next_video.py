@@ -246,7 +246,7 @@ def image_size_to_num_patches(image_size, grid_pinpoints, patch_size: int):
     Calculate the number of patches after the preprocessing for images of any resolution.
 
     Args:
-        image_size (`torch.LongTensor` or `np.ndarray` or `Tuple[int, int]`):
+        image_size (`torch.LongTensor` or `np.ndarray` or `tuple[int, int]`):
             The size of the input image in the format (height, width). ?
         grid_pinpoints (`List`):
             A list containing possible resolutions. Each item in the list should be a tuple or list
@@ -353,7 +353,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
         Reshape, unpad and then pack each image_feature into a single image_features tensor containing all visual vectors.
 
         Args:
-            image_features (`List[torch.Tensor]` of length num_images, each of shape `(num_patches, image_length, embed_dim)`)
+            image_features (`list[torch.Tensor]` of length num_images, each of shape `(num_patches, image_length, embed_dim)`)
                 List of image feature tensor, each contains all the visual feature of all patches.
             image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
                 Actual image size of each images (H, W).
@@ -363,7 +363,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
                 New line embedding vector.
         Returns:
             image_features (`torch.Tensor` of shape `(all_feat_len, embed_dim)`)
-            feature_lens (`List[int]`)
+            feature_lens (`list[int]`)
                 token length of each image in image_features
         """
         new_image_features = []
@@ -430,7 +430,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
                The tensors corresponding to the input images.
             image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
                 Actual image size of each images (H, W).
-            vision_feature_layer (`Union[int, List[int]]`, *optional*):
+            vision_feature_layer (`Union[int, list[int]]`, *optional*):
                 The index of the layer to select the vision feature. If multiple indices are provided,
                 the vision feature of the corresponding indices will be concatenated to form the
                 vision features.
@@ -438,7 +438,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
                 The feature selection strategy used to select the vision feature from the vision backbone.
                 Can be one of `"default"` or `"full"`
         Returns:
-            image_features (List[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
+            image_features (list[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
             and are of shape `(num_patches, image_length, embed_dim)`).
         """
         vision_feature_layer = (
@@ -620,7 +620,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
                The tensors corresponding to the input video.
-            vision_feature_layer (`Union[int, List[int]]`, *optiona;*):
+            vision_feature_layer (`Union[int, list[int]]`, *optiona;*):
                 The index of the layer to select the vision feature. If multiple indices are provided,
                 the vision feature of the corresponding indices will be concatenated to form the
                 vision features.
@@ -628,7 +628,7 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
                 The feature selection strategy used to select the vision feature from the vision backbone.
                 Can be one of `"default"` or `"full"`
         Returns:
-            video_features (List[`torch.Tensor`]): List of video feature tensor, each contains all the visual feature of all patches
+            video_features (list[`torch.Tensor`]): List of video feature tensor, each contains all the visual feature of all patches
             and are of shape `(num_videos, video_length, embed_dim)`).
         """
         vision_feature_layer = (
@@ -787,7 +787,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         ...     Decode the video with PyAV decoder.
         ...     Args:
         ...         container (`av.container.input.InputContainer`): PyAV container.
-        ...         indices (`List[int]`): List of frame indices to decode.
+        ...         indices (`list[int]`): List of frame indices to decode.
         ...     Returns:
         ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
         ...     '''

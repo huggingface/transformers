@@ -47,7 +47,7 @@ class RetrievAugLMMarginOutput(ModelOutput):
         doc_scores (`torch.FloatTensor` of shape `(batch_size, config.n_docs)`):
             Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
             `question_encoder_last_hidden_state`.
-        past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
             num_heads, sequence_length, embed_size_per_head)`).
 
@@ -138,7 +138,7 @@ class RetrievAugLMOutput(ModelOutput):
         doc_scores (`torch.FloatTensor` of shape `(batch_size, config.n_docs)`):
             Score between each retrieved document embeddings (see `retrieved_doc_embeds`) and
             `question_encoder_last_hidden_state`.
-        past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
             num_heads, sequence_length, embed_size_per_head)`).
 
@@ -930,7 +930,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 Number of beams for beam search. 1 means no beam search.
             n_docs (`int`, *optional*, defaults to `config.n_docs`)
                 Number of documents to retrieve and/or number of documents for which to generate an answer.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional kwargs will be passed to [`~generation.GenerationMixin.generate`].
 
         Return:
@@ -1440,7 +1440,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
                 priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
                 configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
                 default values, whose documentation should be checked to parameterize generation.
-            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
+            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], list[int]]`, *optional*):
                 If provided, this function constraints the beam search to allowed tokens only at each step. If not
                 provided no constraint is applied. This function takes 2 arguments `inputs_ids` and the batch ID
                 `batch_id`. It has to return a list with the allowed tokens for the next generation step conditioned on
@@ -1455,7 +1455,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
                 Custom stopping criteria that complement the default stopping criteria built from arguments and a
                 model's config. If a stopping criteria is passed that is already created with the arguments or a
                 model's config an error is thrown.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model.
 

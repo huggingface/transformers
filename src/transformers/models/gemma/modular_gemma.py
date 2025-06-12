@@ -202,7 +202,7 @@ class GemmaTokenizer(LlamaTokenizer, PreTrainedTokenizer):
         pad_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<pad>"`):
             A special token used to make arrays of tokens the same size for batching purpose. Will then be ignored by
             attention mechanisms or loss computation.
-        sp_model_kwargs (`Dict[str, Any]`, `Optional`, *optional*):
+        sp_model_kwargs (`dict[str, Any]`, `Optional`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
             SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
             to set:

@@ -101,11 +101,11 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
             other word. (RoBERTa tokenizer detect beginning of words by the preceding space).
         trim_offsets (`bool`, *optional*, defaults to `True`):
             Whether the post processing step should trim offsets to avoid including whitespaces.
-        cls_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
+        cls_token_box (`list[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
             The bounding box to use for the special [CLS] token.
-        sep_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
+        sep_token_box (`list[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
             The bounding box to use for the special [SEP] token.
-        pad_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
+        pad_token_box (`list[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
             The bounding box to use for the special [PAD] token.
         pad_token_label (`int`, *optional*, defaults to -100):
             The label to use for padding tokens. Defaults to -100, which is the `ignore_index` of PyTorch's
@@ -225,16 +225,16 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         sequences with word-level normalized bounding boxes and optional labels.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string, a list of strings
                 (words of a single example or questions of a batch of examples) or a list of list of strings (batch of
                 words).
-            text_pair (`List[str]`, `List[List[str]]`):
+            text_pair (`list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence should be a list of strings
                 (pretokenized string).
-            boxes (`List[List[int]]`, `List[List[List[int]]]`):
+            boxes (`list[list[int]]`, `list[list[list[int]]]`):
                 Word-level bounding boxes. Each bounding box should be normalized to be on a 0-1000 scale.
-            word_labels (`List[int]`, `List[List[int]]`, *optional*):
+            word_labels (`list[int]`, `list[list[int]]`, *optional*):
                 Word-level integer labels (for token classification tasks such as FUNSD, CORD).
         """
 
@@ -262,18 +262,18 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         if text_pair is not None:
             # in case text + text_pair are provided, text = questions, text_pair = words
             if not _is_valid_text_input(text):
-                raise ValueError("text input must of type `str` (single example) or `List[str]` (batch of examples). ")
+                raise ValueError("text input must of type `str` (single example) or `list[str]` (batch of examples). ")
             if not isinstance(text_pair, (list, tuple)):
                 raise ValueError(
-                    "Words must be of type `List[str]` (single pretokenized example), "
-                    "or `List[List[str]]` (batch of pretokenized examples)."
+                    "Words must be of type `list[str]` (single pretokenized example), "
+                    "or `list[list[str]]` (batch of pretokenized examples)."
                 )
         else:
             # in case only text is provided => must be words
             if not isinstance(text, (list, tuple)):
                 raise ValueError(
-                    "Words must be of type `List[str]` (single pretokenized example), "
-                    "or `List[List[str]]` (batch of pretokenized examples)."
+                    "Words must be of type `list[str]` (single pretokenized example), "
+                    "or `list[list[str]]` (batch of pretokenized examples)."
                 )
 
         if text_pair is not None:
@@ -449,9 +449,9 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         `__call__` should be used instead.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The first sequence to be encoded. This can be a string, a list of strings or a list of list of strings.
-            text_pair (`List[str]` or `List[int]`, *optional*):
+            text_pair (`list[str]` or `list[int]`, *optional*):
                 Optional second sequence to be encoded. This can be a list of strings (words of a single example) or a
                 list of list of strings (words of a batch of examples).
         """
@@ -538,9 +538,9 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         )
 
         # Convert encoding to dict
-        # `Tokens` has type: Tuple[
-        #                       List[Dict[str, List[List[int]]]] or List[Dict[str, 2D-Tensor]],
-        #                       List[EncodingFast]
+        # `Tokens` has type: tuple[
+        #                       list[dict[str, list[list[int]]]] or list[dict[str, 2D-Tensor]],
+        #                       list[EncodingFast]
         #                    ]
         # with nested dimensions corresponding to batch, overflows, sequence length
         tokens_and_encodings = [
@@ -736,7 +736,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
 
         Args:
             encoded_inputs:
-                Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
+                Dictionary of tokenized inputs (`list[int]`) or batch of tokenized inputs (`list[list[int]]`).
             max_length: maximum length of the returned list and optionally padding length (see below).
                 Will truncate by taking into account the special tokens.
             padding_strategy: PaddingStrategy to use for padding.
@@ -830,12 +830,12 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         Args:
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. RoBERTa does not:
         make use of token type ids, therefore a list of zeros is returned.
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
         Returns:
-            `List[int]`: List of zeros.
+            `list[int]`: List of zeros.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]

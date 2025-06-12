@@ -1488,7 +1488,7 @@ class TFLEDSeq2SeqModelOutput(ModelOutput):
 
             If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
             hidden_size)` is output.
-        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -1554,7 +1554,7 @@ class TFLEDSeq2SeqLMOutput(ModelOutput):
             Language modeling loss.
         logits (`tf.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -1695,7 +1695,7 @@ LED_INPUTS_DOCSTRING = r"""
         encoder_outputs (`tf.Tensor`, *optional*):
             hidden states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
             of shape `(batch_size, sequence_length, hidden_size)` is a sequence of
-        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
+        past_key_values (`tuple[tuple[tf.Tensor]]` of length `config.n_layers`)
             contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
@@ -2074,7 +2074,7 @@ class TFLEDDecoder(keras.layers.Layer):
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+            past_key_values (`tuple[tuple[tf.Tensor]]` of length `config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
                 Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
                 decoding. If `past_key_values` are used, the user can optionally input only the last
                 `decoder_input_ids` (those that don't have their past key value states given to this model) of shape

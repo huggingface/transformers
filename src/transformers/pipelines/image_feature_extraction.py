@@ -95,7 +95,7 @@ class ImageFeatureExtractionPipeline(Pipeline):
         Extract the features of the input(s).
 
         Args:
-            images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            images (`str`, `list[str]`, `PIL.Image` or `list[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing a http link pointing to an image

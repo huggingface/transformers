@@ -186,7 +186,7 @@ class TextToAudioPipeline(Pipeline):
         Generates speech/audio from the inputs. See the [`TextToAudioPipeline`] documentation for more information.
 
         Args:
-            text_inputs (`str` or `List[str]`):
+            text_inputs (`str` or `list[str]`):
                 The text(s) to generate.
             forward_params (`dict`, *optional*):
                 Parameters passed to the model generation/forward method. `forward_params` are always passed to the

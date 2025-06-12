@@ -220,7 +220,7 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
             remove_index (`int`) An index id to subtract from `token_indices` before chunking
 
         Returns:
-            `List[Tuple[int, int]]`: A list of tuples, each representing the start (inclusive)
+            `list[tuple[int, int]]`: A list of tuples, each representing the start (inclusive)
                                 and end (exclusive) indices of a chunk in `token_indices`.
         """
 
@@ -851,7 +851,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         r"""
         input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
             Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
-            obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
+            obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
             `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
             `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
             and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
@@ -1604,7 +1604,7 @@ class Qwen2_5OmniDecoderLayer(GradientCheckpointingLayer):
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence.
-            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
             kwargs (`dict`, *optional*):
@@ -1944,7 +1944,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, feature_sequence_length)`):
             Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
+            loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via
             the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
             [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
             tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]

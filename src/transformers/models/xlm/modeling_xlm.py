@@ -808,7 +808,7 @@ class XLMModel(XLMPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`Dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.FloatTensor]`, *optional*):
             Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
             decoding.
@@ -1049,7 +1049,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`Dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.FloatTensor]`, *optional*):
             Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
             decoding.
@@ -1141,7 +1141,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`Dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.FloatTensor]`, *optional*):
             Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
             decoding.
@@ -1255,7 +1255,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`Dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.FloatTensor]`, *optional*):
             Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
             decoding.
@@ -1362,7 +1362,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`Dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.FloatTensor]`, *optional*):
             Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
             decoding.
@@ -1483,7 +1483,7 @@ class XLMForTokenClassification(XLMPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`Dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.FloatTensor]`, *optional*):
             Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
             decoding.
@@ -1594,7 +1594,7 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`Dict[str, torch.FloatTensor]`, *optional*):
+        cache (`dict[str, torch.FloatTensor]`, *optional*):
             Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
             decoding.

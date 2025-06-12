@@ -94,7 +94,7 @@ BLOOM_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        past_key_values (`Dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
+        past_key_values (`dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
             Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
             auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
         output_attentions (`bool`, *optional*):

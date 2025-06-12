@@ -250,7 +250,7 @@ def get_image_processor_config(
         resume_download:
             Deprecated and ignored. All downloads are now resumed by default when possible.
             Will be removed in v5 of Transformers.
-        proxies (`Dict[str, str]`, *optional*):
+        proxies (`dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         token (`str` or *bool*, *optional*):
@@ -375,7 +375,7 @@ class AutoImageProcessor:
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
-            proxies (`Dict[str, str]`, *optional*):
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             token (`str` or *bool*, *optional*):
@@ -400,7 +400,7 @@ class AutoImageProcessor:
                 execute code present on the Hub on your local machine.
             image_processor_filename (`str`, *optional*, defaults to `"config.json"`):
                 The name of the file in the model directory to use for the image processor config.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are image processor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* image processor attributes is
                 controlled by the `return_unused_kwargs` keyword parameter.

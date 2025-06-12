@@ -111,7 +111,7 @@ class FlaxBaseModelOutputWithPast(ModelOutput):
     Args:
         last_hidden_state (`jnp.ndarray` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        past_key_values (`Dict[str, jnp.ndarray]`):
+        past_key_values (`dict[str, jnp.ndarray]`):
             Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
             auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
         hidden_states (`tuple(jnp.ndarray)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):

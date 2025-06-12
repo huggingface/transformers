@@ -1415,7 +1415,7 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
         Computes the last hidden states.
 
         Parameters:
-            hidden_states (`Tuple[Tuple[torch.Tensor]]`):
+            hidden_states (`tuple[tuple[torch.Tensor]]`):
                 The generated hidden states. Tuple (one element for each generated token) of tuples (one element for
                 each layer of the decoder) of torch.FloatTensor of shape (batch_size*num_beams*num_return_sequences,
                 generated_length, hidden_size).
@@ -2699,7 +2699,7 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel, GenerationMixin):
                 Custom stopping criteria that complement the default stopping criteria built from arguments and a
                 generation config. If a stopping criteria is passed that is already created with the arguments or a
                 generation config an error is thrown. This feature is intended for advanced users.
-            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
+            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], list[int]]`, *optional*):
                 If provided, this function constraints the beam search to allowed tokens only at each step. If not
                 provided no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
                 `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
@@ -2709,7 +2709,7 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel, GenerationMixin):
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed to avoid deadlocking with
                 `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model.
 
@@ -2971,7 +2971,7 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel, GenerationMixin):
                 Custom stopping criteria that complement the default stopping criteria built from arguments and a
                 generation config. If a stopping criteria is passed that is already created with the arguments or a
                 generation config an error is thrown. This feature is intended for advanced users.
-            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
+            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], list[int]]`, *optional*):
                 If provided, this function constraints the beam search to allowed tokens only at each step. If not
                 provided no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
                 `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
@@ -2981,7 +2981,7 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel, GenerationMixin):
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed to avoid deadlocking with
                 `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model.
 
@@ -3262,7 +3262,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
 
 
         Returns:
-            `Union[SeamlessM4TGenerationOutput, Tuple[Tensor]]`:
+            `Union[SeamlessM4TGenerationOutput, tuple[Tensor]]`:
             - If `return_intermediate_token_ids`, returns [`SeamlessM4TGenerationOutput`].
             - If not `return_intermediate_token_ids`, returns a tuple composed of waveforms of shape `(batch_size,
               sequence_length)` and `waveform_lengths` which gives the length of each sample.
@@ -3599,7 +3599,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel, GenerationMixin):
 
 
         Returns:
-            `Union[SeamlessM4TGenerationOutput, Tuple[Tensor]]`:
+            `Union[SeamlessM4TGenerationOutput, tuple[Tensor]]`:
             - If `return_intermediate_token_ids`, returns [`SeamlessM4TGenerationOutput`].
             - If not `return_intermediate_token_ids`, returns a tuple composed of waveforms of shape `(batch_size,
               sequence_length)` and `waveform_lengths` which gives the length of each sample.
@@ -4017,7 +4017,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel, GenerationMixin):
                     other.
 
         Returns:
-            `Union[SeamlessM4TGenerationOutput, Tuple[Tensor], ModelOutput]`:
+            `Union[SeamlessM4TGenerationOutput, tuple[Tensor], ModelOutput]`:
             - If `generate_speech` and `return_intermediate_token_ids`, returns [`SeamlessM4TGenerationOutput`].
             - If `generate_speech` and not `return_intermediate_token_ids`, returns a tuple composed of waveforms of
               shape `(batch_size, sequence_length)` and `waveform_lengths` which gives the length of each sample.

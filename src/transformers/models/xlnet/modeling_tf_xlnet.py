@@ -846,7 +846,7 @@ class TFXLNetModelOutput(ModelOutput):
 
             `num_predict` corresponds to `target_mapping.shape[1]`. If `target_mapping` is `None`, then `num_predict`
             corresponds to `sequence_length`.
-        mems (`List[tf.Tensor]` of length `config.n_layers`):
+        mems (`list[tf.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states. Can be used (see `mems` input) to speed up sequential decoding. The
             token ids which have their past given to this model should not be passed as `input_ids` as they have
             already been computed.
@@ -882,7 +882,7 @@ class TFXLNetLMHeadModelOutput(ModelOutput):
 
             `num_predict` corresponds to `target_mapping.shape[1]`. If `target_mapping` is `None`, then `num_predict`
             corresponds to `sequence_length`.
-        mems (`List[tf.Tensor]` of length `config.n_layers`):
+        mems (`list[tf.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states. Can be used (see `mems` input) to speed up sequential decoding. The
             token ids which have their past given to this model should not be passed as `input_ids` as they have
             already been computed.
@@ -916,7 +916,7 @@ class TFXLNetForSequenceClassificationOutput(ModelOutput):
             Classification (or regression if config.num_labels==1) loss.
         logits (`tf.Tensor` of shape `(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        mems (`List[tf.Tensor]` of length `config.n_layers`):
+        mems (`list[tf.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states. Can be used (see `mems` input) to speed up sequential decoding. The
             token ids which have their past given to this model should not be passed as `input_ids` as they have
             already been computed.
@@ -950,7 +950,7 @@ class TFXLNetForTokenClassificationOutput(ModelOutput):
             Classification loss.
         logits (`tf.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`):
             Classification scores (before SoftMax).
-        mems (`List[tf.Tensor]` of length `config.n_layers`):
+        mems (`list[tf.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states. Can be used (see `mems` input) to speed up sequential decoding. The
             token ids which have their past given to this model should not be passed as `input_ids` as they have
             already been computed.
@@ -986,7 +986,7 @@ class TFXLNetForMultipleChoiceOutput(ModelOutput):
             *num_choices* is the second dimension of the input tensors. (see *input_ids* above).
 
             Classification scores (before SoftMax).
-        mems (`List[tf.Tensor]` of length `config.n_layers`):
+        mems (`list[tf.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states. Can be used (see `mems` input) to speed up sequential decoding. The
             token ids which have their past given to this model should not be passed as `input_ids` as they have
             already been computed.
@@ -1022,7 +1022,7 @@ class TFXLNetForQuestionAnsweringSimpleOutput(ModelOutput):
             Span-start scores (before SoftMax).
         end_logits (`tf.Tensor` of shape `(batch_size, sequence_length,)`):
             Span-end scores (before SoftMax).
-        mems (`List[tf.Tensor]` of length `config.n_layers`):
+        mems (`list[tf.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states. Can be used (see `mems` input) to speed up sequential decoding. The
             token ids which have their past given to this model should not be passed as `input_ids` as they have
             already been computed.
@@ -1105,7 +1105,7 @@ XLNET_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        mems (`List[torch.FloatTensor]` of length `config.n_layers`):
+        mems (`list[torch.FloatTensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (see `mems` output below) . Can be used to speed up sequential
             decoding. The token ids which have their past given to this model should not be passed as `input_ids` as
             they have already been computed.

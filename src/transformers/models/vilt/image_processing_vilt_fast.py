@@ -149,7 +149,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
 
         Args:
             images (`torch.Tensor`): Image or batch of images to resize.
-            size (`Dict[str, int]`): Size dictionary with shortest_edge key.
+            size (`dict[str, int]`): Size dictionary with shortest_edge key.
             interpolation (`F.InterpolationMode`, *optional*): Interpolation method to use.
             size_divisor (`int`, *optional*): Value to ensure height/width are divisible by.
 

@@ -39,49 +39,49 @@ class HGNetV2Config(BackboneConfigMixin, PretrainedConfig):
             The number of input channels.
         embedding_size (`int`, *optional*, defaults to 64):
             Dimensionality (hidden size) for the embedding layer.
-        depths (`List[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
+        depths (`list[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
             Depth (number of layers) for each stage.
-        hidden_sizes (`List[int]`, *optional*, defaults to `[256, 512, 1024, 2048]`):
+        hidden_sizes (`list[int]`, *optional*, defaults to `[256, 512, 1024, 2048]`):
             Dimensionality (hidden size) at each stage.
         hidden_act (`str`, *optional*, defaults to `"relu"`):
             The non-linear activation function in each block. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"`
             are supported.
-        out_features (`List[str]`, *optional*):
+        out_features (`list[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
             corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
             same order as defined in the `stage_names` attribute.
-        out_indices (`List[int]`, *optional*):
+        out_indices (`list[int]`, *optional*):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
             If unset and `out_features` is unset, will default to the last stage. Must be in the
             same order as defined in the `stage_names` attribute.
-        stem_channels (`List[int]`, *optional*, defaults to `[3, 32, 48]`):
+        stem_channels (`list[int]`, *optional*, defaults to `[3, 32, 48]`):
             Channel dimensions for the stem layers:
             - First number (3) is input image channels
             - Second number (32) is intermediate stem channels
             - Third number (48) is output stem channels
-        stage_in_channels (`List[int]`, *optional*, defaults to `[48, 128, 512, 1024]`):
+        stage_in_channels (`list[int]`, *optional*, defaults to `[48, 128, 512, 1024]`):
             Input channel dimensions for each stage of the backbone.
             This defines how many channels the input to each stage will have.
-        stage_mid_channels (`List[int]`, *optional*, defaults to `[48, 96, 192, 384]`):
+        stage_mid_channels (`list[int]`, *optional*, defaults to `[48, 96, 192, 384]`):
             Mid-channel dimensions for each stage of the backbone.
             This defines the number of channels used in the intermediate layers of each stage.
-        stage_out_channels (`List[int]`, *optional*, defaults to `[128, 512, 1024, 2048]`):
+        stage_out_channels (`list[int]`, *optional*, defaults to `[128, 512, 1024, 2048]`):
             Output channel dimensions for each stage of the backbone.
             This defines how many channels the output of each stage will have.
-        stage_num_blocks (`List[int]`, *optional*, defaults to `[1, 1, 3, 1]`):
+        stage_num_blocks (`list[int]`, *optional*, defaults to `[1, 1, 3, 1]`):
             Number of blocks to be used in each stage of the backbone.
             This controls the depth of each stage by specifying how many convolutional blocks to stack.
-        stage_downsample (`List[bool]`, *optional*, defaults to `[False, True, True, True]`):
+        stage_downsample (`list[bool]`, *optional*, defaults to `[False, True, True, True]`):
             Indicates whether to downsample the feature maps at each stage.
             If `True`, the spatial dimensions of the feature maps will be reduced.
-        stage_light_block (`List[bool]`, *optional*, defaults to `[False, False, True, True]`):
+        stage_light_block (`list[bool]`, *optional*, defaults to `[False, False, True, True]`):
             Indicates whether to use light blocks in each stage.
             Light blocks are a variant of convolutional blocks that may have fewer parameters.
-        stage_kernel_size (`List[int]`, *optional*, defaults to `[3, 3, 5, 5]`):
+        stage_kernel_size (`list[int]`, *optional*, defaults to `[3, 3, 5, 5]`):
             Kernel sizes for the convolutional layers in each stage.
-        stage_numb_of_layers (`List[int]`, *optional*, defaults to `[6, 6, 6, 6]`):
+        stage_numb_of_layers (`list[int]`, *optional*, defaults to `[6, 6, 6, 6]`):
             Number of layers to be used in each block of the stage.
         use_learnable_affine_block (`bool`, *optional*, defaults to `False`):
             Whether to use Learnable Affine Blocks (LAB) in the network.

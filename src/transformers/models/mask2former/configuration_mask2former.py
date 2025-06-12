@@ -105,7 +105,7 @@ class Mask2FormerConfig(PretrainedConfig):
         use_auxiliary_loss (`boolean``, *optional*, defaults to `True`):
             If `True` [`Mask2FormerForUniversalSegmentationOutput`] will contain the auxiliary losses computed using
             the logits from each decoder's stage.
-        feature_strides (`List[int]`, *optional*, defaults to `[4, 8, 16, 32]`):
+        feature_strides (`list[int]`, *optional*, defaults to `[4, 8, 16, 32]`):
             Feature strides corresponding to features generated from backbone network.
         output_auxiliary_logits (`bool`, *optional*):
             Should the model output its `auxiliary_logits` or not.

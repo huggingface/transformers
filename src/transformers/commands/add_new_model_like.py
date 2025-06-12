@@ -156,7 +156,7 @@ def parse_module_content(content: str) -> list[str]:
         content (`str`): The content to parse
 
     Returns:
-        `List[str]`: The list of objects defined in the module.
+        `list[str]`: The list of objects defined in the module.
     """
     objects = []
     current_object = []
@@ -414,10 +414,10 @@ def simplify_replacements(replacements):
     "BertConfig->BertNewConfig" is implied by "Bert->BertNew" so not needed.
 
     Args:
-        replacements (`List[Tuple[str, str]]`): List of patterns (old, new)
+        replacements (`list[tuple[str, str]]`): List of patterns (old, new)
 
     Returns:
-        `List[Tuple[str, str]]`: The list of patterns simplified.
+        `list[tuple[str, str]]`: The list of patterns simplified.
     """
     if len(replacements) <= 1:
         # Nothing to simplify
@@ -591,11 +591,11 @@ def filter_framework_files(
     Filter a list of files to only keep the ones corresponding to a list of frameworks.
 
     Args:
-        files (`List[Union[str, os.PathLike]]`): The list of files to filter.
-        frameworks (`List[str]`, *optional*): The list of allowed frameworks.
+        files (`list[Union[str, os.PathLike]]`): The list of files to filter.
+        frameworks (`list[str]`, *optional*): The list of allowed frameworks.
 
     Returns:
-        `List[Union[str, os.PathLike]]`: The list of filtered files.
+        `list[Union[str, os.PathLike]]`: The list of filtered files.
     """
     if frameworks is None:
         frameworks = get_default_frameworks()
@@ -623,11 +623,11 @@ def get_model_files(model_type: str, frameworks: Optional[list[str]] = None) -> 
 
     Args:
         model_type (`str`): A valid model type (like "bert" or "gpt2")
-        frameworks (`List[str]`, *optional*):
+        frameworks (`list[str]`, *optional*):
             If passed, will only keep the model files corresponding to the passed frameworks.
 
     Returns:
-        `Dict[str, Union[Path, List[Path]]]`: A dictionary with the following keys:
+        `dict[str, Union[Path, list[Path]]]`: A dictionary with the following keys:
         - **doc_file** -- The documentation file for the model.
         - **model_files** -- All the files in the model module.
         - **test_files** -- The test files for the model.
@@ -670,7 +670,7 @@ def find_base_model_checkpoint(
 
     Args:
         model_type (`str`): A valid model type (like "bert" or "gpt2")
-        model_files (`Dict[str, Union[Path, List[Path]]`, *optional*):
+        model_files (`dict[str, Union[Path, list[Path]]`, *optional*):
             The files associated to `model_type`. Can be passed to speed up the function, otherwise will be computed.
 
     Returns:
@@ -719,12 +719,12 @@ def retrieve_model_classes(model_type: str, frameworks: Optional[list[str]] = No
 
     Args:
         model_type (`str`): A valid model type (like "bert" or "gpt2")
-        frameworks (`List[str]`, *optional*):
+        frameworks (`list[str]`, *optional*):
             The frameworks to look for. Will default to `["pt", "tf", "flax"]`, passing a smaller list will restrict
             the classes returned.
 
     Returns:
-        `Dict[str, List[str]]`: A dictionary with one key per framework and the list of model classes associated to
+        `dict[str, list[str]]`: A dictionary with one key per framework and the list of model classes associated to
         that framework as values.
     """
     if frameworks is None:
@@ -760,14 +760,14 @@ def retrieve_info_for_model(model_type, frameworks: Optional[list[str]] = None):
 
     Args:
         model_type (`str`): A valid model type (like "bert" or "gpt2")
-        frameworks (`List[str]`, *optional*):
+        frameworks (`list[str]`, *optional*):
             If passed, will only keep the info corresponding to the passed frameworks.
 
     Returns:
         `Dict`: A dictionary with the following keys:
-        - **frameworks** (`List[str]`): The list of frameworks that back this model type.
-        - **model_classes** (`Dict[str, List[str]]`): The model classes implemented for that model type.
-        - **model_files** (`Dict[str, Union[Path, List[Path]]]`): The files associated with that model type.
+        - **frameworks** (`list[str]`): The list of frameworks that back this model type.
+        - **model_classes** (`dict[str, list[str]]`): The model classes implemented for that model type.
+        - **model_files** (`dict[str, Union[Path, list[Path]]]`): The files associated with that model type.
         - **model_patterns** (`ModelPatterns`): The various patterns for the model.
     """
     if model_type not in auto_module.MODEL_NAMES_MAPPING:
@@ -841,7 +841,7 @@ def clean_frameworks_in_init(
 
     Args:
         init_file (`str` or `os.PathLike`): The path to the init to treat.
-        frameworks (`List[str]`, *optional*):
+        frameworks (`list[str]`, *optional*):
            If passed, this will remove all imports that are subject to a framework not in frameworks
         keep_processing (`bool`, *optional*, defaults to `True`):
             Whether or not to keep the preprocessing (tokenizer, feature extractor, image processor, processor) imports
@@ -923,7 +923,7 @@ def add_model_to_main_init(
     Args:
         old_model_patterns (`ModelPatterns`): The patterns for the old model.
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
-        frameworks (`List[str]`, *optional*):
+        frameworks (`list[str]`, *optional*):
             If specified, only the models implemented in those frameworks will be added.
         with_processing (`bool`, *optional*, defaults to `True`):
             Whether the tokenizer/feature extractor/processor of the model should also be added to the init or not.
@@ -1076,7 +1076,7 @@ def add_model_to_auto_classes(
     Args:
         old_model_patterns (`ModelPatterns`): The patterns for the old model.
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
-        model_classes (`Dict[str, List[str]]`): A dictionary framework to list of model classes implemented.
+        model_classes (`dict[str, list[str]]`): A dictionary framework to list of model classes implemented.
     """
     for filename in AUTO_CLASSES_PATTERNS:
         # Extend patterns with all model classes if necessary
@@ -1180,7 +1180,7 @@ def duplicate_doc_file(
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
         dest_file (`str` or `os.PathLike`, *optional*): Path to the new doc file.
             Will default to the a file named `{new_model_patterns.model_type}.md` in the same folder as `module_file`.
-        frameworks (`List[str]`, *optional*):
+        frameworks (`list[str]`, *optional*):
             If passed, will only keep the model classes corresponding to this list of frameworks in the new doc file.
     """
     with open(doc_file, "r", encoding="utf-8") as f:
@@ -1332,7 +1332,7 @@ def create_new_model_like(
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
         add_copied_from (`bool`, *optional*, defaults to `True`):
             Whether or not to add "Copied from" statements to all classes in the new model modeling files.
-        frameworks (`List[str]`, *optional*):
+        frameworks (`list[str]`, *optional*):
             If passed, will limit the duplicate to the frameworks specified.
         old_checkpoint (`str`, *optional*):
             The name of the base checkpoint for the old model. Should be passed along when it can't be automatically

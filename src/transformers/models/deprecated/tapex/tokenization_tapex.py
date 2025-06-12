@@ -325,12 +325,12 @@ class TapexTokenizer(PreTrainedTokenizer):
         - pair of sequences: `<s> A </s></s> B </s>`
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
         Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
@@ -345,14 +345,14 @@ class TapexTokenizer(PreTrainedTokenizer):
         Args:
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
         Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
@@ -370,12 +370,12 @@ class TapexTokenizer(PreTrainedTokenizer):
         Args:
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. TAPEX does not:
         make use of token type ids, therefore a list of zeros is returned.
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
         Returns:
-            `List[int]`: List of zeros.
+            `list[int]`: List of zeros.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -518,12 +518,12 @@ class TapexTokenizer(PreTrainedTokenizer):
         Main method to tokenize and prepare for the model one or several table-sequence pair(s).
 
         Args:
-            table (`pd.DataFrame`, `List[pd.DataFrame]`):
+            table (`pd.DataFrame`, `list[pd.DataFrame]`):
                 Table(s) containing tabular data.
-            query (`str` or `List[str]`, *optional*):
+            query (`str` or `list[str]`, *optional*):
                 Sentence or batch of sentences related to one or more table(s) to be encoded. Note that the number of
                 sentences must match the number of tables.
-            answer (`str` or `List[str]`, *optional*):
+            answer (`str` or `list[str]`, *optional*):
                 Optionally, the corresponding answer to the questions as supervision.
         """
 
@@ -610,10 +610,10 @@ class TapexTokenizer(PreTrainedTokenizer):
 
         if not valid_table:
             raise ValueError(
-                "table input must of type `pd.DataFrame` (single example), `List[pd.DataFrame]` (batch of examples). "
+                "table input must of type `pd.DataFrame` (single example), `list[pd.DataFrame]` (batch of examples). "
             )
         if not valid_query:
-            raise ValueError("query input must of type `str` (single example), `List[str]` (batch of examples). ")
+            raise ValueError("query input must of type `str` (single example), `list[str]` (batch of examples). ")
         is_batched = isinstance(table, (list, tuple)) or isinstance(query, (list, tuple))
 
         if is_batched:
@@ -1006,7 +1006,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         The method tokenizes and prepares the answer label for the model.
 
         Args:
-            answer (`str` or `List[str]`):
+            answer (`str` or `list[str]`):
                 Corresponding answer supervision to the queries for training the model.
         """
         is_batched = isinstance(answer, (list, tuple))
@@ -1070,7 +1070,7 @@ class TapexTokenizer(PreTrainedTokenizer):
         Prepare answer strings for the model.
 
         Args:
-            answer `List[str]`:
+            answer `list[str]`:
                 Corresponding answer supervision to the queries for training the model.
         """
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'

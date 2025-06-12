@@ -101,7 +101,7 @@ def make_pixel_mask(
     Args:
         image (`np.ndarray`):
             Image to make the pixel mask for.
-        output_size (`Tuple[int, int]`):
+        output_size (`tuple[int, int]`):
             Output size of the mask.
     """
     input_height, input_width = get_image_size(image, channel_dim=input_data_format)
@@ -142,7 +142,7 @@ def convert_segmentation_to_rle(segmentation):
         segmentation (`torch.Tensor` or `numpy.array`):
             A segmentation map of shape `(height, width)` where each value denotes a segment or class id.
     Returns:
-        `List[List]`: A list of lists, where each list is the run-length encoding of a segment / class id.
+        `list[List]`: A list of lists, where each list is the run-length encoding of a segment / class id.
     """
     segment_ids = torch.unique(segmentation)
 
@@ -173,7 +173,7 @@ def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_
     Raises:
         `ValueError`: Raised when the first dimension doesn't match in all input tensors.
     Returns:
-        `Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the region
+        `tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the region
         < `object_mask_threshold`.
     """
     if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
@@ -319,7 +319,7 @@ def get_oneformer_resize_output_image_size(
     Args:
         image (`np.ndarray`):
             The input image.
-        size (`int` or `Tuple[int, int]` or `List[int]` or `Tuple[int]`):
+        size (`int` or `tuple[int, int]` or `list[int]` or `tuple[int]`):
             The size of the output image.
         max_size (`int`, *optional*):
             The maximum size of the output image.
@@ -329,7 +329,7 @@ def get_oneformer_resize_output_image_size(
             The channel dimension format of the input image. If unset, will use the inferred format from the input.
 
     Returns:
-        `Tuple[int, int]`: The output size.
+        `tuple[int, int]`: The output size.
     """
     output_size = get_resize_output_image_size(
         input_image=image,
@@ -979,11 +979,11 @@ class OneFormerImageProcessor(BaseImageProcessor):
         each mask.
 
         Args:
-            pixel_values_list (`List[ImageInput]`):
+            pixel_values_list (`list[ImageInput]`):
                 List of images (pixel values) to be padded. Each image should be a tensor of shape `(channels, height,
                 width)`.
 
-            task_inputs (`List[str]`):
+            task_inputs (`list[str]`):
                 List of task values.
 
             segmentation_maps (`ImageInput`, *optional*):
@@ -997,7 +997,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
 
-            instance_id_to_semantic_id (`List[Dict[int, int]]` or `Dict[int, int]`, *optional*):
+            instance_id_to_semantic_id (`list[dict[int, int]]` or `dict[int, int]`, *optional*):
                 A mapping between object instance ids and class ids. If passed, `segmentation_maps` is treated as an
                 instance segmentation map where each pixel represents an instance id. Can be provided as a single
                 dictionary with a global/dataset-level mapping or as a list of dictionaries (one per image), to map
@@ -1103,11 +1103,11 @@ class OneFormerImageProcessor(BaseImageProcessor):
         Args:
             outputs ([`MaskFormerForInstanceSegmentation`]):
                 Raw outputs of the model.
-            target_sizes (`List[Tuple[int, int]]`, *optional*):
-                List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
+            target_sizes (`list[tuple[int, int]]`, *optional*):
+                List of length (batch_size), where each list item (`tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction. If left to None, predictions will not be resized.
         Returns:
-            `List[torch.Tensor]`:
+            `list[torch.Tensor]`:
                 A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
                 corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
                 `torch.Tensor` correspond to a semantic class id.
@@ -1173,15 +1173,15 @@ class OneFormerImageProcessor(BaseImageProcessor):
             overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
                 The overlap mask area threshold to merge or discard small disconnected parts within each binary
                 instance mask.
-            target_sizes (`List[Tuple]`, *optional*):
-                List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
+            target_sizes (`list[Tuple]`, *optional*):
+                List of length (batch_size), where each list item (`tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction in batch. If left to None, predictions will not be
                 resized.
             return_coco_annotation (`bool`, *optional)*, defaults to `False`):
                 Whether to return predictions in COCO format.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
+            `list[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
             - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id`, set
               to `None` if no mask if found above `threshold`. If `target_sizes` is specified, segmentation is resized
               to the corresponding `target_sizes` entry.
@@ -1290,13 +1290,13 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 The labels in this state will have all their instances be fused together. For instance we could say
                 there can only be one sky in an image, but several persons, so the label ID for sky would be in that
                 set, but not the one for person.
-            target_sizes (`List[Tuple]`, *optional*):
-                List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
+            target_sizes (`list[Tuple]`, *optional*):
+                List of length (batch_size), where each list item (`tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction in batch. If left to None, predictions will not be
                 resized.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
+            `list[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
             - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id`, set
               to `None` if no mask if found above `threshold`. If `target_sizes` is specified, segmentation is resized
               to the corresponding `target_sizes` entry.

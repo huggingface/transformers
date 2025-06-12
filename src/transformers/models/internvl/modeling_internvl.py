@@ -640,7 +640,7 @@ class InternVLModel(InternVLPreTrainedModel):
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
                The tensors corresponding to the input images.
-            vision_feature_layer (`int` or `List[int]`):
+            vision_feature_layer (`int` or `list[int]`):
                 Layer index or list of layer indices to extract features from.
         Returns:
             vision_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`.

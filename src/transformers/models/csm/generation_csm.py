@@ -400,14 +400,14 @@ class CsmGenerationMixin(GenerationMixin):
                 through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
             output_audio (`bool`, *optional*):
                 Whether to return the generated audio.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. Depth decoder specific kwargs should be prefixed with *depth_decoder_*.
 
         Return:
-            [`CsmGenerateOutput`] or `torch.LongTensor` or `List[torch.FloatTensor]`: A [`CsmGenerateOutput`]
+            [`CsmGenerateOutput`] or `torch.LongTensor` or `list[torch.FloatTensor]`: A [`CsmGenerateOutput`]
             (if `return_dict_in_generate=True` or when `config.return_dict_in_generate=True`) or a `torch.LongTensor` when `output_audio=False`
-            or a `List[torch.FloatTensor]` otherwise.
+            or a `list[torch.FloatTensor]` otherwise.
 
         Example:
 

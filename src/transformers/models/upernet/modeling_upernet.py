@@ -84,7 +84,7 @@ class UperNetPyramidPoolingModule(nn.Module):
     Pyramid Pooling Module (PPM) used in PSPNet.
 
     Args:
-        pool_scales (`Tuple[int]`):
+        pool_scales (`tuple[int]`):
             Pooling scales used in Pooling Pyramid Module.
         in_channels (`int`):
             Input channels.

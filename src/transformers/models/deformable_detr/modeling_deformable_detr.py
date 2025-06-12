@@ -1480,7 +1480,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         Args:
             enc_output (Tensor[batch_size, sequence_length, hidden_size]): Output of the encoder.
             padding_mask (Tensor[batch_size, sequence_length]): Padding mask for `enc_output`.
-            spatial_shapes (List[Tuple[int, int]]): Spatial shapes of the feature maps.
+            spatial_shapes (list[tuple[int, int]]): Spatial shapes of the feature maps.
 
         Returns:
             `tuple(torch.FloatTensor)`: A tuple of feature map and bbox prediction.
@@ -1836,7 +1836,7 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
             Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
             embedded representation.
-        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
+        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
             respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes

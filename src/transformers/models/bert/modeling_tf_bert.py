@@ -1098,7 +1098,7 @@ BERT_START_DOCSTRING = r"""
 
 BERT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
+        input_ids (`np.ndarray`, `tf.Tensor`, `list[tf.Tensor]` ``dict[str, tf.Tensor]` or `dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
@@ -1197,7 +1197,7 @@ class TFBertModel(TFBertPreTrainedModel):
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
+        past_key_values (`tuple[tuple[tf.Tensor]]` of length `config.n_layers`)
             contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
@@ -1291,7 +1291,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
 
             - 0 indicates sequence B is a continuation of sequence A,
             - 1 indicates sequence B is a random sequence.
-        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
+        kwargs (`dict[str, any]`, *optional*, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
 
         Return:
@@ -1529,7 +1529,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
+        past_key_values (`tuple[tuple[tf.Tensor]]` of length `config.n_layers`)
             contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all

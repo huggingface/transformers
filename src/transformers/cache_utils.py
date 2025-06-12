@@ -41,7 +41,7 @@ def _static_cache_update(
                                                        If None, the entire cache is overwritten (prefill).
 
     Returns:
-        Tuple[`torch.Tensor`, `torch.Tensor`]: The updated key and value cache tensors (modified in-place).
+        tuple[`torch.Tensor`, `torch.Tensor`]: The updated key and value cache tensors (modified in-place).
     """
     if cache_position is None:
         # Prefill phase where seq_len potentially equals max_cache_len. Directly copy.
@@ -80,7 +80,7 @@ def _sliding_cache_update(
         max_cache_len (`int`): The maximum length of the sliding window cache.
 
     Returns:
-        Tuple[`torch.Tensor`, `torch.Tensor`]: The key and value tensors representing the cache state after the update.
+        tuple[`torch.Tensor`, `torch.Tensor`]: The key and value tensors representing the cache state after the update.
                                                For prefill > window, these are the full input states.
                                                Otherwise, they are the updated cache tensors.
     """
@@ -146,7 +146,7 @@ class Cache:
                 The new value states to cache.
             layer_idx (`int`):
                 The index of the layer to cache the states for.
-            cache_kwargs (`Dict[str, Any]`, `optional`):
+            cache_kwargs (`dict[str, Any]`, `optional`):
                 Additional arguments for the cache subclass. These are specific to each subclass and allow new types of
                 cache to be created.
 
@@ -222,7 +222,7 @@ class CacheConfig:
         """
         Constructs a CacheConfig instance from a dictionary of parameters.
         Args:
-            config_dict (Dict[str, Any]): Dictionary containing configuration parameters.
+            config_dict (dict[str, Any]): Dictionary containing configuration parameters.
             **kwargs: Additional keyword arguments to override dictionary values.
 
         Returns:
@@ -260,7 +260,7 @@ class CacheConfig:
     def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+            `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         return copy.deepcopy(self.__dict__)
 
@@ -289,11 +289,11 @@ class CacheConfig:
         returning all the unused kwargs.
 
         Args:
-            kwargs (`Dict[str, Any]`):
+            kwargs (`dict[str, Any]`):
                 Dictionary of attributes to tentatively update this class.
 
         Returns:
-            `Dict[str, Any]`: Dictionary containing all the key-value pairs that were not used to update the instance.
+            `dict[str, Any]`: Dictionary containing all the key-value pairs that were not used to update the instance.
         """
         to_remove = []
         for key, value in kwargs.items():
@@ -529,7 +529,7 @@ class DynamicCache(Cache):
                 The new value states to cache.
             layer_idx (`int`):
                 The index of the layer to cache the states for.
-            cache_kwargs (`Dict[str, Any]`, `optional`):
+            cache_kwargs (`dict[str, Any]`, `optional`):
                 Additional arguments for the cache subclass. No additional arguments are used in `DynamicCache`.
 
         Return:
@@ -810,7 +810,7 @@ class OffloadedCache(DynamicCache):
                 The new value states to cache.
             layer_idx (`int`):
                 The index of the layer to cache the states for.
-            cache_kwargs (`Dict[str, Any]`, `optional`):
+            cache_kwargs (`dict[str, Any]`, `optional`):
                 Additional arguments for the cache subclass. No additional arguments are used in `OffloadedCache`.
         Return:
             A tuple containing the updated key and value states.
@@ -1094,7 +1094,7 @@ class StaticCache(Cache):
             should pass the `layer_device_map` argument instead.
         dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
-        layer_device_map (`Optional[Dict[int, Union[str, torch.device, int]]]]`, *optional*):
+        layer_device_map (`Optional[dict[int, Union[str, torch.device, int]]]]`, *optional*):
             Mapping between the layers and its device. This is required when you are manually initializing the cache
             and the model is split between different gpus. You can know which layers mapped to which device by
             checking the associated device_map: `model.hf_device_map`.
@@ -1182,7 +1182,7 @@ class StaticCache(Cache):
                 The new value states to cache.
             layer_idx (`int`):
                 The index of the layer to cache the states for.
-            cache_kwargs (`Dict[str, Any]`, `optional`):
+            cache_kwargs (`dict[str, Any]`, `optional`):
                 Additional arguments for the cache subclass. The `StaticCache` needs the `cache_position` input
                 to know how where to write in the cache.
 
@@ -1260,7 +1260,7 @@ class SlidingWindowCache(StaticCache):
             should pass the `layer_device_map` argument instead.
         dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
-        layer_device_map (`Optional[Dict[int, Union[str, torch.device, int]]]]`, *optional*):
+        layer_device_map (`Optional[dict[int, Union[str, torch.device, int]]]]`, *optional*):
             Mapping between the layers and its device. This is required when you are manually initializing the cache
             and the model is split between different gpus. You can know which layers mapped to which device by
             checking the associated device_map: `model.hf_device_map`.
@@ -1569,7 +1569,7 @@ class HybridCache(Cache):
             should pass the `layer_device_map` argument instead.
         dtype (torch.dtype, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
-        layer_device_map (`Optional[Dict[int, Union[str, torch.device, int]]]]`, *optional*):
+        layer_device_map (`Optional[dict[int, Union[str, torch.device, int]]]]`, *optional*):
             Mapping between the layers and its device. This is required when you are manually initializing the cache
             and the model is split between different gpus. You can know which layers mapped to which device by
             checking the associated device_map: `model.hf_device_map`.
@@ -1757,7 +1757,7 @@ class HybridChunkedCache(Cache):
             should pass the `layer_device_map` argument instead.
         dtype (torch.dtype, *optional*, defaults to `torch.bfloat16`):
             The default `dtype` to use when initializing the layer.
-        layer_device_map (`Optional[Dict[int, Union[str, torch.device, int]]]]`, *optional*):
+        layer_device_map (`Optional[dict[int, Union[str, torch.device, int]]]]`, *optional*):
             Mapping between the layers and its device. This is required when you are manually initializing the cache
             and the model is split between different gpus. You can know which layers mapped to which device by
             checking the associated device_map: `model.hf_device_map`.
@@ -2193,7 +2193,7 @@ class OffloadedStaticCache(StaticCache):
             The default `dtype` to use when initializing the cache.
         offload_device (`Union[str, torch.device]`, *optional*, defaults to `cpu`):
             The device to offload to. Defaults to CPU.
-        layer_device_map (`Dict[int, Union[str, torch.device, int]]`, *optional*):
+        layer_device_map (`dict[int, Union[str, torch.device, int]]`, *optional*):
             Mapping between the layers and its device. This is required when you are manually initializing the cache
             and the model is split between different gpus. You can know which layers mapped to which device by
             checking the associated device_map: `model.hf_device_map`.
@@ -2302,7 +2302,7 @@ class OffloadedStaticCache(StaticCache):
                 The new value states to cache.
             layer_idx (`int`):
                 The index of the layer to cache the states for.
-            cache_kwargs (`Dict[str, Any]`, *optional*):
+            cache_kwargs (`dict[str, Any]`, *optional*):
                 Additional arguments for the cache subclass. The `OffloadedStaticCache` needs the
                 `cache_position` input to know how where to write in the cache.
 
@@ -2407,7 +2407,7 @@ class OffloadedStaticCache(StaticCache):
         addresses for non-CPU tensors.
 
         Args:
-            shape (`Tuple[int, ...]`): Shape.
+            shape (`tuple[int, ...]`): Shape.
             device (`torch.device`): Device.
 
         Returns:

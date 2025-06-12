@@ -104,7 +104,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden
             by `do_resize` in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"height": 480, "width": 640}`):
+        size (`dict[str, int]` *optional*, defaults to `{"height": 480, "width": 640}`):
             Resolution of the output image after `resize` is applied. Only has an effect if `do_resize` is set to
             `True`. Can be overridden by `size` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -152,7 +152,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Dictionary of the form `{"height": int, "width": int}`, specifying the size of the output image.
             data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the output image. If not provided, it will be inferred from the input
@@ -199,7 +199,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the output image after `resize` has been applied. If `size["shortest_edge"]` >= 384, the image
                 is resized to `(size["shortest_edge"], size["shortest_edge"])`. Otherwise, the smaller edge of the
                 image will be matched to `int(size["shortest_edge"]/ crop_pct)`, after which the image is cropped to
@@ -299,12 +299,12 @@ class SuperPointImageProcessor(BaseImageProcessor):
         Args:
             outputs ([`SuperPointKeypointDescriptionOutput`]):
                 Raw outputs of the model containing keypoints in a relative (x, y) format, with scores and descriptors.
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. This must be the original
                 image size (before any processing).
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the keypoints in absolute format according
+            `list[Dict]`: A list of dictionaries, each dictionary containing the keypoints in absolute format according
             to target_sizes, scores and descriptors for an image in the batch as predicted by the model.
         """
         if len(outputs.mask) != len(target_sizes):

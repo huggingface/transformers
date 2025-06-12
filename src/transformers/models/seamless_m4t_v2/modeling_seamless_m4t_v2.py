@@ -1382,7 +1382,7 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
         Args:
             input_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary.
-            subwords_batch (`List[List[str]]` of shape `(batch_size, sequence_length)`):
+            subwords_batch (`list[list[str]]` of shape `(batch_size, sequence_length)`):
                 Corresponding text string for each input id.
             merge_space_with_prev_subword (`bool`, *optional*, defaults to `False`):
                 Indicates if the space character is merged with the previous subword. If `False`, it will be merged
@@ -1458,7 +1458,7 @@ class SeamlessM4Tv2PreTrainedModel(PreTrainedModel):
         Args:
             input_ids (`torch.Tensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary.
-            subwords_batch (`List[List[str]]` of shape `(batch_size, sequence_length)`):
+            subwords_batch (`list[list[str]]` of shape `(batch_size, sequence_length)`):
                 Corresponding text string for each input id.
             char_count_per_id (`torch.Tensor` of shape `(batch_size, sequence_length)`):
                 Number of characters per input id.
@@ -2944,7 +2944,7 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
                 Custom stopping criteria that complement the default stopping criteria built from arguments and a
                 generation config. If a stopping criteria is passed that is already created with the arguments or a
                 generation config an error is thrown. This feature is intended for advanced users.
-            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
+            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], list[int]]`, *optional*):
                 If provided, this function constraints the beam search to allowed tokens only at each step. If not
                 provided no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
                 `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
@@ -2954,7 +2954,7 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed to avoid deadlocking with
                 `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model.
 
@@ -3226,7 +3226,7 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin
                 Custom stopping criteria that complement the default stopping criteria built from arguments and a
                 generation config. If a stopping criteria is passed that is already created with the arguments or a
                 generation config an error is thrown. This feature is intended for advanced users.
-            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
+            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], list[int]]`, *optional*):
                 If provided, this function constraints the beam search to allowed tokens only at each step. If not
                 provided no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
                 `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
@@ -3236,7 +3236,7 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed to avoid deadlocking with
                 `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model.
 
@@ -3527,7 +3527,7 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin
 
 
         Returns:
-            `Union[SeamlessM4Tv2GenerationOutput, Tuple[Tensor]]`:
+            `Union[SeamlessM4Tv2GenerationOutput, tuple[Tensor]]`:
             - If `return_intermediate_token_ids`, returns [`SeamlessM4Tv2GenerationOutput`].
             - If not `return_intermediate_token_ids`, returns a tuple composed of waveforms of shape `(batch_size,
               sequence_length)` and `waveform_lengths` which gives the length of each sample.
@@ -3905,7 +3905,7 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMix
 
 
         Returns:
-            `Union[SeamlessM4Tv2GenerationOutput, Tuple[Tensor]]`:
+            `Union[SeamlessM4Tv2GenerationOutput, tuple[Tensor]]`:
             - If `return_intermediate_token_ids`, returns [`SeamlessM4Tv2GenerationOutput`].
             - If not `return_intermediate_token_ids`, returns a tuple composed of waveforms of shape `(batch_size,
               sequence_length)` and `waveform_lengths` which gives the length of each sample.
@@ -4363,7 +4363,7 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
                     other.
 
         Returns:
-            `Union[SeamlessM4Tv2GenerationOutput, Tuple[Tensor], ModelOutput]`:
+            `Union[SeamlessM4Tv2GenerationOutput, tuple[Tensor], ModelOutput]`:
             - If `generate_speech` and `return_intermediate_token_ids`, returns [`SeamlessM4Tv2GenerationOutput`].
             - If `generate_speech` and not `return_intermediate_token_ids`, returns a tuple composed of waveforms of
               shape `(batch_size, sequence_length)` and `waveform_lengths` which gives the length of each sample.

@@ -892,7 +892,7 @@ VIT_MAE_START_DOCSTRING = r"""
 
 VIT_MAE_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`np.ndarray`, `tf.Tensor`, `list[tf.Tensor]` ``dict[str, tf.Tensor]` or `dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
             for details.
 
@@ -1224,7 +1224,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         Args:
             patchified_pixel_values (`tf.Tensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
                 Patchified pixel values.
-            original_image_size (`Tuple[int, int]`, *optional*):
+            original_image_size (`tuple[int, int]`, *optional*):
                 Original image size.
 
         Returns:

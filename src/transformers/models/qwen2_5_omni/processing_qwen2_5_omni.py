@@ -128,17 +128,17 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            videos (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
                 tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
-            audio (`np.ndarray`, `List[np.ndarray]`):
+            audio (`np.ndarray`, `list[np.ndarray]`):
                 The audio or batch of audio to be prepared. Each audio can be a NumPy array.
         """
 
@@ -300,7 +300,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             t_ntoken_per_chunk (`int`): Number of tokens per chunk (used as the chunk size threshold).
 
         Returns:
-            `List[Tuple[int, int]]`: A list of tuples, each representing the start (inclusive)
+            `list[tuple[int, int]]`: A list of tuples, each representing the start (inclusive)
                                 and end (exclusive) indices of a chunk in `token_indices`.
         """
 

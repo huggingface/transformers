@@ -562,7 +562,7 @@ class TFWhisperPreTrainedModel(TFPreTrainedModel):
         Dummy inputs to build the network.
 
         Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
+            `dict[str, tf.Tensor]`: The dummy inputs.
         """
         return {
             self.main_input_name: tf.random.uniform(
@@ -600,7 +600,7 @@ WHISPER_INPUTS_DOCSTRING = r"""
     Args:
         input_features (`tf.Tensor` of shape `(batch_size, feature_size, sequence_length)`):
             Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
-            by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.*
+            by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.*
             via the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
             [`AutoFeatureExtractor`] should be used for extracting the fbank features, padding and conversion into a
             tensor of type `tf.Tensor`. See [`~WhisperFeatureExtractor.__call__`]
@@ -728,7 +728,7 @@ class TFWhisperEncoder(keras.layers.Layer):
         Args:
             input_features (`tf.Tensor` of shape `(batch_size, feature_size, sequence_length)`):
                 Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
+                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
                 `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
                 `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the fbank features,
                 padding and conversion into a tensor of type `tf.Tensor`. See [`~WhisperFeatureExtractor.__call__`]
@@ -1516,7 +1516,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
                 Custom logits processors that complement the default logits processors built from arguments and
                 generation config. If a logit processor is passed that is already created with the arguments or a
                 generation config an error is thrown. This feature is intended for advanced users.
-            seed (`List[int]`, *optional*):
+            seed (`list[int]`, *optional*):
                 Random seed to control sampling, containing two integers, used when `do_sample` is `True`. See the
                 `seed` argument from stateless functions in `tf.random`.
             return_timestamps (`bool`, *optional*):
@@ -1538,7 +1538,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
                 Whether to return token-level timestamps with the text. This can be used with or without the
                 `return_timestamps` option. To get word-level timestamps, use the tokenizer to group the tokens into
                 words.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
                 specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.

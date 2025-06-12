@@ -55,7 +55,7 @@ class TFRetrievAugLMMarginOutput(ModelOutput):
         logits (`tf.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head. The score is possibly marginalized over all documents for
             each vocabulary token.
-        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -139,7 +139,7 @@ class TFRetrievAugLMOutput(ModelOutput):
         logits (`tf.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head. The score is possibly marginalized over all documents for
             each vocabulary token.
-        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -886,7 +886,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         reduce_loss (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the NLL loss is reduced using the `tf.Tensor.sum`
             operation.
-        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
+        kwargs (`dict[str, any]`, *optional*, defaults to `{}`):
             Legacy dictionary, which is required so that model can use *generate()* function.
 
         Returns:
@@ -1061,7 +1061,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 Custom logits processors that complement the default logits processors built from arguments and a
                 model's config. If a logit processor is passed that is already created with the arguments or a model's
                 config an error is thrown.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model.
 
@@ -1400,7 +1400,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         reduce_loss (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the NLL loss is reduced using the `tf.Tensor.sum`
             operation.
-        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
+        kwargs (`dict[str, any]`, *optional*, defaults to `{}`):
             Legacy dictionary, which is required so that model can use *generate()* function.
 
         Returns:
@@ -1647,7 +1647,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
                 Number of beams for beam search. 1 means no beam search.
             n_docs (`int`, *optional*, defaults to `config.n_docs`)
                 Number of documents to retrieve and/or number of documents for which to generate an answer.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional kwargs will be passed to [`~generation.GenerationMixin.generate`]
 
         Return:

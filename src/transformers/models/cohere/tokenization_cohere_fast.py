@@ -244,16 +244,16 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         You can override the default template using the `tool_use_template` kwarg but the quality of your results may decrease.
 
         Args:
-            conversation (Union[List[Dict[str, str]]]): A list of dicts
+            conversation (Union[list[dict[str, str]]]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
-            tools (List[Dict]): a list of tools to render into the prompt for the model to choose from.
+            tools (list[Dict]): a list of tools to render into the prompt for the model to choose from.
                 See an example at the bottom of the docstring.
                 The format should be:
                    * name (str): The name of the tool to be called. Valid names contain only the characters a-z,
                         A-Z, 0-9, _ and must not begin with a digit.
                    * description (str): The description of what the tool does, the model uses the description to
                         choose when and how to call the function.
-                   * parameter_definitions (List[Dict]): The input parameters of the tool. Accepts a dictionary
+                   * parameter_definitions (list[Dict]): The input parameters of the tool. Accepts a dictionary
                         where the key is the name of the parameter and the value is the parameter spec.
                         Valid parameter names contain only the characters a-z, A-Z, 0-9, _ and must not begin with a digit.
                         Parameter specs are as follows:
@@ -287,7 +287,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         Returns:
             `str`: A rendered prompt string.
             or if tokenize=True:
-            `List[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
+            `list[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
             output is ready to pass to the model, either directly or via methods like `generate()`.
 
         Examples:
@@ -336,7 +336,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         Here is a list of tools that you have available to you:
 
         \\`\\`\\`python
-        def internet_search(query: str) -> List[Dict]:
+        def internet_search(query: str) -> list[Dict]:
             \"\"\"Returns a list of relevant document snippets for a textual query retrieved from the internet
 
             Args:
@@ -346,7 +346,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         \\`\\`\\`
 
         \\`\\`\\`python
-        def directly_answer() -> List[Dict]:
+        def directly_answer() -> list[Dict]:
             \"\"\"Calls a standard (un-augmented) AI chatbot to generate a response given the conversation history
             \"\"\"
             pass
@@ -400,9 +400,9 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         You can override the default template using the `grounded_generation_template` kwarg but the quality of your results may decrease.
 
         Args:
-            conversation (Union[List[Dict[str, str]]]): A list of dicts
+            conversation (Union[list[dict[str, str]]]): A list of dicts
                 with "role" and "content" keys, representing the chat history so far.
-            documents (List[Dict[str, str]): A list of dicts, representing documents or tool outputs to ground your
+            documents (list[dict[str, str]): A list of dicts, representing documents or tool outputs to ground your
                 generation on. A document is a semistructured dict, with a string to string mapping. Common fields are
                 `url`, `title`, `snippet` etc but should be descriptive of the key. They will get rendered into the prompt.
             citation_mode: either "accurate" (prompt the model to generate an answer first, then rewrite it with citation
@@ -435,7 +435,7 @@ class CohereTokenizerFast(PreTrainedTokenizerFast):
         Returns:
             `str`: A rendered prompt string.
             or if tokenize=True:
-            `List[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
+            `list[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
             output is ready to pass to the model, either directly or via methods like `generate()`.
 
         Examples:

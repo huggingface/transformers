@@ -540,7 +540,7 @@ class DPRReader(DPRPretrainedReader):
         return_dict: Optional[bool] = None,
     ) -> Union[DPRReaderOutput, tuple[Tensor, ...]]:
         r"""
-        input_ids (`Tuple[torch.LongTensor]` of shapes `(n_passages, sequence_length)`):
+        input_ids (`tuple[torch.LongTensor]` of shapes `(n_passages, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. It has to be a sequence triplet with 1) the question
             and 2) the passages titles and 3) the passages texts To match pretraining, DPR `input_ids` sequence should
             be formatted with [CLS] and [SEP] with the format:

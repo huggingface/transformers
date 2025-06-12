@@ -76,10 +76,10 @@ def get_max_res_without_distortion(
     aspect ratio, based on the target resolution.
 
     Args:
-        image_size (Tuple[int, int]): The original resolution of the image (height, width).
-        target_resolution (Tuple[int, int]): The desired resolution to fit the image into (height, width).
+        image_size (tuple[int, int]): The original resolution of the image (height, width).
+        target_resolution (tuple[int, int]): The desired resolution to fit the image into (height, width).
     Returns:
-        Tuple[int, int]: The optimal dimensions (height, width) to which the image should be resized.
+        tuple[int, int]: The optimal dimensions (height, width) to which the image should be resized.
     Example:
         >>> _get_max_res_without_distortion([200, 300], target_size = [450, 200])
         (134, 200)
@@ -195,7 +195,7 @@ def pad_to_best_fit(
     Args:
         images (`np.ndarray`):
             The images to pad.
-        background_color (`int` or `Tuple[int, int, int]`, *optional*, defaults to 0):
+        background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
             The color to use for the padding. Can be an integer for single channel or a
             tuple of integers representing for multi-channel images. If passed as integer
             in mutli-channel mode, it will default to `0` in subsequent channels.
@@ -245,13 +245,13 @@ def get_best_fit(
     has more padding.
 
     Args:
-        image_size (Tuple[int, int]): A tuple containing the height and width of the image.
+        image_size (tuple[int, int]): A tuple containing the height and width of the image.
         possible_resolutions (torch.Tensor): A tensor of shape (N, 2) where each
             row represents a possible resolution (height, width).
         resize_to_max_canvas (bool): If True, will return the largest upscaling resolution.
 
     Returns:
-        List[int]: The best resolution [height, width] for the given image.
+        list[int]: The best resolution [height, width] for the given image.
 
     Example:
         >>> image_size = (200, 300)

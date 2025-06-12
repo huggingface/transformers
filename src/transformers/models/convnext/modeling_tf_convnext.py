@@ -226,7 +226,7 @@ class TFConvNextStage(keras.layers.Layer):
             Number of output channels.
         depth (`int`):
             Number of residual blocks.
-        drop_path_rates(`List[float]`):
+        drop_path_rates(`list[float]`):
             Stochastic depth rates for each layer.
     """
 
@@ -474,7 +474,7 @@ CONVNEXT_START_DOCSTRING = r"""
 
 CONVNEXT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`np.ndarray`, `tf.Tensor`, `list[tf.Tensor]` ``dict[str, tf.Tensor]` or `dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`ConvNextImageProcessor.__call__`] for details.
 

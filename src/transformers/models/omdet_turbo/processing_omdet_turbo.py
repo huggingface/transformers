@@ -147,7 +147,7 @@ def _post_process_boxes_for_image(
             A Tensor of predicted labels for the image.
         image_num_classes (`int`):
             The number of classes queried for detection on the image.
-        image_size (`Tuple[int, int]`):
+        image_size (`tuple[int, int]`):
             A tuple of (height, width) for the image.
         threshold (`float`):
             Only return detections with a confidence score exceeding this threshold.
@@ -241,12 +241,12 @@ class OmDetTurboProcessor(ProcessorMixin):
         Args:
             images (`ImageInput`):
                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255.
-            text (`Union[str, List[str], List[List[str]]]`):
+            text (`Union[str, list[str], list[list[str]]]`):
                 The classes used to limit the scope of the open vocabulary detection. Expects a list of strings or a list
                 of list of strings. Batched classes can be of different lengths.
                 Examples: ["cat", "dog", "bird"], [["cat", "dog", "bird"], ["hat", "person"], ["car"]]
         Kwargs:
-            task (`Union[str, List[str], TextInput, PreTokenizedInput]`):
+            task (`Union[str, list[str], TextInput, PreTokenizedInput]`):
                 The grounded text used to guide open vocabulary detection. Expects a single string or a list of strings.
                 Examples: "Detect a cat, a dog, and a bird.",[ "Detect everything.", "Detect trees and flowers."]
                 When not provided, the default task is "Detect [class1], [class2], [class3]" etc.
@@ -337,19 +337,19 @@ class OmDetTurboProcessor(ProcessorMixin):
         Args:
             outputs ([`OmDetTurboObjectDetectionOutput`]):
                 Raw outputs of the model.
-            text_labels (Union[List[str], List[List[str]]], *optional*):
+            text_labels (Union[list[str], list[list[str]]], *optional*):
                 The input classes names. If not provided, `text_labels` will be set to `None` in `outputs`.
             threshold (float, defaults to 0.3):
                 Only return detections with a confidence score exceeding this threshold.
             nms_threshold (float, defaults to 0.5):
                 The threshold to use for box non-maximum suppression. Value in [0, 1].
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
             max_num_det (`int`, *optional*):
                 The maximum number of detections to return.
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, classes and boxes for an image
+            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, classes and boxes for an image
             in the batch as predicted by the model.
         """
 

@@ -1123,7 +1123,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        obj_labels (`Dict[Str: Tuple[Torch.FloatTensor, Torch.FloatTensor]]`, *optional*):
+        obj_labels (`dict[Str: tuple[Torch.FloatTensor, Torch.FloatTensor]]`, *optional*):
             each key is named after each one of the visual losses and each element of the tuple is of the shape
             `(batch_size, num_features)` and `(batch_size, num_features, visual_feature_dim)` for each the label id and
             the label score respectively

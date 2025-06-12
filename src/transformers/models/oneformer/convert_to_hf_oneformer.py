@@ -81,7 +81,7 @@ class TrackedStateDict:
         This is an effective method to check if we have update all the keys
 
         Returns:
-            List[str]: List of keys not yet updated
+            list[str]: List of keys not yet updated
         """
         return set(self.to_track.keys()) - self._seen
 

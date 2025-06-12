@@ -1228,7 +1228,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
-            proxies (`Dict[str, str]`, *optional*):
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             local_files_only(`bool`, *optional*, defaults to `False`):
@@ -2040,7 +2040,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
             soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
             conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -2154,7 +2154,7 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
             soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
             conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -2336,7 +2336,7 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
             soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
             conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

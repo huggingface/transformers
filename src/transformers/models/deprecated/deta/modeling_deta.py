@@ -1921,7 +1921,7 @@ class DetaForObjectDetection(DetaPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple[torch.FloatTensor], DetaObjectDetectionOutput]:
         r"""
-        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
+        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
             respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
@@ -2152,7 +2152,7 @@ class DetaLoss(nn.Module):
             Number of object categories, omitting the special no-object category.
         focal_alpha (`float`):
             Alpha parameter in focal loss.
-        losses (`List[str]`):
+        losses (`list[str]`):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
 
@@ -2281,7 +2281,7 @@ class DetaLoss(nn.Module):
         Args:
              outputs (`dict`, *optional*):
                 Dictionary of tensors, see the output specification of the model for the format.
-             targets (`List[dict]`, *optional*):
+             targets (`list[dict]`, *optional*):
                 List of dicts, such that `len(targets) == batch_size`. The expected keys in each dict depends on the
                 losses applied, see each loss' doc.
         """
@@ -2392,7 +2392,7 @@ class DetaHungarianMatcher(nn.Module):
                 A dictionary that contains at least these entries:
                 * "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
                 * "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates.
-            targets (`List[dict]`):
+            targets (`list[dict]`):
                 A list of targets (len(targets) = batch_size), where each target is a dict containing:
                 * "class_labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of
                   ground-truth
@@ -2400,7 +2400,7 @@ class DetaHungarianMatcher(nn.Module):
                 * "boxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates.
 
         Returns:
-            `List[Tuple]`: A list of size `batch_size`, containing tuples of (index_i, index_j) where:
+            `list[Tuple]`: A list of size `batch_size`, containing tuples of (index_i, index_j) where:
             - index_i is the indices of the selected predictions (in order)
             - index_j is the indices of the corresponding selected targets (in order)
             For each batch element, it holds: len(index_i) = len(index_j) = min(num_queries, num_target_boxes)

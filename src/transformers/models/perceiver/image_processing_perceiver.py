@@ -55,13 +55,13 @@ class PerceiverImageProcessor(BaseImageProcessor):
             Whether or not to center crop the image. If the input size if smaller than `crop_size` along any edge, the
             image will be padded with zeros and then center cropped. Can be overridden by the `do_center_crop`
             parameter in the `preprocess` method.
-        crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 256, "width": 256}`):
+        crop_size (`dict[str, int]`, *optional*, defaults to `{"height": 256, "width": 256}`):
             Desired output size when applying center-cropping. Can be overridden by the `crop_size` parameter in the
             `preprocess` method.
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image to `(size["height"], size["width"])`. Can be overridden by the `do_resize`
             parameter in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
+        size (`dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
             Size of the image after resizing. Can be overridden by the `size` parameter in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
             Defines the resampling filter to use if resizing the image. Can be overridden by the `resample` parameter
@@ -75,10 +75,10 @@ class PerceiverImageProcessor(BaseImageProcessor):
         do_normalize:
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
     """
@@ -135,9 +135,9 @@ class PerceiverImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to center crop.
-            crop_size (`Dict[str, int]`):
+            crop_size (`dict[str, int]`):
                 Desired output size after applying the center crop.
-            size (`Dict[str, int]`, *optional*):
+            size (`dict[str, int]`, *optional*):
                 Size of the image after resizing. If not provided, the self.size attribute will be used.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
@@ -176,7 +176,7 @@ class PerceiverImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
@@ -236,11 +236,11 @@ class PerceiverImageProcessor(BaseImageProcessor):
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
                 Whether to center crop the image to `crop_size`.
-            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
+            crop_size (`dict[str, int]`, *optional*, defaults to `self.crop_size`):
                 Desired output size after applying the center crop.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after resizing.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
@@ -251,9 +251,9 @@ class PerceiverImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:

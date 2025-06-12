@@ -65,7 +65,7 @@ def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) 
             The maximum number of tiles allowed.
 
     Returns:
-        `List[Tuple[int, int]]`: A list of tuples, each tuple representing a valid (width, height)
+        `list[tuple[int, int]]`: A list of tuples, each tuple representing a valid (width, height)
         configuration in terms of number of tiles.
 
     Example:
@@ -155,11 +155,11 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
             overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
@@ -217,7 +217,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
@@ -279,7 +279,7 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Controls the size of the image after `resize`. The shortest edge of the image is resized to
                 `size["shortest_edge"]` whilst preserving the aspect ratio. If the longest edge of this resized image
                 is > `int(size["shortest_edge"] * (1333 / 800))`, then the image is resized again to make the longest
@@ -300,9 +300,9 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to normalize the image by if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to normalize the image by if `do_normalize` is set to `True`.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the image to RGB.
@@ -437,13 +437,13 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
                 The maximum number of patches to be extracted from the image.
             use_thumbnail (`bool`, *optional*, defaults to `True`):
                 Whether to add a thumbnail image to the list of cropped patches.
-            patch_size (`int`, `Tuple[int, int]`, `dict`, *optional*):
+            patch_size (`int`, `tuple[int, int]`, `dict`, *optional*):
                 The size of the output patches.
             data_format (`ChannelDimension`, *optional*):
                 The format of the image data. If `None`, the format is inferred from the input image.
 
         Returns:
-            List[`PIL.Image.Image`] or List[np.ndarray]: The list of cropped images.
+            list[`PIL.Image.Image`] or list[np.ndarray]: The list of cropped images.
         """
         if data_format is None:
             data_format = infer_channel_dimension_format(images)

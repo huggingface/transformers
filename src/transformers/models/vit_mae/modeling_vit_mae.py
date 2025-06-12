@@ -974,7 +974,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         Args:
             patchified_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
                 Patchified pixel values.
-            original_image_size (`Tuple[int, int]`, *optional*):
+            original_image_size (`tuple[int, int]`, *optional*):
                 Original image size.
 
         Returns:

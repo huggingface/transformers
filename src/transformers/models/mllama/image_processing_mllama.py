@@ -63,7 +63,7 @@ def get_all_supported_aspect_ratios(max_image_tiles: int) -> list[tuple[int, int
             The maximum number of tiles allowed.
 
     Returns:
-        `List[Tuple[int, int]]`: A list of tuples, each tuple representing a valid (width, height)
+        `list[tuple[int, int]]`: A list of tuples, each tuple representing a valid (width, height)
         configuration in terms of number of tiles.
 
     Example:
@@ -108,7 +108,7 @@ def get_image_size_fit_to_canvas(
             The tile size.
 
     Returns:
-        `Tuple[int, int]`: A tuple containing the new height and width of the image.
+        `tuple[int, int]`: A tuple containing the new height and width of the image.
 
     """
     # Set target image size in between `tile_size` and canvas_size
@@ -239,7 +239,7 @@ def get_optimal_tiled_canvas(
             The tile size.
 
     Returns:
-        `Tuple[int, int]`: The best canvas resolution [height, width] for the given image.
+        `tuple[int, int]`: The best canvas resolution [height, width] for the given image.
     """
     possible_tile_arrangements = get_all_supported_aspect_ratios(max_image_tiles)
     possible_canvas_sizes = np.array(possible_tile_arrangements) * tile_size
@@ -316,7 +316,7 @@ def build_aspect_ratio_mask(aspect_ratios: list[list[tuple[int, int]]], max_imag
     Builds a mask for the aspect ratios of the images.
 
     Args:
-        aspect_ratios (`List[List[Tuple[int, int]]]`):
+        aspect_ratios (`list[list[tuple[int, int]]]`):
             A list of lists containing aspect ratios for each image in the batch.
             Each aspect ratio is represented as a tuple of (width, height) in terms of number of tiles.
         max_image_tiles (`int`):
@@ -355,7 +355,7 @@ def pack_images(
     (batch_size, max_num_images, max_image_tiles, channels, tile_height, tile_width).
 
     Args:
-        batch_images (`List[List[np.ndarray]]`):
+        batch_images (`list[list[np.ndarray]]`):
             A list of lists of image tiles. Each inner list represents
             a batch sample containing multiple images, where each image is pre-split into tiles.
             The shape of each tile array is (num_tiles, channels, tile_height, tile_width).
@@ -363,11 +363,11 @@ def pack_images(
             The maximum number of tiles any image was potantially split.
 
     Returns:
-        `Tuple[np.ndarray, List[List[int]]]`: A tuple containing:
+        `tuple[np.ndarray, list[list[int]]]`: A tuple containing:
             - stacked_images (`np.ndarray`):
                 A numpy array of stacked images with shape
                 (batch_size, max_num_images, max_image_tiles, channels, tile_height, tile_width).
-            - all_num_tiles (`List[List[int]]`):
+            - all_num_tiles (`list[list[int]]`):
                 A list of lists containing the number of tiles
                 for each image in each batch sample.
     """
@@ -402,7 +402,7 @@ def pack_aspect_ratios(aspect_ratios: list[list[tuple[int, int]]], pad_value: in
     Stack a list of aspect ratios into a numpy array.
 
     Args:
-        aspect_ratios (`List[List[Tuple[int, int]]]`):
+        aspect_ratios (`list[list[tuple[int, int]]]`):
             A list of aspect ratios.
         pad_value (`int`, *optional*, defaults to 1):
             The value to pad the aspect ratios with.
@@ -429,7 +429,7 @@ def convert_aspect_ratios_to_ids(aspect_ratios: list[list[tuple[int, int]]], max
     The aspect ratio ids start from 1, with 1 corresponding to the first supported aspect ratio.
 
     Args:
-        aspect_ratios (`List[List[Tuple[int, int]]]`):
+        aspect_ratios (`list[list[tuple[int, int]]]`):
             A list of aspect ratios for each image in the batch.
         max_image_tiles (`int`):
             The maximum number of tiles any image can be split into.
@@ -543,7 +543,7 @@ class MllamaImageProcessor(BaseImageProcessor):
             Only has an effect if the input image is in the PIL format.
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image.
-        size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+        size (`dict[str, int]`, *optional*, defaults to `self.size`):
             Size of the image tile. Should be a dictionary containing 'height' and 'width' keys, both with integer values.
             The height and width values should be equal.
         resample (`int`, *optional*, defaults to `Resampling.BILINEAR`):
@@ -555,9 +555,9 @@ class MllamaImageProcessor(BaseImageProcessor):
             Rescale factor to rescale the image by if `do_rescale` is set to `True`.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
             Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-        image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
             Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
             `True`.
         do_pad (`bool`, *optional*, defaults to `True`):
@@ -625,7 +625,7 @@ class MllamaImageProcessor(BaseImageProcessor):
                 Whether to convert the image to RGB.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image tile. Should be a dictionary containing 'height' and 'width' keys, both with integer values.
                 The height and width values should be equal.
             resample (`int`, *optional*, defaults to `self.resample`):
@@ -637,9 +637,9 @@ class MllamaImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
                 `True`.
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):
@@ -664,7 +664,7 @@ class MllamaImageProcessor(BaseImageProcessor):
             `BatchFeature` of the following structure:
                 - **pixel_values** (`TensorType`): The preprocessed pixel values.
                 - **aspect_ratio_ids** (`TensorType`): The aspect ratio ids of the images.
-                - **num_tiles** (`List[List[int]]`): The number of tiles for each image in the batch.
+                - **num_tiles** (`list[list[int]]`): The number of tiles for each image in the batch.
         """
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         do_resize = do_resize if do_resize is not None else self.do_resize
@@ -771,7 +771,7 @@ class MllamaImageProcessor(BaseImageProcessor):
 
         # images (np.ndarray) with shape (batch_size, max_num_images, max_image_tiles, channels, tile_height, tile_width)
         # aspect_ratio_ids (np.ndarray) with shape (batch_size, max_num_images) - aspect ratio ids for each image, padded to max_num_images with 0
-        # num_tiles (List[List[int]]) with (batch_size, num_images_in_batch) - real number of tiles for each image, not padded
+        # num_tiles (list[list[int]]) with (batch_size, num_images_in_batch) - real number of tiles for each image, not padded
         # aspect_ratio_mask (np.ndarray) with shape (batch_size, max_num_images, max_image_tiles) - number of tiles for each image, padded to max_num_images with 0
         encoded_inputs = BatchFeature(
             data={
@@ -800,9 +800,9 @@ class MllamaImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image.
-            aspect_ratio (`Tuple[int, int]`):
+            aspect_ratio (`tuple[int, int]`):
                 The aspect ratio of the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
@@ -852,7 +852,7 @@ class MllamaImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image.
             max_image_tiles (`int`):
                 The maximum number of tiles to split the image into.
@@ -864,7 +864,7 @@ class MllamaImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image. If not provided, it will be inferred.
 
         Returns:
-            `Union[np.ndarray, Tuple[int, int]]`: The resized image and a tuple containing the number of tiles
+            `Union[np.ndarray, tuple[int, int]]`: The resized image and a tuple containing the number of tiles
             along the height and width dimensions.
         """
 

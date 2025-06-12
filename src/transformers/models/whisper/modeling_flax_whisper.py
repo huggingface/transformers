@@ -101,7 +101,7 @@ WHISPER_INPUTS_DOCSTRING = r"""
     Args:
         input_features (`numpy.ndarray` of shape `(batch_size, feature_size, sequence_length)`):
             Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
+            loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via
             the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
             [`WhisperFeatureExtractor`] should be used for extracting the features, padding and conversion into a
             tensor of type `numpy.ndarray`. See [`~WhisperFeatureExtractor.__call__`]
@@ -138,7 +138,7 @@ WHISPER_ENCODE_INPUTS_DOCSTRING = r"""
     Args:
         input_features (`numpy.ndarray` of shape `(batch_size, feature_size, sequence_length)`):
             Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
+            loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via
             the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
             [`WhisperFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
             tensor of type `numpy.ndarray`. See [`~WhisperFeatureExtractor.__call__`].
@@ -175,7 +175,7 @@ WHISPER_DECODE_INPUTS_DOCSTRING = r"""
         decoder_position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
             range `[0, config.max_position_embeddings - 1]`.
-        past_key_values (`Dict[str, numpy.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
+        past_key_values (`dict[str, numpy.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
             Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
             auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
         output_attentions (`bool`, *optional*):

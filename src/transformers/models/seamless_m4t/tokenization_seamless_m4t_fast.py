@@ -192,13 +192,13 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         separator.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `list[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return self.prefix_tokens + token_ids_0 + self.suffix_tokens
@@ -214,13 +214,13 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         make use of token type ids, therefore a list of zeros is returned.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of zeros.
+            `list[int]`: List of zeros.
 
         """
 
@@ -385,19 +385,19 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
     ):
         """
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`, *optional*):
+            text (`str`, `list[str]`, `list[list[str]]`, *optional*):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            text_pair (`str`, `List[str]`, `List[List[str]]`, *optional*):
+            text_pair (`str`, `list[str]`, `list[list[str]]`, *optional*):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            text_target (`str`, `List[str]`, `List[List[str]]`, *optional*):
+            text_target (`str`, `list[str]`, `list[list[str]]`, *optional*):
                 The sequence or batch of sequences to be encoded as target texts. Each sequence can be a string or a
                 list of strings (pretokenized string). If the sequences are provided as list of strings (pretokenized),
                 you must set `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            text_pair_target (`str`, `List[str]`, `List[List[str]]`, *optional*):
+            text_pair_target (`str`, `list[str]`, `list[list[str]]`, *optional*):
                 The sequence or batch of sequences to be encoded as target texts. Each sequence can be a string or a
                 list of strings (pretokenized string). If the sequences are provided as list of strings (pretokenized),
                 you must set `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).

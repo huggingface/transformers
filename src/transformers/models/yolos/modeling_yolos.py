@@ -713,7 +713,7 @@ class YolosForObjectDetection(YolosPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, YolosObjectDetectionOutput]:
         r"""
-        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
+        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
             following 2 keys: `'class_labels'` and `'boxes'` (the class labels and bounding boxes of an image in the
             batch respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding

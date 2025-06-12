@@ -104,7 +104,7 @@ class ImageLoss(nn.Module):
             Number of object categories, omitting the special no-object category.
         eos_coef (`float`):
             Relative classification weight applied to the no-object category.
-        losses (`List[str]`):
+        losses (`list[str]`):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
 
@@ -243,7 +243,7 @@ class ImageLoss(nn.Module):
         Args:
              outputs (`dict`, *optional*):
                 Dictionary of tensors, see the output specification of the model for the format.
-             targets (`List[dict]`, *optional*):
+             targets (`list[dict]`, *optional*):
                 List of dicts, such that `len(targets) == batch_size`. The expected keys in each dict depends on the
                 losses applied, see each loss' doc.
         """
@@ -318,7 +318,7 @@ class HungarianMatcher(nn.Module):
                 A dictionary that contains at least these entries:
                 * "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
                 * "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates.
-            targets (`List[dict]`):
+            targets (`list[dict]`):
                 A list of targets (len(targets) = batch_size), where each target is a dict containing:
                 * "class_labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of
                   ground-truth
@@ -326,7 +326,7 @@ class HungarianMatcher(nn.Module):
                 * "boxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates.
 
         Returns:
-            `List[Tuple]`: A list of size `batch_size`, containing tuples of (index_i, index_j) where:
+            `list[Tuple]`: A list of size `batch_size`, containing tuples of (index_i, index_j) where:
             - index_i is the indices of the selected predictions (in order)
             - index_j is the indices of the corresponding selected targets (in order)
             For each batch element, it holds: len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
@@ -431,7 +431,7 @@ def generalized_box_iou(boxes1, boxes2):
 
 # below: taken from https://github.com/facebookresearch/detr/blob/master/util/misc.py#L306
 def _max_by_axis(the_list):
-    # type: (List[List[int]]) -> List[int]
+    # type: (list[list[int]]) -> list[int]
     maxes = the_list[0]
     for sublist in the_list[1:]:
         for index, item in enumerate(sublist):

@@ -258,13 +258,13 @@ def get_slices(lines, clean_lines):
       greater than 0.9.
 
     Args:
-        lines (`List[str]`):
+        lines (`list[str]`):
             The list of lines containing the text.
-        clean_lines (`List[str]`):
+        clean_lines (`list[str]`):
             A cleaned version of the text (without numbers).
 
     Returns:
-        `List[tuple]`: A list of tuples representing the start and end indices of text slices.
+        `list[tuple]`: A list of tuples representing the start and end indices of text slices.
     """
     indices = np.zeros(len(lines))
     for i in range(len(lines) - 1):
@@ -594,7 +594,7 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         Postprocessing is quite slow so it is recommended to use multiprocessing to speed up the process.
 
         Args:
-            generation (Union[str, List[str]]):
+            generation (Union[str, list[str]]):
                 The generated text or a list of generated texts.
             fix_markdown (`bool`, *optional*, defaults to `True`):
                 Whether to perform Markdown formatting fixes.
@@ -603,7 +603,7 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
                 parallel).
 
         Returns:
-            Union[str, List[str]]: The postprocessed text or list of postprocessed texts.
+            Union[str, list[str]]: The postprocessed text or list of postprocessed texts.
         """
         requires_backends(self, ["nltk", "levenshtein"])
 

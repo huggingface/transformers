@@ -58,7 +58,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden
             by `do_resize` in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 384}`):
+        size (`dict[str, int]` *optional*, defaults to `{"shortest_edge": 384}`):
             Resolution of the output image after `resize` is applied. If `size["shortest_edge"]` >= 384, the image is
             resized to `(size["shortest_edge"], size["shortest_edge"])`. Otherwise, the smaller edge of the image will
             be matched to `int(size["shortest_edge"]/crop_pct)`, after which the image is cropped to
@@ -78,10 +78,10 @@ class ConvNextImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
     """
@@ -132,7 +132,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Dictionary of the form `{"shortest_edge": int}`, specifying the size of the output image. If
                 `size["shortest_edge"]` >= 384 image is resized to `(size["shortest_edge"], size["shortest_edge"])`.
                 Otherwise, the smaller edge of the image will be matched to `int(size["shortest_edge"] / crop_pct)`,
@@ -211,7 +211,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the output image after `resize` has been applied. If `size["shortest_edge"]` >= 384, the image
                 is resized to `(size["shortest_edge"], size["shortest_edge"])`. Otherwise, the smaller edge of the
                 image will be matched to `int(size["shortest_edge"]/ crop_pct)`, after which the image is cropped to
@@ -227,9 +227,9 @@ class ConvNextImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:

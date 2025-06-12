@@ -26,8 +26,8 @@ class TFGPT2Tokenizer(keras.layers.Layer):
     straight from `tf.string` inputs to outputs.
 
     Args:
-        vocab (Dict[str, int]): Vocabulary dict for Byte Pair Tokenizer
-        merges (List[str]): Merges list for Byte Pair Tokenizer
+        vocab (dict[str, int]): Vocabulary dict for Byte Pair Tokenizer
+        merges (list[str]): Merges list for Byte Pair Tokenizer
     """
 
     def __init__(

@@ -38,9 +38,9 @@ class HfQuantizer(ABC):
     Attributes
         quantization_config (`transformers.utils.quantization_config.QuantizationConfigMixin`):
             The quantization config that defines the quantization parameters of your model that you want to quantize.
-        modules_to_not_convert (`List[str]`, *optional*):
+        modules_to_not_convert (`list[str]`, *optional*):
             The list of module names to not convert when quantizing the model.
-        required_packages (`List[str]`, *optional*):
+        required_packages (`list[str]`, *optional*):
             The list of required pip packages to install prior to using the quantizer
         requires_calibration (`bool`):
             Whether the quantization method requires to calibrate the model before using it.
@@ -108,7 +108,7 @@ class HfQuantizer(ABC):
         Override this method if you want to adjust the `missing_keys`.
 
         Args:
-            missing_keys (`List[str]`, *optional*):
+            missing_keys (`list[str]`, *optional*):
                 The list of missing keys in the checkpoint compared to the state dict of the model
         """
         return missing_keys
@@ -118,7 +118,7 @@ class HfQuantizer(ABC):
         Override this method if you want to adjust the `unexpected_keys`.
 
         Args:
-            unexpected_keys (`List[str]`, *optional*):
+            unexpected_keys (`list[str]`, *optional*):
                 The list of unexpected keys in the checkpoint compared to the state dict of the model
         """
         return unexpected_keys
@@ -129,7 +129,7 @@ class HfQuantizer(ABC):
         but before the model is post-processed.
 
         Args:
-            missing_keys (`List[str]`, *optional*):
+            missing_keys (`list[str]`, *optional*):
                 The list of missing keys in the checkpoint compared to the state dict of the model
         """
         return missing_keys
@@ -139,9 +139,9 @@ class HfQuantizer(ABC):
         Override this method if you want to adjust the `update_expected_keys`.
 
         Args:
-            expected_keys (`List[str]`, *optional*):
+            expected_keys (`list[str]`, *optional*):
                 The list of the expected keys in the initialized model.
-            loaded_keys (`List[str]`, *optional*):
+            loaded_keys (`list[str]`, *optional*):
                 The list of the loaded keys in the checkpoint.
         """
         return expected_keys

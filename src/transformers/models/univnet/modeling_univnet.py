@@ -161,7 +161,7 @@ class UnivNetKernelPredictor(nn.Module):
                 Tensor containing the log-mel spectrograms.
 
         Returns:
-            Tuple[`torch.FloatTensor, `torch.FloatTensor`]: tuple of tensors where the first element is the tensor of
+            tuple[`torch.FloatTensor, `torch.FloatTensor`]: tuple of tensors where the first element is the tensor of
             location variable convolution kernels of shape `(batch_size, self.conv_layers, self.conv_in_channels,
             self.conv_out_channels, self.conv_kernel_size, seq_length)` and the second element is the tensor of
             location variable convolution biases of shape `(batch_size, self.conv_layers. self.conv_out_channels,

@@ -33,7 +33,7 @@ STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""
             Prediction scores of a language modeling head. These can be scores for each vocabulary token before SoftMax
             or scores for each vocabulary token after SoftMax. If this stopping criteria depends on the `scores` input,
             make sure you pass `return_dict_in_generate=True, output_scores=True` to `generate`.
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             Additional stopping criteria specific kwargs.
 
     Return:
@@ -209,7 +209,7 @@ class StopStringCriteria(StoppingCriteria):
     Args:
         tokenizer (`PreTrainedTokenizer`):
             The model's associated tokenizer (necessary to extract vocab and tokenize the termination sequences)
-        stop_strings (`Union[str, List[str]]`):
+        stop_strings (`Union[str, list[str]]`):
             A list of strings that should end generation. If a string is passed, it will be treated like a
             list with a single element.
 
@@ -455,7 +455,7 @@ class EosTokenCriteria(StoppingCriteria):
     By default, it uses the `model.generation_config.eos_token_id`.
 
     Args:
-        eos_token_id (`Union[int, List[int], torch.Tensor]`):
+        eos_token_id (`Union[int, list[int], torch.Tensor]`):
             The id(s) of the *end-of-sequence* token.
     """
 

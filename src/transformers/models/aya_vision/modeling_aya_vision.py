@@ -224,7 +224,7 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
                The tensors corresponding to the input images.
-            vision_feature_layer (`Union[int, List[int]]`, *optional*):
+            vision_feature_layer (`Union[int, list[int]]`, *optional*):
                 The index of the layer to select the vision feature. If multiple indices are provided,
                 the vision feature of the corresponding indices will be concatenated to form the
                 vision features.

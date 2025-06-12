@@ -135,13 +135,13 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
         - pair of sequences for question answering: `[CLS] question_tokens [QUESTION] . [SEP] context_tokens [SEP]`
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 The question token IDs if pad_on_right, else context tokens IDs
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 The context token IDs if pad_on_right, else question token IDs
 
         Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
@@ -166,11 +166,11 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
         Should be overridden in a subclass if the model has a special way of building those.
 
         Args:
-            token_ids_0 (`List[int]`): The first tokenized sequence.
-            token_ids_1 (`List[int]`, *optional*): The second tokenized sequence.
+            token_ids_0 (`list[int]`): The first tokenized sequence.
+            token_ids_1 (`list[int]`, *optional*): The second tokenized sequence.
 
         Returns:
-            `List[int]`: The token type ids.
+            `list[int]`: The token type ids.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]

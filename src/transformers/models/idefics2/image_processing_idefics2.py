@@ -53,7 +53,7 @@ def get_resize_output_image_size(image, size, input_data_format) -> tuple[int, i
     Args:
         image (`np.ndarray`):
             Image to resize.
-        size (`Dict[str, int]`):
+        size (`dict[str, int]`):
             Size of the output image containing the keys "shortest_edge" and "longest_edge".
         input_data_format (`ChannelDimension` or `str`):
             The channel dimension format of the input image.
@@ -114,7 +114,7 @@ def make_pixel_mask(
     Args:
         image (`np.ndarray`):
             Image to make the pixel mask for.
-        output_size (`Tuple[int, int]`):
+        output_size (`tuple[int, int]`):
             Output size of the mask.
     """
     input_height, input_width = get_image_size(image, channel_dim=input_data_format)
@@ -169,11 +169,11 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. If set to `True`, the image is normalized to have a mean of `image_mean` and
             a standard deviation of `image_std`.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
             overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IDEFICS_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
@@ -231,7 +231,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 Resampling filter to use when resiizing the image.
@@ -419,7 +419,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
                 Whether to convert the image to RGB.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
                 the longest edge resized to keep the input aspect ratio.
             resample (`int`, *optional*, defaults to `self.resample`):
@@ -431,9 +431,9 @@ class Idefics2ImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
                 `True`.
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):

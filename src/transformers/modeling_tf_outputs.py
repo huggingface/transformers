@@ -139,7 +139,7 @@ class TFBaseModelOutputWithPoolingAndCrossAttentions(ModelOutput):
 
             This output is usually *not* a good summary of the semantic content of the input, you're often better with
             averaging or pooling the sequence of hidden-states for the whole input sequence.
-        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -183,7 +183,7 @@ class TFBaseModelOutputWithPast(ModelOutput):
 
             If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
             hidden_size)` is output.
-        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -252,7 +252,7 @@ class TFBaseModelOutputWithPastAndCrossAttentions(ModelOutput):
 
             If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
             hidden_size)` is output.
-        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -296,7 +296,7 @@ class TFSeq2SeqModelOutput(ModelOutput):
 
             If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
             hidden_size)` is output.
-        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -383,7 +383,7 @@ class TFCausalLMOutputWithPast(ModelOutput):
             Language modeling loss (for next-token prediction).
         logits (`tf.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -436,7 +436,7 @@ class TFCausalLMOutputWithCrossAttentions(ModelOutput):
 
             Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
             weighted average in the cross-attention heads.
-        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -491,7 +491,7 @@ class TFSeq2SeqLMOutput(ModelOutput):
             Language modeling loss.
         logits (`tf.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -609,7 +609,7 @@ class TFSeq2SeqSequenceClassifierOutput(ModelOutput):
             Classification (or regression if config.num_labels==1) loss.
         logits (`tf.Tensor` of shape `(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -854,7 +854,7 @@ class TFSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
             Span-start scores (before SoftMax).
         end_logits (`tf.Tensor` of shape `(batch_size, sequence_length)`):
             Span-end scores (before SoftMax).
-        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -907,7 +907,7 @@ class TFSequenceClassifierOutputWithPast(ModelOutput):
             Classification (or regression if config.num_labels==1) loss.
         logits (`tf.Tensor` of shape `(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 

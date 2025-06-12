@@ -149,7 +149,7 @@ class Kosmos2Processor(ProcessorMixin):
         The rest of this documentation shows the arguments specific to `Kosmos2Processor`.
 
         Args:
-            bboxes (`Union[List[Tuple[int]], List[Tuple[float]], List[List[Tuple[int]]], List[List[Tuple[float]]]]`, *optional*):
+            bboxes (`Union[list[tuple[int]], list[tuple[float]], list[list[tuple[int]]], list[list[tuple[float]]]]`, *optional*):
                 The bounding bboxes associated to `texts`.
             num_image_tokens (`int`, *optional* defaults to 64):
                 The number of (consecutive) places that are used to mark the placeholders to store image information.
@@ -349,16 +349,16 @@ class Kosmos2Processor(ProcessorMixin):
         """Add image and bounding box information to `texts` as image and patch index tokens.
 
         Args:
-            texts (`Union[TextInput, List[TextInput]]`): The texts to be processed.
+            texts (`Union[TextInput, list[TextInput]]`): The texts to be processed.
             images (`ImageInput`, *optional*): The images associated to `texts`.
-            bboxes (`Union[List[Tuple[int]], List[Tuple[float]], List[List[Tuple[int]]], List[List[Tuple[float]]]]`, *optional*):
+            bboxes (`Union[list[tuple[int]], list[tuple[float]], list[list[tuple[int]]], list[list[tuple[float]]]]`, *optional*):
                 The bounding bboxes associated to `texts`.
             num_image_tokens (`int`, *optional*, defaults to 64):
                 The number of image tokens (used as latent queries). This should corresponds to the `latent_query_num`
                 attribute in `Kosmos2Config`.
 
         Returns:
-            `Union[TextInput, List[TextInput]]`: The processed texts with image and patch index tokens.
+            `Union[TextInput, list[TextInput]]`: The processed texts with image and patch index tokens.
         """
         # These are fake `<image>` tokens enclosed between (the actual) `<image>` token and `</image>`.
         img_tokens = [self.boi_token] * num_image_tokens
@@ -441,7 +441,7 @@ class Kosmos2Processor(ProcessorMixin):
                 Additional arguments to be passed to the tokenizer's `batch_decode method`.
 
         Returns:
-            `List[str]`: The decoded text.
+            `list[str]`: The decoded text.
         """
         generated_texts = self.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
         return [self.post_process_generation(text, cleanup_and_extract=False) for text in generated_texts]
@@ -520,13 +520,13 @@ def coordinate_to_patch_index(bbox: tuple[float, float, float, float], num_patch
     """Convert a bounding box to a pair of patch indices.
 
     Args:
-        bbox (`Tuple[float, float, float, float]`):
+        bbox (`tuple[float, float, float, float]`):
             The 4 coordinates of the bounding box, with the format being (x1, y1, x2, y2) specifying the upper-left and
             lower-right corners of the box. It should have x2 > x1 and y2 > y1.
         num_patches_per_side (`int`): the number of patches along each side.
 
     Returns:
-        `Tuple[int, int]`: A pair of patch indices representing the upper-left patch and lower-right patch.
+        `tuple[int, int]`: A pair of patch indices representing the upper-left patch and lower-right patch.
     """
     (x1, y1, x2, y2) = bbox
 
@@ -558,7 +558,7 @@ def patch_index_to_coordinate(ul_idx: int, lr_idx: int, num_patches_per_side: in
         num_patches_per_side (`int`): the number of patches along each side.
 
     Returns:
-        `Tuple[float]`: the normalized coordinates of the bounding box, in the form (x1, y1, x2, y2).
+        `tuple[float]`: the normalized coordinates of the bounding box, in the form (x1, y1, x2, y2).
     """
     # Compute the size of each cell in the grid
     cell_size = 1.0 / num_patches_per_side

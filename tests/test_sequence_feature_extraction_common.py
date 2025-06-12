@@ -123,7 +123,7 @@ class SequenceFeatureExtractionTestMixin(FeatureExtractionSavingTestMixin):
         batch_size = self.feat_extract_tester.batch_size
         feature_size = self.feat_extract_tester.feature_size
 
-        # test padding for List[int] + numpy
+        # test padding for list[int] + numpy
         input_1 = feat_extract.pad(processed_features, padding=False)
         input_1 = input_1[input_name]
 
@@ -157,7 +157,7 @@ class SequenceFeatureExtractionTestMixin(FeatureExtractionSavingTestMixin):
         if feature_size > 1:
             self.assertTrue(input_4.shape[2] == input_5.shape[2] == feature_size)
 
-        # test padding for `pad_to_multiple_of` for List[int] + numpy
+        # test padding for `pad_to_multiple_of` for list[int] + numpy
         input_6 = feat_extract.pad(processed_features, pad_to_multiple_of=10)
         input_6 = input_6[input_name]
 
@@ -319,7 +319,7 @@ class SequenceFeatureExtractionTestMixin(FeatureExtractionSavingTestMixin):
         with self.assertRaises(ValueError):
             feat_extract.pad(processed_features, padding="max_length", truncation=True)[input_name]
 
-        # test truncation for `pad_to_multiple_of` for List[int] + numpy
+        # test truncation for `pad_to_multiple_of` for list[int] + numpy
         pad_to_multiple_of = 12
         input_8 = feat_extract.pad(
             processed_features,

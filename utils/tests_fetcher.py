@@ -271,7 +271,7 @@ def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = Fal
     - the current head and its parent commit otherwise.
 
     Returns:
-        `List[str]`: The list of Python modeling files that are impacted by the changes of `tiny_model_summary.json`.
+        `list[str]`: The list of Python modeling files that are impacted by the changes of `tiny_model_summary.json`.
     """
     repo = Repo(PATH_TO_REPO)
 
@@ -388,11 +388,11 @@ def get_diff(repo: Repo, base_commit: str, commits: list[str]) -> list[str]:
             A git repository (for instance the Transformers repo).
         base_commit (`str`):
             The commit reference of where to compare for the diff. This is the current commit, not the branching point!
-        commits (`List[str]`):
+        commits (`list[str]`):
             The list of commits with which to compare the repo at `base_commit` (so the branching point).
 
     Returns:
-        `List[str]`: The list of Python files with a diff (files added, renamed or deleted are always returned, files
+        `list[str]`: The list of Python files with a diff (files added, renamed or deleted are always returned, files
         modified are returned if the diff in the file is not only in docstrings or comments, see
         `diff_is_docstring_only`).
     """
@@ -429,7 +429,7 @@ def get_modified_python_files(diff_with_last_commit: bool = False) -> list[str]:
     - the current head and its parent commit otherwise.
 
     Returns:
-        `List[str]`: The list of Python files with a diff (files added, renamed or deleted are always returned, files
+        `list[str]`: The list of Python files with a diff (files added, renamed or deleted are always returned, files
         modified are returned if the diff in the file is not only in docstrings or comments, see
         `diff_is_docstring_only`).
     """
@@ -460,11 +460,11 @@ def get_diff_for_doctesting(repo: Repo, base_commit: str, commits: list[str]) ->
             A git repository (for instance the Transformers repo).
         base_commit (`str`):
             The commit reference of where to compare for the diff. This is the current commit, not the branching point!
-        commits (`List[str]`):
+        commits (`list[str]`):
             The list of commits with which to compare the repo at `base_commit` (so the branching point).
 
     Returns:
-        `List[str]`: The list of Python and Markdown files with a diff (files added or renamed are always returned, files
+        `list[str]`: The list of Python and Markdown files with a diff (files added or renamed are always returned, files
         modified are returned if the diff in the file is only in doctest examples).
     """
     print("\n### DIFF ###\n")
@@ -499,7 +499,7 @@ def get_all_doctest_files() -> list[str]:
     At this moment, we restrict this to only take files from `src/` or `docs/source/en/` that are not in `utils/not_doctested.txt`.
 
     Returns:
-        `List[str]`: The complete list of Python and Markdown files on which we run doctest.
+        `list[str]`: The complete list of Python and Markdown files on which we run doctest.
     """
     py_files = [str(x.relative_to(PATH_TO_REPO)) for x in PATH_TO_REPO.glob("**/*.py")]
     md_files = [str(x.relative_to(PATH_TO_REPO)) for x in PATH_TO_REPO.glob("**/*.md")]
@@ -531,7 +531,7 @@ def get_new_doctest_files(repo, base_commit, branching_commit) -> list[str]:
     `branching_commit`.
 
     Returns:
-        `List[str]`: List of files that were removed from "utils/not_doctested.txt".
+        `list[str]`: List of files that were removed from "utils/not_doctested.txt".
     """
     for diff_obj in branching_commit.diff(base_commit):
         # Ignores all but the "utils/not_doctested.txt" file.
@@ -560,7 +560,7 @@ def get_doctest_files(diff_with_last_commit: bool = False) -> list[str]:
     - the current head and its parent commit otherwise.
 
     Returns:
-        `List[str]`: The list of Python and Markdown files with a diff (files added or renamed are always returned, files
+        `list[str]`: The list of Python and Markdown files with a diff (files added or renamed are always returned, files
         modified are returned if the diff in the file is only in doctest examples).
     """
     repo = Repo(PATH_TO_REPO)
@@ -629,12 +629,12 @@ def extract_imports(module_fname: str, cache: Optional[dict[str, list[str]]] = N
         module_fname (`str`):
             The name of the file of the module where we want to look at the imports (given relative to the root of
             the repo).
-        cache (Dictionary `str` to `List[str]`, *optional*):
+        cache (Dictionary `str` to `list[str]`, *optional*):
             To speed up this function if it was previously called on `module_fname`, the cache of all previously
             computed results.
 
     Returns:
-        `List[str]`: The list of module filenames imported in the input `module_fname` (a submodule we import from that
+        `list[str]`: The list of module filenames imported in the input `module_fname` (a submodule we import from that
         is a subfolder will give its init file).
     """
     if cache is not None and module_fname in cache:
@@ -717,12 +717,12 @@ def get_module_dependencies(module_fname: str, cache: Optional[dict[str, list[st
         module_fname (`str`):
             The name of the file of the module where we want to look at the imports (given relative to the root of
             the repo).
-        cache (Dictionary `str` to `List[str]`, *optional*):
+        cache (Dictionary `str` to `list[str]`, *optional*):
             To speed up this function if it was previously called on `module_fname`, the cache of all previously
             computed results.
 
     Returns:
-        `List[str]`: The list of module filenames imported in the input `module_fname` (with submodule imports refined).
+        `list[str]`: The list of module filenames imported in the input `module_fname` (with submodule imports refined).
     """
     dependencies = []
     imported_modules = extract_imports(module_fname, cache=cache)
@@ -806,10 +806,10 @@ def get_tree_starting_at(module: str, edges: list[tuple[str, str]]) -> list[Unio
 
     Args:
         module (`str`): The module that will be the root of the subtree we want.
-        eges (`List[Tuple[str, str]]`): The list of all edges of the tree.
+        eges (`list[tuple[str, str]]`): The list of all edges of the tree.
 
     Returns:
-        `List[Union[str, List[str]]]`: The tree to print in the following format: [module, [list of edges
+        `list[Union[str, list[str]]]`: The tree to print in the following format: [module, [list of edges
         starting at module], [list of edges starting at the preceding level], ...]
     """
     vertices_seen = [module]
@@ -834,7 +834,7 @@ def print_tree_deps_of(module, all_edges=None):
 
     Args:
         module (`str`): The module that will be the root of the subtree we want.
-        all_eges (`List[Tuple[str, str]]`, *optional*):
+        all_eges (`list[tuple[str, str]]`, *optional*):
             The list of all edges of the tree. Will be set to `create_reverse_dependency_tree()` if not passed.
     """
     if all_edges is None:
@@ -868,7 +868,7 @@ def init_test_examples_dependencies() -> tuple[dict[str, list[str]], list[str]]:
     example files by linking each example to the example test file for the example framework.
 
     Returns:
-        `Tuple[Dict[str, List[str]], List[str]]`: A tuple with two elements: the initialized dependency map which is a
+        `tuple[dict[str, list[str]], list[str]]`: A tuple with two elements: the initialized dependency map which is a
         dict test example file to list of example files potentially tested by that test file, and the list of all
         example files (to avoid recomputing it later).
     """
@@ -902,7 +902,7 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
     Create the dependency map from module/test filename to the list of modules/tests that depend on it recursively.
 
     Returns:
-        `Dict[str, List[str]]`: The reverse dependency map as a dictionary mapping filenames to all the filenames
+        `dict[str, list[str]]`: The reverse dependency map as a dictionary mapping filenames to all the filenames
         depending on it recursively. This way the tests impacted by a change in file A are the test files in the list
         corresponding to key A in this result.
     """
@@ -959,14 +959,14 @@ def create_module_to_test_map(
     Extract the tests from the reverse_dependency_map and potentially filters the model tests.
 
     Args:
-        reverse_map (`Dict[str, List[str]]`, *optional*):
+        reverse_map (`dict[str, list[str]]`, *optional*):
             The reverse dependency map as created by `create_reverse_dependency_map`. Will default to the result of
             that function if not provided.
         filter_models (`bool`, *optional*, defaults to `False`):
             Whether or not to filter model tests to only include core models if a file impacts a lot of models.
 
     Returns:
-        `Dict[str, List[str]]`: A dictionary that maps each file to the tests to execute if that file was modified.
+        `dict[str, list[str]]`: A dictionary that maps each file to the tests to execute if that file was modified.
     """
     if reverse_map is None:
         reverse_map = create_reverse_dependency_map()
@@ -1114,7 +1114,7 @@ def filter_tests(output_file: str, filters: list[str]):
 
     Args:
         output_file (`str` or `os.PathLike`): The path to the output file of the tests fetcher.
-        filters (`List[str]`): A list of folders to filter.
+        filters (`list[str]`): A list of folders to filter.
     """
     if not os.path.isfile(output_file):
         print("No test file found.")
@@ -1143,7 +1143,7 @@ def parse_commit_message(commit_message: str) -> dict[str, bool]:
         commit_message (`str`): The commit message of the current commit.
 
     Returns:
-        `Dict[str, bool]`: A dictionary of strings to bools with keys the following keys: `"skip"`,
+        `dict[str, bool]`: A dictionary of strings to bools with keys the following keys: `"skip"`,
         `"test_all_models"` and `"test_all"`.
     """
     if commit_message is None:

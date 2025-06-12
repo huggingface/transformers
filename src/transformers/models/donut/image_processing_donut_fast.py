@@ -111,7 +111,7 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
         Args:
             image (`torch.Tensor`):
                 The image to be aligned.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 The size `{"height": h, "width": w}` to align the long axis to.
 
         Returns:
@@ -140,7 +140,7 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
         Args:
             image (`torch.Tensor`):
                 The image to be padded.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 The size `{"height": h, "width": w}` to pad the image to.
             random_padding (`bool`, *optional*, defaults to `False`):
                 Whether to use random padding or not.
@@ -184,7 +184,7 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
         Args:
             image (`torch.Tensor`):
                 The image to be resized.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 The size `{"height": h, "width": w}` to resize the image to.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 The resampling filter to use.

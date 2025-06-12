@@ -135,7 +135,7 @@ def load_balancing_loss_func(
     experts is too unbalanced.
 
     Args:
-        gate_logits (Union[`torch.Tensor`, Tuple[torch.Tensor]):
+        gate_logits (Union[`torch.Tensor`, tuple[torch.Tensor]):
             Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
             shape [batch_size X sequence_length, num_experts].
         num_experts (`int`):

@@ -194,7 +194,7 @@ class Mask2FormerForUniversalSegmentationOutput(ModelOutput):
         masks_queries_logits (`torch.FloatTensor`):
             A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
             query.
-        auxiliary_logits (`List[Dict(str, torch.FloatTensor)]`, *optional*):
+        auxiliary_logits (`list[Dict(str, torch.FloatTensor)]`, *optional*):
             List of class and mask predictions from each layer of the transformer decoder.
         encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Last hidden states (final feature map) of the last stage of the encoder model (backbone).
@@ -421,7 +421,7 @@ class Mask2FormerHungarianMatcher(nn.Module):
                 A tensor of dim `num_target_boxes, height, width` containing the target masks.
 
         Returns:
-            matched_indices (`List[Tuple[Tensor]]`): A list of size batch_size, containing tuples of (index_i, index_j)
+            matched_indices (`list[tuple[Tensor]]`): A list of size batch_size, containing tuples of (index_i, index_j)
             where:
                 - index_i is the indices of the selected predictions (in order)
                 - index_j is the indices of the corresponding selected labels (in order)
@@ -483,7 +483,7 @@ class Mask2FormerLoss(nn.Module):
         Args:
             config (`Mask2FormerConfig`):
                 The configuration for Mask2Former model also containing loss calculation specific parameters.
-            weight_dict (`Dict[str, float]`):
+            weight_dict (`dict[str, float]`):
                 A dictionary of weights to be applied to the different losses.
         """
         super().__init__()
@@ -542,13 +542,13 @@ class Mask2FormerLoss(nn.Module):
         Args:
             class_queries_logits (`torch.Tensor`):
                 A tensor of shape `batch_size, num_queries, num_labels`
-            class_labels (`List[torch.Tensor]`):
+            class_labels (`list[torch.Tensor]`):
                 List of class labels of shape `(labels)`.
-            indices (`Tuple[np.array])`:
+            indices (`tuple[np.array])`:
                 The indices computed by the Hungarian matcher.
 
         Returns:
-            `Dict[str, Tensor]`: A dict of `torch.Tensor` containing the following key:
+            `dict[str, Tensor]`: A dict of `torch.Tensor` containing the following key:
             - **loss_cross_entropy** -- The loss computed using cross entropy on the predicted and ground truth labels.
         """
         pred_logits = class_queries_logits
@@ -582,13 +582,13 @@ class Mask2FormerLoss(nn.Module):
                 A tensor of shape `(batch_size, num_queries, height, width)`.
             mask_labels (`torch.Tensor`):
                 List of mask labels of shape `(labels, height, width)`.
-            indices (`Tuple[np.array])`:
+            indices (`tuple[np.array])`:
                 The indices computed by the Hungarian matcher.
             num_masks (`int)`:
                 The number of masks, used for normalization.
 
         Returns:
-            losses (`Dict[str, Tensor]`): A dict of `torch.Tensor` containing two keys:
+            losses (`dict[str, Tensor]`): A dict of `torch.Tensor` containing two keys:
             - **loss_mask** -- The loss computed using sigmoid cross entropy loss on the predicted and ground truth.
               masks.
             - **loss_dice** -- The loss computed using dice loss on the predicted on the predicted and ground truth,
@@ -732,14 +732,14 @@ class Mask2FormerLoss(nn.Module):
                 A tensor of shape `(batch_size, num_queries, num_labels)`.
             mask_labels (`torch.Tensor`):
                 List of mask labels of shape `(labels, height, width)`.
-            class_labels (`List[torch.Tensor]`):
+            class_labels (`list[torch.Tensor]`):
                 List of class labels of shape `(labels)`.
-            auxiliary_predictions (`Dict[str, torch.Tensor]`, *optional*):
+            auxiliary_predictions (`dict[str, torch.Tensor]`, *optional*):
                 if `use_auxiliary_loss` was set to `true` in [`Mask2FormerConfig`], then it contains the logits from
                 the inner layers of the Mask2FormerMaskedAttentionDecoder.
 
         Returns:
-            losses (`Dict[str, Tensor]`): A dict of `torch.Tensor` containing three keys:
+            losses (`dict[str, Tensor]`): A dict of `torch.Tensor` containing three keys:
             - **loss_cross_entropy** -- The loss computed using cross entropy on the predicted and ground truth labels.
             - **loss_mask** -- The loss computed using sigmoid cross_entropy loss on the predicted and ground truth
               masks.
@@ -1811,7 +1811,7 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
             encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the
                 cross(masked)-attention of the decoder.
-            feature_size_list (`List[torch.Size]`):
+            feature_size_list (`list[torch.Size]`):
                 This is a list containing shapes (height & width) of multi-scale features from the Pixel Decoder.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -2303,9 +2303,9 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Mask2FormerForUniversalSegmentationOutput:
         r"""
-        mask_labels (`List[torch.Tensor]`, *optional*):
+        mask_labels (`list[torch.Tensor]`, *optional*):
             List of mask labels of shape `(num_labels, height, width)` to be fed to a model
-        class_labels (`List[torch.LongTensor]`, *optional*):
+        class_labels (`list[torch.LongTensor]`, *optional*):
             list of target class labels of shape `(num_labels, height, width)` to be fed to a model. They identify the
             labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
         output_auxiliary_logits (`bool`, *optional*):

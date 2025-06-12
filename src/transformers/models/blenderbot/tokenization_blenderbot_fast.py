@@ -249,13 +249,13 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
         make use of token type ids, therefore a list of zeros is returned.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of zeros.
+            `list[int]`: List of zeros.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -271,12 +271,12 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
         - single sequence: ` X </s>`
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs to which the special tokens will be added
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Will be ignored
         Returns:
-            `List[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `list[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         return token_ids_0 + [self.eos_token_id]
 

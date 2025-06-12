@@ -1718,7 +1718,7 @@ class ModuleUtilsMixin:
         Arguments:
             attention_mask (`torch.Tensor`):
                 Mask with ones indicating tokens to attend to, zeros for tokens to ignore.
-            input_shape (`Tuple[int]`):
+            input_shape (`tuple[int]`):
                 The shape of the input to the model.
 
         Returns:
@@ -2005,7 +2005,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
     @property
     def dummy_inputs(self) -> dict[str, torch.Tensor]:
         """
-        `Dict[str, torch.Tensor]`: Dummy inputs to do a forward pass in the network.
+        `dict[str, torch.Tensor]`: Dummy inputs to do a forward pass in the network.
         """
         return {"input_ids": torch.tensor(DUMMY_INPUTS)}
 
@@ -2114,7 +2114,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         not overwrite existing tags in the model.
 
         Args:
-            tags (`Union[List[str], str]`):
+            tags (`Union[list[str], str]`):
                 The desired tags to inject in the model
 
         Examples:
@@ -2809,7 +2809,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 The device map value. Options are ["auto", "balanced", "balanced_low_0", "sequential"]
 
         Returns:
-            `List[str]`: List of modules that should not be split
+            `list[str]`: List of modules that should not be split
         """
         _no_split_modules = set()
         modules_to_check = [self]
@@ -3317,7 +3317,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         Prunes heads of the base model.
 
         Arguments:
-            heads_to_prune (`Dict[int, List[int]]`):
+            heads_to_prune (`dict[int, list[int]]`):
                 Dictionary with keys being selected layer indices (`int`) and associated values being the list of heads
                 to prune in said layer (list of `int`). For instance {1: [0, 2], 2: [2, 3]} will prune heads 0 and 2 on
                 layer 1 and heads 2 and 3 on layer 2.
@@ -3486,7 +3486,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 For backward compatibility with PEFT library, in case adapter weights are attached to the model, all
                 keys of the state dict of adapters needs to be prepended with `base_model.model`. Advanced users can
                 disable this behaviours by setting `save_peft_format` to `False`.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         use_auth_token = kwargs.pop("use_auth_token", None)
@@ -4057,7 +4057,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                       save directory.
                     - The model is loaded by supplying a local directory as `pretrained_model_name_or_path` and a
                       configuration JSON file named *config.json* is found in the directory.
-            state_dict (`Dict[str, torch.Tensor]`, *optional*):
+            state_dict (`dict[str, torch.Tensor]`, *optional*):
                 A state dictionary to use instead of a state dictionary loaded from saved weights file.
 
                 This option can be used if you want to create a model from a pretrained configuration but load your own
@@ -4082,7 +4082,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
-            proxies (`Dict[str, str]`, *optional*):
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             output_loading_info(`bool`, *optional*, defaults to `False`):
@@ -4131,7 +4131,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
                 </Tip>
 
-            device_map (`str` or `Dict[str, Union[int, str, torch.device]]` or `int` or `torch.device`, *optional*):
+            device_map (`str` or `dict[str, Union[int, str, torch.device]]` or `int` or `torch.device`, *optional*):
                 A map that specifies where each submodule should go. It doesn't need to be refined to each
                 parameter/buffer name, once a given module name is inside, every submodule of it will be sent to the
                 same device. If we only pass the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"mps"`, or a GPU ordinal rank
@@ -4179,7 +4179,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                 Indicates whether unpickler should be restricted to loading only tensors, primitive types,
                 dictionaries and any types added via torch.serialization.add_safe_globals().
                 When set to False, we can load wrapper tensor subclass weights.
-            key_mapping (`Dict[str, str], *optional*):
+            key_mapping (`dict[str, str], *optional*):
                 A potential mapping of the weight names if using a model on the Hub which is compatible to a Transformers
                 architecture, but was not converted accordingly.
             kwargs (remaining dictionary of keyword arguments, *optional*):

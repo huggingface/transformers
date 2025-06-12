@@ -712,7 +712,7 @@ class MllamaSelfAttentionDecoderLayer(nn.Module):
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence
-            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+            position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
             kwargs (`dict`, *optional*):
@@ -1315,7 +1315,7 @@ class MllamaTextModel(MllamaPreTrainedModel):
             For each text token (in seq_length):
             - 1 indicates the token **should attend** to the corresponding image tile
             - 0 indicates the token **should not attend** to the corresponding image tile
-        full_text_row_masked_out_mask (`Tuple[torch.Tensor, torch.Tensor]`, *optional*):
+        full_text_row_masked_out_mask (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
             A tuple containing two tensors that mask out rows in the cross-attention mechanism:
             - The first tensor has shape `(batch_size, 1, seq_length, 1)` and contains values of 0 or 1.
               A value of 0 indicates that the corresponding text token's entire row in the cross-attention
@@ -1535,7 +1535,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        full_text_row_masked_out_mask (`Tuple[torch.Tensor, torch.Tensor]`, *optional*):
+        full_text_row_masked_out_mask (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
             A tuple containing two tensors that mask out rows in the cross-attention mechanism:
             - The first tensor has shape `(batch_size, 1, seq_length, 1)` and contains values of 0 or 1.
               A value of 0 indicates that the corresponding text token's entire row in the cross-attention

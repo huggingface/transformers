@@ -395,12 +395,12 @@ class TapasTokenizer(PreTrainedTokenizer):
         Creates the attention mask according to the query token IDs and a list of table values.
 
         Args:
-            query_ids (`List[int]`): list of token IDs corresponding to the ID.
-            table_values (`List[TableValue]`): lift of table values, which are named tuples containing the
+            query_ids (`list[int]`): list of token IDs corresponding to the ID.
+            table_values (`list[TableValue]`): lift of table values, which are named tuples containing the
                 token value, the column ID and the row ID of said token.
 
         Returns:
-            `List[int]`: List of ints containing the attention mask values.
+            `list[int]`: List of ints containing the attention mask values.
         """
         return [1] * (1 + len(query_ids) + 1 + len(table_values))
 
@@ -411,12 +411,12 @@ class TapasTokenizer(PreTrainedTokenizer):
         Creates the segment token type IDs according to the query token IDs and a list of table values.
 
         Args:
-            query_ids (`List[int]`): list of token IDs corresponding to the ID.
-            table_values (`List[TableValue]`): lift of table values, which are named tuples containing the
+            query_ids (`list[int]`): list of token IDs corresponding to the ID.
+            table_values (`list[TableValue]`): lift of table values, which are named tuples containing the
                 token value, the column ID and the row ID of said token.
 
         Returns:
-            `List[int]`: List of ints containing the segment token type IDs values.
+            `list[int]`: List of ints containing the segment token type IDs values.
         """
         table_ids = list(zip(*table_values))[0] if table_values else []
         return [0] * (1 + len(query_ids) + 1) + [1] * len(table_ids)
@@ -428,12 +428,12 @@ class TapasTokenizer(PreTrainedTokenizer):
         Creates the column token type IDs according to the query token IDs and a list of table values.
 
         Args:
-            query_ids (`List[int]`): list of token IDs corresponding to the ID.
-            table_values (`List[TableValue]`): lift of table values, which are named tuples containing the
+            query_ids (`list[int]`): list of token IDs corresponding to the ID.
+            table_values (`list[TableValue]`): lift of table values, which are named tuples containing the
                 token value, the column ID and the row ID of said token.
 
         Returns:
-            `List[int]`: List of ints containing the column token type IDs values.
+            `list[int]`: List of ints containing the column token type IDs values.
         """
         table_column_ids = list(zip(*table_values))[1] if table_values else []
         return [0] * (1 + len(query_ids) + 1) + list(table_column_ids)
@@ -445,12 +445,12 @@ class TapasTokenizer(PreTrainedTokenizer):
         Creates the row token type IDs according to the query token IDs and a list of table values.
 
         Args:
-            query_ids (`List[int]`): list of token IDs corresponding to the ID.
-            table_values (`List[TableValue]`): lift of table values, which are named tuples containing the
+            query_ids (`list[int]`): list of token IDs corresponding to the ID.
+            table_values (`list[TableValue]`): lift of table values, which are named tuples containing the
                 token value, the column ID and the row ID of said token.
 
         Returns:
-            `List[int]`: List of ints containing the row token type IDs values.
+            `list[int]`: List of ints containing the row token type IDs values.
         """
         table_row_ids = list(zip(*table_values))[2] if table_values else []
         return [0] * (1 + len(query_ids) + 1) + list(table_row_ids)
@@ -463,11 +463,11 @@ class TapasTokenizer(PreTrainedTokenizer):
         by concatenating and adding special tokens.
 
         Args:
-            token_ids_0 (`List[int]`): The ids of the question.
-            token_ids_1 (`List[int]`, *optional*): The ids of the flattened table.
+            token_ids_0 (`list[int]`): The ids of the question.
+            token_ids_1 (`list[int]`, *optional*): The ids of the flattened table.
 
         Returns:
-            `List[int]`: The model input with special tokens.
+            `list[int]`: The model input with special tokens.
         """
         if token_ids_1 is None:
             raise ValueError("With TAPAS, you must provide both question IDs and table IDs.")
@@ -482,15 +482,15 @@ class TapasTokenizer(PreTrainedTokenizer):
         special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of question IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 List of flattened table IDs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
@@ -541,17 +541,17 @@ class TapasTokenizer(PreTrainedTokenizer):
             table (`pd.DataFrame`):
                 Table containing tabular data. Note that all cell values must be text. Use *.astype(str)* on a Pandas
                 dataframe to convert it to string.
-            queries (`str` or `List[str]`):
+            queries (`str` or `list[str]`):
                 Question or batch of questions related to a table to be encoded. Note that in case of a batch, all
                 questions must refer to the **same** table.
-            answer_coordinates (`List[Tuple]` or `List[List[Tuple]]`, *optional*):
+            answer_coordinates (`list[Tuple]` or `list[list[Tuple]]`, *optional*):
                 Answer coordinates of each table-question pair in the batch. In case only a single table-question pair
                 is provided, then the answer_coordinates must be a single list of one or more tuples. Each tuple must
                 be a (row_index, column_index) pair. The first data row (not the column header row) has index 0. The
                 first column has index 0. In case a batch of table-question pairs is provided, then the
                 answer_coordinates must be a list of lists of tuples (each list corresponding to a single
                 table-question pair).
-            answer_text (`List[str]` or `List[List[str]]`, *optional*):
+            answer_text (`list[str]` or `list[list[str]]`, *optional*):
                 Answer text of each table-question pair in the batch. In case only a single table-question pair is
                 provided, then the answer_text must be a single list of one or more strings. Each string must be the
                 answer text of a corresponding answer coordinate. In case a batch of table-question pairs is provided,
@@ -572,7 +572,7 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         if not valid_query:
             raise ValueError(
-                "queries input must of type `str` (single example), `List[str]` (batch or single pretokenized"
+                "queries input must of type `str` (single example), `list[str]` (batch or single pretokenized"
                 " example). "
             )
         is_batched = isinstance(queries, (list, tuple))
@@ -664,15 +664,15 @@ class TapasTokenizer(PreTrainedTokenizer):
             table (`pd.DataFrame`):
                 Table containing tabular data. Note that all cell values must be text. Use *.astype(str)* on a Pandas
                 dataframe to convert it to string.
-            queries (`List[str]`):
+            queries (`list[str]`):
                 Batch of questions related to a table to be encoded. Note that all questions must refer to the **same**
                 table.
-            answer_coordinates (`List[Tuple]` or `List[List[Tuple]]`, *optional*):
+            answer_coordinates (`list[Tuple]` or `list[list[Tuple]]`, *optional*):
                 Answer coordinates of each table-question pair in the batch. Each tuple must be a (row_index,
                 column_index) pair. The first data row (not the column header row) has index 0. The first column has
                 index 0. The answer_coordinates must be a list of lists of tuples (each list corresponding to a single
                 table-question pair).
-            answer_text (`List[str]` or `List[List[str]]`, *optional*):
+            answer_text (`list[str]` or `list[list[str]]`, *optional*):
                 Answer text of each table-question pair in the batch. In case a batch of table-question pairs is
                 provided, then the answer_coordinates must be a list of lists of strings (each list corresponding to a
                 single table-question pair). Each string must be the answer text of a corresponding answer coordinate.
@@ -894,7 +894,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             table (`pd.DataFrame`):
                 Table containing tabular data. Note that all cell values must be text. Use *.astype(str)* on a Pandas
                 dataframe to convert it to string.
-            query (`str` or `List[str]`):
+            query (`str` or `list[str]`):
                 Question related to a table to be encoded.
         """
         encoded_inputs = self.encode_plus(
@@ -945,13 +945,13 @@ class TapasTokenizer(PreTrainedTokenizer):
             table (`pd.DataFrame`):
                 Table containing tabular data. Note that all cell values must be text. Use *.astype(str)* on a Pandas
                 dataframe to convert it to string.
-            query (`str` or `List[str]`):
+            query (`str` or `list[str]`):
                 Question related to a table to be encoded.
-            answer_coordinates (`List[Tuple]` or `List[List[Tuple]]`, *optional*):
+            answer_coordinates (`list[Tuple]` or `list[list[Tuple]]`, *optional*):
                 Answer coordinates of each table-question pair in the batch. The answer_coordinates must be a single
                 list of one or more tuples. Each tuple must be a (row_index, column_index) pair. The first data row
                 (not the column header row) has index 0. The first column has index 0.
-            answer_text (`List[str]` or `List[List[str]]`, *optional*):
+            answer_text (`list[str]` or `list[list[str]]`, *optional*):
                 Answer text of each table-question pair in the batch. The answer_text must be a single list of one or
                 more strings. Each string must be the answer text of a corresponding answer coordinate.
         """
@@ -1093,13 +1093,13 @@ class TapasTokenizer(PreTrainedTokenizer):
                 The original query before any transformation (like tokenization) was applied to it.
             tokenized_table (`TokenizedTable`):
                 The table after tokenization.
-            query_tokens (`List[str]`):
+            query_tokens (`list[str]`):
                 The query after tokenization.
-            answer_coordinates (`List[Tuple]` or `List[List[Tuple]]`, *optional*):
+            answer_coordinates (`list[Tuple]` or `list[list[Tuple]]`, *optional*):
                 Answer coordinates of each table-question pair in the batch. The answer_coordinates must be a single
                 list of one or more tuples. Each tuple must be a (row_index, column_index) pair. The first data row
                 (not the column header row) has index 0. The first column has index 0.
-            answer_text (`List[str]` or `List[List[str]]`, *optional*):
+            answer_text (`list[str]` or `list[list[str]]`, *optional*):
                 Answer text of each table-question pair in the batch. The answer_text must be a single list of one or
                 more strings. Each string must be the answer text of a corresponding answer coordinate.
         """
@@ -1261,7 +1261,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         Truncates a sequence pair in-place following the strategy.
 
         Args:
-            query_tokens (`List[str]`):
+            query_tokens (`list[str]`):
                 List of strings corresponding to the tokenized query.
             tokenized_table (`TokenizedTable`):
                 Tokenized table
@@ -1360,7 +1360,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         sequence length of the model.
 
         Args:
-            question_tokens (`List[String]`):
+            question_tokens (`list[String]`):
                 List of question tokens. Returns: `int`: the number of tokens left for the table, given the model max
                 length.
         """
@@ -1784,7 +1784,7 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         Args:
             encoded_inputs:
-                Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
+                Dictionary of tokenized inputs (`list[int]`) or batch of tokenized inputs (`list[list[int]]`).
             max_length: maximum length of the returned list and optionally padding length (see below).
                 Will truncate by taking into account the special tokens.
             padding_strategy: PaddingStrategy to use for padding.
@@ -1908,10 +1908,10 @@ class TapasTokenizer(PreTrainedTokenizer):
         Returns:
             `tuple` comprising various elements depending on the inputs:
 
-            - predicted_answer_coordinates (`List[List[[tuple]]` of length `batch_size`): Predicted answer coordinates
+            - predicted_answer_coordinates (`list[list[[tuple]]` of length `batch_size`): Predicted answer coordinates
               as a list of lists of tuples. Each element in the list contains the predicted answer coordinates of a
               single example in the batch, as a list of tuples. Each tuple is a cell, i.e. (row index, column index).
-            - predicted_aggregation_indices (`List[int]`of length `batch_size`, *optional*, returned when
+            - predicted_aggregation_indices (`list[int]`of length `batch_size`, *optional*, returned when
               `logits_aggregation` is provided): Predicted aggregation operator indices of the aggregation head.
         """
         # converting to numpy arrays to work with PT/TF
@@ -2032,7 +2032,7 @@ class BasicTokenizer:
         Basic Tokenization of a piece of text. For sub-word tokenization, see WordPieceTokenizer.
 
         Args:
-            never_split (`List[str]`, *optional*)
+            never_split (`list[str]`, *optional*)
                 Kept for backward compatibility purposes. Now implemented directly at the base class level (see
                 [`PreTrainedTokenizer.tokenize`]) List of token not to split.
         """

@@ -110,10 +110,10 @@ class FuyuBatchFeature(BatchFeature):
         # Do the tensor conversion in batch
         for key, value in self.items():
             if isinstance(value, list) and isinstance(value[0], list):
-                # List[List[Any]] -> List[List[Tensor]]
+                # list[list[Any]] -> list[list[Tensor]]
                 self[key] = [[_safe_convert_tensor(elem) for elem in elems] for elems in value]
             elif isinstance(value, list):
-                # List[Any] -> List[Tensor]
+                # list[Any] -> list[Tensor]
                 self[key] = [_safe_convert_tensor(elem) for elem in value]
             else:
                 # Any -> Tensor
@@ -201,7 +201,7 @@ class FuyuImageProcessor(BaseImageProcessor):
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image to `size`.
-        size (`Dict[str, int]`, *optional*, defaults to `{"height": 1080, "width": 1920}`):
+        size (`dict[str, int]`, *optional*, defaults to `{"height": 1080, "width": 1920}`):
             Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
@@ -221,7 +221,7 @@ class FuyuImageProcessor(BaseImageProcessor):
             Whether to rescale the image.
         rescale_factor (`float`, *optional*, defaults to `1 / 255`):
             The factor to use when rescaling the image.
-        patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 30, "width": 30}`):
+        patch_size (`dict[str, int]`, *optional*, defaults to `{"height": 30, "width": 30}`):
             Dictionary in the format `{"height": int, "width": int}` specifying the size of the patches.
     """
 
@@ -278,7 +278,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
@@ -336,7 +336,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to pad.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             data_format (`ChannelDimension` or `str`, *optional*):
                 The data format of the output image. If unset, the same format as the input image is used.
@@ -389,7 +389,7 @@ class FuyuImageProcessor(BaseImageProcessor):
                 values range from 0 to 255, or between 0 and 1 if `do_rescale` is `False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image to `size`.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
@@ -409,7 +409,7 @@ class FuyuImageProcessor(BaseImageProcessor):
                 Whether to rescale the image.
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
                 The factor to use when rescaling the image.
-            patch_size (`Dict[str, int]`, *optional*, defaults to `self.patch_size`):
+            patch_size (`dict[str, int]`, *optional*, defaults to `self.patch_size`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the patches.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
@@ -546,7 +546,7 @@ class FuyuImageProcessor(BaseImageProcessor):
                 Height of the image.
             image_width (`int`):
                 Width of the image.
-            patch_size (`Dict[str, int]`, *optional*, defaults to `self.patch_size`):
+            patch_size (`dict[str, int]`, *optional*, defaults to `self.patch_size`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the patches.
         """
         patch_size = patch_size if patch_size is not None else self.patch_size
@@ -569,7 +569,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         Args:
             image (`torch.Tensor`):
                 Image to convert. Shape: [batch, channels, height, width]
-            patch_size (`Dict[str, int]`, *optional*, defaults to `self.patch_size`):
+            patch_size (`dict[str, int]`, *optional*, defaults to `self.patch_size`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the patches.
         """
         requires_backends(self, ["torch"])
@@ -616,7 +616,7 @@ class FuyuImageProcessor(BaseImageProcessor):
                 The id of the image newline token. Comes from an associated tokenizer.
             variable_sized (bool):
                 Whether to process images as variable-sized.
-            patch_size (`Dict[str, int]`, *optional*, defaults to `self.patch_size`):
+            patch_size (`dict[str, int]`, *optional*, defaults to `self.patch_size`):
                 Size of the patches.
         """
         requires_backends(self, ["torch"])

@@ -1126,7 +1126,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         Arguments:
             attention_mask (`torch.Tensor`):
                 Mask with ones indicating tokens to attend to, zeros for tokens to ignore.
-            input_shape (`Tuple[int]`):
+            input_shape (`tuple[int]`):
                 The shape of the input to the model.
             device (`torch.device`):
                 The device of the input to the model.

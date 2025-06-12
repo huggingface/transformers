@@ -687,7 +687,7 @@ XLM_INPUTS_DOCSTRING = r"""
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
-        cache (`Dict[str, tf.Tensor]`, *optional*):
+        cache (`dict[str, tf.Tensor]`, *optional*):
             Dictionary string to `tf.Tensor` that contains precomputed hidden states (key and values in the attention
             blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential decoding.
 

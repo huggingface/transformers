@@ -56,7 +56,7 @@ if is_torchvision_available():
 
 class LlavaNextFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
-    image_grid_pinpoints (`List[List[int]]`, *optional*):
+    image_grid_pinpoints (`list[list[int]]`, *optional*):
         A list of possible resolutions to use for processing high resolution images. The best resolution is selected
         based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
         method.
@@ -185,7 +185,7 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
                 Resampling filter to use if resizing the image.
 
         Returns:
-            List["torch.Tensor"]: A list of NumPy arrays containing the processed image patches.
+            list["torch.Tensor"]: A list of NumPy arrays containing the processed image patches.
         """
         if not isinstance(grid_pinpoints, list):
             raise TypeError("grid_pinpoints must be a list of possible resolutions.")
@@ -213,11 +213,11 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
         Pads images on the `num_of_patches` dimension with zeros to form a batch of same number of patches.
 
         Args:
-            pixel_values (`List[torch.Tensor]`):
+            pixel_values (`list[torch.Tensor]`):
                 An array of pixel values of each images of shape (`batch_size`, `num_patches`, `image_in_3D`)
 
         Returns:
-            List[`torch.Tensor`]: The padded images.
+            list[`torch.Tensor`]: The padded images.
         """
         max_patch = max(len(x) for x in pixel_values)
         pixel_values = [

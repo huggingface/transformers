@@ -264,11 +264,11 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         Use default HuggingFace tokenization methods for full functionality.
 
         Args:
-            text (`str` or `List[str]`): One or several text(s) to convert to token ids.
+            text (`str` or `list[str]`): One or several text(s) to convert to token ids.
             return_tensors (`str` or `bool`): Returns PyTorch tensors if set to True or "pt"
 
         Returns:
-            `List[int]`, `List[List[int]]`, or `torch.Tensor`: The encoded text(s) as token ids.
+            `list[int]`, `list[list[int]]`, or `torch.Tensor`: The encoded text(s) as token ids.
         """
 
         if isinstance(text, str):
@@ -289,7 +289,7 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         functionality but is often much faster.
 
         Args:
-            token_ids (`int` or `List[int]`): Encoded token or text as token id(s).
+            token_ids (`int` or `list[int]`): Encoded token or text as token id(s).
 
         Returns:
             `str`: Decoded text

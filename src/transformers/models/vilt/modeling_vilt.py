@@ -52,11 +52,11 @@ class ViltForImagesAndTextClassificationOutput(ModelOutput):
             Classification (or regression if config.num_labels==1) loss.
         logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (`List[tuple(torch.FloatTensor)]`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        hidden_states (`list[tuple(torch.FloatTensor)]`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             List of tuples of `torch.FloatTensor` (one for each image-text pair, each tuple containing the output of
             the embeddings + one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`List[tuple(torch.FloatTensor)]`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        attentions (`list[tuple(torch.FloatTensor)]`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             List of tuples of `torch.FloatTensor` (one for each image-text pair, each tuple containing the attention
             weights of shape `(batch_size, num_heads, sequence_length, sequence_length)`. Attentions weights after the
             attention softmax, used to compute the weighted average in the self-attention heads.

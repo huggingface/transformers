@@ -108,7 +108,7 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
             Whether to add an end of sequence token at the end of sequences.
         clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
             Whether or not to clean up the tokenization spaces.
-        additional_special_tokens (`List[str]`, *optional*):
+        additional_special_tokens (`list[str]`, *optional*):
             Additional special tokens used by the tokenizer.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Llama should be used.
@@ -376,15 +376,15 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
@@ -421,13 +421,13 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         if token_ids_1 is None, only returns the first portion of the mask (0s).
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of ids.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
+            `list[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
         bos_token_id = [self.bos_token_id] if self.add_bos_token else []
         eos_token_id = [self.eos_token_id] if self.add_eos_token else []

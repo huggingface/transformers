@@ -92,11 +92,11 @@ class SamImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
+        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
             overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
+        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
@@ -177,7 +177,7 @@ class SamImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to pad.
-            pad_size (`Dict[str, int]`):
+            pad_size (`dict[str, int]`):
                 Size of the output image after padding.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The data format of the image. Can be either "channels_first" or "channels_last". If `None`, the
@@ -226,7 +226,7 @@ class SamImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Dictionary in the format `{"longest_edge": int}` specifying the size of the output image. The longest
                 edge of the image will be resized to the specified size, while the other edge will be resized to
                 maintain the aspect ratio.
@@ -420,10 +420,10 @@ class SamImageProcessor(BaseImageProcessor):
                 Segmentation map to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Controls the size of the image after `resize`. The longest edge of the image is resized to
                 `size["longest_edge"]` whilst preserving the aspect ratio.
-            mask_size (`Dict[str, int]`, *optional*, defaults to `self.mask_size`):
+            mask_size (`dict[str, int]`, *optional*, defaults to `self.mask_size`):
                 Controls the size of the segmentation map after `resize`. The longest edge of the image is resized to
                 `size["longest_edge"]` whilst preserving the aspect ratio.
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
@@ -434,16 +434,16 @@ class SamImageProcessor(BaseImageProcessor):
                 Rescale factor to apply to the image pixel values.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to normalize the image by if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to normalize the image by if `do_normalize` is set to `True`.
             do_pad (`bool`, *optional*, defaults to `self.do_pad`):
                 Whether to pad the image.
-            pad_size (`Dict[str, int]`, *optional*, defaults to `self.pad_size`):
+            pad_size (`dict[str, int]`, *optional*, defaults to `self.pad_size`):
                 Controls the size of the padding applied to the image. The image is padded to `pad_size["height"]` and
                 `pad_size["width"]` if `do_pad` is set to `True`.
-            mask_pad_size (`Dict[str, int]`, *optional*, defaults to `self.mask_pad_size`):
+            mask_pad_size (`dict[str, int]`, *optional*, defaults to `self.mask_pad_size`):
                 Controls the size of the padding applied to the segmentation map. The image is padded to
                 `mask_pad_size["height"]` and `mask_pad_size["width"]` if `do_pad` is set to `True`.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
@@ -585,12 +585,12 @@ class SamImageProcessor(BaseImageProcessor):
         Remove padding and upscale masks to the original image size.
 
         Args:
-            masks (`Union[List[torch.Tensor], List[np.ndarray], List[tf.Tensor]]`):
+            masks (`Union[list[torch.Tensor], list[np.ndarray], list[tf.Tensor]]`):
                 Batched masks from the mask_decoder in (batch_size, num_channels, height, width) format.
-            original_sizes (`Union[torch.Tensor, tf.Tensor, List[Tuple[int,int]]]`):
+            original_sizes (`Union[torch.Tensor, tf.Tensor, list[tuple[int,int]]]`):
                 The original sizes of each image before it was resized to the model's expected input shape, in (height,
                 width) format.
-            reshaped_input_sizes (`Union[torch.Tensor, tf.Tensor, List[Tuple[int,int]]]`):
+            reshaped_input_sizes (`Union[torch.Tensor, tf.Tensor, list[tuple[int,int]]]`):
                 The size of each image as it is fed to the model, in (height, width) format. Used to remove padding.
             mask_threshold (`float`, *optional*, defaults to 0.0):
                 The threshold to use for binarizing the masks.
@@ -633,12 +633,12 @@ class SamImageProcessor(BaseImageProcessor):
         Remove padding and upscale masks to the original image size.
 
         Args:
-            masks (`Union[List[torch.Tensor], List[np.ndarray]]`):
+            masks (`Union[list[torch.Tensor], list[np.ndarray]]`):
                 Batched masks from the mask_decoder in (batch_size, num_channels, height, width) format.
-            original_sizes (`Union[torch.Tensor, List[Tuple[int,int]]]`):
+            original_sizes (`Union[torch.Tensor, list[tuple[int,int]]]`):
                 The original sizes of each image before it was resized to the model's expected input shape, in (height,
                 width) format.
-            reshaped_input_sizes (`Union[torch.Tensor, List[Tuple[int,int]]]`):
+            reshaped_input_sizes (`Union[torch.Tensor, list[tuple[int,int]]]`):
                 The size of each image as it is fed to the model, in (height, width) format. Used to remove padding.
             mask_threshold (`float`, *optional*, defaults to 0.0):
                 The threshold to use for binarizing the masks.
@@ -722,11 +722,11 @@ class SamImageProcessor(BaseImageProcessor):
         Post processes mask that are generated by calling the Non Maximum Suppression algorithm on the predicted masks.
 
         Args:
-            all_masks (`Union[List[torch.Tensor], List[tf.Tensor]]`):
+            all_masks (`Union[list[torch.Tensor], list[tf.Tensor]]`):
                 List of all predicted segmentation masks
-            all_scores (`Union[List[torch.Tensor], List[tf.Tensor]]`):
+            all_scores (`Union[list[torch.Tensor], list[tf.Tensor]]`):
                 List of all predicted iou scores
-            all_boxes (`Union[List[torch.Tensor], List[tf.Tensor]]`):
+            all_boxes (`Union[list[torch.Tensor], list[tf.Tensor]]`):
                 List of all bounding boxes of the predicted masks
             crops_nms_thresh (`float`):
                 Threshold for NMS (Non Maximum Suppression) algorithm.
@@ -766,7 +766,7 @@ class SamImageProcessor(BaseImageProcessor):
                 the image length. Later layers with more crops scale down this overlap.
             points_per_crop (`int`, *optional*, defaults to 32):
                 Number of points to sample from each crop.
-            crop_n_points_downscale_factor (`List[int]`, *optional*, defaults to 1):
+            crop_n_points_downscale_factor (`list[int]`, *optional*, defaults to 1):
                 The number of points-per-side sampled in layer n is scaled down by crop_n_points_downscale_factor**n.
             device (`torch.device`, *optional*, defaults to None):
                 Device to use for the computation. If None, cpu will be used.
@@ -826,7 +826,7 @@ class SamImageProcessor(BaseImageProcessor):
                 Input masks.
             iou_scores (`Union[torch.Tensor, tf.Tensor]`):
                 List of IoU scores.
-            original_size (`Tuple[int,int]`):
+            original_size (`tuple[int,int]`):
                 Size of the original image.
             cropped_box_image (`np.array`):
                 The cropped image.
@@ -886,7 +886,7 @@ class SamImageProcessor(BaseImageProcessor):
                 Input masks.
             iou_scores (`torch.Tensor`):
                 List of IoU scores.
-            original_size (`Tuple[int,int]`):
+            original_size (`tuple[int,int]`):
                 Size of the original image.
             cropped_box_image (`np.array`):
                 The cropped image.
@@ -966,7 +966,7 @@ class SamImageProcessor(BaseImageProcessor):
                 Input masks.
             iou_scores (`tf.Tensor`):
                 List of IoU scores.
-            original_size (`Tuple[int,int]`):
+            original_size (`tuple[int,int]`):
                 Size of the original image.
             cropped_box_image (`np.array`):
                 The cropped image.

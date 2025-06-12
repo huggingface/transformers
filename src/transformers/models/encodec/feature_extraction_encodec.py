@@ -94,7 +94,7 @@ class EncodecFeatureExtractor(SequenceFeatureExtractor):
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            raw_audio (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_audio (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be processed. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. The numpy array must be of shape
                 `(num_samples,)` for mono audio (`feature_size = 1`), or `(2, num_samples)` for stereo audio

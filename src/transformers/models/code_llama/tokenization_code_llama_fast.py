@@ -98,7 +98,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
             End of text token used for infilling.
         fill_token (`str`, *optional*, defaults to `"<FILL_ME>"`):
             The token used to split the input between the prefix and suffix.
-        additional_special_tokens (`List[str]`, *optional*):
+        additional_special_tokens (`list[str]`, *optional*):
             Additional special tokens used by the tokenizer.
         add_bos_token (`bool`, *optional*, defaults to `True`):
             Whether to add a beginning of sequence token at the start of sequences.
@@ -358,13 +358,13 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         separator.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `list[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return self.bos_token_id + token_ids_0 + self.eos_token_id

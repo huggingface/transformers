@@ -402,7 +402,7 @@ class AriaImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 The image to pad.
-            padding (`int` or `Tuple[int, int]` or `Iterable[Tuple[int, int]]`):
+            padding (`int` or `tuple[int, int]` or `Iterable[tuple[int, int]]`):
                 Padding to apply to the edges of the height, width axes. Can be one of three formats:
                 - `((before_height, after_height), (before_width, after_width))` unique pad widths for each axis.
                 - `((before, after),)` yields same before and after pad for height and width.
@@ -466,7 +466,7 @@ class AriaImageProcessor(BaseImageProcessor):
         Args:
             image (`np.array`):
                 The input image to be processed.
-            grid_pinpoints (List[Tuple[int, int]]):
+            grid_pinpoints (list[tuple[int, int]]):
                 A list of possible resolutions as tuples.
             patch_size (`int`):
                 Size of the patches to divide the image into.
@@ -478,7 +478,7 @@ class AriaImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image.
 
         Returns:
-            `List[np.array]`: A list of NumPy arrays containing the processed image patches.
+            `list[np.array]`: A list of NumPy arrays containing the processed image patches.
         """
         if not isinstance(grid_pinpoints, list):
             raise TypeError("grid_pinpoints must be a list of possible resolutions.")

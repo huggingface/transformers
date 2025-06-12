@@ -213,7 +213,7 @@ class GPTSanJapaneseTop1Router(nn.Module):
             hidden_states (`torch.Tensor`) :
                 [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
         Returns:
-            Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`] Tuple containing the expert index, the router probs
+            tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`] Tuple containing the expert index, the router probs
             and the router logits. The router probabilities and logits are required to compute the loss.
         """
         router_probs, router_logits = self._compute_router_probabilities(hidden_states)
@@ -555,7 +555,7 @@ class GPTSanJapaneseLayerSelfAttention(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         Returns:
-            Tuple[torch.Tensor[num_groups, tokens_per_group, hidden_dim],...]
+            tuple[torch.Tensor[num_groups, tokens_per_group, hidden_dim],...]
         """
         # Self Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
@@ -638,7 +638,7 @@ class GPTSanJapaneseBlock(nn.Module):
             output_router_tuple:
                 output experts router logits and expert id.
         Returns:
-            Tuple[torch.Tensor[num_groups, tokens_per_group, hidden_dim],...]
+            tuple[torch.Tensor[num_groups, tokens_per_group, hidden_dim],...]
         """
         atten_out = self.self_attn(
             hidden_states=hidden_states,

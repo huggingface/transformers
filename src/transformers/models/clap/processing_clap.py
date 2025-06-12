@@ -49,11 +49,11 @@ class ClapProcessor(ProcessorMixin):
         docstring of the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            audios (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            audios (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The audio or batch of audios to be prepared. Each audio can be NumPy array or PyTorch tensor. In case
                 of a NumPy array/PyTorch tensor, each audio should be of shape (C, T), where C is a number of channels,
                 and T the sample length of the audio.

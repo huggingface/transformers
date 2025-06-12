@@ -125,7 +125,7 @@ class TrajectoryTransformerOutput(ModelOutput):
             Language modeling loss.
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`Tuple[Tuple[torch.Tensor]]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`tuple[tuple[torch.Tensor]]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Tuple of length `config.n_layers`, containing tuples of tensors of shape `(batch_size, num_heads,
             sequence_length, embed_size_per_head)`). Contains pre-computed hidden-states (key and values in the
             attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
@@ -190,7 +190,7 @@ TRAJECTORY_TRANSFORMER_INPUTS_DOCSTRING = r"""
     Args:
         trajectories (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Batch of trajectories, where a trajectory is a sequence of states, actions and rewards.
-        past_key_values (`Tuple[Tuple[torch.Tensor]]` of length `config.n_layers`, *optional*):
+        past_key_values (`tuple[tuple[torch.Tensor]]` of length `config.n_layers`, *optional*):
             Contains precomputed hidden-states (key and values in the attention blocks) as computed by the model (see
             `past_key_values` output below). Can be used to speed up sequential decoding. The `input_ids` which have
             their past given to this model should not be passed as `input_ids` as they have already been computed.

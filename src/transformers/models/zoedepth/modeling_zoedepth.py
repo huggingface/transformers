@@ -103,7 +103,7 @@ class ZoeDepthReassembleStage(nn.Module):
     def forward(self, hidden_states: list[torch.Tensor], patch_height, patch_width) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
+            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
                 List of hidden states from the backbone.
         """
         batch_size = hidden_states[0].shape[0]
@@ -323,7 +323,7 @@ class ZoeDepthNeck(nn.Module):
     def forward(self, hidden_states: list[torch.Tensor], patch_height, patch_width) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
+            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
                 List of hidden states from the backbone.
         """
         if not isinstance(hidden_states, (tuple, list)):
@@ -630,7 +630,7 @@ class ZoeDepthAttractorLayer(nn.Module):
                 Whether to interpolate the previous bin embeddings to the size of the input features.
 
         Returns:
-            `Tuple[`torch.Tensor`, `torch.Tensor`]:
+            `tuple[`torch.Tensor`, `torch.Tensor`]:
                 New bin centers normed and scaled.
         """
         if prev_bin_embedding is not None:
@@ -723,7 +723,7 @@ class ZoeDepthAttractorLayerUnnormed(nn.Module):
                 Whether to interpolate the previous bin embeddings to the size of the input features.
 
         Returns:
-            `Tuple[`torch.Tensor`, `torch.Tensor`]:
+            `tuple[`torch.Tensor`, `torch.Tensor`]:
                 New bin centers unbounded. Two outputs just to keep the API consistent with the normed version.
         """
         if prev_bin_embedding is not None:

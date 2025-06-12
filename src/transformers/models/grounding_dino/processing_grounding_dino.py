@@ -162,9 +162,9 @@ class GroundingDinoProcessor(ProcessorMixin):
         [`BertTokenizerFast.__call__`] to prepare text for the model.
 
         Args:
-            images (`ImageInput`, `List[ImageInput]`, *optional*):
+            images (`ImageInput`, `list[ImageInput]`, *optional*):
                 The image or batch of images to be processed. The image might be either PIL image, numpy array or a torch tensor.
-            text (`TextInput`, `PreTokenizedInput`, `List[TextInput]`, `List[PreTokenizedInput]`, *optional*):
+            text (`TextInput`, `PreTokenizedInput`, `list[TextInput]`, `list[PreTokenizedInput]`, *optional*):
                 Candidate labels to be detected on the image. The text might be one of the following:
                 - A list of candidate labels (strings) to be detected on the image (e.g. ["a cat", "a dog"]).
                 - A batch of candidate labels to be detected on the batch of images (e.g. [["a cat", "a dog"], ["a car", "a person"]]).
@@ -262,16 +262,16 @@ class GroundingDinoProcessor(ProcessorMixin):
                 Threshold to keep object detection predictions based on confidence score.
             text_threshold (`float`, *optional*, defaults to 0.25):
                 Score threshold to keep text detection predictions.
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
-            text_labels (`List[List[str]]`, *optional*):
+            text_labels (`list[list[str]]`, *optional*):
                 List of candidate labels to be detected on each image. At the moment it's *NOT used*, but required
                 to be in signature for the zero-shot object detection pipeline. Text labels are instead extracted
                 from the `input_ids` tensor provided in `outputs`.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the
+            `list[Dict]`: A list of dictionaries, each dictionary containing the
                 - **scores**: tensor of confidence scores for detected objects
                 - **boxes**: tensor of bounding boxes in [x0, y0, x1, y1] format
                 - **labels**: list of text labels for each detected object (will be replaced with integer ids in v4.51.0)

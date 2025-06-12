@@ -270,7 +270,7 @@ def read_video_opencv(
                 return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
 
     Returns:
-        Tuple[`np.array`, `VideoMetadata`]: A tuple containing:
+        tuple[`np.array`, `VideoMetadata`]: A tuple containing:
             - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
             - `VideoMetadata` object.
     """
@@ -327,7 +327,7 @@ def read_video_decord(
                 return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
 
     Returns:
-        Tuple[`np.array`, `VideoMetadata`]: A tuple containing:
+        tuple[`np.array`, `VideoMetadata`]: A tuple containing:
             - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
             - `VideoMetadata` object.
     """
@@ -370,7 +370,7 @@ def read_video_pyav(
                 return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
 
     Returns:
-        Tuple[`np.array`, `VideoMetadata`]: A tuple containing:
+        tuple[`np.array`, `VideoMetadata`]: A tuple containing:
             - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
             - `VideoMetadata` object.
     """
@@ -421,7 +421,7 @@ def read_video_torchvision(
                 return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
 
     Returns:
-        Tuple[`np.array`, `VideoMetadata`]: A tuple containing:
+        tuple[`np.array`, `VideoMetadata`]: A tuple containing:
             - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
             - `VideoMetadata` object.
     """
@@ -490,7 +490,7 @@ def load_video(
                 return np.linspace(0, metadata.total_num_frames - 1, num_frames, dtype=int)
 
     Returns:
-        Tuple[`np.array`, Dict]: A tuple containing:
+        tuple[`np.array`, Dict]: A tuple containing:
             - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
             - Metadata dictionary.
     """
@@ -613,7 +613,7 @@ def pad(
     Args:
         video (`np.ndarray`):
             The video to pad.
-        padding (`int` or `Tuple[int, int]` or `Iterable[Tuple[int, int]]`):
+        padding (`int` or `tuple[int, int]` or `Iterable[tuple[int, int]]`):
             Padding to apply to the edges of the height, width axes. Can be one of three formats:
             - `((before_height, after_height), (before_width, after_width))` unique pad widths for each axis.
             - `((before, after),)` yields same before and after pad for height and width.

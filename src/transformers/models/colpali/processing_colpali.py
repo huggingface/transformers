@@ -63,7 +63,7 @@ def build_string_from_input(prompt, bos_token, image_seq_len, image_token, num_i
     The output will be:
     "<im><im><im><s>Initial str"
     Args:
-        prompt (`List[Union[str, ImageInput]]`): The input prompt.
+        prompt (`list[Union[str, ImageInput]]`): The input prompt.
         bos_token (`str`): The beginning of sentence token.
         image_seq_len (`int`): The length of the image sequence.
         image_token (`str`): The image token.
@@ -151,11 +151,11 @@ class ColPaliProcessor(ProcessorMixin):
         Please refer to the docstring of the above two methods for more information.
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -261,10 +261,10 @@ class ColPaliProcessor(ProcessorMixin):
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
-            image_sizes (List[List[str]], *optional*):
+            image_sizes (list[list[str]], *optional*):
                 The input sizes formatted as (height, width) per each image.
         Returns:
-            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
+            dict[str, list[int]]: A dictionary mapping each modality ("image", "video", "audio")
             to a list containing the number of placeholder tokens required. If the model doesn't accept
             a certain modality or no input sizes are provided, the dict value is set to an empty list.
         """
@@ -316,7 +316,7 @@ class ColPaliProcessor(ProcessorMixin):
         This method forwards the `images` and `kwargs` arguments to the image processor.
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
@@ -351,7 +351,7 @@ class ColPaliProcessor(ProcessorMixin):
         This method forwards the `text` and `kwargs` arguments to the tokenizer.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -393,8 +393,8 @@ class ColPaliProcessor(ProcessorMixin):
             obtained by padding the list of tensors.
 
         Args:
-            query_embeddings (`Union[torch.Tensor, List[torch.Tensor]`): Query embeddings.
-            passage_embeddings (`Union[torch.Tensor, List[torch.Tensor]`): Passage embeddings.
+            query_embeddings (`Union[torch.Tensor, list[torch.Tensor]`): Query embeddings.
+            passage_embeddings (`Union[torch.Tensor, list[torch.Tensor]`): Passage embeddings.
             batch_size (`int`, *optional*, defaults to 128): Batch size for computing scores.
             output_dtype (`torch.dtype`, *optional*, defaults to `torch.float32`): The dtype of the output tensor.
                 If `None`, the dtype of the input embeddings is used.

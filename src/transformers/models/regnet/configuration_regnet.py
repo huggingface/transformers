@@ -36,9 +36,9 @@ class RegNetConfig(PretrainedConfig):
             The number of input channels.
         embedding_size (`int`, *optional*, defaults to 64):
             Dimensionality (hidden size) for the embedding layer.
-        hidden_sizes (`List[int]`, *optional*, defaults to `[256, 512, 1024, 2048]`):
+        hidden_sizes (`list[int]`, *optional*, defaults to `[256, 512, 1024, 2048]`):
             Dimensionality (hidden size) at each stage.
-        depths (`List[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
+        depths (`list[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
             Depth (number of layers) for each stage.
         layer_type (`str`, *optional*, defaults to `"y"`):
             The layer to use, it can be either `"x" or `"y"`. An `x` layer is a ResNet's BottleNeck layer with

@@ -179,7 +179,7 @@ class ConvNextStage(nn.Module):
         in_channels (`int`): Number of input channels.
         out_channels (`int`): Number of output channels.
         depth (`int`): Number of residual blocks.
-        drop_path_rates(`List[float]`): Stochastic depth rates for each layer.
+        drop_path_rates(`list[float]`): Stochastic depth rates for each layer.
     """
 
     def __init__(self, config, in_channels, out_channels, kernel_size=2, stride=2, depth=2, drop_path_rates=None):

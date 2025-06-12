@@ -55,7 +55,7 @@ class TimesFmConfig(PretrainedConfig):
             The tolerance for the quantile loss.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the RMS normalization layers.
-        quantiles (`List[float]`, *optional*, defaults to `[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]`):
+        quantiles (`list[float]`, *optional*, defaults to `[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]`):
             The quantiles to predict.
         pad_val (`float`, *optional*, defaults to 1123581321.0):
             The value used to pad the predictions.

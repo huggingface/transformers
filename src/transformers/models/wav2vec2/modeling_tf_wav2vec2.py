@@ -1441,7 +1441,7 @@ WAV2VEC2_START_DOCSTRING = r"""
 
 WAV2VEC2_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` `Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
+        input_values (`np.ndarray`, `tf.Tensor`, `list[tf.Tensor]` `dict[str, tf.Tensor]` or `dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and

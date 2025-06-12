@@ -53,7 +53,7 @@ def make_pixel_mask(
     Args:
         image (`np.ndarray`):
             Image to make the pixel mask for.
-        output_size (`Tuple[int, int]`):
+        output_size (`tuple[int, int]`):
             Output size of the mask.
     """
     input_height, input_width = image.shape[-2:]
@@ -186,7 +186,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
         Args:
             image (`torch.Tensor`):
                 Image to center crop.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image in the form `{"height": h, "width": w}`.
         """
         output_size = size.shortest_edge

@@ -260,10 +260,10 @@ class IdeficsProcessor(ProcessorMixin):
         the model was trained on and prepares the image pixel values for the model to process.
 
         Args:
-            images (`Union[ImageInput, List[ImageInput], str, List[str], List[List[str]]]`):
+            images (`Union[ImageInput, list[ImageInput], str, list[str], list[list[str]]]`):
                 either a single image or a batched list of images - can be passed in when text contains only text prompts,
                 in order to use the image-text-to-text behavior.
-            text (`Union[List[TextInput], [List[List[TextInput]]]]`):
+            text (`Union[list[TextInput], [list[list[TextInput]]]]`):
                 either a single prompt or a batched list of prompts - see the detailed description immediately after
                 the end of the arguments doc section.
             return_tensors (`str` or `TensorType`, *optional*, defaults to `TensorType.PYTORCH`):

@@ -81,7 +81,7 @@ class ObjectDetectionPipeline(Pipeline):
         Detect objects (bounding boxes & classes) in the image(s) passed as inputs.
 
         Args:
-            inputs (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            inputs (`str`, `list[str]`, `PIL.Image` or `list[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing an HTTP(S) link pointing to an image
@@ -105,7 +105,7 @@ class ObjectDetectionPipeline(Pipeline):
 
             - **label** (`str`) -- The class label identified by the model.
             - **score** (`float`) -- The score attributed by the model for that label.
-            - **box** (`List[Dict[str, int]]`) -- The bounding box of detected object in image's original size.
+            - **box** (`list[dict[str, int]]`) -- The bounding box of detected object in image's original size.
         """
         # After deprecation of this is completed, remove the default `None` value for `images`
         if "images" in kwargs and "inputs" not in kwargs:
@@ -184,7 +184,7 @@ class ObjectDetectionPipeline(Pipeline):
             box (`torch.Tensor`): Tensor containing the coordinates in corners format.
 
         Returns:
-            bbox (`Dict[str, int]`): Dict containing the coordinates in corners format.
+            bbox (`dict[str, int]`): Dict containing the coordinates in corners format.
         """
         if self.framework != "pt":
             raise ValueError("The ObjectDetectionPipeline is only available in PyTorch.")

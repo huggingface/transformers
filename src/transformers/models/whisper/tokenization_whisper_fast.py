@@ -210,7 +210,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         Compute offsets for a given tokenized input
 
         Args:
-            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             time_precision (`float`, *optional*, defaults to 0.02):
                 The time ratio to convert from token to time.
@@ -291,7 +291,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         Pre-process the token ids for decoding by removing the prompt tokens ids and timestamp token ids.
 
         Args:
-            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Typically, obtained using the `__call__` method of the tokenizer.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens from the token ids. If `True`, the prompt token ids will be
@@ -329,7 +329,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         Similar to doing `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`.
 
         Args:
-            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+            token_ids (`Union[int, list[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding. Will remove the previous tokens (pre-prompt)
@@ -543,15 +543,15 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:

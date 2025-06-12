@@ -59,9 +59,9 @@ class GenerationOutput:
 
     Attributes:
         request_id (str): The ID of the generation request.
-        prompt_ids (List[int]): The IDs of the prompt tokens.
-        generated_tokens (List[int]): The generated tokens.
-        logprobs (List[float]): The log probabilities of the generated tokens.
+        prompt_ids (list[int]): The IDs of the prompt tokens.
+        generated_tokens (list[int]): The generated tokens.
+        logprobs (list[float]): The log probabilities of the generated tokens.
         error (Optional[str]): Any error message associated with the request. When None, the request was successful.
     """
 
@@ -1441,7 +1441,7 @@ class ContinuousMixin:
             **kwargs: Additional generation parameters
 
         Returns:
-            `List[List[int]]`: A list containing the generated sequences (including prompt tokens
+            `list[list[int]]`: A list containing the generated sequences (including prompt tokens
                                 if not handled otherwise) for each input prompt, in the same order.
                                 Returns an empty list `[]` for requests that failed.
         """
