@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.from typing import List, Union
-from typing import List, Union
+from typing import Union
 
 from ..generation import GenerationConfig
 from ..utils import is_torch_available
@@ -173,12 +173,12 @@ class TextToAudioPipeline(Pipeline):
 
         return output
 
-    def __call__(self, text_inputs: Union[str, List[str]], **forward_params):
+    def __call__(self, text_inputs: Union[str, list[str]], **forward_params):
         """
         Generates speech/audio from the inputs. See the [`TextToAudioPipeline`] documentation for more information.
 
         Args:
-            text_inputs (`str` or `List[str]`):
+            text_inputs (`str` or `list[str]`):
                 The text(s) to generate.
             forward_params (`dict`, *optional*):
                 Parameters passed to the model generation/forward method. `forward_params` are always passed to the

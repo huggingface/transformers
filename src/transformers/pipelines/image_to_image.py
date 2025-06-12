@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import List, Union
+from typing import Union
 
 import numpy as np
 
@@ -85,13 +85,13 @@ class ImageToImagePipeline(Pipeline):
         return preprocess_params, forward_params, postprocess_params
 
     def __call__(
-        self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs
-    ) -> Union["Image.Image", List["Image.Image"]]:
+        self, images: Union[str, list[str], "Image.Image", list["Image.Image"]], **kwargs
+    ) -> Union["Image.Image", list["Image.Image"]]:
         """
         Transform the image(s) passed as inputs.
 
         Args:
-            images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            images (`str`, `list[str]`, `PIL.Image` or `list[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing a http link pointing to an image
@@ -106,7 +106,7 @@ class ImageToImagePipeline(Pipeline):
                 the call may block forever.
 
         Return:
-            An image (Image.Image) or a list of images (List["Image.Image"]) containing result(s). If the input is a
+            An image (Image.Image) or a list of images (list["Image.Image"]) containing result(s). If the input is a
             single image, the return will be also a single image, if the input is a list of several images, it will
             return a list of transformed images.
         """

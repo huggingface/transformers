@@ -455,12 +455,12 @@ class HfArgumentParserTest(unittest.TestCase):
             args = get_args(field.type)
             # These should be returned as `dict`, `str`, ...
             # we only care about the first two
-            self.assertIn(args[0], (dict, dict))
-            self.assertEqual(
-                str(args[1]),
-                "<class 'str'>",
+            self.assertIn(dict, args)
+            self.assertIn(
+                str,
+                args,
                 f"Expected field `{field.name}` to have a type signature of at least `typing.Union[dict,str,...]` for CLI compatibility, "
-                "but `str` not found. Please fix this.",
+                f"but `str` not found. Its type is {args}, Please fix this.",
             )
 
         # Second check: anything in `optional_dict_fields` is bad if it's not in `base_list`

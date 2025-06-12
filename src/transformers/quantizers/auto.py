@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
-from typing import Dict, Optional, Union
+from typing import Optional, Union
 
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils import logging
@@ -111,7 +111,7 @@ class AutoQuantizationConfig:
     """
 
     @classmethod
-    def from_dict(cls, quantization_config_dict: Dict):
+    def from_dict(cls, quantization_config_dict: dict):
         quant_method = quantization_config_dict.get("quant_method", None)
         # We need a special care for bnb models to make sure everything is BC ..
         if quantization_config_dict.get("load_in_8bit", False) or quantization_config_dict.get("load_in_4bit", False):
@@ -152,7 +152,7 @@ class AutoHfQuantizer:
     """
 
     @classmethod
-    def from_config(cls, quantization_config: Union[QuantizationConfigMixin, Dict], **kwargs):
+    def from_config(cls, quantization_config: Union[QuantizationConfigMixin, dict], **kwargs):
         # Convert it to a QuantizationConfig if the q_config is a dict
         if isinstance(quantization_config, dict):
             quantization_config = AutoQuantizationConfig.from_dict(quantization_config)

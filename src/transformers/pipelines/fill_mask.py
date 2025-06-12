@@ -1,5 +1,3 @@
-from typing import Dict
-
 import numpy as np
 
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
@@ -24,7 +22,7 @@ logger = logging.get_logger(__name__)
     r"""
         top_k (`int`, *optional*, defaults to 5):
             The number of predictions to return.
-        targets (`str` or `List[str]`, *optional*):
+        targets (`str` or `list[str]`, *optional*):
             When passed, the model will limit the scores to the passed targets instead of looking up in the whole
             vocab. If the provided targets are not in the model vocab, they will be tokenized and the first resulting
             token will be used (with a warning, and that might be slower).
@@ -113,7 +111,7 @@ class FillMaskPipeline(Pipeline):
 
     def preprocess(
         self, inputs, return_tensors=None, tokenizer_kwargs=None, **preprocess_parameters
-    ) -> Dict[str, GenericTensor]:
+    ) -> dict[str, GenericTensor]:
         if return_tensors is None:
             return_tensors = self.framework
         if tokenizer_kwargs is None:
@@ -250,9 +248,9 @@ class FillMaskPipeline(Pipeline):
         Fill the masked token in the text(s) given as inputs.
 
         Args:
-            inputs (`str` or `List[str]`):
+            inputs (`str` or `list[str]`):
                 One or several texts (or one list of prompts) with masked tokens.
-            targets (`str` or `List[str]`, *optional*):
+            targets (`str` or `list[str]`, *optional*):
                 When passed, the model will limit the scores to the passed targets instead of looking up in the whole
                 vocab. If the provided targets are not in the model vocab, they will be tokenized and the first
                 resulting token will be used (with a warning, and that might be slower).

@@ -19,7 +19,7 @@ import os
 import re
 from abc import ABC, abstractmethod
 from collections import Counter, defaultdict, deque
-from typing import Dict, Optional, Set, Union
+from typing import Optional, Union
 
 import libcst as cst
 from check_copies import run_ruff
@@ -197,7 +197,7 @@ def get_full_attribute_name(node: Union[cst.Attribute, cst.Name]) -> Optional[st
 
 # Transformer class to replace ClassB.call_to_method and ClassB().call_to_method with super().call_to_method
 class ReplaceMethodCallTransformer(cst.CSTTransformer):
-    def __init__(self, all_bases: Set[str]):
+    def __init__(self, all_bases: set[str]):
         self.all_bases = all_bases
 
     def leave_Attribute(self, original_node: cst.Attribute, updated_node: cst.Attribute) -> cst.CSTNode:
@@ -473,7 +473,7 @@ class SuperTransformer(cst.CSTTransformer):
 
 
 def find_all_dependencies(
-    dependency_mapping: Dict[str, set],
+    dependency_mapping: dict[str, set],
     start_entity: Optional[str] = None,
     initial_dependencies: Optional[set] = None,
     initial_checked_dependencies: Optional[set] = None,
@@ -636,11 +636,11 @@ class ModuleMapper(CSTVisitor, ABC):
     def __init__(self, python_module: cst.Module):
         # fmt: off
         self.python_module: cst.Module = python_module             # original cst.Module being visited
-        self.classes: Dict[str, cst.ClassDef] = {}                 # mapping from class names to Nodes (it will be ordered by default!!)
+        self.classes: dict[str, cst.ClassDef] = {}                 # mapping from class names to Nodes (it will be ordered by default!!)
         self.imports = []                                          # stores all import statements
-        self.functions: Dict[str, cst.FunctionDef] = {}            # mapping of global scope function names to Nodes
+        self.functions: dict[str, cst.FunctionDef] = {}            # mapping of global scope function names to Nodes
         self.object_dependency_mapping = defaultdict(set)          # immediate function/assignment dependency mapping (i.e. dependencies immediately in the function/assignment definition)
-        self.assignments: Dict[str, cst.SimpleStatementLine] = {}  # mapping of global assignments names to Nodes
+        self.assignments: dict[str, cst.SimpleStatementLine] = {}  # mapping of global assignments names to Nodes
         self.current_function = None                               # this keeps track of the current module-scope function
         self.current_class = None                                  # this keeps track of the current module-scope class
         self.current_assignment = None                             # this keeps track of the current module-scope assignment
@@ -1266,8 +1266,8 @@ class ModularFileMapper(ModuleMapper):
         # fmt: off
         self.model_name = new_name  # name of the model being defined. Should be in the format of `llama` or `layout_xlm` or `phi3`
 
-        self.model_specific_imported_objects: Dict[str, str] = {}  # e.g. {"LlamaModel": "transformers.models.llama.modeling_llama"}
-        self.model_specific_modules: Dict[str, cst.Module] = {}  # e.g. {"transformers.models.llama.modeling_llama": cst.Module}
+        self.model_specific_imported_objects: dict[str, str] = {}  # e.g. {"LlamaModel": "transformers.models.llama.modeling_llama"}
+        self.model_specific_modules: dict[str, cst.Module] = {}  # e.g. {"transformers.models.llama.modeling_llama": cst.Module}
 
         self.all_all_to_add = {}
         # fmt: on

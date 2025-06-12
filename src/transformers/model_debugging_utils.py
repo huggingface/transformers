@@ -167,7 +167,7 @@ def _repr_to_list(value: torch.Tensor):
         value (`torch.Tensor`): The tensor to represent.
 
     Returns:
-        `List[str]`: List of string lines representing the tensor.
+        `list[str]`: List of string lines representing the tensor.
     """
     torch.set_printoptions(sci_mode=True, linewidth=120)
     with StringIO() as buf, redirect_stdout(buf):

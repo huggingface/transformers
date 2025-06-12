@@ -271,7 +271,7 @@ class DistributedSamplerWithLoop(DistributedSampler):
             Dataset used for sampling.
         batch_size (`int`):
             The batch size used with this sampler
-        kwargs (`Dict[str, Any]`, *optional*):
+        kwargs (`dict[str, Any]`, *optional*):
             All other keyword arguments passed to `DistributedSampler`.
     """
 
@@ -644,7 +644,7 @@ class LengthGroupedSampler(Sampler):
             lengths = [len(feature[model_input_name]) for feature in dataset]
         elif isinstance(lengths, torch.Tensor):
             logger.info(
-                "If lengths is a torch.Tensor, LengthGroupedSampler will be slow. Converting lengths to List[int]..."
+                "If lengths is a torch.Tensor, LengthGroupedSampler will be slow. Converting lengths to list[int]..."
             )
             lengths = lengths.tolist()
 
@@ -708,7 +708,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         elif isinstance(lengths, torch.Tensor):
             logger.info(
                 "If lengths is a torch.Tensor, DistributedLengthGroupedSampler will be slow. Converting lengths to"
-                " List[int]..."
+                " list[int]..."
             )
             lengths = lengths.tolist()
 
@@ -941,11 +941,11 @@ def metrics_format(self, metrics: dict[str, float]) -> dict[str, float]:
     Reformat Trainer metrics values to a human-readable format.
 
     Args:
-        metrics (`Dict[str, float]`):
+        metrics (`dict[str, float]`):
             The metrics returned from train/evaluate/predict
 
     Returns:
-        metrics (`Dict[str, float]`): The reformatted metrics
+        metrics (`dict[str, float]`): The reformatted metrics
     """
 
     metrics_copy = metrics.copy()
@@ -971,7 +971,7 @@ def log_metrics(self, split, metrics):
     Args:
         split (`str`):
             Mode/split name: one of `train`, `eval`, `test`
-        metrics (`Dict[str, float]`):
+        metrics (`dict[str, float]`):
             The metrics returned from train/evaluate/predictmetrics: metrics dict
 
     Notes on memory reports:
@@ -1061,7 +1061,7 @@ def save_metrics(self, split, metrics, combined=True):
     Args:
         split (`str`):
             Mode/split name: one of `train`, `eval`, `test`, `all`
-        metrics (`Dict[str, float]`):
+        metrics (`dict[str, float]`):
             The metrics returned from train/evaluate/predict
         combined (`bool`, *optional*, defaults to `True`):
             Creates combined metrics by updating `all_results.json` with metrics of this call

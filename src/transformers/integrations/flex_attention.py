@@ -26,7 +26,7 @@ Citation:
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from packaging import version
@@ -106,7 +106,7 @@ def make_flex_block_causal_mask(
     attention_chunk_size: Optional[int] = None,
     query_length=None,
     key_length=None,
-    offsets: Optional[Tuple[Offset, Offset]] = None,
+    offsets: Optional[tuple[Offset, Offset]] = None,
     is_causal: Optional[bool] = True,
 ) -> "BlockMask":
     """
@@ -234,7 +234,7 @@ def flex_attention_forward(
     softcap: Optional[float] = None,
     head_mask: Optional[torch.Tensor] = None,
     **kwargs,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     if head_mask is not None:
         logger.warning_once(
             "`flex_attention` does not support `head_mask`. Please set your attention to `eager` if you want this feature."
