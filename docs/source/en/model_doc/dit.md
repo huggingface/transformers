@@ -23,9 +23,7 @@ rendered properly in your Markdown viewer.
 
 # DiT
 
-[DiT: Self-supervised Pre-training for Document Image Transformer](https://huggingface.co/papers/2203.02378) is an image transformer pretrained on large-scale unlabeled document images. It learns to predict the missing visual tokens from a corrupted input image. The pretrained DiT model can now be used as a backbone in other models for visual document tasks like document image classification and table detection.
-
-The DiT model is a Transformer-based architecture designed to process document images (like scanned PDFs, forms, invoices) instead of natural images. The key idea is to pre-train the Transformer in a self-supervised way, so it learns to understand the layout, text, and structure of documents without needing labeled data.
+[DiT](https://huggingface.co/papers/2203.02378) is an image transformer pretrained on large-scale unlabeled document images. It learns to predict the missing visual tokens from a corrupted input image. The pretrained DiT model can be used as a backbone in other models for visual document tasks like document image classification and table detection.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/dit_architecture.jpg"/>
 
