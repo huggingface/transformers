@@ -77,6 +77,11 @@ predictor_outputs = outputs.predictor_output.last_hidden_state
 [[autodoc]] VJEPA2Model
     - forward
 
+## VJEPA2ForVideoClassification
+
+[[autodoc]] VJEPA2Model
+    - forward
+
 ## VJEPA2VideoProcessor
 
 [[autodoc]] VJEPA2VideoProcessor
