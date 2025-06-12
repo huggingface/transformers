@@ -82,7 +82,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             Path to the vocabulary file which contain a mapping between genres and ids.
         lyrics_file (`str`):
             Path to the vocabulary file which contains the accepted characters for the lyrics tokenization.
-        version (`List[str]`, `optional`, default to `["v3", "v2", "v2"]`) :
+        version (`list[str]`, `optional`, default to `["v3", "v2", "v2"]`) :
             List of the tokenizer versions. The `5b-lyrics`'s top level prior model was trained using `v3` instead of
             `v2`.
         n_genres (`int`, `optional`, defaults to 1):
@@ -393,9 +393,9 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         Args:
             artists_index (`int`):
                 Index of the artist in its corresponding dictionary.
-            genres_index (`Union[List[int], int]`):
+            genres_index (`Union[list[int], int]`):
                Index of the genre in its corresponding dictionary.
-            lyric_index (`List[int]`):
+            lyric_index (`list[int]`):
                 List of character indices, which each correspond to a character.
         """
         artist = self.artists_decoder.get(artists_index)

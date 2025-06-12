@@ -694,7 +694,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         r"""
         inputs (`torch.FloatTensor`):
             Inputs to the perceiver. Can be anything: images, text, audio, video, etc.
-        subsampled_output_points (`Dict[str, torch.Tensor]`, *optional*):
+        subsampled_output_points (`dict[str, torch.Tensor]`, *optional*):
             Dictionary of tensors used as queries for the decoder. The decoder maps these queries to the latent
             representation of the model. Used for subsampled decoding, e.g. when only decoding certain image patches.
 
@@ -1856,7 +1856,7 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        subsampled_output_points (`Dict[str, torch.Tensor]`, *optional*):
+        subsampled_output_points (`dict[str, torch.Tensor]`, *optional*):
             Dictionary of tensors used as queries for the decoder. The decoder maps these queries to the latent
             representation of the model. Used for subsampled decoding, e.g. when only decoding certain image patches.
 
@@ -2286,7 +2286,7 @@ class PerceiverBasicVideoAutoencodingDecoder(PerceiverAbstractDecoder):
     Args:
         config ([*PerceiverConfig*]):
             Model configuration.
-        output_shape (`List[int]`):
+        output_shape (`list[int]`):
             Shape of the output as (batch_size, num_frames, height, width), excluding the channel dimension.
         position_encoding_type (`str`):
             The type of position encoding to use. Can be either "trainable", "fourier", or "none".
@@ -2367,7 +2367,7 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
     Args:
         config ([*PerceiverConfig*]):
             Model configuration.
-        modalities (`Dict[str, PerceiverAbstractDecoder]`):
+        modalities (`dict[str, PerceiverAbstractDecoder]`):
             Dictionary mapping modality name to the decoder of that modality.
         num_outputs (`int`):
             The number of outputs of the decoder.
@@ -2376,7 +2376,7 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
         min_padding_size (`int`, *optional*, defaults to 2):
             The minimum padding size for all modalities. The final output will have num_channels equal to the maximum
             channels across all modalities plus min_padding_size.
-        subsampled_index_dims (`Dict[str, PerceiverAbstractDecoder]`, *optional*):
+        subsampled_index_dims (`dict[str, PerceiverAbstractDecoder]`, *optional*):
             Dictionary mapping modality name to the subsampled index dimensions to use for the decoder query of that
             modality.
     """
@@ -2589,7 +2589,7 @@ def generate_fourier_features(pos, num_bands, max_resolution=(224, 224), concat_
         The Tensor containing the position of n points in d dimensional space.
       num_bands (`int`):
         The number of frequency bands (K) to use.
-      max_resolution (`Tuple[int]`, *optional*, defaults to (224, 224)):
+      max_resolution (`tuple[int]`, *optional*, defaults to (224, 224)):
         The maximum resolution (i.e. the number of pixels per dim). A tuple representing resolution for each dimension.
       concat_pos (`bool`, *optional*, defaults to `True`):
         Whether to concatenate the input position encoding to the Fourier features.
@@ -2637,9 +2637,9 @@ def build_linear_positions(index_dims, output_range=(-1.0, 1.0)):
     Generate an array of position indices for an N-D input array.
 
     Args:
-      index_dims (`List[int]`):
+      index_dims (`list[int]`):
         The shape of the index dimensions of the input array.
-      output_range (`Tuple[float]`, *optional*, defaults to `(-1.0, 1.0)`):
+      output_range (`tuple[float]`, *optional*, defaults to `(-1.0, 1.0)`):
         The min and max values taken by each input index dimension.
 
     Returns:
@@ -2733,7 +2733,7 @@ def _check_or_build_spatial_positions(pos, index_dims, batch_size):
     Args:
       pos (`torch.FloatTensor`):
         None, or an array of position features. If None, position features are built. Otherwise, their size is checked.
-      index_dims (`List[int]`):
+      index_dims (`list[int]`):
         An iterable giving the spatial/index size of the data to be featurized.
       batch_size (`int`):
         The batch size of the data to be featurized.
@@ -3347,7 +3347,7 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
     Args:
         modalities (`Mapping[str, PreprocessorType]`):
             Dict mapping modality name to preprocessor.
-        mask_probs (`Dict[str, float]`):
+        mask_probs (`dict[str, float]`):
             Dict mapping modality name to masking probability of that modality.
         min_padding_size (`int`, *optional*, defaults to 2):
             The minimum padding size for all modalities. The final output will have num_channels equal to the maximum

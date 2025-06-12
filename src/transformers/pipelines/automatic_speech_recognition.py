@@ -262,7 +262,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         Return:
             `Dict`: A dictionary with the following keys:
                 - **text** (`str`): The recognized text.
-                - **chunks** (*optional(, `List[Dict]`)
+                - **chunks** (*optional(, `list[Dict]`)
                     When using `return_timestamps`, the `chunks` will become a list containing all the various text
                     chunks identified by the model, *e.g.* `[{"text": "hi ", "timestamp": (0.5, 0.9)}, {"text":
                     "there", "timestamp": (1.0, 1.5)}]`. The original full text can roughly be recovered by doing

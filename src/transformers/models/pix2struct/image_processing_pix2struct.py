@@ -197,7 +197,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method. According to Pix2Struct paper and code, the image is normalized with its own mean and standard
             deviation.
-        patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
+        patch_size (`dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
             The patch size to use for the image. According to Pix2Struct paper and code, the patch size is 16x16.
         max_patches (`int`, *optional*, defaults to 2048):
             The maximum number of patches to extract from the image as per the [Pix2Struct
@@ -369,7 +369,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         Args:
             images (`ImageInput`):
                 Image to preprocess. Expects a single or batch of images.
-            header_text (`Union[List[str], str]`, *optional*):
+            header_text (`Union[list[str], str]`, *optional*):
                 Text to render as a header. Only has an effect if `image_processor.is_vqa` is `True`.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the image to RGB.

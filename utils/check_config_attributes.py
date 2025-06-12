@@ -320,11 +320,11 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
     Args:
         config_class (`type`):
             The configuration class for which the arguments in its `__init__` will be checked.
-        attributes (`List[str]`):
+        attributes (`list[str]`):
             The name of an argument (or attribute) and its variant names if any.
         default_value (`Any`):
             A default value for the attribute in `attributes` assigned in the `__init__` of `config_class`.
-        source_strings (`List[str]`):
+        source_strings (`list[str]`):
             The python source code strings in the same modeling directory where `config_class` is defined. The file
             containing the definition of `config_class` should be excluded.
     """

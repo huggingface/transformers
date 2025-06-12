@@ -344,10 +344,10 @@ class TFTransformer(keras.layers.Layer):
         Returns:
             hidden_state: tf.Tensor(bs, seq_length, dim)
                 Sequence of hidden states in the last (top) layer
-            all_hidden_states: Tuple[tf.Tensor(bs, seq_length, dim)]
+            all_hidden_states: tuple[tf.Tensor(bs, seq_length, dim)]
                 Tuple of length n_layers with the hidden states from each layer.
                 Optional: only if output_hidden_states=True
-            all_attentions: Tuple[tf.Tensor(bs, n_heads, seq_length, seq_length)]
+            all_attentions: tuple[tf.Tensor(bs, n_heads, seq_length, seq_length)]
                 Tuple of length n_layers with the attention weights from each layer
                 Optional: only if output_attentions=True
         """

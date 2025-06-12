@@ -2187,7 +2187,7 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel, GenerationMixin):
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (*pip install
+            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (*pip install
             soundfile*). To prepare the array into `input_values`, the [`SpeechT5Processor`] should be used for padding
             and conversion into a tensor of type `torch.FloatTensor`. See [`SpeechT5Processor.__call__`] for details.
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -2688,11 +2688,11 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 - **spectrograms** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
                 `(batch_size, output_sequence_length, config.num_mel_bins)` -- The predicted log-mel spectrograms that
                 are padded to the maximum length.
-                - **spectrogram_lengths** (*optional*, returned when no `vocoder` is provided) `List[Int]` -- A list of
+                - **spectrogram_lengths** (*optional*, returned when no `vocoder` is provided) `list[Int]` -- A list of
                 all the concrete lengths for each spectrogram.
                 - **waveforms** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
                 `(batch_size, num_frames)` -- The predicted speech waveforms that are padded to the maximum length.
-                - **waveform_lengths** (*optional*, returned when a `vocoder` is provided) `List[Int]` -- A list of all
+                - **waveform_lengths** (*optional*, returned when a `vocoder` is provided) `list[Int]` -- A list of all
                 the concrete lengths for each waveform.
                 - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`)
                 `torch.FloatTensor` of shape `(batch_size, config.decoder_layers, config.decoder_attention_heads,
@@ -2784,11 +2784,11 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 - **spectrograms** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
                 `(batch_size, output_sequence_length, config.num_mel_bins)` -- The predicted log-mel spectrograms that
                 are padded to the maximum length.
-                - **spectrogram_lengths** (*optional*, returned when no `vocoder` is provided) `List[Int]` -- A list of
+                - **spectrogram_lengths** (*optional*, returned when no `vocoder` is provided) `list[Int]` -- A list of
                 all the concrete lengths for each spectrogram.
                 - **waveforms** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
                 `(batch_size, num_frames)` -- The predicted speech waveforms that are padded to the maximum length.
-                - **waveform_lengths** (*optional*, returned when a `vocoder` is provided) `List[Int]` -- A list of all
+                - **waveform_lengths** (*optional*, returned when a `vocoder` is provided) `list[Int]` -- A list of all
                 the concrete lengths for each waveform.
                 - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`)
                 `torch.FloatTensor` of shape `(batch_size, config.decoder_layers, config.decoder_attention_heads,
@@ -2872,7 +2872,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (*pip install
+            into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (*pip install
             soundfile*). To prepare the array into `input_values`, the [`SpeechT5Processor`] should be used for padding
             and conversion into a tensor of type `torch.FloatTensor`. See [`SpeechT5Processor.__call__`] for details.
         decoder_input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_mel_bins)`):
@@ -2997,7 +2997,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
             input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
                 Float values of input raw speech waveform.
 
-                Values can be obtained by loading a *.flac* or *.wav* audio file into an array of type `List[float]` or
+                Values can be obtained by loading a *.flac* or *.wav* audio file into an array of type `list[float]` or
                 a `numpy.ndarray`, *e.g.* via the soundfile library (*pip install soundfile*). To prepare the array
                 into `input_values`, the [`SpeechT5Processor`] should be used for padding and conversion into a tensor
                 of type `torch.FloatTensor`. See [`SpeechT5Processor.__call__`] for details.
@@ -3039,11 +3039,11 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
                 - **spectrograms** (*optional*, returned when no `vocoder` is provided) `torch.FloatTensor` of shape
                 `(batch_size, output_sequence_length, config.num_mel_bins)` -- The predicted log-mel spectrograms that
                 are padded to the maximum length.
-                - **spectrogram_lengths** (*optional*, returned when no `vocoder` is provided) `List[Int]` -- A list of
+                - **spectrogram_lengths** (*optional*, returned when no `vocoder` is provided) `list[Int]` -- A list of
                 all the concrete lengths for each spectrogram.
                 - **waveforms** (*optional*, returned when a `vocoder` is provided) `torch.FloatTensor` of shape
                 `(batch_size, num_frames)` -- The predicted speech waveforms that are padded to the maximum length.
-                - **waveform_lengths** (*optional*, returned when a `vocoder` is provided) `List[Int]` -- A list of all
+                - **waveform_lengths** (*optional*, returned when a `vocoder` is provided) `list[Int]` -- A list of all
                 the concrete lengths for each waveform.
                 - **cross_attentions** (*optional*, returned when `output_cross_attentions` is `True`)
                 `torch.FloatTensor` of shape `(batch_size, config.decoder_layers, config.decoder_attention_heads,

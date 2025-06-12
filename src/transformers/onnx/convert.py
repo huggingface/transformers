@@ -107,7 +107,7 @@ def export_pytorch(
             The device on which the ONNX model will be exported. Either `cpu` or `cuda`.
 
     Returns:
-        `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
+        `tuple[list[str], list[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
         the ONNX configuration.
     """
 
@@ -207,7 +207,7 @@ def export_tensorflow(
             Directory to store the exported ONNX model.
 
     Returns:
-        `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
+        `tuple[list[str], list[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
         the ONNX configuration.
     """
     import onnx
@@ -277,7 +277,7 @@ def export(
             export on CUDA devices.
 
     Returns:
-        `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
+        `tuple[list[str], list[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
         the ONNX configuration.
     """
     if not (is_torch_available() or is_tf_available()):

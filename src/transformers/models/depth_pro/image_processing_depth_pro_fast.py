@@ -123,13 +123,13 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
         Args:
             outputs ([`DepthProDepthEstimatorOutput`]):
                 Raw outputs of the model.
-            target_sizes (`Optional[Union[TensorType, List[Tuple[int, int]], None]]`, *optional*, defaults to `None`):
+            target_sizes (`Optional[Union[TensorType, list[tuple[int, int]], None]]`, *optional*, defaults to `None`):
                 Target sizes to resize the depth predictions. Can be a tensor of shape `(batch_size, 2)`
                 or a list of tuples `(height, width)` for each image in the batch. If `None`, no resizing
                 is performed.
 
         Returns:
-            `List[Dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
+            `list[dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
             predictions, and field of view (degrees) and focal length (pixels) if `field_of_view` is given in `outputs`.
 
         Raises:

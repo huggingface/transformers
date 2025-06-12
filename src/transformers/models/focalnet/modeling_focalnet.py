@@ -396,7 +396,7 @@ class FocalNetLayer(nn.Module):
             Layer index.
         dim (`int`):
             Number of input channels.
-        input_resolution (`Tuple[int]`):
+        input_resolution (`tuple[int]`):
             Input resolution.
         drop_path (`float`, *optional*, defaults to 0.0):
             Stochastic depth rate.

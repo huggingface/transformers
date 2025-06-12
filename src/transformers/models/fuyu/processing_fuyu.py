@@ -500,10 +500,10 @@ class FuyuProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            images (`PIL.Image.Image`, `List[PIL.Image.Image]`):
+            images (`PIL.Image.Image`, `list[PIL.Image.Image]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`):
+            text (`str`, `list[str]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -600,7 +600,7 @@ class FuyuProcessor(ProcessorMixin):
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
 
         Args:
-            image_sizes (`List[List[int]]`, *optional*):
+            image_sizes (`list[list[int]]`, *optional*):
                 The input sizes formatted as (height, width) per each image.
 
         Returns:
@@ -761,7 +761,7 @@ class FuyuProcessor(ProcessorMixin):
                 Additional arguments to be passed to the tokenizer's `batch_decode method`.
 
         Returns:
-            `List[str]`: The decoded text output.
+            `list[str]`: The decoded text output.
         """
         beginning_of_answer = self.tokenizer.convert_tokens_to_ids(BEGINNING_OF_ANSWER_STRING)
         # get boa index for each outputted sequence tensor

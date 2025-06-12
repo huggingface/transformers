@@ -103,7 +103,7 @@ class VisualQuestionAnsweringPipeline(Pipeline):
         - `pipeline([{"image": image, "question": question}, {"image": image, "question": question}])`
 
         Args:
-            image (`str`, `List[str]`, `PIL.Image`, `List[PIL.Image]` or `KeyDataset`):
+            image (`str`, `list[str]`, `PIL.Image`, `list[PIL.Image]` or `KeyDataset`):
                 The pipeline handles three types of images:
 
                 - A string containing a http link pointing to an image
@@ -122,7 +122,7 @@ class VisualQuestionAnsweringPipeline(Pipeline):
                 >>> oracle(image=KeyDataset(dataset, "image"), question="What's in this image?")
 
                 ```
-            question (`str`, `List[str]`):
+            question (`str`, `list[str]`):
                 The question(s) asked. If given a single question, it can be broadcasted to multiple images.
                 If multiple images and questions are given, each and every question will be broadcasted to all images
                 (same effect as a Cartesian product)

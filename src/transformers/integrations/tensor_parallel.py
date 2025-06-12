@@ -101,7 +101,7 @@ def _blocks_to_block_sizes(total_size: int, blocks: Union[int, list[int]]) -> li
 
     - The number of blocks (int), in which case the block size is
       total_size//blocks; or
-    - A list of block sizes (List[int]).
+    - A list of block sizes (list[int]).
 
     In the second case, if sum(blocks) < total_size, the ratios between
     the block sizes will be preserved. For instance, if blocks is

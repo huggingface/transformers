@@ -95,7 +95,7 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
         Args:
             image (`torch.Tensor`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Dictionary of the form `{"shortest_edge": int}`, specifying the size of the output image. If
                 `size["shortest_edge"]` >= 384 image is resized to `(size["shortest_edge"], size["shortest_edge"])`.
                 Otherwise, the smaller edge of the image will be matched to `int(size["shortest_edge"] / crop_pct)`,

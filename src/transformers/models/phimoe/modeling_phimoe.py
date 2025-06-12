@@ -568,7 +568,7 @@ class MultiplierProcessor(torch.autograd.Function):
             grad_at_output (torch.Tensor): Gradient at the output.
 
         Returns:
-            Tuple[torch.Tensor, None, None, None, None]: Gradients for the inputs.
+            tuple[torch.Tensor, None, None, None, None]: Gradients for the inputs.
         """
         multiplier, selected_experts, masked_gates = ctx.saved_tensors
 
@@ -606,7 +606,7 @@ def sparsemixer(scores, jitter_eps, training, top_k=2):
         top_k (int): Number of top experts to select.
 
     Returns:
-        Tuple[torch.Tensor, torch.Tensor]: Multiplier and selected experts tensors.
+        tuple[torch.Tensor, torch.Tensor]: Multiplier and selected experts tensors.
     """
     if top_k != 2:
         raise ValueError("top_k must be equal to 2")

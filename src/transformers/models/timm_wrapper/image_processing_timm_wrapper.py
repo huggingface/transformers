@@ -41,7 +41,7 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
     Wrapper class for timm models to be used within transformers.
 
     Args:
-        pretrained_cfg (`Dict[str, Any]`):
+        pretrained_cfg (`dict[str, Any]`):
             The configuration of the pretrained model used to resolve evaluation and
             training transforms.
         architecture (`Optional[str]`, *optional*):

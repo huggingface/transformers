@@ -281,7 +281,7 @@ class OneFormerHungarianMatcher(nn.Module):
                   masks.
 
         Returns:
-            `List[Tuple[Tensor]]`: A list of size batch_size, containing tuples of (index_i, index_j) where:
+            `list[tuple[Tensor]]`: A list of size batch_size, containing tuples of (index_i, index_j) where:
                 - index_i is the indices of the selected predictions (in order)
                 - index_j is the indices of the corresponding selected labels (in order)
             For each batch element, it holds:
@@ -366,7 +366,7 @@ class OneFormerLoss(nn.Module):
                 The number of classes.
             matcher (`OneFormerHungarianMatcher`):
                 A torch module that computes the assignments between the predictions and labels.
-            weight_dict (`Dict[str, float]`):
+            weight_dict (`dict[str, float]`):
                 A dictionary of weights to be applied to the different losses.
             eos_coef (`float`):
                 Weight to apply to the null class.
@@ -432,7 +432,7 @@ class OneFormerLoss(nn.Module):
             text_queries (`torch.Tensor`):
                 A tensor of shape `batch_size, num_queries, hidden_dim`
         Returns:
-            `Dict[str, Tensor]`: A dict of `torch.Tensor` containing the following key:
+            `dict[str, Tensor]`: A dict of `torch.Tensor` containing the following key:
             - **loss_contrastive** -- The query-text contrastive loss computed using task-guided queries
                                     and text queries derived from input text list.
         """
@@ -468,13 +468,13 @@ class OneFormerLoss(nn.Module):
         Args:
             class_queries_logits (`torch.Tensor`):
                 A tensor of shape `batch_size, num_queries, num_labels`
-            class_labels (`List[torch.Tensor]`):
+            class_labels (`list[torch.Tensor]`):
                 List of class labels of shape `(labels)`.
-            indices (`Tuple[np.array])`:
+            indices (`tuple[np.array])`:
                 The indices computed by the Hungarian matcher.
 
         Returns:
-            `Dict[str, Tensor]`: A dict of `torch.Tensor` containing the following key:
+            `dict[str, Tensor]`: A dict of `torch.Tensor` containing the following key:
             - **loss_cross_entropy** -- The loss computed using cross entropy on the predicted and ground truth labels.
         """
         pred_logits = class_queries_logits
@@ -505,13 +505,13 @@ class OneFormerLoss(nn.Module):
                 A tensor of shape `batch_size, num_queries, height, width`
             mask_labels (`torch.Tensor`):
                 List of mask labels of shape `(labels, height, width)`.
-            indices (`Tuple[np.array])`:
+            indices (`tuple[np.array])`:
                 The indices computed by the Hungarian matcher.
             num_masks (`int)`:
                 The number of masks, used for normalization.
 
         Returns:
-            `Dict[str, Tensor]`: A dict of `torch.Tensor` containing two keys:
+            `dict[str, Tensor]`: A dict of `torch.Tensor` containing two keys:
             - **loss_mask** -- The loss computed using sigmoid ce loss on the predicted and ground truth masks.
             - **loss_dice** -- The loss computed using dice loss on the predicted on the predicted and ground truth
               masks.
@@ -661,18 +661,18 @@ class OneFormerLoss(nn.Module):
                 A tensor of shape `batch_size, num_queries, hidden_dim`
             mask_labels (`torch.Tensor`):
                 List of mask labels of shape `(labels, height, width)`.
-            class_labels (`List[torch.Tensor]`):
+            class_labels (`list[torch.Tensor]`):
                 List of class labels of shape `(labels)`.
             text_queries (`torch.Tensor`):
                 A tensor of shape `batch_size, num_queries, hidden_dim`
-            auxiliary_predictions (`Dict[str, torch.Tensor]`, *optional*):
+            auxiliary_predictions (`dict[str, torch.Tensor]`, *optional*):
                 if `use_auxiliary_loss` was set to `true` in [`OneFormerConfig`], then it contains the logits from the
                 inner layers of the Detr's Decoder.
             calculate_contrastive_loss (`bool`, *optional*, defaults to `True`):
                 Whether or not to calculate the contrastive loss.
 
         Returns:
-            `Dict[str, Tensor]`: A dict of `torch.Tensor` containing two keys:
+            `dict[str, Tensor]`: A dict of `torch.Tensor` containing two keys:
             - **loss_cross_entropy** -- The loss computed using cross entropy on the predicted and ground truth labels.
             - **loss_mask** -- The loss computed using sigmoid ce loss on the predicted and ground truth masks.
             - **loss_dice** -- The loss computed using dice loss on the predicted on the predicted and ground truth
@@ -1879,8 +1879,8 @@ class OneFormerTransformerDecoderLayer(nn.Module):
         Args:
             index (`int`): index of the layer in the Transformer decoder.
             output (`torch.FloatTensor`): the object queries of shape `(N, batch, hidden_dim)`
-            multi_stage_features (`List[torch.Tensor]`): the multi-scale features from the pixel decoder.
-            multi_stage_positional_embeddings (`List[torch.Tensor]`):
+            multi_stage_features (`list[torch.Tensor]`): the multi-scale features from the pixel decoder.
+            multi_stage_positional_embeddings (`list[torch.Tensor]`):
                 positional embeddings for the multi_stage_features
             attention_mask (`torch.FloatTensor`): attention mask for the masked cross attention layer
             query_embeddings (`torch.FloatTensor`, *optional*):
@@ -2896,7 +2896,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
         task_inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Task inputs. Task inputs can be obtained using [`AutoImageProcessor`]. See [`OneFormerProcessor.__call__`]
             for details.
-        text_inputs (`List[torch.Tensor]`, *optional*):
+        text_inputs (`list[torch.Tensor]`, *optional*):
             Tensor fof shape `(num_queries, sequence_length)` to be fed to a model
 
         Example:
@@ -3082,11 +3082,11 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         task_inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Task inputs. Task inputs can be obtained using [`AutoImageProcessor`]. See [`OneFormerProcessor.__call__`]
             for details.
-        text_inputs (`List[torch.Tensor]`, *optional*):
+        text_inputs (`list[torch.Tensor]`, *optional*):
             Tensor fof shape `(num_queries, sequence_length)` to be fed to a model
-        mask_labels (`List[torch.Tensor]`, *optional*):
+        mask_labels (`list[torch.Tensor]`, *optional*):
             List of mask labels of shape `(num_labels, height, width)` to be fed to a model
-        class_labels (`List[torch.LongTensor]`, *optional*):
+        class_labels (`list[torch.LongTensor]`, *optional*):
             list of target class labels of shape `(num_labels, height, width)` to be fed to a model. They identify the
             labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
         output_auxiliary_logits (`bool`, *optional*):

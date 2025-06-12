@@ -74,9 +74,9 @@ class LongformerConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        attention_window (`int` or `List[int]`, *optional*, defaults to 512):
+        attention_window (`int` or `list[int]`, *optional*, defaults to 512):
             Size of an attention window around each token. If an `int`, use the same size for all layers. To specify a
-            different window size for each layer, use a `List[int]` where `len(attention_window) == num_hidden_layers`.
+            different window size for each layer, use a `list[int]` where `len(attention_window) == num_hidden_layers`.
 
     Example:
 

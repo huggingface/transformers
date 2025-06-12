@@ -517,10 +517,10 @@ class Transformer(nn.Module):
 
         Returns:
             hidden_state: torch.tensor(bs, seq_length, dim) Sequence of hidden states in the last (top)
-            layer all_hidden_states: Tuple[torch.tensor(bs, seq_length, dim)]
+            layer all_hidden_states: tuple[torch.tensor(bs, seq_length, dim)]
                 Tuple of length n_layers with the hidden states from each layer.
                 Optional: only if output_hidden_states=True
-            all_attentions: Tuple[torch.tensor(bs, n_heads, seq_length, seq_length)]
+            all_attentions: tuple[torch.tensor(bs, n_heads, seq_length, seq_length)]
                 Tuple of length n_layers with the attention weights from each layer
                 Optional: only if output_attentions=True
         """

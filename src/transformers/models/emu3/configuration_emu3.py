@@ -45,11 +45,11 @@ class Emu3VQVAEConfig(PretrainedConfig):
             Temporal downsample factor.
         base_channels (`int`, *optional*, defaults to 256):
             Basic channel number of the intermediate blocks.
-        channel_multiplier (`List[int]`, *optional*, defaults to `[1, 2, 2, 4]`):
+        channel_multiplier (`list[int]`, *optional*, defaults to `[1, 2, 2, 4]`):
             Channel scaling factor of the intermediate blocks.
         num_res_blocks (`int`, *optional*, defaults to 2):
             Residual block number in each stage.
-        attn_resolutions (`List[int]`, *optional*, defaults to `[3]`):
+        attn_resolutions (`list[int]`, *optional*, defaults to `[3]`):
             Stage indices to apply attention.
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimension of the hidden representations in the attention layer.
@@ -185,11 +185,11 @@ class Emu3TextConfig(PretrainedConfig):
                 `beta_slow` (`float`, *optional*):
                     Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
                     ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
+                `short_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to short contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
+                `long_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to long contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2

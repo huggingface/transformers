@@ -701,7 +701,7 @@ class BarkSemanticModel(BarkCausalModel):
                 long as the longest generation among the batch.
             semantic_generation_config (`BarkSemanticGenerationConfig`):
                 Generation config indicating how to generate the semantic tokens.
-            history_prompt (`Optional[Dict[str,torch.Tensor]]`, *optional*):
+            history_prompt (`Optional[dict[str,torch.Tensor]]`, *optional*):
                 Optional `Bark` speaker prompt.
             attention_mask (`Optional[torch.Tensor]`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -817,7 +817,7 @@ class BarkCoarseModel(BarkCausalModel):
                 Generation config indicating how to generate the semantic tokens.
             codebook_size (`int`):
                 Codebook channel size, i.e. the size of the output vocabulary per codebook channel.
-            history_prompt (`Optional[Dict[str,torch.Tensor]]`):
+            history_prompt (`Optional[dict[str,torch.Tensor]]`):
                 Optional `Bark` speaker prompt.
         Returns: Returns:
             `tuple(torch.FloatTensor)`:
@@ -891,7 +891,7 @@ class BarkCoarseModel(BarkCausalModel):
                 Generation config indicating how to generate the coarse tokens.
             codebook_size (`int`, *optional*, defaults to 1024):
                 Codebook channel size, i.e. the size of the output vocabulary per codebook channel.
-            history_prompt (`Optional[Dict[str,torch.Tensor]]`, *optional*):
+            history_prompt (`Optional[dict[str,torch.Tensor]]`, *optional*):
                 Optional `Bark` speaker prompt.
             return_output_lengths (`bool`, *optional*):
                 Whether or not to return the output lengths. Useful when batching.
@@ -1313,7 +1313,7 @@ class BarkFineModel(BarkPreTrainedModel):
                 Generation config indicating how to generate the fine tokens.
             codebook_size (`int`, *optional*, defaults to 1024):
                 Codebook channel size, i.e. the size of the output vocabulary per codebook channel.
-            history_prompt (`Optional[Dict[str,torch.Tensor]]`, *optional*):
+            history_prompt (`Optional[dict[str,torch.Tensor]]`, *optional*):
                 Optional `Bark` speaker prompt.
         Returns:
             torch.LongTensor: Output fine acoustics tokens.
@@ -1574,7 +1574,7 @@ class BarkModel(BarkPreTrainedModel):
             input_ids (`Optional[torch.Tensor]` of shape (batch_size, seq_len), *optional*):
                 Input ids. Will be truncated up to 256 tokens. Note that the output audios will be as long as the
                 longest generation among the batch.
-            history_prompt (`Optional[Dict[str,torch.Tensor]]`, *optional*):
+            history_prompt (`Optional[dict[str,torch.Tensor]]`, *optional*):
                 Optional `Bark` speaker prompt. Note that for now, this model takes only one speaker prompt per batch.
             kwargs (*optional*): Remaining dictionary of keyword arguments. Keyword arguments are of two types:
 

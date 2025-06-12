@@ -131,7 +131,7 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
         Args:
             images (`torch.Tensor`):
                 Images to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Target size of the output image.
             keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
                 If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
@@ -227,12 +227,12 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
         Args:
             outputs ([`ZoeDepthDepthEstimatorOutput`]):
                 Raw outputs of the model.
-            source_sizes (`TensorType` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the source size
+            source_sizes (`TensorType` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the source size
                 (height, width) of each image in the batch before preprocessing. This argument should be dealt as
                 "required" unless the user passes `do_remove_padding=False` as input to this function.
-            target_sizes (`TensorType` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+            target_sizes (`TensorType` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
             outputs_flipped ([`ZoeDepthDepthEstimatorOutput`], *optional*):
                 Raw outputs of the model from flipped input (averaged out in the end).
@@ -242,7 +242,7 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
                 parameter exists here in case the user changed the image preprocessing to not include padding.
 
         Returns:
-            `List[Dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
+            `list[dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
             predictions.
         """
         requires_backends(self, "torch")

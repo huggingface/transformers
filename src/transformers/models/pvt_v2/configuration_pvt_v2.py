@@ -37,25 +37,25 @@ class PvtV2Config(BackboneConfigMixin, PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        image_size (`Union[int, Tuple[int, int]]`, *optional*, defaults to 224):
+        image_size (`Union[int, tuple[int, int]]`, *optional*, defaults to 224):
             The input image size. Pass int value for square image, or tuple of (height, width).
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         num_encoder_blocks (`[int]`, *optional*, defaults to 4):
             The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
-        depths (`List[int]`, *optional*, defaults to `[2, 2, 2, 2]`):
+        depths (`list[int]`, *optional*, defaults to `[2, 2, 2, 2]`):
             The number of layers in each encoder block.
-        sr_ratios (`List[int]`, *optional*, defaults to `[8, 4, 2, 1]`):
+        sr_ratios (`list[int]`, *optional*, defaults to `[8, 4, 2, 1]`):
             Spatial reduction ratios in each encoder block.
-        hidden_sizes (`List[int]`, *optional*, defaults to `[32, 64, 160, 256]`):
+        hidden_sizes (`list[int]`, *optional*, defaults to `[32, 64, 160, 256]`):
             Dimension of each of the encoder blocks.
-        patch_sizes (`List[int]`, *optional*, defaults to `[7, 3, 3, 3]`):
+        patch_sizes (`list[int]`, *optional*, defaults to `[7, 3, 3, 3]`):
             Patch size for overlapping patch embedding before each encoder block.
-        strides (`List[int]`, *optional*, defaults to `[4, 2, 2, 2]`):
+        strides (`list[int]`, *optional*, defaults to `[4, 2, 2, 2]`):
             Stride for overlapping patch embedding before each encoder block.
-        num_attention_heads (`List[int]`, *optional*, defaults to `[1, 2, 5, 8]`):
+        num_attention_heads (`list[int]`, *optional*, defaults to `[1, 2, 5, 8]`):
             Number of attention heads for each attention layer in each block of the Transformer encoder.
-        mlp_ratios (`List[int]`, *optional*, defaults to `[8, 8, 4, 4]`):
+        mlp_ratios (`list[int]`, *optional*, defaults to `[8, 8, 4, 4]`):
             Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
             encoder blocks.
         hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
@@ -76,11 +76,11 @@ class PvtV2Config(BackboneConfigMixin, PretrainedConfig):
         linear_attention (`bool`, *optional*, defaults to `False`):
             Use linear attention complexity. If set to True, `sr_ratio` is ignored and average pooling is used for
             dimensionality reduction in the attention layers rather than strided convolution.
-        out_features (`List[str]`, *optional*):
+        out_features (`list[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
             corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
-        out_indices (`List[int]`, *optional*):
+        out_indices (`list[int]`, *optional*):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
             If unset and `out_features` is unset, will default to the last stage.

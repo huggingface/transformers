@@ -150,7 +150,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         Preprocess the given images.
 
         Args:
-            images (`PIL.Image.Image` or `TensorType` or `List[np.ndarray]` or `List[TensorType]`):
+            images (`PIL.Image.Image` or `TensorType` or `list[np.ndarray]` or `list[TensorType]`):
                 Images to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_normalize=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
@@ -243,12 +243,12 @@ class GLPNImageProcessor(BaseImageProcessor):
         Args:
             outputs ([`DepthEstimatorOutput`]):
                 Raw outputs of the model.
-            target_sizes (`TensorType` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+            target_sizes (`TensorType` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
 
         Returns:
-            `List[Dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
+            `list[dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
             predictions.
         """
         requires_backends(self, "torch")

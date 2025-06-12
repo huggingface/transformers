@@ -453,7 +453,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         loaded in the model.
 
         Args:
-            shard_files (`List[str]`:
+            shard_files (`list[str]`:
                 The list of shard files to load.
 
         Returns:
@@ -581,7 +581,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             resume_download:
                 Deprecated and ignored. All downloads are now resumed by default when possible.
                 Will be removed in v5 of Transformers.
-            proxies (`Dict[str, str]`, *optional*):
+            proxies (`dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             local_files_only(`bool`, *optional*, defaults to `False`):
@@ -1113,7 +1113,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
                 the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
             safe_serialization (`bool`, *optional*, defaults to `False`):
                 Whether to save the model using `safetensors` or through msgpack.

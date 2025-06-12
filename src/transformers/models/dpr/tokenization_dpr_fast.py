@@ -72,13 +72,13 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
     [CLS] <question token ids> [SEP] <titles ids> [SEP] <texts ids>
 
     Args:
-        questions (`str` or `List[str]`):
+        questions (`str` or `list[str]`):
             The questions to be encoded. You can specify one question for many passages. In this case, the question
             will be duplicated like `[questions] * n_passages`. Otherwise you have to specify as many questions as in
             `titles` or `texts`.
-        titles (`str` or `List[str]`):
+        titles (`str` or `list[str]`):
             The passages titles to be encoded. This can be a string or a list of strings if there are several passages.
-        texts (`str` or `List[str]`):
+        texts (`str` or `list[str]`):
             The passages texts to be encoded. This can be a string or a list of strings if there are several passages.
         padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
             Activates and controls padding. Accepts the following values:
@@ -123,7 +123,7 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
             [What are attention masks?](../glossary#attention-mask)
 
     Return:
-        `Dict[str, List[List[int]]]`: A dictionary with the following keys:
+        `dict[str, list[list[int]]]`: A dictionary with the following keys:
 
         - `input_ids`: List of token ids to be fed to a model.
         - `attention_mask`: List of indices specifying which tokens should be attended to by the model.

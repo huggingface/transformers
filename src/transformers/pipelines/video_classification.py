@@ -88,7 +88,7 @@ class VideoClassificationPipeline(Pipeline):
         Assign labels to the video(s) passed as inputs.
 
         Args:
-            inputs (`str`, `List[str]`):
+            inputs (`str`, `list[str]`):
                 The pipeline handles three types of videos:
 
                 - A string containing a http link pointing to a video

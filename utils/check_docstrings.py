@@ -796,7 +796,7 @@ def match_docstring_with_signature(obj: Any) -> Optional[tuple[str, str]]:
         obj (`Any`): The object to process.
 
     Returns:
-        `Optional[Tuple[str, str]]`: Returns `None` if there is no docstring or no parameters documented in the
+        `Optional[tuple[str, str]]`: Returns `None` if there is no docstring or no parameters documented in the
         docstring, otherwise returns a tuple of two strings: the current documentation of the arguments in the
         docstring and the one matched with the signature.
     """

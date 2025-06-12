@@ -80,7 +80,7 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         Detect objects (bounding boxes & classes) in the image(s) passed as inputs.
 
         Args:
-            image (`str`, `PIL.Image` or `List[Dict[str, Any]]`):
+            image (`str`, `PIL.Image` or `list[dict[str, Any]]`):
                 The pipeline handles three types of images:
 
                 - A string containing an http url pointing to an image
@@ -109,7 +109,7 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
                 ```
 
 
-            candidate_labels (`str` or `List[str]` or `List[List[str]]`):
+            candidate_labels (`str` or `list[str]` or `list[list[str]]`):
                 What the model should recognize in the image.
 
             threshold (`float`, *optional*, defaults to 0.1):
@@ -130,7 +130,7 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
 
             - **label** (`str`) -- Text query corresponding to the found object.
             - **score** (`float`) -- Score corresponding to the object (between 0 and 1).
-            - **box** (`Dict[str,int]`) -- Bounding box of the detected object in image's original size. It is a
+            - **box** (`dict[str,int]`) -- Bounding box of the detected object in image's original size. It is a
               dictionary with `x_min`, `x_max`, `y_min`, `y_max` keys.
         """
         if "text_queries" in kwargs:
@@ -229,7 +229,7 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
             box (`torch.Tensor`): Tensor containing the coordinates in corners format.
 
         Returns:
-            bbox (`Dict[str, int]`): Dict containing the coordinates in corners format.
+            bbox (`dict[str, int]`): Dict containing the coordinates in corners format.
         """
         if self.framework != "pt":
             raise ValueError("The ZeroShotObjectDetectionPipeline is only available in PyTorch.")

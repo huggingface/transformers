@@ -197,11 +197,11 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         spectrogram features.
 
         Args:
-            audio (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, *optional*):
+            audio (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`, *optional*):
                 The sequence or batch of sequences to be processed. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. This outputs waveform features. Must
                 be mono channel audio, not stereo, i.e. single float per timestep.
-            audio_target (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, *optional*):
+            audio_target (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`, *optional*):
                 The sequence or batch of sequences to be processed as targets. Each sequence can be a numpy array, a
                 list of float values, a list of numpy arrays or a list of list of float values. This outputs log-mel
                 spectrogram features.

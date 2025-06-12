@@ -94,14 +94,14 @@ class ZeroShotImageClassificationPipeline(Pipeline):
         Assign labels to the image(s) passed as inputs.
 
         Args:
-            image (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            image (`str`, `list[str]`, `PIL.Image` or `list[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing a http link pointing to an image
                 - A string containing a local path to an image
                 - An image loaded in PIL directly
 
-            candidate_labels (`List[str]`):
+            candidate_labels (`list[str]`):
                 The candidate labels for this image. They will be formatted using *hypothesis_template*.
 
             hypothesis_template (`str`, *optional*, defaults to `"This is a photo of {}"`):

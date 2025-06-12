@@ -118,13 +118,13 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
         Pairs of sequences are not the expected use case, but they will be handled without a separator.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         bos_token = [self.bos_token_id]
         eos_token = [self.eos_token_id]
@@ -141,13 +141,13 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
         zeros is returned.
 
         Args:
-            token_ids_0 (`List[int]`):
+            token_ids_0 (`list[int]`):
                 List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
+            token_ids_1 (`list[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`: List of zeros.
+            `list[int]`: List of zeros.
         """
         bos_token = [self.bos_token_id]
         eos_token = [self.eos_token_id]

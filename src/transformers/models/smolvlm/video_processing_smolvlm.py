@@ -213,7 +213,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         Args:
             video (`torch.Tensor`):
                 Video to pad.
-            padded_size (`Tuple[int, int]`):
+            padded_size (`tuple[int, int]`):
                 Height and width to pad.
             max_num_frames (`int`):
                 The maximum number of frames to which video will be padded.

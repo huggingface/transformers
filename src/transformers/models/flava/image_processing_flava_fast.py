@@ -161,7 +161,7 @@ class FlavaFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         codebook_do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the input for codebook to a certain. Can be overridden by the `codebook_do_resize`
             parameter in `preprocess`. `codebook_size`.
-        codebook_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
+        codebook_size (`dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Resize the input for codebook to the given size. Can be overridden by the `codebook_size` parameter in
             `preprocess`.
         codebook_resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.LANCZOS`):
@@ -171,7 +171,7 @@ class FlavaFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
             Whether to crop the input for codebook at the center. If the input size is smaller than
             `codebook_crop_size` along any edge, the image is padded with 0's and then center cropped. Can be
             overridden by the `codebook_do_center_crop` parameter in `preprocess`.
-        codebook_crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
+        codebook_crop_size (`dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Desired output size for codebook input when applying center-cropping. Can be overridden by the
             `codebook_crop_size` parameter in `preprocess`.
         codebook_do_rescale (`bool`, *optional*, defaults to `True`):

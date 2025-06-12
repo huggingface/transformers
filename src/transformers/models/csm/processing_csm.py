@@ -128,8 +128,8 @@ class CsmProcessor(ProcessorMixin):
 
         Args:
             audio_length (int): The length of the audio sequence.
-            kernel_sizes (List[int]): The kernel sizes for the convolutional layers.
-            strides (List[int]): The strides for the convolutional layers.
+            kernel_sizes (list[int]): The kernel sizes for the convolutional layers.
+            strides (list[int]): The strides for the convolutional layers.
             use_causal_conv (bool): Whether to use causal convolutions.
         """
         cur_length = audio_length
@@ -210,10 +210,10 @@ class CsmProcessor(ProcessorMixin):
         to the docstring of the above two methods for more information.
 
         Args:
-            audio (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            audio (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The audio or batch of audio to be prepared. Each audio can be a NumPy array or PyTorch
                 tensor.
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).

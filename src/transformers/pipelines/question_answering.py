@@ -294,8 +294,8 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         We currently support extractive question answering.
 
         Arguments:
-            question (`str` or `List[str]`): The question(s) asked.
-            context (`str` or `List[str]`): The context(s) in which we will look for the answer.
+            question (`str` or `list[str]`): The question(s) asked.
+            context (`str` or `list[str]`): The context(s) in which we will look for the answer.
 
         Returns:
             One or a list of [`SquadExample`]: The corresponding [`SquadExample`] grouping question and context.
@@ -352,9 +352,9 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         Answer the question(s) given as inputs by using the context(s).
 
         Args:
-            question (`str` or `List[str]`):
+            question (`str` or `list[str]`):
                 One or several question(s) (must be used in conjunction with the `context` argument).
-            context (`str` or `List[str]`):
+            context (`str` or `list[str]`):
                 One or several context(s) associated with the question(s) (must be used in conjunction with the
                 `question` argument).
             top_k (`int`, *optional*, defaults to 1):

@@ -39,7 +39,7 @@ class DepthProOutput(ModelOutput):
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, n_patches_per_batch, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        features (`Union[torch.FloatTensor, List[torch.FloatTensor]]`, *optional*):
+        features (`Union[torch.FloatTensor, list[torch.FloatTensor]]`, *optional*):
             Features from encoders. Can be a single feature or a list of features.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
@@ -212,7 +212,7 @@ def reconstruct_feature_maps(
             representing the encoded patches.
         batch_size (int): The number of samples in a batch.
         padding (int): The amount of padding to be removed when merging patches.
-        output_size (Tuple[float, float]): The desired output size for the feature maps, specified as `(height, width)`.
+        output_size (tuple[float, float]): The desired output size for the feature maps, specified as `(height, width)`.
 
     Returns:
         torch.Tensor: Reconstructed feature maps of shape `(batch_size, hidden_size, output_size[0], output_size[1])`.

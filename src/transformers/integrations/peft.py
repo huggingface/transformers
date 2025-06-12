@@ -133,7 +133,7 @@ class PeftAdapterMixin:
                 Whether to use authentication token to load the remote folder. Useful to load private repositories
                 that are on HuggingFace Hub. You might need to call `huggingface-cli login` and paste your tokens to
                 cache it.
-            device_map (`str` or `Dict[str, Union[int, str, torch.device]]` or `int` or `torch.device`, *optional*):
+            device_map (`str` or `dict[str, Union[int, str, torch.device]]` or `int` or `torch.device`, *optional*):
                 A map that specifies where each submodule should go. It doesn't need to be refined to each
                 parameter/buffer name, once a given module name is inside, every submodule of it will be sent to the
                 same device. If we only pass the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"mps"`, or a GPU ordinal rank
@@ -150,10 +150,10 @@ class PeftAdapterMixin:
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_index (`int`, `optional`):
                 `offload_index` argument to be passed to `accelerate.dispatch_model` method.
-            peft_config (`Dict[str, Any]`, *optional*):
+            peft_config (`dict[str, Any]`, *optional*):
                 The configuration of the adapter to add, supported adapters are non-prefix tuning and adaption prompts
                 methods. This argument is used in case users directly pass PEFT state dicts
-            adapter_state_dict (`Dict[str, torch.Tensor]`, *optional*):
+            adapter_state_dict (`dict[str, torch.Tensor]`, *optional*):
                 The state dict of the adapter to load. This argument is used in case users directly pass PEFT state
                 dicts
             low_cpu_mem_usage (`bool`, *optional*, defaults to `False`):
@@ -162,7 +162,7 @@ class PeftAdapterMixin:
             is_trainable (`bool`, *optional*, defaults to `False`):
                 Whether the adapter should be trainable or not. If `False`, the adapter will be frozen and can only be
                 used for inference.
-            adapter_kwargs (`Dict[str, Any]`, *optional*):
+            adapter_kwargs (`dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to the `from_pretrained` method of the adapter config and
                 `find_adapter_config_file` method.
         """
@@ -356,7 +356,7 @@ class PeftAdapterMixin:
         Sets a specific adapter by forcing the model to use a that adapter and disable the other adapters.
 
         Args:
-            adapter_name (`Union[List[str], str]`):
+            adapter_name (`Union[list[str], str]`):
                 The name of the adapter to set. Can be also a list of strings to set multiple adapters.
         """
         check_peft_version(min_version=MIN_PEFT_VERSION)
@@ -518,7 +518,7 @@ class PeftAdapterMixin:
         accelerate (i.e. with `device_map=xxx`)
 
         Args:
-            device_map (`str` or `Dict[str, Union[int, str, torch.device]]` or `int` or `torch.device`, *optional*):
+            device_map (`str` or `dict[str, Union[int, str, torch.device]]` or `int` or `torch.device`, *optional*):
                 A map that specifies where each submodule should go. It doesn't need to be refined to each
                 parameter/buffer name, once a given module name is inside, every submodule of it will be sent to the
                 same device. If we only pass the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"mps"`, or a GPU ordinal rank
@@ -567,7 +567,7 @@ class PeftAdapterMixin:
         Delete an adapter's LoRA layers from the underlying model.
 
         Args:
-            adapter_names (`Union[List[str], str]`):
+            adapter_names (`Union[list[str], str]`):
                 The name(s) of the adapter(s) to delete.
 
         Example:

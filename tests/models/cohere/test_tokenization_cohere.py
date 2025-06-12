@@ -221,7 +221,7 @@ Unless the user asks for a different style of answer, you should answer in full 
 Here is a list of tools that you have available to you:
 
 ```python
-def internet_search(query: str) -> List[Dict]:
+def internet_search(query: str) -> list[Dict]:
     """Returns a list of relevant document snippets for a textual query retrieved from the internet
 
     Args:
@@ -231,7 +231,7 @@ def internet_search(query: str) -> List[Dict]:
 ```
 
 ```python
-def directly_answer() -> List[Dict]:
+def directly_answer() -> list[Dict]:
     """Calls a standard (un-augmented) AI chatbot to generate a response given the conversation history
     """
     pass

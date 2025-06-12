@@ -82,7 +82,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         Override this method if you want to adjust the `unexpected_keys`.
 
         Args:
-            unexpected_keys (`List[str]`, *optional*):
+            unexpected_keys (`list[str]`, *optional*):
                 The list of unexpected keys in the checkpoint compared to the state dict of the model
         """
 

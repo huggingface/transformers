@@ -673,7 +673,7 @@ class TFTransfoXLModelOutput(ModelOutput):
     Args:
         last_hidden_state (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        mems (`List[tf.Tensor]` of length `config.n_layers`):
+        mems (`list[tf.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks). Can be used (see `mems`
             input) to speed up sequential decoding. The token ids which have their past given to this model should not
             be passed as input ids as they have already been computed.
@@ -706,7 +706,7 @@ class TFTransfoXLLMHeadModelOutput(ModelOutput):
             Language modeling losses (not reduced).
         prediction_scores (`tf.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token after SoftMax).
-        mems (`List[tf.Tensor]` of length `config.n_layers`):
+        mems (`list[tf.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks). Can be used (see `mems`
             input) to speed up sequential decoding. The token ids which have their past given to this model should not
             be passed as input ids as they have already been computed.
@@ -739,7 +739,7 @@ class TFTransfoXLSequenceClassifierOutputWithPast(ModelOutput):
             Classification (or regression if config.num_labels==1) loss.
         logits (`tf.Tensor` of shape `(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        mems (`List[tf.Tensor]` of length `config.n_layers`):
+        mems (`list[tf.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks). Can be used (see `mems`
             input) to speed up sequential decoding. The token ids which have their past given to this model should not
             be passed as input ids as they have already been computed.
@@ -814,7 +814,7 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        mems (`List[tf.Tensor]` of length `config.n_layers`):
+        mems (`list[tf.Tensor]` of length `config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model (see
             `mems` output below). Can be used to speed up sequential decoding. The token ids which have their mems
             given to this model should not be passed as `input_ids` as they have already been computed.

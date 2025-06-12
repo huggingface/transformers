@@ -48,19 +48,19 @@ class EfficientNetConfig(PretrainedConfig):
             Scaling coefficient for network depth at each stage.
         depth_divisor `int`, *optional*, defaults to 8):
             A unit of network width.
-        kernel_sizes (`List[int]`, *optional*, defaults to `[3, 3, 5, 3, 5, 5, 3]`):
+        kernel_sizes (`list[int]`, *optional*, defaults to `[3, 3, 5, 3, 5, 5, 3]`):
             List of kernel sizes to be used in each block.
-        in_channels (`List[int]`, *optional*, defaults to `[32, 16, 24, 40, 80, 112, 192]`):
+        in_channels (`list[int]`, *optional*, defaults to `[32, 16, 24, 40, 80, 112, 192]`):
             List of input channel sizes to be used in each block for convolutional layers.
-        out_channels (`List[int]`, *optional*, defaults to `[16, 24, 40, 80, 112, 192, 320]`):
+        out_channels (`list[int]`, *optional*, defaults to `[16, 24, 40, 80, 112, 192, 320]`):
             List of output channel sizes to be used in each block for convolutional layers.
-        depthwise_padding (`List[int]`, *optional*, defaults to `[]`):
+        depthwise_padding (`list[int]`, *optional*, defaults to `[]`):
             List of block indices with square padding.
-        strides (`List[int]`, *optional*, defaults to `[1, 2, 2, 2, 1, 2, 1]`):
+        strides (`list[int]`, *optional*, defaults to `[1, 2, 2, 2, 1, 2, 1]`):
             List of stride sizes to be used in each block for convolutional layers.
-        num_block_repeats (`List[int]`, *optional*, defaults to `[1, 2, 2, 3, 3, 4, 1]`):
+        num_block_repeats (`list[int]`, *optional*, defaults to `[1, 2, 2, 3, 3, 4, 1]`):
             List of the number of times each block is to repeated.
-        expand_ratios (`List[int]`, *optional*, defaults to `[1, 6, 6, 6, 6, 6, 6]`):
+        expand_ratios (`list[int]`, *optional*, defaults to `[1, 6, 6, 6, 6, 6, 6]`):
             List of scaling coefficient of each block.
         squeeze_expansion_ratio (`float`, *optional*, defaults to 0.25):
             Squeeze expansion ratio.

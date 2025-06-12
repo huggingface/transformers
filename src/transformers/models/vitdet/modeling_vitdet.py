@@ -172,9 +172,9 @@ def add_decomposed_relative_positions(attn, queries, rel_pos_h, rel_pos_w, q_siz
             Relative position embeddings (Lh, num_channels) for height axis.
         rel_pos_w (`torch.Tensor`):
             Relative position embeddings (Lw, num_channels) for width axis.
-        q_size (`Tuple[int]`):
+        q_size (`tuple[int]`):
             Spatial sequence size of query q with (queries_height, queries_width).
-        k_size (`Tuple[int]`):
+        k_size (`tuple[int]`):
             Spatial sequence size of key k with (keys_height, keys_width).
 
     Returns:
@@ -207,7 +207,7 @@ class VitDetAttention(nn.Module):
         Args:
             config (`VitDetConfig`):
                 Model configuration.
-            input_size (`Tuple[int]`, *optional*):
+            input_size (`tuple[int]`, *optional*):
                 Input resolution, only required in case relative position embeddings are added.
         """
         super().__init__()
@@ -417,9 +417,9 @@ def window_unpartition(windows, window_size, pad_height_width, height_width):
             Input tokens with [batch_size * num_windows, window_size, window_size, num_channels].
         window_size (`int`):
             Window size.
-        pad_height_width (`Tuple[int]`):
+        pad_height_width (`tuple[int]`):
             Padded height and width (padded_height, padded_width).
-        height_width (`Tuple[int]`):
+        height_width (`tuple[int]`):
             Original height and width before padding.
 
     Returns:

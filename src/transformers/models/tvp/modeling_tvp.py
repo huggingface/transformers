@@ -65,7 +65,7 @@ class TvpLoss(nn.Module):
     ground-truth / prediction (supervise class and box).
 
     Args:
-        losses (`List[str]`):
+        losses (`list[str]`):
             List of all the losses to be applied.
     """
 
@@ -122,7 +122,7 @@ class TvpLoss(nn.Module):
         Args:
             logits (`torch.FloatTensor`):
                 The output logits of head module.
-            labels (`List[torch.FloatTensor]`):
+            labels (`list[torch.FloatTensor]`):
                 List of tensors ([start, end, duration]), which contains start time, end time of the video corresponding to the text, and also the duration.
         """
         duration, start_time, end_time = labels

@@ -443,7 +443,7 @@ class ASTModel(ASTPreTrainedModel):
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, max_length, num_mel_bins)`):
             Float values mel features extracted from the raw audio waveform. Raw audio waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
+            loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via
             the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
             [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
             tensor of type `torch.FloatTensor`. See [`~ASTFeatureExtractor.__call__`]
@@ -533,7 +533,7 @@ class ASTForAudioClassification(ASTPreTrainedModel):
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, max_length, num_mel_bins)`):
             Float values mel features extracted from the raw audio waveform. Raw audio waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
+            loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a `numpy.ndarray`, *e.g.* via
             the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
             [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
             tensor of type `torch.FloatTensor`. See [`~ASTFeatureExtractor.__call__`]

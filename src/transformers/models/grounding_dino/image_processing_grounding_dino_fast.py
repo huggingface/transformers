@@ -72,7 +72,7 @@ class GroundingDinoFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         method. If `True`, padding will be applied to the bottom and right of the image with zeros.
         If `pad_size` is provided, the image will be padded to the specified dimensions.
         Otherwise, the image will be padded to the maximum height and width of the batch.
-    pad_size (`Dict[str, int]`, *optional*):
+    pad_size (`dict[str, int]`, *optional*):
         The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
         provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
         height and width in the batch.
@@ -96,7 +96,7 @@ def convert_coco_poly_to_mask(segmentations, height: int, width: int, device: to
     Convert a COCO polygon annotation to a mask.
 
     Args:
-        segmentations (`List[List[float]]`):
+        segmentations (`list[list[float]]`):
             List of polygons, each polygon represented by a list of x-y coordinates.
         height (`int`):
             Height of the mask.
@@ -294,7 +294,7 @@ def _scale_boxes(boxes, target_sizes):
     Args:
         boxes (`torch.Tensor` of shape `(batch_size, num_boxes, 4)`):
             Bounding boxes to scale. Each box is expected to be in (x1, y1, x2, y2) format.
-        target_sizes (`List[Tuple[int, int]]` or `torch.Tensor` of shape `(batch_size, 2)`):
+        target_sizes (`list[tuple[int, int]]` or `torch.Tensor` of shape `(batch_size, 2)`):
             Target sizes to scale the boxes to. Each target size is expected to be in (height, width) format.
 
     Returns:
@@ -468,11 +468,11 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
         Resizes an annotation to a target size.
 
         Args:
-            annotation (`Dict[str, Any]`):
+            annotation (`dict[str, Any]`):
                 The annotation dictionary.
-            orig_size (`Tuple[int, int]`):
+            orig_size (`tuple[int, int]`):
                 The original size of the input image.
-            target_size (`Tuple[int, int]`):
+            target_size (`tuple[int, int]`):
                 The target size of the image, as returned by the preprocessing `resize` step.
             threshold (`float`, *optional*, defaults to 0.5):
                 The threshold used to binarize the segmentation masks.
@@ -598,15 +598,15 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
         **kwargs: Unpack[GroundingDinoFastImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
-        annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
+        annotations (`AnnotationType` or `list[AnnotationType]`, *optional*):
             List of annotations associated with the image or batch of images. If annotation is for object
             detection, the annotations should be a dictionary with the following keys:
             - "image_id" (`int`): The image id.
-            - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a
+            - "annotations" (`list[Dict]`): List of annotations for an image. Each annotation should be a
                 dictionary. An image can have no annotations, in which case the list should be empty.
             If annotation is for segmentation, the annotations should be a dictionary with the following keys:
             - "image_id" (`int`): The image id.
-            - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
+            - "segments_info" (`list[Dict]`): List of segments for an image. Each segment should be a dictionary.
                 An image can have no segments, in which case the list should be empty.
             - "file_name" (`str`): The file name of the image.
         masks_path (`str` or `pathlib.Path`, *optional*):
@@ -759,12 +759,12 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
                 Raw outputs of the model.
             threshold (`float`, *optional*, defaults to 0.1):
                 Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the following keys:
+            `list[Dict]`: A list of dictionaries, each dictionary containing the following keys:
             - "scores": The confidence scores for each predicted box on the image.
             - "labels": Indexes of the classes predicted by the model on the image.
             - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.

@@ -47,11 +47,11 @@ class ChameleonVQVAEConfig(PretrainedConfig):
             Number of input channels.
         base_channels (`int`, *optional*, defaults to 128):
             Base channel count.
-        channel_multiplier (`List[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
+        channel_multiplier (`list[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
             Channel multipliers for each resolution.
         num_res_blocks (`int`, *optional*, defaults to 2):
             Number of residual blocks.
-        attn_resolutions (`List[int]`, *optional*):
+        attn_resolutions (`list[int]`, *optional*):
             Resolutions to apply attention.
         dropout (`float`, *optional*, defaults to 0.0):
             Dropout rate.

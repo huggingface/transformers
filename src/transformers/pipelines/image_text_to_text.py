@@ -287,7 +287,7 @@ class ImageTextToTextPipeline(Pipeline):
         Generate a text given text and the image(s) passed as inputs.
 
         Args:
-            images (`str`, `List[str]`, `PIL.Image, `List[PIL.Image]`, `List[Dict[str, Union[str, PIL.Image]]]`):
+            images (`str`, `list[str]`, `PIL.Image, `list[PIL.Image]`, `list[dict[str, Union[str, PIL.Image]]]`):
                 The pipeline handles three types of images:
 
                 - A string containing a HTTP(s) link pointing to an image
@@ -296,7 +296,7 @@ class ImageTextToTextPipeline(Pipeline):
 
                 The pipeline accepts either a single image or a batch of images. Finally, this pipeline also supports
                 the chat format (see `text`) containing images and text in this argument.
-            text (str, List[str], `List[Dict[str, Union[str, PIL.Image]]]`):
+            text (str, list[str], `list[dict[str, Union[str, PIL.Image]]]`):
                 The text to be used for generation. If a list of strings is passed, the length of the list should be
                 the same as the number of images. Text can also follow the chat format: a list of dictionaries where
                 each dictionary represents a message in a conversation. Each dictionary should have two keys: 'role'

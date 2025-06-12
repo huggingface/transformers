@@ -2287,7 +2287,7 @@ class GenerationMixin(ContinuousMixin):
                 generation config an error is thrown. If your stopping criteria depends on the `scores` input, make
                 sure you pass `return_dict_in_generate=True, output_scores=True` to `generate`. This feature is
                 intended for advanced users.
-            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
+            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], list[int]]`, *optional*):
                 If provided, this function constraints the beam search to allowed tokens only at each step. If not
                 provided no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
                 `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
@@ -2321,7 +2321,7 @@ class GenerationMixin(ContinuousMixin):
                 function defined in that reposity's `custom_generate/generate.py` file will be executed instead of the
                 standard `generate` method. Note that the logic is for generation is entirely defined in that
                 repository, and the return type may be different from the standard `generate` method.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
                 specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.
@@ -2695,7 +2695,7 @@ class GenerationMixin(ContinuousMixin):
 
                 def typeerror():
                     raise ValueError(
-                        "`force_words_ids` has to either be a `List[List[List[int]]]` or `List[List[int]]` "
+                        "`force_words_ids` has to either be a `list[list[list[int]]]` or `list[list[int]]` "
                         f"of positive integers, but is {generation_config.force_words_ids}."
                     )
 
@@ -2888,7 +2888,7 @@ class GenerationMixin(ContinuousMixin):
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
-            dola_layers (`Union[str, List[int]]`):
+            dola_layers (`Union[str, list[int]]`):
                 The candidate layers used in contrasting layers of DoLa. It can be either 1) 'low' or 'high', which
                 means the lower part or higher part of the model layers, respectively, or 2) a list of layer indices
                 to be used for candidate layers. The 0-th layer is the word embedding layer of the model.

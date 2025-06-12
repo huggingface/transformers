@@ -39,9 +39,9 @@ class SuperGlueConfig(PretrainedConfig):
             The config object or dictionary of the keypoint detector.
         hidden_size (`int`, *optional*, defaults to 256):
             The dimension of the descriptors.
-        keypoint_encoder_sizes (`List[int]`, *optional*, defaults to `[32, 64, 128, 256]`):
+        keypoint_encoder_sizes (`list[int]`, *optional*, defaults to `[32, 64, 128, 256]`):
             The sizes of the keypoint encoder layers.
-        gnn_layers_types (`List[str]`, *optional*, defaults to `['self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross']`):
+        gnn_layers_types (`list[str]`, *optional*, defaults to `['self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross', 'self', 'cross']`):
             The types of the GNN layers. Must be either 'self' or 'cross'.
         num_attention_heads (`int`, *optional*, defaults to 4):
             The number of heads in the GNN layers.

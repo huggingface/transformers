@@ -293,13 +293,13 @@ class FlaxGenerationMixin:
             trace (`bool`, *optional*, defaults to `True`):
                 Whether to trace generation. Setting `trace=False` should only be used for debugging and will lead to a
                 considerably slower runtime.
-            params (`Dict[str, jnp.ndarray]`, *optional*):
+            params (`dict[str, jnp.ndarray]`, *optional*):
                 Optionally the model parameters can be passed. Can be useful for parallelized generation.
             logits_processor (`FlaxLogitsProcessorList `, *optional*):
                 Custom logits processors that complement the default logits processors built from arguments and
                 generation config. If a logit processor is passed that is already created with the arguments or a
                 generation config an error is thrown. This feature is intended for advanced users.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
                 specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.

@@ -175,7 +175,7 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         log-mel spectrogram of the input audio, as implemented in the original Flashlight MFSC feature extraction code.
 
         Args:
-            raw_speech (`torch.Tensor`, `np.ndarray`, `List[float]`, `List[torch.Tensor]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_speech (`torch.Tensor`, `np.ndarray`, `list[float]`, `list[torch.Tensor]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a tensor, a numpy array, a list
                 of float values, a list of tensors, a list of numpy arrays or a list of list of float values. Must be
                 mono channel audio, not stereo, i.e. single float per timestep.

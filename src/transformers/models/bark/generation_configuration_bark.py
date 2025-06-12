@@ -318,7 +318,7 @@ class BarkGenerationConfig(GenerationConfig):
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
 
         Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+            `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = copy.deepcopy(self.__dict__)
 

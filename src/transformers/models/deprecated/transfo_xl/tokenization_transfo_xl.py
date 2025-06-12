@@ -122,7 +122,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
     this superclass for more information regarding those methods.
 
     Args:
-        special (`List[str]`, *optional*):
+        special (`list[str]`, *optional*):
             A list of special tokens (to be treated by the original implementation of this tokenizer).
         min_freq (`int`, *optional*, defaults to 0):
             The minimum number of times a token has to be present in order to be kept in the vocabulary (otherwise it
@@ -138,7 +138,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             File containing the vocabulary (from the original implementation).
         pretrained_vocab_file (`str`, *optional*):
             File containing the vocabulary as saved with the `save_pretrained()` method.
-        never_split (`List[str]`, *optional*):
+        never_split (`list[str]`, *optional*):
             List of tokens that should never be split. If no list is specified, will simply use the existing special
             tokens.
         unk_token (`str`, *optional*, defaults to `"<unk>"`):
@@ -146,7 +146,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             token instead.
         eos_token (`str`, *optional*, defaults to `"<eos>"`):
             The end of sequence token.
-        additional_special_tokens (`List[str]`, *optional*, defaults to `['<formula>']`):
+        additional_special_tokens (`list[str]`, *optional*, defaults to `['<formula>']`):
             A list of additional special tokens (for the HuggingFace functionality).
         language (`str`, *optional*, defaults to `"en"`):
             The language of this tokenizer (used for mose preprocessing).

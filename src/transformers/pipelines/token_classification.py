@@ -63,7 +63,7 @@ class AggregationStrategy(ExplicitEnum):
 @add_end_docstrings(
     build_pipeline_init_args(has_tokenizer=True),
     r"""
-        ignore_labels (`List[str]`, defaults to `["O"]`):
+        ignore_labels (`list[str]`, defaults to `["O"]`):
             A list of labels to ignore.
         grouped_entities (`bool`, *optional*, defaults to `False`):
             DEPRECATED, use `aggregation_strategy` instead. Whether or not to group the tokens corresponding to the
@@ -230,7 +230,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         Classify each token of the text(s) given as inputs.
 
         Args:
-            inputs (`str` or `List[str]`):
+            inputs (`str` or `list[str]`):
                 One or several texts (or one list of texts) for token classification.
 
         Return:

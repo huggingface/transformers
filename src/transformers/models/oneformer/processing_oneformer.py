@@ -83,11 +83,11 @@ class OneFormerProcessor(ProcessorMixin):
         docstring of the above two methods for more information.
 
         Args:
-            task_inputs (`str`, `List[str]`):
+            task_inputs (`str`, `list[str]`):
                 The sequence or batch of task_inputs sequences to be encoded. Each sequence can be a string or a list
                 of strings of the template "the task is {task}".
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`,
-            `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`,
+            `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
             segmentation_maps (`ImageInput`, *optional*):

@@ -35,11 +35,11 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
     should refer to this superclass for more information regarding those methods.
 
     Args:
-        spectrogram_length (`Dict[str, int]` *optional*, defaults to 2048):
+        spectrogram_length (`dict[str, int]` *optional*, defaults to 2048):
             The time length of each audio spectrogram.
         num_channels (`int` *optional*, defaults to 1):
             Number of audio channels.
-        patch_size (`List[int]` *optional*, defaults to `[16, 16]`):
+        patch_size (`list[int]` *optional*, defaults to `[16, 16]`):
             The patch size of audio patch embedding.
         feature_size (`int`, *optional*, defaults to 128):
             The frequency length of audio spectrogram.
@@ -127,7 +127,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         Main method to prepare one or several audio(s) for the model.
 
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
                 stereo, i.e. single float per timestep.

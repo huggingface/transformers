@@ -78,7 +78,7 @@ class ConditionalDetrFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         method. If `True`, padding will be applied to the bottom and right of the image with zeros.
         If `pad_size` is provided, the image will be padded to the specified dimensions.
         Otherwise, the image will be padded to the maximum height and width of the batch.
-    pad_size (`Dict[str, int]`, *optional*):
+    pad_size (`dict[str, int]`, *optional*):
         The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
         provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
         height and width in the batch.
@@ -102,7 +102,7 @@ def convert_coco_poly_to_mask(segmentations, height: int, width: int, device: to
     Convert a COCO polygon annotation to a mask.
 
     Args:
-        segmentations (`List[List[float]]`):
+        segmentations (`list[list[float]]`):
             List of polygons, each polygon represented by a list of x-y coordinates.
         height (`int`):
             Height of the mask.
@@ -446,11 +446,11 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
         Resizes an annotation to a target size.
 
         Args:
-            annotation (`Dict[str, Any]`):
+            annotation (`dict[str, Any]`):
                 The annotation dictionary.
-            orig_size (`Tuple[int, int]`):
+            orig_size (`tuple[int, int]`):
                 The original size of the input image.
-            target_size (`Tuple[int, int]`):
+            target_size (`tuple[int, int]`):
                 The target size of the image, as returned by the preprocessing `resize` step.
             threshold (`float`, *optional*, defaults to 0.5):
                 The threshold used to binarize the segmentation masks.
@@ -576,15 +576,15 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
         **kwargs: Unpack[ConditionalDetrFastImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
-        annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
+        annotations (`AnnotationType` or `list[AnnotationType]`, *optional*):
             List of annotations associated with the image or batch of images. If annotation is for object
             detection, the annotations should be a dictionary with the following keys:
             - "image_id" (`int`): The image id.
-            - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a
+            - "annotations" (`list[Dict]`): List of annotations for an image. Each annotation should be a
                 dictionary. An image can have no annotations, in which case the list should be empty.
             If annotation is for segmentation, the annotations should be a dictionary with the following keys:
             - "image_id" (`int`): The image id.
-            - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
+            - "segments_info" (`list[Dict]`): List of segments for an image. Each segment should be a dictionary.
                 An image can have no segments, in which case the list should be empty.
             - "file_name" (`str`): The file name of the image.
         masks_path (`str` or `pathlib.Path`, *optional*):
@@ -735,7 +735,7 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
                 image size (before any data augmentation). For visualization, this should be the image size after data
                 augment, but before padding.
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
         logging.warning_once(
@@ -779,14 +779,14 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
                 Raw outputs of the model.
             threshold (`float`, *optional*):
                 Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
             top_k (`int`, *optional*, defaults to 100):
                 Keep only top k bounding boxes before filtering by thresholding.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
@@ -833,11 +833,11 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
         Args:
             outputs ([`ConditionalDetrForSegmentation`]):
                 Raw outputs of the model.
-            target_sizes (`List[Tuple[int, int]]`, *optional*):
-                A list of tuples (`Tuple[int, int]`) containing the target size (height, width) of each image in the
+            target_sizes (`list[tuple[int, int]]`, *optional*):
+                A list of tuples (`tuple[int, int]`) containing the target size (height, width) of each image in the
                 batch. If unset, predictions will not be resized.
         Returns:
-            `List[torch.Tensor]`:
+            `list[torch.Tensor]`:
                 A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
                 corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
                 `torch.Tensor` correspond to a semantic class id.
@@ -895,16 +895,16 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
             overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
                 The overlap mask area threshold to merge or discard small disconnected parts within each binary
                 instance mask.
-            target_sizes (`List[Tuple]`, *optional*):
-                List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
+            target_sizes (`list[Tuple]`, *optional*):
+                List of length (batch_size), where each list item (`tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction. If unset, predictions will not be resized.
             return_coco_annotation (`bool`, *optional*):
                 Defaults to `False`. If set to `True`, segmentation maps are returned in COCO run-length encoding (RLE)
                 format.
         Returns:
-            `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
+            `list[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
             - **segmentation** -- A tensor of shape `(height, width)` where each pixel represents a `segment_id` or
-              `List[List]` run-length encoding (RLE) of the segmentation map if return_coco_annotation is set to
+              `list[List]` run-length encoding (RLE) of the segmentation map if return_coco_annotation is set to
               `True`. Set to `None` if no mask if found above `threshold`.
             - **segments_info** -- A dictionary that contains additional information on each segment.
                 - **id** -- An integer representing the `segment_id`.
@@ -983,11 +983,11 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
                 The labels in this state will have all their instances be fused together. For instance we could say
                 there can only be one sky in an image, but several persons, so the label ID for sky would be in that
                 set, but not the one for person.
-            target_sizes (`List[Tuple]`, *optional*):
-                List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
+            target_sizes (`list[Tuple]`, *optional*):
+                List of length (batch_size), where each list item (`tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction in batch. If unset, predictions will not be resized.
         Returns:
-            `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
+            `list[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
             - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id` or
               `None` if no mask if found above `threshold`. If `target_sizes` is specified, segmentation is resized to
               the corresponding `target_sizes` entry.

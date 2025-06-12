@@ -46,11 +46,11 @@ def clean_model_doc_toc(model_doc: list[dict]) -> list[dict]:
     and sorting models alphabetically.
 
     Args:
-        model_doc (`List[dict]`):
+        model_doc (`list[dict]`):
             The list of dictionaries extracted from the `_toctree.yml` file for this specific modality.
 
     Returns:
-        `List[dict]`: List of dictionaries like the input, but cleaned up and sorted.
+        `list[dict]`: List of dictionaries like the input, but cleaned up and sorted.
     """
     counts = defaultdict(int)
     for doc in model_doc:

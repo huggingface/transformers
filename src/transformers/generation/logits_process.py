@@ -72,7 +72,7 @@ class LogitsProcessorList(list):
             scores (`torch.FloatTensor` of shape `(batch_size, config.vocab_size)`):
                 Prediction scores of a language modeling head. These can be logits for each vocabulary when not using
                 beam search or log softmax for each vocabulary token when using beam search
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional kwargs that are specific to a logits processor.
 
         Return:
@@ -103,7 +103,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     Args:
         min_length (`int`):
             The minimum length below which the score of `eos_token_id` is set to `-float("Inf")`.
-        eos_token_id (`Union[int, List[int], torch.Tensor]`):
+        eos_token_id (`Union[int, list[int], torch.Tensor]`):
             The id(s) of the *end-of-sequence* token.
         device (`str`, *optional*, defaults to `"cpu"`):
             The device to allocate the tensors.
@@ -167,7 +167,7 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
             input length.
         min_new_tokens (`int`):
             The minimum *new* tokens length below which the score of `eos_token_id` is set to `-float("Inf")`.
-        eos_token_id (`Union[int, List[int], torch.Tensor]`):
+        eos_token_id (`Union[int, list[int], torch.Tensor]`):
             The id(s) of the *end-of-sequence* token.
         device (`str`, *optional*, defaults to `"cpu"`):
             The device to allocate the tensors.
@@ -1074,7 +1074,7 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
     </Tip>
 
     Args:
-        sequence_bias (`List[List[Union[List[int], float]]]`):
+        sequence_bias (`list[list[Union[list[int], float]]]`):
             List of lists that maps a sequence of tokens to its bias term (e.g. `[[[10, 45], -2.0],
             [[64], -7.5]]`). Positive biases increase the odds of the
             sequence being selected, while negative biases do the opposite. If a sequence has a length of 1, its bias
@@ -1250,9 +1250,9 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
     </Tip>
 
     Args:
-        bad_words_ids (`List[List[int]]`):
+        bad_words_ids (`list[list[int]]`):
             List of list of token ids that are not allowed to be generated.
-        eos_token_id (`Union[int, List[int], torch.Tensor]`, *optional*):
+        eos_token_id (`Union[int, list[int], torch.Tensor]`, *optional*):
             The id(s) of the *end-of-sequence* token.
 
     Examples:
@@ -1332,7 +1332,7 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     generation. See [Autoregressive Entity Retrieval](https://huggingface.co/papers/2010.00904) for more information.
 
     Args:
-        prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`):
+        prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], list[int]]`):
             This function constraints the beam search to allowed tokens only at each step. This function takes 2
             arguments `inputs_ids` and the batch ID `batch_id`. It has to return a list with the allowed tokens for the
             next generation step conditioned on the previously generated tokens `inputs_ids` and the batch ID
@@ -1586,7 +1586,7 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
     Args:
         max_length (`int`):
             The maximum length of the sequence to be generated.
-        eos_token_id (`Union[int, List[int], torch.Tensor]`):
+        eos_token_id (`Union[int, list[int], torch.Tensor]`):
             The id(s) of the *end-of-sequence* token.
         device (`str`, *optional*, defaults to `"cpu"`):
             The device to allocate the tensors.
@@ -1666,7 +1666,7 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
         exponential_decay_length_penalty (`tuple(int, float)`):
             This tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates where penalty
             starts and `decay_factor` represents the factor of exponential decay
-        eos_token_id (`Union[int, List[int], torch.Tensor]`):
+        eos_token_id (`Union[int, list[int], torch.Tensor]`):
             The id(s) of the *end-of-sequence* token.
         input_ids_seq_length (`int`):
             The length of the input sequence.
@@ -2326,7 +2326,7 @@ class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
     </Tip>
 
     Args:
-        eos_token_id (`Union[int, List[int], torch.Tensor]`):
+        eos_token_id (`Union[int, list[int], torch.Tensor]`):
             The id(s) of the *end-of-sequence* token.
         min_eos_p (`float`, *optional*):
             Minimum end of speech threshold.
@@ -2569,7 +2569,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
     Args:
         ngram_len (`int`):
             Ngram length.
-        keys (`List[int]`):
+        keys (`list[int]`):
             A sequence of watermarking keys, one for each depth.
         sampling_table_size (`int`):
             Size of the sampling table.

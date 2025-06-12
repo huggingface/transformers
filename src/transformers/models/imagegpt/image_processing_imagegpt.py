@@ -65,13 +65,13 @@ class ImageGPTImageProcessor(BaseImageProcessor):
     (color clusters).
 
     Args:
-        clusters (`np.ndarray` or `List[List[int]]`, *optional*):
+        clusters (`np.ndarray` or `list[list[int]]`, *optional*):
             The color clusters to use, of shape `(n_clusters, 3)` when color quantizing. Can be overridden by `clusters`
             in `preprocess`.
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's dimensions to `(size["height"], size["width"])`. Can be overridden by
             `do_resize` in `preprocess`.
-        size (`Dict[str, int]` *optional*, defaults to `{"height": 256, "width": 256}`):
+        size (`dict[str, int]` *optional*, defaults to `{"height": 256, "width": 256}`):
             Size of the image after resizing. Can be overridden by `size` in `preprocess`.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
@@ -121,7 +121,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
@@ -198,7 +198,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
                 passing in images with pixel values between 0 and 1, set `do_normalize=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after resizing.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
@@ -207,7 +207,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
                 Whether to normalize the image
             do_color_quantize (`bool`, *optional*, defaults to `self.do_color_quantize`):
                 Whether to color quantize the image.
-            clusters (`np.ndarray` or `List[List[int]]`, *optional*, defaults to `self.clusters`):
+            clusters (`np.ndarray` or `list[list[int]]`, *optional*, defaults to `self.clusters`):
                 Clusters used to quantize the image of shape `(n_clusters, 3)`. Only has an effect if
                 `do_color_quantize` is set to `True`.
             return_tensors (`str` or `TensorType`, *optional*):
