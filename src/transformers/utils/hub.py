@@ -90,7 +90,7 @@ torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOM
 default_cache_path = constants.default_cache_path
 
 # Determine default cache directory. Lots of legacy environment variables to ensure backward compatibility.
-# The best way to set the cache path is with the environment variable HF_HOME. For more details, checkout this
+# The best way to set the cache path is with the environment variable HF_HOME. For more details, check out this
 # documentation page: https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables.
 #
 # In code, use `HF_HUB_CACHE` as the default cache path. This variable is set by the library and is guaranteed
@@ -542,7 +542,7 @@ def cached_files(
             elif _raise_exceptions_for_missing_entries:
                 raise OSError(
                     f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load the files, and couldn't find them in the"
-                    f" cached files.\nCheckout your internet connection or see how to run the library in offline mode at"
+                    f" cached files.\nCheck your internet connection or see how to run the library in offline mode at"
                     " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
                 ) from e
         # snapshot_download will not raise EntryNotFoundError, but hf_hub_download can. If this is the case, it will be treated
@@ -570,7 +570,7 @@ def cached_files(
         msg = (
             f"a file named {missing_entries[0]}" if len(missing_entries) == 1 else f"files named {(*missing_entries,)}"
         )
-        raise EnvironmentError(
+        raise OSError(
             f"{path_or_repo_id} does not appear to have {msg}. Checkout 'https://huggingface.co/{path_or_repo_id}/tree/{revision_}'"
             " for available files."
         )

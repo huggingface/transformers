@@ -496,6 +496,18 @@ class LlavaNextVideoModel(LlavaNextModel):
 
 
 class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
+    def get_video_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        vision_feature_layer: Optional[Union[int, List[int]]] = None,
+        vision_feature_select_strategy: Optional[str] = None,
+    ):
+        return self.model.get_video_features(
+            pixel_values=pixel_values,
+            vision_feature_layer=vision_feature_layer,
+            vision_feature_select_strategy=vision_feature_select_strategy,
+        )
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,
