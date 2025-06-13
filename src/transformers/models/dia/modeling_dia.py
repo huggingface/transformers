@@ -957,7 +957,8 @@ class DiaModel(DiaPreTrainedModel):
                 size=(bsz, 1, channels), fill_value=self.config.bos_token_id, device=self.device
             )
         # Ensure 3D
-        decoder_input_ids = decoder_input_ids.reshape(bsz, seq_len, channels)
+        if decoder_input_ids.ndim == 2:
+            decoder_input_ids = decoder_input_ids.reshape(bsz, channels, seq_len).transpose(1, 2)
 
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
@@ -1075,9 +1076,11 @@ class DiaForConditionalGeneration(DiaPreTrainedModel, DiaGenerationMixin):
             **kwargs,
         )
 
+        # TODO: check which logits is correct
         last_hidden_state = outputs[0]
         batch_size = last_hidden_state.shape[0]
-        audio_logits = self.logits_dense(last_hidden_state).view((batch_size * self.num_channels, -1, self.vocab_size))
+        audio_logits = self.logits_dense(last_hidden_state).transpose(1, 2).reshape(batch_size * self.num_channels, -1, self.vocab_size)
+        #audio_logits = self.logits_dense(last_hidden_state).view((batch_size * self.num_channels, -1, self.vocab_size))
 
         loss = None
         if labels is not None:

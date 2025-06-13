@@ -2977,6 +2977,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         return coinflip_prob + coinflip_prob * (1 - coinflip_prob) * (1 - (1 / vocab_size))
 
 
+# TODO: check for correctness esp due to having a different output shape with transpose
 class DiaClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] for classifier free guidance (CFG). Similar to the original

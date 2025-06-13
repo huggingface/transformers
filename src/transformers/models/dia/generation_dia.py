@@ -95,6 +95,7 @@ class DiaGenerationMixin(GenerationMixin):
             )
             merged_processors.insert(0, cfg_processor)
 
+        # TODO: make max len cond optional
         merged_processors.append(
             DiaEOSDelayPatternLogitsProcessor(
                 delay_pattern=self.config.delay_pattern,
@@ -189,7 +190,7 @@ class DiaGenerationMixin(GenerationMixin):
         valid_input_size = (
             decoder_input_ids.shape[1] - (decoder_input_ids[:, :, 0] == self.config.pad_token_id).sum(dim=-1).max()
         )
-        decoder_input_ids = delay_mask[:, :valid_input_size].long()
+        decoder_input_ids = delay_mask[:, :valid_input_size].transpose(1, 2).long()
         decoder_attention_mask = decoder_attention_mask[:, :valid_input_size].long()
 
         # 3. Overwrite into model kwargs
@@ -207,7 +208,7 @@ class DiaGenerationMixin(GenerationMixin):
     ):
         # Reshape decoder input_ids to 3D to be compile friendly and to fit the expected model input shape
         batch_size = encoder_outputs[0].shape[0] // 2 if self._uses_cfg else encoder_outputs[0].shape[0]
-        input_ids = input_ids.reshape(batch_size, -1, self.config.decoder_config.num_channels)
+        input_ids = input_ids.reshape(batch_size, self.config.decoder_config.num_channels, -1).transpose(1, 2)
 
         # Base method handles most things except CFG and the delay pattern mask
         model_inputs = super().prepare_inputs_for_generation(input_ids, encoder_outputs=encoder_outputs, **kwargs)
@@ -258,7 +259,7 @@ class DiaGenerationMixin(GenerationMixin):
         custom_generate: Optional[str] = None,
         **kwargs,
     ):
-        # ******************* taken from main generate function up to calling the different methods *******************
+        # ********** mostly taken from main generate function up to calling the different methods (see NOTE) **********
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         tokenizer = kwargs.pop("tokenizer", None)  # Pull this out first, we only use it for stopping criteria
         assistant_tokenizer = kwargs.pop("assistant_tokenizer", None)  # only used for assisted generation
@@ -344,7 +345,8 @@ class DiaGenerationMixin(GenerationMixin):
             streamer.put(input_ids.cpu())
 
         # 6. Prepare `max_length` depending on other stopping criteria.
-        input_ids_length = input_ids.shape[1]
+        # NOTE: incorrect `input_ids.shape[1]` previously
+        input_ids_length = input_ids.shape[-1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         has_default_min_length = kwargs.get("min_length") is None and generation_config.min_length is not None
         generation_config = self._prepare_generated_length(
@@ -419,7 +421,7 @@ class DiaGenerationMixin(GenerationMixin):
         # ******************* taken from main generate function up to calling the different methods *******************
 
         # Prepare inner 2D logic in generation loop
-        input_ids = input_ids.reshape(-1, input_ids.shape[1])
+        input_ids = input_ids.reshape(-1, input_ids.shape[-1])
 
         # 10. go into different generation modes
         if generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
@@ -490,7 +492,7 @@ class DiaGenerationMixin(GenerationMixin):
         # Reshape from 2D (bsz * channels, seq_len) to 3D (bsz, seq_len, channels)
         num_channels = self.config.decoder_config.num_channels
         bsz = output_sequences.shape[0] // num_channels
-        output_sequences = output_sequences.reshape(bsz, -1, num_channels)
+        output_sequences = output_sequences.reshape(bsz, num_channels, -1).transpose(1, 2)
 
         # Apply delay mask
         output_sequences = self.apply_delay_mask(output_sequences, self.config.pad_token_id, delay_mask)
