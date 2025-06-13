@@ -186,7 +186,9 @@ class DiaGenerationMixin(GenerationMixin):
 
         # 2. Determine the valid input and what works as mask within the input
         delay_mask = decoder_input_ids.long()
-        valid_input_size = (decoder_input_ids[:, :, 0] == self.config.bos_token_id).sum(dim=-1).max()
+        valid_input_size = (
+            decoder_input_ids.shape[1] - (decoder_input_ids[:, :, 0] == self.config.pad_token_id).sum(dim=-1).max()
+        )
         decoder_input_ids = delay_mask[:, :valid_input_size].long()
         decoder_attention_mask = decoder_attention_mask[:, :valid_input_size].long()
 

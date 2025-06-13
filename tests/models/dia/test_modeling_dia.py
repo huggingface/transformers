@@ -439,7 +439,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                             sub_config = getattr(model_sdpa.config, key)
                             self.assertTrue(sub_config._attn_implementation == "sdpa")
 
-    @unittest.skip(reason="Decoder preparation in Dia is currently not designed around cache continuation.")
+    @unittest.skip(reason="Input preparation in Dia is currently not designed around cache continuation.")
     def test_generate_continue_from_past_key_values(self):
         pass
 
