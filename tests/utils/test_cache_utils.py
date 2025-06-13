@@ -626,7 +626,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
         for v1, v2 in zip(res.past_key_values.value_cache, res_eager.past_key_values.value_cache):
             self.assertTrue(torch.allclose(v1, v2))
 
-    def test_dynamic_cache_exportability_dynamic_cache(self):
+    def test_dynamic_cache_exportability_multiple_run(self):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
         model = model.eval()
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
