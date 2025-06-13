@@ -60,7 +60,7 @@ class WavLMConfig(PretrainedConfig):
         final_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the final projection layer of [`WavLMForCTC`].
         layerdrop (`float`, *optional*, defaults to 0.1):
-            The LayerDrop probability. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556) for more
+            The LayerDrop probability. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556) for more
             details.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -99,7 +99,7 @@ class WavLMConfig(PretrainedConfig):
         apply_spec_augment (`bool`, *optional*, defaults to `True`):
             Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder. For reference see
             [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
-            Recognition](https://arxiv.org/abs/1904.08779).
+            Recognition](https://huggingface.co/papers/1904.08779).
         mask_time_prob (`float`, *optional*, defaults to 0.05):
             Probability of each feature vector along the time axis to be chosen as the start of the vector span to be
             masked. Approximately `mask_time_prob * sequence_length // mask_time_length` feature vectors will be masked
@@ -292,7 +292,7 @@ class WavLMConfig(PretrainedConfig):
                 f" `len(config.conv_kernel) = {len(self.conv_kernel)}`."
             )
 
-        # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
+        # fine-tuning config parameters for SpecAugment: https://huggingface.co/papers/1904.08779
         self.apply_spec_augment = apply_spec_augment
         self.mask_time_prob = mask_time_prob
         self.mask_time_length = mask_time_length
