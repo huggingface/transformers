@@ -97,6 +97,52 @@ print(processor.tokenizer.decode(gen_tokens[0][inputs.input_ids.shape[1]:], skip
 </hfoptions>
 
 Quantization reduces the memory footprint of large models by representing weights at lower precision. Refer to the [Quantization](https://huggingface.co/docs/transformers/v4.52.3/quantization/overview) overview for supported backends.
+```python
+
+#pip install transformers accelerate bitsandbytes
+import torch
+from transformers import (
+    AutoProcessor,
+    AutoModelForImageTextToText,
+    BitsAndBytesConfig
+)
+
+model_id = "CohereLabs/aya-vision-32b"
+device = "cuda"  # or "cuda:0"
+
+# Define your 4‑bit quantization config
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,                    # enable 4‑bit loading
+    bnb_4bit_quant_type="nf4",            # use NormalFloat4 quantization
+    bnb_4bit_compute_dtype=torch.bfloat16,# computation dtype (bfloat16 or float16)
+    bnb_4bit_use_double_quant=True        # double-quantization for better accuracy
+)
+
+# Load processor and quantized model
+processor = AutoProcessor.from_pretrained(model_id, use_fast=True)
+model = AutoModelForImageTextToText.from_pretrained(
+    model_id,
+    quantization_config=bnb_config,
+    device_map="auto"   # auto-assign layers to devices
+)
+
+# Quick inference check
+inputs = processor.apply_chat_template(
+    [
+    {"role": "user", "content": [
+        {"type": "image", "url": "https://huggingface.co/roschmid/dog-races/resolve/main/images/Border_Collie.jpg"},
+        {"type": "text",  "text":"Describe what you see."}
+    ]}
+    ],
+    padding=True,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_tensors="pt"
+).to(model.device)
+
+generated = model.generate(**inputs, max_new_tokens=50)
+print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
+```
 
 ## Notes
 
