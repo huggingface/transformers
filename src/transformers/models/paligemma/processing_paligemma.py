@@ -29,7 +29,6 @@ from ...processing_utils import (
     ProcessorMixin,
     TextKwargs,
     Unpack,
-    _validate_images_text_input_order,
 )
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import logging
@@ -216,8 +215,6 @@ class PaliGemmaProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             - **labels** -- Labels compatible with training if `suffix` is not None
         """
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
 
         output_kwargs = self._merge_kwargs(
             PaliGemmaProcessorKwargs,

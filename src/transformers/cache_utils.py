@@ -185,17 +185,6 @@ class Cache:
                 device = self.value_cache[layer_idx].device
                 self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
 
-    @property
-    def seen_tokens(self):
-        logger.warning_once(
-            "The `seen_tokens` attribute is deprecated and will be removed in v4.41. Use the `cache_position` "
-            "model input instead."
-        )
-        if hasattr(self, "_seen_tokens"):
-            return self._seen_tokens
-        else:
-            return None
-
     def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
         """
         Return a tuple (kv_length, kv_offset) corresponding to the length and offset that will be returned for
@@ -472,7 +461,6 @@ class DynamicCache(Cache):
 
     def __init__(self, _distributed_cache_data: Optional[Iterable] = None) -> None:
         super().__init__()
-        self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
 
@@ -535,10 +523,6 @@ class DynamicCache(Cache):
         Return:
             A tuple containing the updated key and value states.
         """
-        # Update the number of seen tokens
-        if layer_idx == 0:
-            self._seen_tokens += key_states.shape[-2]
-
         # Update the cache
         if key_states is not None:
             if len(self.key_cache) <= layer_idx:
@@ -605,7 +589,6 @@ class DynamicCache(Cache):
         if self.get_seq_length() <= max_length:
             return
 
-        self._seen_tokens = max_length
         for idx in range(len(self.key_cache)):
             if self.key_cache[idx].numel():
                 self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
@@ -617,7 +600,6 @@ class DynamicCache(Cache):
         out = []
         for i in range(0, full_batch_size, split_size):
             current_split = DynamicCache()
-            current_split._seen_tokens = self._seen_tokens
             current_split.key_cache = [tensor[i : i + split_size] for tensor in self.key_cache]
             current_split.value_cache = [tensor[i : i + split_size] for tensor in self.value_cache]
             out.append(current_split)
@@ -815,10 +797,6 @@ class OffloadedCache(DynamicCache):
         Return:
             A tuple containing the updated key and value states.
         """
-        # Update the number of seen tokens
-        if layer_idx == 0:
-            self._seen_tokens += key_states.shape[-2]
-
         # Update the cache
         if len(self.key_cache) < layer_idx:
             raise ValueError("OffloadedCache does not support model usage where layers are skipped. Use DynamicCache.")
@@ -857,6 +835,9 @@ class QuantizedCache(DynamicCache):
 
     def __init__(self, cache_config: QuantizedCacheConfig) -> None:
         super().__init__()
+
+        # Used only for QuantCache where the seq-length can't be inferred easily from cache contents
+        self._seen_tokens = 0
         self._quantized_key_cache: List[torch.Tensor] = []
         self._quantized_value_cache: List[torch.Tensor] = []
 
@@ -2277,10 +2258,6 @@ class OffloadedStaticCache(StaticCache):
             self._device_key_cache.append(key_cache)
             self._device_value_cache.append(value_cache)
 
-        # For backwards compatibility.
-        # TODO(gante): Remove this.
-        self._seen_tokens = 0
-
         # Create new CUDA stream for parallel prefetching.
         self._prefetch_stream = torch.cuda.Stream() if self.device.type == "cuda" else None
 
@@ -2314,10 +2291,6 @@ class OffloadedStaticCache(StaticCache):
         value_states = value_states.to(self.value_cache[layer_idx].dtype)
 
         if layer_idx == 0:
-            # Update seen tokens.
-            # TODO(gante): Remove this.
-            self._seen_tokens += key_states.shape[-2]
-
             # Always there.
             k_out = self.key_cache[0]
             v_out = self.value_cache[0]
@@ -2371,10 +2344,14 @@ class OffloadedStaticCache(StaticCache):
         return k_out, v_out
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
-        """Returns the sequence length of the cached states that were seen by the model."""
-
-        # TODO(gante): Remove this.
-        return self._seen_tokens
+        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
+        is_empty_layer = (
+            len(self.key_cache) == 0  # no cache in any layer
+            or len(self.key_cache) <= layer_idx  # hasn't run a layer with cache after it
+            or not self.key_cache[layer_idx].numel()  # the layer has no cache
+        )
+        layer_seq_length = self.key_cache[layer_idx].shape[-2] if not is_empty_layer else 0
+        return layer_seq_length
 
     def get_max_cache_shape(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states."""
@@ -2384,21 +2361,11 @@ class OffloadedStaticCache(StaticCache):
     def reset(self) -> None:
         """Resets the cache values while preserving the objects."""
 
-        # For backwards compatibility.
-        # TODO(gante): Remove this.
-        self._seen_tokens = 0
-
         # Zero out cache.
         for layer_idx in range(len(self.key_cache)):
             # In-place ops prevent breaking the static address.
             self.key_cache[layer_idx].zero_()
             self.value_cache[layer_idx].zero_()
-
-    @property
-    def seen_tokens(self) -> int:
-        # For backwards compatibility.
-        # TODO(gante): Remove this.
-        return self._seen_tokens
 
     def _create_key_value_cache_tensors(
         self, shape: Tuple[int, ...], device: torch.device

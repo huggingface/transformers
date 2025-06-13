@@ -27,7 +27,6 @@ from ...processing_utils import (
     ProcessorMixin,
     TextKwargs,
     Unpack,
-    _validate_images_text_input_order,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_tf_available, is_torch_available
@@ -340,8 +339,6 @@ class IdeficsProcessor(ProcessorMixin):
         """
         if images is None and text is None:
             raise ValueError("You need to specify either `text` or `images` and `text`.")
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
 
         if images is None:
             # assuming the user wants to use the old behavior with prompts as the only argument

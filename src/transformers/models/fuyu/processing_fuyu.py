@@ -27,7 +27,6 @@ from ...processing_utils import (
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
-    _validate_images_text_input_order,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torch_available, logging, requires_backends
@@ -522,8 +521,6 @@ class FuyuProcessor(ProcessorMixin):
         # --- Check input validity ---
         if text is None and images is None:
             raise ValueError("You have to specify either text or images. Both cannot be None.")
-        # check if images and text inputs are reversed for BC
-        images, text = _validate_images_text_input_order(images, text)
 
         output_kwargs = self._merge_kwargs(
             FuyuProcessorKwargs,
