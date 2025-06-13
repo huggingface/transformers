@@ -14,7 +14,7 @@ jobs:
     name: Model CI
     uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
     with:
-      job: run_models_gaudi
+      job: run_models_gpu
       ci_event: Scheduled CI (Intel Gaudi3)
       runner_scale_set: itac-bm-emr-gaudi3-dell
       slack_report_channel: "#transformers-ci-dummy"
@@ -26,7 +26,7 @@ jobs:
     name: Pipeline CI
     uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
     with:
-      job: run_pipelines_gaudi
+      job: run_pipelines_gpu
       ci_event: Scheduled CI (Intel Gaudi3)
       runner_scale_set: itac-bm-emr-gaudi3-dell
       slack_report_channel: "#transformers-ci-dummy"
@@ -38,7 +38,7 @@ jobs:
     name: Example CI
     uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
     with:
-      job: run_examples_gaudi
+      job: run_examples_gpu
       ci_event: Scheduled CI (Intel Gaudi3)
       runner_scale_set: itac-bm-emr-gaudi3-dell
       slack_report_channel: "#transformers-ci-dummy"
@@ -50,7 +50,7 @@ jobs:
     name: DeepSpeed CI
     uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
     with:
-      job: run_deepspeed_gaudi
+      job: run_deepspeed_gpu
       ci_event: Scheduled CI (Intel Gaudi3)
       runner_scale_set: itac-bm-emr-gaudi3-dell
       slack_report_channel: "#transformers-ci-dummy"

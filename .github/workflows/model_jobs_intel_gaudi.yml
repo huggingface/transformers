@@ -17,7 +17,7 @@ on:
         type: string
       report_name_prefix:
         required: false
-        default: run_models_gaudi
+        default: run_models_gpu
         type: string
 
 env:
@@ -30,7 +30,7 @@ env:
   RUN_SLOW: yes
 
 jobs:
-  run_models_gaudi:
+  run_models_gpu:
     name: " "
     strategy:
       max-parallel: 1
