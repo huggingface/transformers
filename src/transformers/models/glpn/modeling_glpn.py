@@ -97,7 +97,7 @@ class GLPNOverlapPatchEmbeddings(nn.Module):
 # Copied from transformers.models.segformer.modeling_segformer.SegformerEfficientSelfAttention
 class GLPNEfficientSelfAttention(nn.Module):
     """SegFormer's efficient self-attention mechanism. Employs the sequence reduction process introduced in the [PvT
-    paper](https://arxiv.org/abs/2102.12122)."""
+    paper](https://huggingface.co/papers/2102.12122)."""
 
     def __init__(self, config, hidden_size, num_attention_heads, sequence_reduction_ratio):
         super().__init__()
@@ -480,7 +480,7 @@ class GLPNModel(GLPNPreTrainedModel):
 
 class GLPNSelectiveFeatureFusion(nn.Module):
     """
-    Selective Feature Fusion module, as explained in the [paper](https://arxiv.org/abs/2201.07436) (section 3.4). This
+    Selective Feature Fusion module, as explained in the [paper](https://huggingface.co/papers/2201.07436) (section 3.4). This
     module adaptively selects and integrates local and global features by attaining an attention map for each feature.
     """
 
@@ -571,7 +571,7 @@ class GLPNDecoder(nn.Module):
 
 class SiLogLoss(nn.Module):
     r"""
-    Implements the Scale-invariant log scale loss [Eigen et al., 2014](https://arxiv.org/abs/1406.2283).
+    Implements the Scale-invariant log scale loss [Eigen et al., 2014](https://huggingface.co/papers/1406.2283).
 
     $$L=\frac{1}{n} \sum_{i} d_{i}^{2}-\frac{1}{2 n^{2}}\left(\sum_{i} d_{i}^{2}\right)$$ where $d_{i}=\log y_{i}-\log
     y_{i}^{*}$.
