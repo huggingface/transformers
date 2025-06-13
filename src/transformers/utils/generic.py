@@ -26,7 +26,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import Any, ContextManager, Optional, TypedDict
+from typing import Any, Callable, ContextManager, List, Optional, TypedDict
 
 import numpy as np
 from packaging import version
@@ -727,32 +727,6 @@ def tensor_size(array):
         raise ValueError(f"Type not supported for tensor_size: {type(array)}.")
 
 
-def add_model_info_to_auto_map(auto_map, repo_id):
-    """
-    Adds the information of the repo_id to a given auto map.
-    """
-    for key, value in auto_map.items():
-        if isinstance(value, (tuple, list)):
-            auto_map[key] = [f"{repo_id}--{v}" if (v is not None and "--" not in v) else v for v in value]
-        elif value is not None and "--" not in value:
-            auto_map[key] = f"{repo_id}--{value}"
-
-    return auto_map
-
-
-def add_model_info_to_custom_pipelines(custom_pipeline, repo_id):
-    """
-    Adds the information of the repo_id to a given custom pipeline.
-    """
-    # {custom_pipelines : {task: {"impl": "path.to.task"},...} }
-    for task in custom_pipeline.keys():
-        if "impl" in custom_pipeline[task]:
-            module = custom_pipeline[task]["impl"]
-            if "--" not in module:
-                custom_pipeline[task]["impl"] = f"{repo_id}--{module}"
-    return custom_pipeline
-
-
 def infer_framework(model_class):
     """
     Infers the framework of a given model without using isinstance(), because we cannot guarantee that the relevant
@@ -879,12 +853,12 @@ class LossKwargs(TypedDict, total=False):
     Keyword arguments to be passed to the loss function
 
     Attributes:
-        num_items_in_batch (`int`, *optional*):
+        num_items_in_batch (`Optional[torch.Tensor]`, *optional*):
             Number of items in the batch. It is recommended to pass it when
             you are doing gradient accumulation.
     """
 
-    num_items_in_batch: Optional[int]
+    num_items_in_batch: Optional["torch.Tensor"]
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
@@ -977,3 +951,44 @@ def can_return_tuple(func):
         return output
 
     return wrapper
+
+
+class GeneralInterface(MutableMapping):
+    """
+    Dict-like object keeping track of a class-wide mapping, as well as a local one. Allows to have library-wide
+    modifications though the class mapping, as well as local modifications in a single file with the local mapping.
+    """
+
+    # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
+    # a new instance is created (in order to locally override a given function)
+    _global_mapping = {}
+
+    def __init__(self):
+        self._local_mapping = {}
+
+    def __getitem__(self, key):
+        # First check if instance has a local override
+        if key in self._local_mapping:
+            return self._local_mapping[key]
+        return self._global_mapping[key]
+
+    def __setitem__(self, key, value):
+        # Allow local update of the default functions without impacting other instances
+        self._local_mapping.update({key: value})
+
+    def __delitem__(self, key):
+        del self._local_mapping[key]
+
+    def __iter__(self):
+        # Ensure we use all keys, with the overwritten ones on top
+        return iter({**self._global_mapping, **self._local_mapping})
+
+    def __len__(self):
+        return len(self._global_mapping.keys() | self._local_mapping.keys())
+
+    @classmethod
+    def register(cls, key: str, value: Callable):
+        cls._global_mapping.update({key: value})
+
+    def valid_keys(self) -> List[str]:
+        return list(self.keys())

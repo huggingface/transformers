@@ -23,17 +23,21 @@ from pytest import mark
 from transformers import AutoModelForCausalLM, AutoTokenizer, Gemma2Config, is_torch_available, pipeline
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
+    Expectations,
+    cleanup,
+    is_flash_attn_2_available,
     require_flash_attn,
+    require_large_cpu_ram,
     require_read_token,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
+    require_torch_large_accelerator,
+    require_torch_large_gpu,
     slow,
-    tooslow,
     torch_device,
 )
 
-from ...models.gemma.test_modeling_gemma import GemmaModelTest, GemmaModelTester
+from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_configuration_common import ConfigTester
 
 
@@ -48,17 +52,28 @@ if is_torch_available():
     )
 
 
-class Gemma2ModelTester(GemmaModelTester):
+class Gemma2ModelTester(CausalLMModelTester):
     if is_torch_available():
         config_class = Gemma2Config
-        model_class = Gemma2Model
-        for_causal_lm_class = Gemma2ForCausalLM
-        for_sequence_class = Gemma2ForSequenceClassification
-        for_token_class = Gemma2ForTokenClassification
+        base_model_class = Gemma2Model
+        causal_lm_class = Gemma2ForCausalLM
+        sequence_class = Gemma2ForSequenceClassification
+        token_class = Gemma2ForTokenClassification
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": Gemma2Model,
+            "text-classification": Gemma2ForSequenceClassification,
+            "token-classification": Gemma2ForTokenClassification,
+            "text-generation": Gemma2ForCausalLM,
+            "zero-shot": Gemma2ForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
 
 @require_torch
-class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
+class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
     all_model_classes = (
         (Gemma2Model, Gemma2ForCausalLM, Gemma2ForSequenceClassification, Gemma2ForTokenClassification)
         if is_torch_available()
@@ -75,10 +90,12 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
+
     test_headmasking = False
     test_pruning = False
     _is_stateful = True
     model_split_percents = [0.5, 0.6]
+    model_tester_class = Gemma2ModelTester
 
     def setUp(self):
         self.model_tester = Gemma2ModelTester(self)
@@ -143,10 +160,6 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
-    @unittest.skip("Gemma2's eager attn/sdpa attn outputs are expected to be different")
-    def test_sdpa_equivalence(self):
-        pass
-
     @unittest.skip(
         reason="HybridCache can't be gathered because it is not iterable. Adding a simple iter and dumping `distributed_iterator`"
         " as in Dynamic Cache doesn't work. NOTE: @gante all cache objects would need better compatibility with multi gpu setting"
@@ -158,22 +171,23 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_eager_matches_fa2_generate(self):
         pass
 
+    @unittest.skip("Gemma2 eager/FA2 attention outputs are expected to be different")
+    def test_flash_attn_2_equivalence(self):
+        pass
+
 
 @slow
 @require_torch_accelerator
 class Gemma2IntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
 
-    @classmethod
-    def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
 
-    @tooslow
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    @require_torch_large_accelerator
     @require_read_token
     def test_model_9b_bf16(self):
         model_id = "google/gemma-2-9b"
@@ -183,7 +197,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="eager"
+            model_id, torch_dtype=torch.bfloat16, attn_implementation="eager"
         ).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -194,7 +208,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @tooslow
+    @require_torch_large_accelerator
     @require_read_token
     def test_model_9b_fp16(self):
         model_id = "google/gemma-2-9b"
@@ -204,7 +218,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16, attn_implementation="eager"
+            model_id, torch_dtype=torch.float16, attn_implementation="eager"
         ).to(torch_device)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -216,7 +230,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_read_token
-    @tooslow
+    @require_torch_large_accelerator
     def test_model_9b_pipeline_bf16(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
         model_id = "google/gemma-2-9b"
@@ -227,7 +241,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+            model_id, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
         ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
@@ -242,34 +256,42 @@ class Gemma2IntegrationTest(unittest.TestCase):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
         model_id = "google/gemma-2-2b"
         # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1960s and I am trying to find out what the average",
-            "Hi today I'm going to be talking about the 10 best anime of all time.\n\n1",
-        ]
+        EXPECTED_BATCH_TEXTS = Expectations(
+            {
+                ("xpu", 3): [
+                    "Hello I am doing a project on the 1960s and I am trying to find out what the average",
+                    "Hi today I'm going to be talking about the 10 most powerful characters in the Naruto series.",
+                ],
+                ("cuda", 8): [
+                    "Hello I am doing a project on the 1960s and I am trying to find out what the average",
+                    "Hi today I'm going to be talking about the 10 most powerful characters in the Naruto series.",
+                ],
+            }
+        )
+        EXPECTED_BATCH_TEXT = EXPECTED_BATCH_TEXTS.get_expectation()
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+            model_id, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
         ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
 
         output = pipe(self.input_text, max_new_tokens=20, do_sample=False, padding=True)
 
-        self.assertEqual(output[0][0]["generated_text"], EXPECTED_TEXTS[0])
-        self.assertEqual(output[1][0]["generated_text"], EXPECTED_TEXTS[1])
+        self.assertEqual(output[0][0]["generated_text"], EXPECTED_BATCH_TEXT[0])
+        self.assertEqual(output[1][0]["generated_text"], EXPECTED_BATCH_TEXT[1])
 
     @require_read_token
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_large_gpu
     @mark.flash_attn_test
     @slow
-    @tooslow
     def test_model_9b_flash_attn(self):
         # See https://github.com/huggingface/transformers/issues/31953 --- flash attn was generating garbage for gemma2, especially in long context
         model_id = "google/gemma-2-9b"
         EXPECTED_TEXTS = [
             '<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many people died in the United States. I have found a few sites that say 500,000 but I am not sure if that is correct. I have also found a site that says 675,000 but I am not sure if that is correct either. I am trying to find out how many people died in the United States. I have found a few',
-            "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America is a country in North America. It is the third largest country in the world by total area and the third most populous country with over 320 million people. The United States is a federal republic consisting of 50 states and a federal district. The 48 contiguous states and the district of Columbia are in central North America between Canada and Mexico. The state of Alaska is in the"
+            "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America is a country in North America. It is the third largest country in the world by total area and the third most populous country with over 320 million people. The United States is a federal republic composed of 50 states and a federal district. The 48 contiguous states and the district of Columbia are in central North America between Canada and Mexico. The state of Alaska is in the",
         ]  # fmt: skip
 
         model = AutoModelForCausalLM.from_pretrained(
@@ -291,13 +313,23 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
-            convert_and_export_with_cache,
         )
 
         tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b", pad_token="</s>", padding_side="right")
-        EXPECTED_TEXT_COMPLETION = [
-            "Hello I am doing a project for my school and I need to know how to make a program that will take a number",
-        ]
+        EXPECTED_TEXT_COMPLETIONS = Expectations(
+            {
+                ("xpu", 3): [
+                    "Hello I am doing a project for my school and I need to know how to make a program that will take a number"
+                ],
+                ("cuda", 7): [
+                    "Hello I am doing a project for my school and I need to know how to make a program that will take a number"
+                ],
+                ("cuda", 8): [
+                    "Hello I am doing a project for my class and I am having trouble with the code. I am trying to make a"
+                ],
+            }
+        )
+        EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
         max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
             "input_ids"
         ].shape[-1]
@@ -330,7 +362,10 @@ class Gemma2IntegrationTest(unittest.TestCase):
         max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
 
         # Static Cache + export
-        exported_program = convert_and_export_with_cache(model)
+        from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
+
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
+        exported_program = exportable_module.export()
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
             exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
         )
@@ -339,6 +374,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
     @slow
     @require_read_token
+    @require_large_cpu_ram
     def test_export_hybrid_cache(self):
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
         from transformers.pytorch_utils import is_torch_greater_or_equal
@@ -375,8 +411,8 @@ class Gemma2IntegrationTest(unittest.TestCase):
         eager_generated_text = tokenizer.decode(eager_outputs[0], skip_special_tokens=True)
         self.assertEqual(export_generated_text, eager_generated_text)
 
+    @require_torch_large_accelerator
     @require_read_token
-    @tooslow
     def test_model_9b_bf16_flex_attention(self):
         model_id = "google/gemma-2-9b"
         EXPECTED_TEXTS = [
@@ -385,7 +421,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+            model_id, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
         ).to(torch_device)
         assert model.config._attn_implementation == "flex_attention"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -403,6 +439,8 @@ class Gemma2IntegrationTest(unittest.TestCase):
         we need to correctly slice the attention mask in all cases (because we use a HybridCache).
         Outputs for every attention functions should be coherent and identical.
         """
+        if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
+            self.skipTest("FlashAttention2 is required for this test.")
 
         if torch_device == "xpu" and attn_implementation == "flash_attention_2":
             self.skipTest(reason="Intel XPU doesn't support falsh_attention_2 as of now.")

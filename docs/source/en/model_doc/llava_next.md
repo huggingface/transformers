@@ -43,7 +43,7 @@ Along with performance improvements, LLaVA-NeXT maintains the minimalist design 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/llava_next_overview.png"
 alt="drawing" width="600"/>
 
-<small> LLaVa-NeXT incorporates a higher input resolution by encoding various patches of the input image. Taken from the <a href="https://arxiv.org/abs/2310.03744">original paper.</a> </small>
+<small> LLaVa-NeXT incorporates a higher input resolution by encoding various patches of the input image. Taken from the <a href="https://huggingface.co/papers/2310.03744">original paper.</a> </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/haotian-liu/LLaVA/tree/main).
@@ -157,7 +157,7 @@ import requests
 
 processor = LlavaNextProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
 
-model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", torch_dtype=torch.float16, low_cpu_mem_usage=True)
+model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", torch_dtype=torch.float16)
 model.to("cuda:0")
 
 # prepare image and text prompt, using the appropriate prompt template
@@ -292,7 +292,6 @@ from transformers import AutoModelForImageTextToText
 model = AutoModelForImageTextToText.from_pretrained(
     model_id,
     torch_dtype=torch.float16,
-    low_cpu_mem_usage=True,
     use_flash_attention_2=True
 ).to(0)
 ```

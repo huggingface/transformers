@@ -61,7 +61,7 @@ def load_balancing_loss_func(
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
-    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
     function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
     experts is too unbalanced.
 
@@ -593,7 +593,7 @@ class MultiplierProcessor(torch.autograd.Function):
 def sparsemixer(scores, jitter_eps, training, top_k=2):
     """
     Sparse mixer function to select top-k experts and compute multipliers.
-    Based on the paper: https://arxiv.org/pdf/2409.12136
+    Based on the paper: https://huggingface.co/papers/2409.12136
     We first replace the TopK(·) function as random sampling of discrete variables
     in model training. Then, following Liu et al. (2023a) and Liu et al. (2023b), we apply Heun's
     third order method to approximate the expert routing gradient and construct a modified
@@ -1068,7 +1068,6 @@ class PhimoeModel(PhimoePreTrainedModel):
             router_logits=all_router_logits,
         )
 
-    # Copied from transformers.models.phi3.modeling_phi3.Phi3Model._update_causal_mask with Phi3->Phimoe
     def _update_causal_mask(
         self,
         attention_mask: Union[torch.Tensor, "BlockMask"],
@@ -1156,7 +1155,6 @@ class PhimoeModel(PhimoePreTrainedModel):
         return causal_mask
 
     @staticmethod
-    # Copied from transformers.models.mistral.modeling_mistral.MistralModel._prepare_4d_causal_attention_mask_with_cache_position with Mistral->Phimoe
     def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor,
         sequence_length: int,
@@ -1200,12 +1198,13 @@ class PhimoeModel(PhimoePreTrainedModel):
             diagonal_attend_mask = torch.arange(target_length, device=cache_position.device) > cache_position.reshape(
                 -1, 1
             )
-            if config.get_text_config().sliding_window is not None:
+            text_config = config.get_text_config()
+            if getattr(text_config, "use_sliding_window", True) and text_config.sliding_window is not None:
                 # if we have sliding window, we should not attend to tokens beyond sliding window length, so we mask them out also
                 # the check is needed to verify is current checkpoint was trained with sliding window or not
                 if not isinstance(past_key_values, SlidingWindowCache) or sequence_length > target_length:
                     sliding_attend_mask = torch.arange(target_length, device=cache_position.device) <= (
-                        cache_position.reshape(-1, 1) - config.get_text_config().sliding_window
+                        cache_position.reshape(-1, 1) - text_config.sliding_window
                     )
                     diagonal_attend_mask.bitwise_or_(sliding_attend_mask)
             causal_mask *= diagonal_attend_mask

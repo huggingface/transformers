@@ -418,7 +418,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             `bitsandbytes`.
         llm_int8_threshold (`float`, *optional*, defaults to 6.0):
             This corresponds to the outlier threshold for outlier detection as described in `LLM.int8() : 8-bit Matrix
-            Multiplication for Transformers at Scale` paper: https://arxiv.org/abs/2208.07339 Any hidden states value
+            Multiplication for Transformers at Scale` paper: https://huggingface.co/papers/2208.07339 Any hidden states value
             that is above this threshold will be considered an outlier and the operation on those values will be done
             in fp16. Values are usually normally distributed, that is, most values are in the range [-3.5, 3.5], but
             there are some exceptional systematic outliers that are very differently distributed for large models.
@@ -1357,13 +1357,15 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
     def post_init(self):
         if self.run_compressed:
             if self.is_sparsification_compressed:
-                logger.warn(
+                logger.warning(
                     "`run_compressed` is only supported for quantized_compressed models"
                     " and not for sparsified models. Setting `run_compressed=False`"
                 )
                 self.run_compressed = False
             elif not self.is_quantization_compressed:
-                logger.warn("`run_compressed` is only supported for compressed models. Setting `run_compressed=False`")
+                logger.warning(
+                    "`run_compressed` is only supported for compressed models. Setting `run_compressed=False`"
+                )
                 self.run_compressed = False
 
     @classmethod
@@ -1554,7 +1556,7 @@ class TorchAoConfig(QuantizationConfigMixin):
     quant_type: Union[str, "AOBaseConfig"]  # noqa: F821
     modules_to_not_convert: Optional[List]
     quant_type_kwargs: Dict[str, Any]
-    include_embedding: bool
+    include_input_output_embeddings: bool
     untie_embedding_weights: bool
 
     """This is a config class for torchao quantization/sparsity techniques.
@@ -1617,7 +1619,7 @@ class TorchAoConfig(QuantizationConfigMixin):
         self,
         quant_type: Union[str, "AOBaseConfig"],  # noqa: F821
         modules_to_not_convert: Optional[List] = None,
-        include_embedding: bool = False,
+        include_input_output_embeddings: bool = False,
         untie_embedding_weights: bool = False,
         **kwargs,
     ):
@@ -1625,7 +1627,7 @@ class TorchAoConfig(QuantizationConfigMixin):
         self.quant_type = quant_type
         self.modules_to_not_convert = modules_to_not_convert
         self.quant_type_kwargs = kwargs.get("quant_type_kwargs", kwargs)
-        self.include_embedding = include_embedding
+        self.include_input_output_embeddings = include_input_output_embeddings
         self.untie_embedding_weights = untie_embedding_weights
         self.post_init()
 
@@ -1711,9 +1713,23 @@ class TorchAoConfig(QuantizationConfigMixin):
                 and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0")
                 and quant_type_kwargs.get("layout", None) is None
             ):
-                from torchao.dtypes import Int4CPULayout
+                if torch.xpu.is_available():
+                    if version.parse(importlib.metadata.version("torchao")) >= version.parse(
+                        "0.11.0"
+                    ) and version.parse(importlib.metadata.version("torch")) > version.parse("2.7.9"):
+                        from torchao.dtypes import Int4XPULayout
+                        from torchao.quantization.quant_primitives import ZeroPointDomain
 
-                quant_type_kwargs["layout"] = Int4CPULayout()
+                        quant_type_kwargs["layout"] = Int4XPULayout()
+                        quant_type_kwargs["zero_point_domain"] = ZeroPointDomain.INT
+                    else:
+                        raise ValueError(
+                            "TorchAoConfig requires torchao >= 0.11.0 and torch >= 2.8.0 for XPU support. Please upgrade the version or use run on CPU with the cpu version pytorch."
+                        )
+                else:
+                    from torchao.dtypes import Int4CPULayout
+
+                    quant_type_kwargs["layout"] = Int4CPULayout()
 
             return methods[self.quant_type](**quant_type_kwargs)
         else:
@@ -1732,7 +1748,7 @@ class TorchAoConfig(QuantizationConfigMixin):
                         dataclasses.asdict(d["quant_type_kwargs"]["layout"]),
                     ]
                 if isinstance(d["quant_type_kwargs"]["layout"], list):
-                    assert len(d["quant_type_kwargs"]["layout"]) == 2, "layout saves layout name and layour kwargs"
+                    assert len(d["quant_type_kwargs"]["layout"]) == 2, "layout saves layout name and layout kwargs"
                     assert isinstance(d["quant_type_kwargs"]["layout"][0], str), "layout name must be a string"
                     assert isinstance(d["quant_type_kwargs"]["layout"][1], dict), "layout kwargs must be a dict"
                 else:
@@ -1791,6 +1807,11 @@ class BitNetQuantConfig(QuantizationConfigMixin):
             In `offline` mode, quantization parameters are pre-calculated *before* inference.
             These parameters are then fixed and loaded into the quantized model. This
             generally results in lower runtime overhead compared to online quantization.
+        use_rms_norm (`bool`, *optional*, defaults to `False`):
+            Whether to apply RMSNorm on the activations before quantization. This matches the original BitNet paper's approach
+            of normalizing activations before quantization/packing.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon value used in the RMSNorm layer for numerical stability.
         kwargs (`Dict[str, Any]`, *optional*):
             Additional keyword arguments that may be used by specific quantization
             backends or future versions.
@@ -1801,6 +1822,8 @@ class BitNetQuantConfig(QuantizationConfigMixin):
         modules_to_not_convert: Optional[List] = None,
         linear_class: Optional[str] = "bitlinear",
         quantization_mode: Optional[str] = "offline",
+        use_rms_norm: Optional[bool] = False,
+        rms_norm_eps: Optional[float] = 1e-6,
         **kwargs,
     ):
         if linear_class not in ["bitlinear", "autobitlinear"]:
@@ -1811,6 +1834,8 @@ class BitNetQuantConfig(QuantizationConfigMixin):
         self.modules_to_not_convert = modules_to_not_convert
         self.linear_class = linear_class
         self.quantization_mode = quantization_mode
+        self.use_rms_norm = use_rms_norm
+        self.rms_norm_eps = rms_norm_eps
         self.post_init()
 
     def post_init(self):

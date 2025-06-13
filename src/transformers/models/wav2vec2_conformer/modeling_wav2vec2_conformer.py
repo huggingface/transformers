@@ -26,7 +26,11 @@ from ...modeling_outputs import (
     XVectorOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, is_peft_available
+from ...utils import (
+    ModelOutput,
+    auto_docstring,
+    is_peft_available,
+)
 from .configuration_wav2vec2_conformer import Wav2Vec2ConformerConfig
 
 
@@ -38,7 +42,7 @@ class Wav2Vec2ConformerForPreTrainingOutput(ModelOutput):
     Args:
         loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
             Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
-            paper](https://arxiv.org/pdf/2006.11477.pdf) . (classification) loss.
+            paper](https://huggingface.co/papers/2006.11477) . (classification) loss.
         projected_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
             Hidden-states of the model projected to *config.proj_codevector_dim* that can be used to predict the masked
             projected quantized states.
@@ -57,9 +61,9 @@ class Wav2Vec2ConformerForPreTrainingOutput(ModelOutput):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
         contrastive_loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
-            The contrastive loss (L_m) as stated in the [official paper](https://arxiv.org/pdf/2006.11477.pdf) .
+            The contrastive loss (L_m) as stated in the [official paper](https://huggingface.co/papers/2006.11477) .
         diversity_loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
-            The diversity loss (L_d) as stated in the [official paper](https://arxiv.org/pdf/2006.11477.pdf) .
+            The diversity loss (L_d) as stated in the [official paper](https://huggingface.co/papers/2006.11477) .
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -130,7 +134,7 @@ class Wav2Vec2ConformerPositionalConvEmbedding(nn.Module):
 
 class Wav2Vec2ConformerRotaryPositionalEmbedding(nn.Module):
     """Rotary positional embedding
-    Reference : https://blog.eleuther.ai/rotary-embeddings/ Paper: https://arxiv.org/pdf/2104.09864.pdf
+    Reference : https://blog.eleuther.ai/rotary-embeddings/ Paper: https://huggingface.co/papers/2104.09864
     """
 
     def __init__(self, config):
@@ -197,7 +201,7 @@ class Wav2Vec2ConformerRelPositionalEmbedding(nn.Module):
 
         # Reverse the order of positive indices and concat both positive and
         # negative indices. This is used to support the shifting trick
-        # as in https://arxiv.org/abs/1901.02860
+        # as in https://huggingface.co/papers/1901.02860
         pe_positive = torch.flip(pe_positive, [0]).unsqueeze(0)
         pe_negative = pe_negative[1:].unsqueeze(0)
         pe = torch.cat([pe_positive, pe_negative], dim=1)
@@ -453,7 +457,7 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
             # linear transformation for positional encoding
             self.linear_pos = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
             # these two learnable bias are used in matrix c and matrix d
-            # as described in https://arxiv.org/abs/1901.02860 Section 3.3
+            # as described in https://huggingface.co/papers/1901.02860 Section 3.3
             self.pos_bias_u = nn.Parameter(torch.zeros(self.num_heads, self.head_size))
             self.pos_bias_v = nn.Parameter(torch.zeros(self.num_heads, self.head_size))
 
@@ -495,7 +499,7 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
                     " 'relative'"
                 )
             # apply relative_position_embeddings to qk scores
-            # as proposed in Transformer_XL: https://arxiv.org/abs/1901.02860
+            # as proposed in Transformer_XL: https://huggingface.co/papers/1901.02860
             scores = self._apply_relative_embeddings(
                 query=query, key=key, relative_position_embeddings=relative_position_embeddings
             )
@@ -555,7 +559,7 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
         q_with_bias_v = (query + self.pos_bias_v).transpose(1, 2)
 
         # 3. attention score: first compute matrix a and matrix c
-        # as described in https://arxiv.org/abs/1901.02860 Section 3.3
+        # as described in https://huggingface.co/papers/1901.02860 Section 3.3
         # => (batch, head, time1, time2)
         scores_ac = torch.matmul(q_with_bias_u, key.transpose(-2, -1))
 
@@ -579,7 +583,7 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
 
 
 class Wav2Vec2ConformerEncoderLayer(nn.Module):
-    """Conformer block based on https://arxiv.org/abs/2005.08100."""
+    """Conformer block based on https://huggingface.co/papers/2005.08100."""
 
     def __init__(self, config):
         super().__init__()
@@ -699,7 +703,7 @@ class Wav2Vec2ConformerEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
@@ -744,7 +748,7 @@ class Wav2Vec2ConformerEncoder(nn.Module):
 class Wav2Vec2ConformerGumbelVectorQuantizer(nn.Module):
     """
     Vector quantization using gumbel softmax. See `[CATEGORICAL REPARAMETERIZATION WITH
-    GUMBEL-SOFTMAX](https://arxiv.org/pdf/1611.01144.pdf) for more information.
+    GUMBEL-SOFTMAX](https://huggingface.co/papers/1611.01144) for more information.
     """
 
     def __init__(self, config):
@@ -970,7 +974,7 @@ def _compute_mask_indices(
 ) -> np.ndarray:
     """
     Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
-    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
+    ASR](https://huggingface.co/papers/1904.08779). Note that this method is not optimized to run on TPU and should be run on
     CPU as part of the preprocessing during training.
 
     Args:
@@ -1117,7 +1121,7 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
     ):
         """
         Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://arxiv.org/abs/1904.08779).
+        [SpecAugment](https://huggingface.co/papers/1904.08779).
         """
 
         # `config.apply_spec_augment` can set masking to False
@@ -1382,7 +1386,7 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
             ).permute(2, 0, 1, 3)
 
             # 4. compute logits, corresponding to `logs = sim(c_t, [q_t, \sim{q}_t]) / \kappa`
-            # of equation (3) in https://arxiv.org/pdf/2006.11477.pdf
+            # of equation (3) in https://huggingface.co/papers/2006.11477
             logits = self.compute_contrastive_logits(
                 quantized_features[None, :],
                 negative_quantized_features,

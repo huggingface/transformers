@@ -11,18 +11,20 @@
 # specific language governing permissions and limitations under the License.
 
 import logging
-from typing import Optional
+from typing import Callable, Optional
 
 import torch
 
-from transformers.generation.configuration_utils import GenerationConfig
-
-from ..utils.import_utils import is_torch_available
-
-
-if is_torch_available():
-    from transformers import HybridCache, PreTrainedModel, StaticCache
-    from transformers.pytorch_utils import is_torch_greater_or_equal, is_torch_greater_or_equal_than_2_3
+from ..cache_utils import DynamicCache, HybridCache, StaticCache
+from ..generation.configuration_utils import GenerationConfig
+from ..masking_utils import (
+    ALL_MASK_ATTENTION_FUNCTIONS,
+    _ignore_causal_mask_sdpa,
+    _is_torch_greater_or_equal_than_2_5,
+    prepare_padding_mask,
+)
+from ..modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ..pytorch_utils import is_torch_greater_or_equal, is_torch_greater_or_equal_than_2_3
 
 
 class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
@@ -54,19 +56,15 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         if not hasattr(model.config, "use_cache") or model.config.use_cache is False:
             raise ValueError("The model must have caching enabled to be performant.")
 
-        if not hasattr(model.config, "cache_implementation"):
-            # If `cache_implementation` is not specified explicitly in the config, `DynamicCache` will
-            # be used by default, so export will use `StaticCache` by default.
-            logging.info("Using `StaticCache` for export as `cache_implementation` is not specified in the config.")
-            self.model = TorchExportableModuleWithStaticCache(model)
+        if hasattr(model.config, "layer_types") and getattr(model.config, "sliding_window", None) is not None:
+            self.model = TorchExportableModuleWithHybridCache(model, max_batch_size, max_cache_len)
         else:
-            if model.config.cache_implementation == "hybrid":
-                self.model = TorchExportableModuleWithHybridCache(model, max_batch_size, max_cache_len)
-            else:
-                raise ValueError(
-                    f"Unsupported cache implementation: {model.config.cache_implementation}. "
-                    "Please use `hybrid` or `static`."
-                )
+            # If `layer_types` is not specified explicitly in the config or `sliding_window` is null,
+            # there is only 1 type of layers, so export will use `StaticCache` by default.
+            logging.info(
+                "Using `StaticCache` for export as `layer_types` is not specified or `sliding_window` is `null` in the config."
+            )
+            self.model = TorchExportableModuleWithStaticCache(model)
 
     def forward(
         self,
@@ -105,16 +103,22 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
             strict(`Optional[bool]`):
                 Flag to instruct `torch.export` to use `torchdynamo`.
         """
+        # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
+        ALL_MASK_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_mask_without_vmap)
+        ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
+        self.model.model.config._attn_implementation = "sdpa_without_vmap"
+
         example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long)
         example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long)
 
-        return torch.export.export(
+        exported_program = torch.export.export(
             self.model,
             args=(example_input_ids, example_cache_position),
             kwargs={},
             dynamic_shapes=dynamic_shapes,
             strict=strict if strict is not None else True,
         )
+        return exported_program
 
     @staticmethod
     def generate(
@@ -281,17 +285,6 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             self.register_buffer(f"key_cache_{i}", self.static_cache.key_cache[i], persistent=False)
             self.register_buffer(f"value_cache_{i}", self.static_cache.value_cache[i], persistent=False)
 
-        self.is_causal = any("CausalLM" in arch for arch in self.model.config.architectures)
-        if self.is_causal:
-            causal_mask = torch.tril(
-                torch.ones(
-                    self.static_cache.max_cache_len,
-                    self.static_cache.max_cache_len,
-                    dtype=torch.bool,
-                )
-            )
-            self.register_buffer("mask", causal_mask, persistent=False)
-
     def forward(self, input_ids: torch.Tensor, cache_position: torch.Tensor):
         """
         Forward pass of the module, which is compatible with the ExecuTorch runtime.
@@ -314,13 +307,12 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             ensuring that the exported model can be executed in `ExecuTorch` out-of-the-box.
         """
         _, seqlen = input_ids.shape
-        attn_mask = self.mask[cache_position, :seqlen] if self.is_causal else None
         position_ids = cache_position.unsqueeze(0)
         past_key_values = self.static_cache
 
         outs = self.model(
             input_ids=input_ids,
-            attention_mask=attn_mask,
+            attention_mask=None,
             position_ids=position_ids,
             cache_position=cache_position,
             past_key_values=past_key_values,
@@ -410,12 +402,6 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         if not self.model.config.use_cache:
             raise AssertionError("Model must have caching enabled")
 
-        if (
-            not hasattr(self.model.config, "cache_implementation")
-            or self.model.config.cache_implementation != "hybrid"
-        ):
-            raise AssertionError("Model must use 'hybrid' cache implementation")
-
         # Initialize the HybridCache
         self.cache = HybridCache(
             config=self.model.config,
@@ -445,18 +431,15 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         Returns:
             torch.Tensor: Logits output from the model.
         """
-        batch_size, seq_len = input_ids.shape
+        batch_size = input_ids.shape[0]
 
         # Generate position_ids from cache_position
         position_ids = cache_position.unsqueeze(0).expand(batch_size, -1)
 
-        # Create attention mask (always ones for token-by-token generation)
-        attention_mask = torch.ones((batch_size, seq_len), dtype=torch.long, device=input_ids.device)
-
         # Forward pass with the model
         outputs = self.model(
             input_ids=input_ids,
-            attention_mask=attention_mask,
+            attention_mask=None,
             position_ids=position_ids,
             past_key_values=self.cache,
             use_cache=True,
@@ -492,6 +475,11 @@ def convert_and_export_with_cache(
         raise ImportError("torch >= 2.3 is required.")
 
     import torch.export._trace
+
+    # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
+    ALL_MASK_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_mask_without_vmap)
+    ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
+    model.config._attn_implementation = "sdpa_without_vmap"
 
     with torch.no_grad():
         # TODO: The default inputs only work for text models. We need to add support for vision/audio models.
@@ -706,3 +694,131 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
                     break
 
             return generated_ids
+
+
+def export_with_dynamic_cache(
+    model: PreTrainedModel,
+    example_input_ids: Optional[torch.Tensor] = None,
+    example_attention_mask: Optional[torch.Tensor] = None,
+):
+    """
+    Export a model with DynamicCache using `torch.export`, ensuring the exported model is compatible with `ExecuTorch`.
+
+    Args:
+        model (`PreTrainedModel`): The pretrained model to be exported.
+        example_input_ids (`Optional[torch.Tensor]`): Example input token id used by `torch.export`.
+        example_attention_mask (`Optional[torch.Tensor]`): Example attention mask used by `torch.export`.
+
+    Returns:
+        Exported program (`torch.export.ExportedProgram`): The exported program generated via `torch.export`.
+    """
+    if not is_torch_greater_or_equal_than_2_3:
+        raise ImportError("torch >= 2.3 is required.")
+
+    # This is the same as sdpa, but mask creation does not use `vmap` which is not exportable
+    ALL_MASK_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", sdpa_mask_without_vmap)
+    ALL_ATTENTION_FUNCTIONS.register("sdpa_without_vmap", ALL_ATTENTION_FUNCTIONS["sdpa"])
+    model.config._attn_implementation = "sdpa_without_vmap"
+
+    with torch.no_grad():
+        exported_program = torch.export.export(
+            model,
+            (),
+            {
+                "input_ids": example_input_ids,
+                "attention_mask": example_attention_mask,
+                "past_key_values": DynamicCache(),
+                "use_cache": True,
+            },
+            strict=False,
+        )
+        return exported_program
+
+
+def sdpa_mask_without_vmap(
+    batch_size: int,
+    cache_position: torch.Tensor,
+    kv_length: int,
+    kv_offset: int = 0,
+    mask_function: Optional[Callable] = None,
+    attention_mask: Optional[torch.Tensor] = None,
+    local_size: Optional[int] = None,
+    allow_is_causal_skip: bool = True,
+    allow_torch_fix: bool = True,
+    **kwargs,
+) -> Optional[torch.Tensor]:
+    """
+    Create a 4D boolean mask of shape `(batch_size, 1, query_length, kv_length)` where a value of True indicates that
+    the element should take part in the attention computation, and False that it should not.
+
+    This is similar to `masking_utils.sdpa_mask` but does not use `vmap` which is incompatible with export.
+
+    Args:
+        batch_size (`int`):
+            The batch size of the input sequence.
+        cache_position (`torch.Tensor`):
+            A tensor of shape (query_length,) indicating the current indices of the input sequence elements.
+        kv_length (`int`):
+            The size that the key and value states will have during the attention computation.
+        kv_offset (`int`, optional):
+            An optional offset to indicate at which first position the key and values states will refer to.
+        mask_function (`Callable`):
+            The mask factory function describing the mask pattern.
+        attention_mask (`torch.Tensor`, optional):
+            The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length)
+        local_size (`int`, optional):
+            The size of the local attention, if we do not use full attention. This is used only if `allow_is_causal_skip=True`
+            to try to skip mask creation if possible.
+        allow_is_causal_skip (`bool`, optional):
+            Whether to allow to return `None` for the mask under conditions where we can use the `is_causal` argument in
+            `torch.sdpa` instead. Default to `True`.
+        allow_torch_fix (`bool`, optional):
+            Whether to update the mask in case a query is not attending to any tokens, to solve a bug in torch's older
+            versions. We need an arg to skip it when using eager. By default `True`.
+
+    """
+
+    q_length = cache_position.shape[0]
+    # Potentially pad the 2D mask, and slice it correctly
+    padding_mask = prepare_padding_mask(attention_mask, kv_length, kv_offset)
+
+    #  Under specific conditions, we can avoid materializing the mask, instead relying on the `is_causal` argument
+    if allow_is_causal_skip and _ignore_causal_mask_sdpa(padding_mask, q_length, kv_length, local_size):
+        return None
+
+    # Similar to `kv_arange = torch.arange(start=kv_offset, end=kv_offset + kv_length, device=cache_position.device)`
+    # but without data-dependent slicing (i.e. torch.compile friendly)
+    kv_arange = torch.arange(kv_length, device=cache_position.device)
+    kv_arange += kv_offset
+    reshaped_cache_position = cache_position.view(-1, 1)
+
+    # This is a bit hacky to know what pattern we are using, but all mask creation function actually forward
+    # the config through kwargs anyway, so it allows to rely on it
+    # Usually, the `mask_function` is the only entry-point to define the pattern - we could do for loops over it,
+    # but this is more efficient
+    sliding_window = getattr(kwargs["config"], "sliding_window", None)
+    chunk_size = getattr(kwargs["config"], "attention_chunk_size", None)
+
+    if sliding_window is not None and chunk_size is not None:
+        raise ValueError("Cannot use both `sliding_window` and `attention_chunk_size`")
+
+    # Simplest and most efficient way to obtain a causal mask
+    causal_mask = kv_arange <= reshaped_cache_position
+    # If using sliding window, add the sliding mask
+    if sliding_window is not None:
+        sliding_mask_overlay = kv_arange > reshaped_cache_position - sliding_window
+        causal_mask *= sliding_mask_overlay
+    # If using chunk attention, add the chunked mask
+    elif chunk_size is not None:
+        chunked_mask_overlay = kv_arange // chunk_size == reshaped_cache_position // chunk_size
+        causal_mask *= chunked_mask_overlay
+
+    causal_mask = causal_mask[None, None, :, :].expand(batch_size, -1, -1, -1)
+    if padding_mask is not None:
+        causal_mask = causal_mask * padding_mask[:, None, None, :]
+
+    # Due to a bug in some older torch version, we need to update the mask in case a query is not attending to any
+    # tokens (due to padding). See details in https://github.com/pytorch/pytorch/issues/110213
+    if not _is_torch_greater_or_equal_than_2_5 and allow_torch_fix:
+        causal_mask |= torch.all(~causal_mask, dim=-1, keepdim=True)
+    return causal_mask

@@ -14,7 +14,8 @@
 # limitations under the License.
 """Image processor class for LLaVa-NeXT."""
 
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -107,7 +108,7 @@ def expand_to_square(image: np.array, background_color, input_data_format) -> np
 class LlavaNextImageProcessor(BaseImageProcessor):
     r"""
     Constructs a LLaVa-NeXT image processor. Based on [`CLIPImageProcessor`] with incorporation of additional techniques
-    for processing high resolution images as explained in the [LLaVa paper](https://arxiv.org/abs/2310.03744).
+    for processing high resolution images as explained in the [LLaVa paper](https://huggingface.co/papers/2310.03744).
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -424,19 +425,23 @@ class LlavaNextImageProcessor(BaseImageProcessor):
 
         return resized_image
 
+    def _get_padding_size(self, original_resolution: tuple, target_resolution: tuple):
+        original_height, original_width = original_resolution
+        target_height, target_width = target_resolution
+        paste_x, r_x = divmod(target_width - original_width, 2)
+        paste_y, r_y = divmod(target_height - original_height, 2)
+        return (paste_y, paste_y + r_y), (paste_x, paste_x + r_x)
+
     def _pad_for_patching(
         self, image: np.array, target_resolution: tuple, input_data_format: ChannelDimension
     ) -> np.array:
         """
         Pad an image to a target resolution while maintaining aspect ratio.
         """
-        target_height, target_width = target_resolution
-        new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format)
+        new_resolution = get_patch_output_size(image, target_resolution, input_data_format)
+        padding = self._get_padding_size(new_resolution, target_resolution)
 
-        paste_x, r_x = divmod(target_width - new_width, 2)
-        paste_y, r_y = divmod(target_height - new_height, 2)
-
-        padded_image = self.pad(image, padding=((paste_y, paste_y + r_y), (paste_x, paste_x + r_x)))
+        padded_image = self.pad(image, padding=padding)
 
         return padded_image
 

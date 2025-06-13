@@ -137,7 +137,7 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         **kwargs: Unpack[RTDetrFastImageProcessorKwargs],
     ) -> BatchFeature:
-        return BaseImageProcessorFast().preprocess(images, annotations=annotations, masks_path=masks_path, **kwargs)
+        return BaseImageProcessorFast().preprocess(images, annotations, masks_path, **kwargs)
 
     def prepare_annotation(
         self,
@@ -163,13 +163,11 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
         self,
         images: List["torch.Tensor"],
         annotations: Optional[Union[AnnotationType, List[AnnotationType]]],
-        return_segmentation_masks: bool,
         masks_path: Optional[Union[str, pathlib.Path]],
+        return_segmentation_masks: bool,
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
-        do_center_crop: bool,
-        crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -180,6 +178,7 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
         pad_size: Optional[Dict[str, int]],
         format: Optional[Union[str, AnnotationFormat]],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         """
         Preprocess an image or a batch of images so that it can be used by the model.

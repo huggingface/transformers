@@ -85,7 +85,7 @@ class WeightStandardizedConv2d(nn.Conv2d):
     """Conv2d with Weight Standardization. Includes TensorFlow compatible SAME padding. Used for ViT Hybrid model.
 
     Paper: [Micro-Batch Training with Batch-Channel Normalization and Weight
-    Standardization](https://arxiv.org/abs/1903.10520v2)
+    Standardization](https://huggingface.co/papers/1903.10520v2)
     """
 
     def __init__(

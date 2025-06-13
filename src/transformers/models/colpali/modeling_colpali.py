@@ -24,16 +24,10 @@ from transformers import AutoModelForImageTextToText
 
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring
+from ...utils import ModelOutput, auto_docstring, can_return_tuple
 from .configuration_colpali import ColPaliConfig
 
 
-@auto_docstring(
-    custom_intro="""
-    The bare ColPali model outputting raw hidden-states without any specific head on top.
-    """
-)
-@auto_docstring
 class ColPaliPreTrainedModel(PreTrainedModel):
     config_class = ColPaliConfig
     base_model_prefix = "model"
@@ -98,13 +92,16 @@ class ColPaliForRetrievalOutput(ModelOutput):
 
 @auto_docstring(
     custom_intro="""
-    In our proposed ColPali approach, we leverage VLMs to construct efficient multi-vector embeddings directly
-    from document images (“screenshots”) for document retrieval. We train the model to maximize the similarity
+    The ColPali architecture leverages VLMs to construct efficient multi-vector embeddings directly
+    from document images (“screenshots”) for document retrieval. The model is trained to maximize the similarity
     between these document embeddings and the corresponding query embeddings, using the late interaction method
     introduced in ColBERT.
 
     Using ColPali removes the need for potentially complex and brittle layout recognition and OCR pipelines with a
     single model that can take into account both the textual and visual content (layout, charts, etc.) of a document.
+
+    ColPali is part of the ColVision model family, which was first introduced in the following paper:
+    [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://huggingface.co/papers/2407.01449).
     """
 )
 class ColPaliForRetrieval(ColPaliPreTrainedModel):
@@ -126,6 +123,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
 
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -136,9 +134,9 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, ColPaliForRetrievalOutput]:
-        if "pixel_values" in kwargs:
-            kwargs["pixel_values"] = kwargs["pixel_values"].to(dtype=self.dtype)
+    ) -> ColPaliForRetrievalOutput:
+        if pixel_values is not None:
+            pixel_values = pixel_values.to(dtype=self.dtype)
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         output_hidden_states = (
@@ -146,38 +144,33 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.vlm(
+        vlm_output = self.vlm(
             input_ids=input_ids,
             attention_mask=attention_mask,
             pixel_values=pixel_values,
             output_hidden_states=True,
-            return_dict=return_dict,
+            return_dict=True,
             output_attentions=output_attentions,
             **kwargs,
         )
+        vlm_hidden_states = vlm_output.hidden_states if output_hidden_states else None
+        vlm_image_hidden_states = vlm_output.image_hidden_states if pixel_values is not None else None
 
-        last_hidden_states = outputs.hidden_states[-1]  # (batch_size, sequence_length, hidden_size)
+        last_hidden_states = vlm_output.hidden_states[-1]  # (batch_size, sequence_length, hidden_size)
         embeddings = self.embedding_proj_layer(last_hidden_states)  # (batch_size, sequence_length, dim)
 
         # L2 normalization
         embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)  # (batch_size, sequence_length, dim)
 
-        embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
-
-        loss = None
-        if not return_dict:
-            output = (embeddings,) + outputs[2:]
-            output[2] = output[2] if output_hidden_states is not None else None
-            output[-1] = (outputs.image_hidden_states if pixel_values is not None else None,)
-            return (loss,) + output if loss is not None else output
+        if attention_mask is not None:
+            embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
 
         return ColPaliForRetrievalOutput(
-            loss=loss,
             embeddings=embeddings,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states if pixel_values is not None else None,
+            past_key_values=vlm_output.past_key_values,
+            hidden_states=vlm_hidden_states,
+            attentions=vlm_output.attentions,
+            image_hidden_states=vlm_image_hidden_states,
         )
 
     def get_input_embeddings(self):

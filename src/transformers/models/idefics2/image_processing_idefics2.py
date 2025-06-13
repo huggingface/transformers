@@ -14,7 +14,8 @@
 # limitations under the License.
 
 
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -181,7 +182,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
             sample in the batch, such that the returned tensor is of shape (batch_size, max_num_images, num_channels, max_height, max_width).
         do_image_splitting (`bool`, *optional*, defaults to `False`):
             Whether to split the image into a sequence 4 equal sub-images concatenated with the original image. That
-            strategy was first introduced in https://arxiv.org/abs/2311.06607.
+            strategy was first introduced in https://huggingface.co/papers/2311.06607.
     """
 
     model_input_names = ["pixel_values", "pixel_attention_mask"]
@@ -439,7 +440,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
                 Whether or not to pad the images to the largest height and width in the batch.
             do_image_splitting (`bool`, *optional*, defaults to `self.do_image_splitting`):
                 Whether to split the image into a sequence 4 equal sub-images concatenated with the original image. That
-                strategy was first introduced in https://arxiv.org/abs/2311.06607.
+                strategy was first introduced in https://huggingface.co/papers/2311.06607.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.

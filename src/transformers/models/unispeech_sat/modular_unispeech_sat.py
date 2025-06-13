@@ -1,3 +1,19 @@
+# coding=utf-8
+# Copyright 2021 The Fairseq Authors and the HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""PyTorch UniSpeechSat model."""
+
 import math
 import warnings
 from dataclasses import dataclass
@@ -39,7 +55,7 @@ class UniSpeechSatForPreTrainingOutput(ModelOutput):
     Args:
         loss (*optional*, returned when model is in train mode, `torch.FloatTensor` of shape `(1,)`):
             Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
-            paper](https://arxiv.org/pdf/2006.11477.pdf) . (classification) loss.
+            paper](https://huggingface.co/papers/2006.11477) . (classification) loss.
         projected_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
             Hidden-states of the model projected to *config.proj_codevector_dim* that can be used to predict the masked
             projected quantized states.
@@ -145,6 +161,7 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_flex_attn = True
 
     def _init_weights(self, module):
         """Initialize the weights"""

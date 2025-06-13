@@ -24,6 +24,8 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
+    require_torch_large_accelerator,
     require_torch_sdpa,
     slow,
     torch_device,
@@ -300,10 +302,6 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
-    @unittest.skip("DeepseekV3's eager attn/sdpa attn outputs are expected to be different")
-    def test_sdpa_equivalence(self):
-        pass
-
     @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
     def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
@@ -447,6 +445,7 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         ]
         super().test_past_key_values_format(custom_all_cache_shapes=all_cache_shapes)
 
+    @require_torch_large_accelerator
     @require_torch_sdpa
     @slow
     def test_eager_matches_sdpa_generate(self):
@@ -460,7 +459,6 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         model_sdpa = DeepseekV3ForCausalLM.from_pretrained(
             "bzantium/tiny-deepseek-v3",
             torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
         ).to(torch_device)
 
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
@@ -468,7 +466,6 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         model_eager = DeepseekV3ForCausalLM.from_pretrained(
             "bzantium/tiny-deepseek-v3",
             torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
             attn_implementation="eager",
         ).to(torch_device)
 
@@ -496,19 +493,38 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
                     msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
                 )
 
+    @require_torch_gpu
+    def test_flex_attention_with_grads(self):
+        """
+        Overwriting as the namings/functionality on the attention part are different; for now it's more of a unique model.
+        Original issue is also due to dimensionalities, here specifically due to dims not being a multiple of 2.
+        """
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config._attn_implementation = "flex_attention"
+
+            # Disable dropout
+            config.attention_dropout = 0.0
+
+            # Deepseek 3 specific - manipulate nope and adjust calculated total head dim
+            config.qk_nope_head_dim = 16
+            config.qk_head_dim = config.qk_nope_head_dim + config.qk_rope_head_dim
+
+            model = model_class(config).to(device=torch_device)
+            self.assertTrue(model.config._attn_implementation == "flex_attention")
+
+            # Elaborate workaround for encoder-decoder models as some do not specify their main input
+            dummy_inputs = {model.main_input_name: inputs_dict[model.main_input_name].to(torch_device)}
+            if config.is_encoder_decoder:
+                dummy_inputs["decoder_input_ids"] = inputs_dict["decoder_input_ids"].to(torch_device)
+                dummy_inputs["decoder_attention_mask"] = inputs_dict["decoder_attention_mask"].to(torch_device)
+
+            # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
+            _ = model(**dummy_inputs)
+
 
 @require_torch_accelerator
 class DeepseekV3IntegrationTest(unittest.TestCase):
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
-
-    @classmethod
-    def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
-
     def tearDown(self):
         # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
         cleanup(torch_device, gc_collect=False)
@@ -523,14 +539,12 @@ class DeepseekV3IntegrationTest(unittest.TestCase):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
         NUM_TOKENS_TO_GENERATE = 40
-        # Note on `EXPECTED_TEXT_COMPLETION`'s diff: the current value matches the original test if the original test
-        # was changed to have a cache of 53 tokens (as opposed to 4096), on Ampere GPUs.
+        # https://github.com/huggingface/transformers/pull/38562#issuecomment-2939209171
+        # The reason why the output is gibberish is because the testing model bzantium/tiny-deepseek-v3 is not trained
+        # one. Since original DeepSeek-V3 model is too big to debug and test, there was no testing with the original one.
         EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "
-            "reference frames, and 2) the laws of physics are the same for all inertial reference frames.\nThe "
-            "theory of relativ",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on my eggs, "
-            "my fries, my chicken, my burgers, my hot dogs, my sandwiches, my salads, my p",
+            "Simply put, the theory of relativity states that  Frojekecdytesాలు sicʰtinaccianntuala breej的效率和质量的控制lavestock-PraccuraciesOTTensorialoghismos的思路astiomotivityosexualriad TherapeuticsoldtYPEface Kishsatellite-TV",
+            "My favorite all time favorite condiment is ketchup.ieden沟渠係室温 Fryrok般地Segmentation Cycle/physicalwarenkrautempsాలు蹈梗 Mesomac一等asan lethality suspended Causewaydreamswith Fossilsdorfాలు蹈 ChristiansenHOMEbrew",
         ]
 
         prompts = [

@@ -393,6 +393,13 @@ def get_torch_version():
     return _torch_version
 
 
+def get_torch_major_and_minor_version() -> str:
+    if _torch_version == "N/A":
+        return "N/A"
+    parsed_version = version.parse(_torch_version)
+    return str(parsed_version.major) + "." + str(parsed_version.minor)
+
+
 def is_torch_sdpa_available():
     if not is_torch_available():
         return False
@@ -473,6 +480,24 @@ def is_torch_cuda_available():
         import torch
 
         return torch.cuda.is_available()
+    else:
+        return False
+
+
+def is_cuda_platform():
+    if is_torch_available():
+        import torch
+
+        return torch.version.cuda is not None
+    else:
+        return False
+
+
+def is_rocm_platform():
+    if is_torch_available():
+        import torch
+
+        return torch.version.hip is not None
     else:
         return False
 
@@ -995,8 +1020,14 @@ def is_torch_xpu_available(check_device=False):
 
 
 @lru_cache()
-def is_bitsandbytes_available():
-    if not is_torch_available() or not _bitsandbytes_available:
+def is_bitsandbytes_available(check_library_only=False) -> bool:
+    if not _bitsandbytes_available:
+        return False
+
+    if check_library_only:
+        return True
+
+    if not is_torch_available():
         return False
 
     import torch
@@ -1075,6 +1106,19 @@ def is_torch_greater_or_equal(library_version: str, accept_dev: bool = False):
         )
     else:
         return version.parse(importlib.metadata.version("torch")) >= version.parse(library_version)
+
+
+@lru_cache()
+def is_huggingface_hub_greater_or_equal(library_version: str, accept_dev: bool = False):
+    if not _is_package_available("huggingface_hub"):
+        return False
+
+    if accept_dev:
+        return version.parse(
+            version.parse(importlib.metadata.version("huggingface_hub")).base_version
+        ) >= version.parse(library_version)
+    else:
+        return version.parse(importlib.metadata.version("huggingface_hub")) >= version.parse(library_version)
 
 
 def is_torchdistx_available():
@@ -1209,6 +1253,9 @@ def is_keras_nlp_available():
 
 def is_in_notebook():
     try:
+        # Check if we are running inside Marimo
+        if "marimo" in sys.modules:
+            return True
         # Test adapted from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
         get_ipython = sys.modules["IPython"].get_ipython
         if "IPKernelApp" not in get_ipython().config:
@@ -1476,7 +1523,7 @@ Please note that you may need to restart your runtime after installation.
 
 # docstyle-ignore
 SENTENCEPIECE_IMPORT_ERROR = """
-{0} requires the SentencePiece library but it was not found in your environment. Checkout the instructions on the
+{0} requires the SentencePiece library but it was not found in your environment. Check out the instructions on the
 installation page of its repo: https://github.com/google/sentencepiece#installation and follow the ones
 that match your environment. Please note that you may need to restart your runtime after installation.
 """
@@ -1484,7 +1531,7 @@ that match your environment. Please note that you may need to restart your runti
 
 # docstyle-ignore
 PROTOBUF_IMPORT_ERROR = """
-{0} requires the protobuf library but it was not found in your environment. Checkout the instructions on the
+{0} requires the protobuf library but it was not found in your environment. Check out the instructions on the
 installation page of its repo: https://github.com/protocolbuffers/protobuf/tree/master/python#installation and follow the ones
 that match your environment. Please note that you may need to restart your runtime after installation.
 """
@@ -1492,7 +1539,7 @@ that match your environment. Please note that you may need to restart your runti
 
 # docstyle-ignore
 FAISS_IMPORT_ERROR = """
-{0} requires the faiss library but it was not found in your environment. Checkout the instructions on the
+{0} requires the faiss library but it was not found in your environment. Check out the instructions on the
 installation page of its repo: https://github.com/facebookresearch/faiss/blob/master/INSTALL.md and follow the ones
 that match your environment. Please note that you may need to restart your runtime after installation.
 """
@@ -1500,7 +1547,7 @@ that match your environment. Please note that you may need to restart your runti
 
 # docstyle-ignore
 PYTORCH_IMPORT_ERROR = """
-{0} requires the PyTorch library but it was not found in your environment. Checkout the instructions on the
+{0} requires the PyTorch library but it was not found in your environment. Check out the instructions on the
 installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your environment.
 Please note that you may need to restart your runtime after installation.
 """
@@ -1508,7 +1555,7 @@ Please note that you may need to restart your runtime after installation.
 
 # docstyle-ignore
 TORCHVISION_IMPORT_ERROR = """
-{0} requires the Torchvision library but it was not found in your environment. Checkout the instructions on the
+{0} requires the Torchvision library but it was not found in your environment. Check out the instructions on the
 installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your environment.
 Please note that you may need to restart your runtime after installation.
 """
@@ -1560,7 +1607,7 @@ Please note that you may need to restart your runtime after installation.
 
 # docstyle-ignore
 TENSORFLOW_IMPORT_ERROR = """
-{0} requires the TensorFlow library but it was not found in your environment. Checkout the instructions on the
+{0} requires the TensorFlow library but it was not found in your environment. Check out the instructions on the
 installation page: https://www.tensorflow.org/install and follow the ones that match your environment.
 Please note that you may need to restart your runtime after installation.
 """
@@ -1568,7 +1615,7 @@ Please note that you may need to restart your runtime after installation.
 
 # docstyle-ignore
 DETECTRON2_IMPORT_ERROR = """
-{0} requires the detectron2 library but it was not found in your environment. Checkout the instructions on the
+{0} requires the detectron2 library but it was not found in your environment. Check out the instructions on the
 installation page: https://github.com/facebookresearch/detectron2/blob/master/INSTALL.md and follow the ones
 that match your environment. Please note that you may need to restart your runtime after installation.
 """
@@ -1576,14 +1623,14 @@ that match your environment. Please note that you may need to restart your runti
 
 # docstyle-ignore
 FLAX_IMPORT_ERROR = """
-{0} requires the FLAX library but it was not found in your environment. Checkout the instructions on the
+{0} requires the FLAX library but it was not found in your environment. Check out the instructions on the
 installation page: https://github.com/google/flax and follow the ones that match your environment.
 Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 FTFY_IMPORT_ERROR = """
-{0} requires the ftfy library but it was not found in your environment. Checkout the instructions on the
+{0} requires the ftfy library but it was not found in your environment. Check out the instructions on the
 installation section: https://github.com/rspeer/python-ftfy/tree/master#installing and follow the ones
 that match your environment. Please note that you may need to restart your runtime after installation.
 """
@@ -2056,10 +2103,7 @@ class _LazyModule(ModuleType):
         try:
             return importlib.import_module("." + module_name, self.__name__)
         except Exception as e:
-            raise RuntimeError(
-                f"Failed to import {self.__name__}.{module_name} because of the following error (look up to see its"
-                f" traceback):\n{e}"
-            ) from e
+            raise e
 
     def __reduce__(self):
         return (self.__class__, (self._name, self.__file__, self._import_structure))

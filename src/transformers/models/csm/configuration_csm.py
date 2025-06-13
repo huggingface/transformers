@@ -28,7 +28,7 @@ class CsmDepthDecoderConfig(PretrainedConfig):
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield
     a similar configuration to that of the csm-1b.
 
-    e.g. [eustlb/csm-1b](https://huggingface.co/eustlb/csm-1b)
+    e.g. [sesame/csm-1b](https://huggingface.co/sesame/csm-1b)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -54,8 +54,8 @@ class CsmDepthDecoderConfig(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
@@ -210,7 +210,7 @@ class CsmConfig(PretrainedConfig):
     model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the csm-1b.
 
-    e.g. [eustlb/csm-1b](https://huggingface.co/eustlb/csm-1b)
+    e.g. [sesame/csm-1b](https://huggingface.co/sesame/csm-1b)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -235,8 +235,8 @@ class CsmConfig(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf).
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245).
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the backbone model Transformer decoder.
         max_position_embeddings (`int`, *optional*, defaults to 2048):

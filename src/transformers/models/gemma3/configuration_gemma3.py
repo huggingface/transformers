@@ -21,7 +21,7 @@
 # limitations under the License.
 from typing import Any, Dict, Optional, Union
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 from ..siglip import SiglipVisionConfig
@@ -55,8 +55,8 @@ class Gemma3TextConfig(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         head_dim (`int`, *optional*, defaults to 256):
             The attention head dimension.
@@ -88,13 +88,14 @@ class Gemma3TextConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         query_pre_attn_scalar (`float`, *optional*, defaults to 256):
             Scaling factor used on the attention scores
-        sliding_window (`int`, *optional*, defaults to 4096): in Gemma3Text, every other layer uses sliding window attention. This is the
-            size of the sliding window.
+        sliding_window (`int`, *optional*, defaults to 4096):
+            In Gemma3Text, every other layer uses sliding window attention. This is the size of the sliding window.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
         final_logit_softcapping (`float`, *optional*):
             Scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*):
             Scaling factor when applying tanh softcapping on the attention scores.
-        cache_implementation (`str`, *optional*, defaults to `"hybrid"`): the cache type to be used with `generate`.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings used in global attention. NOTE: if you apply new rope type
             and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
@@ -134,8 +135,6 @@ class Gemma3TextConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
         rope_local_base_freq (float, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings for local attention.
-        sliding_window_pattern (`int`, *optional*, defaults to 6):
-            Pattern for the sliding window attention.
 
     ```python
     >>> from transformers import Gemma3TextModel, Gemma3TextConfig
@@ -192,12 +191,11 @@ class Gemma3TextConfig(PretrainedConfig):
         attention_dropout=0.0,
         query_pre_attn_scalar=256,
         sliding_window=4096,
+        layer_types=None,
         final_logit_softcapping=None,
         attn_logit_softcapping=None,
-        cache_implementation="hybrid",
         rope_scaling=None,
         rope_local_base_freq=10_000.0,
-        sliding_window_pattern=6,
         **kwargs,
     ):
         super().__init__(
@@ -226,13 +224,20 @@ class Gemma3TextConfig(PretrainedConfig):
         self.sliding_window = sliding_window
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
-        self.cache_implementation = cache_implementation
+        self.layer_types = layer_types
 
         self.rope_local_base_freq = rope_local_base_freq
-        # For configuring HybridCache to work with 5:1 attention pattern
-        self.sliding_window_pattern = sliding_window_pattern
         self.rope_scaling = rope_scaling
         rope_config_validation(self)
+
+        if self.layer_types is None:
+            # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
+            sliding_window_pattern = getattr(self, "sliding_window_pattern", 6)
+            self.layer_types = [
+                "sliding_attention" if bool((i + 1) % sliding_window_pattern) else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types)
 
 
 class Gemma3Config(PretrainedConfig):

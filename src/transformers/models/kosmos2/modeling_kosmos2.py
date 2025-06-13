@@ -1128,7 +1128,7 @@ class Kosmos2TextTransformer(nn.Module):
                     )
 
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             if self.training:
@@ -1625,6 +1625,37 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.model.embed_tokens = value
 
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        return_attentions: Optional[bool] = False,
+        interpolate_pos_encoding: Optional[bool] = False,
+    ):
+        """
+        Encodes images into continuous embeddings that can be forwarded to the language model.
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+                The tensors corresponding to the input images.
+            return_attentions (`bool`, *optional*, defaults to `False`):
+                Whether to return `projection_attentions` or not.
+            interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
+                Whether to interpolate positional embeddings or not.
+        """
+        vision_model_output = self.vision_model(
+            pixel_values=pixel_values,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+        )
+        # The whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
+        image_embeds = self.vision_model.model.post_layernorm(vision_model_output[0])
+        # normalized features
+        image_embeds = nn.functional.normalize(image_embeds, dim=-1)
+        image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
+
+        if return_attentions:
+            return image_embeds, projection_attentions
+        return image_embeds
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1696,19 +1727,9 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         if image_embeds is None:
             if pixel_values is None:
                 raise ValueError("You have to specify either `pixel_values` or `image_embeds`.")
-
-            vision_model_output = self.vision_model(
-                pixel_values=pixel_values,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                interpolate_pos_encoding=interpolate_pos_encoding,
-                return_dict=return_dict,
+            image_embeds, projection_attentions = self.get_image_features(
+                pixel_values, return_attentions=True, interpolate_pos_encoding=interpolate_pos_encoding
             )
-            # The whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
-            image_embeds = self.vision_model.model.post_layernorm(vision_model_output[0])
-            # normalized features
-            image_embeds = nn.functional.normalize(image_embeds, dim=-1)
-            image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
 
         outputs = self.text_model(
             input_ids=input_ids,
@@ -1788,7 +1809,6 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, Kosmos2ForConditionalGenerationModelOutput]:
         r"""
@@ -1847,7 +1867,6 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         vision_model_output = None
         projection_attentions = None
@@ -1859,7 +1878,6 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
                 pixel_values=pixel_values,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
             )
             # The whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
             image_embeds = self.vision_model.model.post_layernorm(vision_model_output[0])

@@ -1340,7 +1340,6 @@ class BigBirdAttention(nn.Module):
         attn_weights.value = self.self.value
         attn_weights.key = self.self.key
         self.self = attn_weights
-        self.attention_type = value
         if not self.training:
             self.self.eval()
 
@@ -1834,7 +1833,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in [Attention is
-    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    all you need](https://huggingface.co/papers/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
     Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
     To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set

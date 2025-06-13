@@ -190,9 +190,9 @@ class MLCDVisionEmbeddings(CLIPVisionEmbeddings):
 class MLCDAttention(CLIPAttention):
     """Multi-headed attention with RoPE. Refer to papers:
     - Attention is all you need:
-        https://arxiv.org/abs/1706.03762
+        https://huggingface.co/papers/1706.03762
     - RoFormer: Enhanced Transformer with Rotary Position Embedding:
-        https://arxiv.org/abs/2104.09864
+        https://huggingface.co/papers/2104.09864
     """
 
     def __init__(self, config: MLCDVisionConfig):
@@ -226,13 +226,7 @@ class MLCDAttention(CLIPAttention):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,

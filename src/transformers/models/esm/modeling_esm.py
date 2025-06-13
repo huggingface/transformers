@@ -1,5 +1,6 @@
 # coding=utf-8
 # Copyright 2022 Meta and The HuggingFace Inc. team. All rights reserved.
+# Copyright (c) 2025, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,6 +23,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -32,6 +34,10 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import auto_docstring, logging
 from .configuration_esm import EsmConfig
+
+
+if is_flash_attn_available():
+    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -111,8 +117,8 @@ class RotaryEmbedding(torch.nn.Module):
         self._cos_cached, self._sin_cached = self._update_cos_sin_tables(k, seq_dimension=-2)
 
         return (
-            apply_rotary_pos_emb(q, self._cos_cached, self._sin_cached),
-            apply_rotary_pos_emb(k, self._cos_cached, self._sin_cached),
+            apply_rotary_pos_emb(q, self._cos_cached, self._sin_cached).to(dtype=q.dtype),
+            apply_rotary_pos_emb(k, self._cos_cached, self._sin_cached).to(dtype=k.dtype),
         )
 
 
@@ -172,9 +178,10 @@ class EsmEmbeddings(nn.Module):
         )
 
         self.padding_idx = config.pad_token_id
-        self.position_embeddings = nn.Embedding(
-            config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
-        )
+        if self.position_embedding_type == "absolute":
+            self.position_embeddings = nn.Embedding(
+                config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
+            )
         self.token_dropout = config.token_dropout
         self.mask_token_id = config.mask_token_id
 
@@ -244,6 +251,8 @@ class EsmEmbeddings(nn.Module):
 class EsmSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
+        self.config = config
+
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
@@ -392,10 +401,128 @@ class EsmSelfOutput(nn.Module):
         return hidden_states
 
 
+class EsmFlashAttention2(EsmSelfAttention):
+    """
+    ESM flash attention module. This module inherits from `EsmSelfAttention` as the weights of the module stays
+    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
+    flash attention and deal with padding tokens in case the input contains any of them.
+    """
+
+    def __init__(self, config, position_embedding_type=None):
+        super().__init__(config, position_embedding_type=position_embedding_type)
+
+        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
+        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
+        self.dropout_prob = config.attention_probs_dropout_prob
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
+        # Flash attention doesn't support output_attentions or cross attention
+        if output_attentions or head_mask is not None or encoder_hidden_states is not None:
+            logger.warning_once(
+                "EsmFlashAttention2 does not support output_attentions, head_mask, or cross_attention. "
+                "Falling back to the manual attention implementation. This warning can be removed using "
+                'the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states,
+                attention_mask,
+                head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                past_key_value,
+                output_attentions,
+            )
+
+        bsz, q_len, _ = hidden_states.size()
+
+        query_layer = self.transpose_for_scores(self.query(hidden_states))
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        if past_key_value is not None:
+            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
+            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
+
+        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+        # therefore the input hidden states gets silently casted in float32. Hence, we need
+        # cast them back in the correct dtype just to be sure everything works as expected.
+        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+        # in fp32.
+        input_dtype = query_layer.dtype
+        if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
+            # Handle the case where the model is quantized
+            elif hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.query.weight.dtype
+
+            logger.warning_once(
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
+            )
+
+            query_layer = query_layer.to(target_dtype)
+            key_layer = key_layer.to(target_dtype)
+            value_layer = value_layer.to(target_dtype)
+
+        # Matt: Our BERT model (which this code was derived from) scales attention logits down by sqrt(head_dim).
+        # ESM scales the query down by the same factor instead. Modulo numerical stability these are equivalent,
+        # but not when rotary embeddings get involved. Therefore, we scale the query here to match the original
+        # ESM code and fix rotary embeddings.
+        query_layer = query_layer * self.attention_head_size**-0.5
+
+        if self.position_embedding_type == "rotary":
+            query_layer, key_layer = self.rotary_embeddings(query_layer, key_layer)
+        elif self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+            raise ValueError(f"ESM flash attention does not support {self.position_embedding_type} embeddings")
+
+        # It would likely be faster to change self.transpose_for_scores to output the correct
+        # dimensions for flash_attention_2, but that would also mean changing the rotary embedding
+        # functions. Here we just permute the dimensions to match the expected input.
+        attn_output = _flash_attention_forward(
+            query_layer.permute(0, 2, 1, 3),
+            key_layer.permute(0, 2, 1, 3),
+            value_layer.permute(0, 2, 1, 3),
+            attention_mask,
+            query_length=q_len,
+            is_causal=self.is_decoder,
+            softmax_scale=1.0,
+            dropout=self.dropout_prob if self.training else 0.0,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+        )
+
+        attn_output = attn_output.reshape(bsz, q_len, -1)
+
+        outputs = (attn_output, None)
+        if self.is_decoder:
+            outputs = outputs + (past_key_value,)
+
+        return outputs
+
+
+ESM_ATTENTION_CLASSES = {
+    "eager": EsmSelfAttention,
+    "flash_attention_2": EsmFlashAttention2,
+}
+
+
 class EsmAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.self = EsmSelfAttention(config)
+        self.self = ESM_ATTENTION_CLASSES[config._attn_implementation](config)
         self.output = EsmSelfOutput(config)
         self.pruned_heads = set()
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -672,6 +799,7 @@ class EsmPreTrainedModel(PreTrainedModel):
     base_model_prefix = "esm"
     supports_gradient_checkpointing = True
     _no_split_modules = ["EsmLayer", "EsmFoldTriangularSelfAttentionBlock", "EsmEmbeddings"]
+    _supports_flash_attn_2 = True
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with BertLMPredictionHead->EsmLMHead
     def _init_weights(self, module):
@@ -699,7 +827,7 @@ class EsmModel(EsmPreTrainedModel):
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in [Attention is
-    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    all you need](https://huggingface.co/papers/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
     Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
     To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
@@ -805,9 +933,13 @@ class EsmModel(EsmPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
+        if self.config._attn_implementation == "flash_attention_2":
+            extended_attention_mask = attention_mask
+
+        else:
+            # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+            # ourselves in which case we just need to make it broadcastable to all heads.
+            extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -890,6 +1022,8 @@ class EsmForMaskedLM(EsmPreTrainedModel):
         self.lm_head = EsmLMHead(config)
 
         self.init_weights()
+
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.lm_head.decoder
@@ -995,6 +1129,8 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
 
         self.init_weights()
 
+        self.post_init()
+
     @auto_docstring
     def forward(
         self,
@@ -1077,6 +1213,8 @@ class EsmForTokenClassification(EsmPreTrainedModel):
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
+
+        self.post_init()
 
     @auto_docstring
     def forward(

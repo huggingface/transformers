@@ -16,7 +16,8 @@ import copy
 import math
 import warnings
 import zlib
-from typing import Callable, Iterator, List, Optional, Tuple, Union
+from collections.abc import Iterator
+from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -231,42 +232,52 @@ class WhisperGenerationMixin(GenerationMixin):
             tensor containing the timestamps in seconds for each predicted token
         """
         # Create a list with `decoder_layers` elements, each a tensor of shape
-        # (batch size, attention_heads, output length, input length).
+        # (batch size * num beams, attention_heads, output length, input length).
         cross_attentions = []
         for i in range(self.config.decoder_layers):
             cross_attentions.append(torch.cat([x[i] for x in generate_outputs.cross_attentions], dim=2))
 
         # Select specific cross-attention layers and heads. This is a tensor
-        # of shape (batch size, num selected, output length, input length).
+        # of shape (batch size * num beams, num selected heads, output length, input length).
         weights = torch.stack([cross_attentions[l][:, h] for l, h in alignment_heads])
         weights = weights.permute([1, 0, 2, 3])
 
         weight_length = None
 
         if "beam_indices" in generate_outputs:
-            # If beam search has been used, the output sequences may have been generated for more timesteps than their sequence_lengths
-            # since the beam search strategy chooses the most probable sequences at the end of the search.
-            # In that case, the cross_attentions weights are too long and we have to make sure that they have the right output_length
+            # If beam search was used, the sequence length of the outputs may not be the real sequence length:
+            # beam search may end up returning a sequence that finished a few steps earlier while decoding.
+            # In that case, the `cross_attentions` weights are too long and we have to make sure that they have
+            # the right `output_length`
+
+            # get the real sequence length of the longest sequence, crop the beam_indices to the real length
             weight_length = (generate_outputs.beam_indices != -1).sum(-1).max()
-            weight_length = weight_length if num_input_ids is None else weight_length + num_input_ids
+            beam_indices = generate_outputs.beam_indices[:, :weight_length]
 
-            # beam search takes `decoder_input_ids` into account in the `beam_indices` length
-            # but forgot to shift the beam_indices by the number of `decoder_input_ids`
-            beam_indices = torch.zeros_like(generate_outputs.beam_indices[:, :weight_length])
-            # we actually shift the beam indices here
-            beam_indices[:, num_input_ids:] = generate_outputs.beam_indices[:, : weight_length - num_input_ids]
-
-            weights = weights[:, :, :weight_length]
+            # The first forward pass (prefill) may have processed more than one token and, therefore, contain
+            # cross-attention weights for several tokens.
+            # Let's unroll the first `beam_indices` accordingly, so we can use it to gather the weights.
+            if num_input_ids is not None and num_input_ids > 1:
+                # `-1`: `beam_indices` can be used as-is to gather the weights when `num_input_ids` is 1
+                weight_length += num_input_ids - 1
+                beam_indices_first_step_unrolled = (
+                    torch.ones(beam_indices.shape[0], num_input_ids - 1, device=beam_indices.device, dtype=torch.long)
+                    * (beam_indices[:, 0:1])
+                )
+                unrolled_beam_indices = torch.cat([beam_indices_first_step_unrolled, beam_indices], dim=-1)
+            else:
+                unrolled_beam_indices = beam_indices
 
             # If beam index is still -1, it means that the associated token id is EOS
             # We need to replace the index with 0 since index_select gives an error if any of the indexes is -1.
-            beam_indices = beam_indices.masked_fill(beam_indices == -1, 0)
+            unrolled_beam_indices = unrolled_beam_indices.masked_fill(unrolled_beam_indices == -1, 0)
 
-            # Select the cross attention from the right beam for each output sequences
+            # Select the cross attention from the right beam for each output sequence, up to the real sequence
+            # length (`weight_length`)
             weights = torch.stack(
                 [
-                    torch.index_select(weights[:, :, i, :], dim=0, index=beam_indices[:, i])
-                    for i in range(beam_indices.shape[1])
+                    torch.index_select(weights[:, :, i, :], dim=0, index=unrolled_beam_indices[:, i])
+                    for i in range(unrolled_beam_indices.shape[1])
                 ],
                 dim=2,
             )
@@ -403,15 +414,14 @@ class WhisperGenerationMixin(GenerationMixin):
                 `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
                 on the batch ID `batch_id` and the previously generated tokens `inputs_ids`. This argument is useful
                 for constrained generation conditioned on the prefix, as described in [Autoregressive Entity
-                Retrieval](https://arxiv.org/abs/2010.00904).
+                Retrieval](https://huggingface.co/papers/2010.00904).
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed to avoid deadlocking with
                 `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
             return_timestamps (`bool`, *optional*):
                 Whether to return the timestamps with the text. This enables the `WhisperTimestampsLogitsProcessor`.
             task (`str`, *optional*):
-                Task to use for generation, either "translate" or "transcribe". The `model.config.forced_decoder_ids`
-                will be updated accordingly.
+                Task to use for generation, either "translate" or "transcribe".
             language (`str` or list of `str`, *optional*):
                 Language token to use for generation, can be either in the form of `<|en|>`, `en` or `english`. For
                 batched generation, a list of language tokens can be passed. You can find all the possible language
@@ -627,6 +637,10 @@ class WhisperGenerationMixin(GenerationMixin):
         # passing `decoder_input_ids` is deprecated - the only exception is for assisted generation
         # where the input ids are handled explicitly by the generate method
         self._check_decoder_input_ids(kwargs=kwargs)
+        # `output_attentions` is deprecated - we force eager attention if this feature is
+        # indirectly requested, e.g. through return_token_timestamps
+        if return_token_timestamps:
+            self.model.config._attn_implementation = "eager"
 
         # 3. Retrieve logits processors
         device = kwargs["encoder_outputs"][0].device if "encoder_outputs" in kwargs else input_features.device
@@ -1305,8 +1319,9 @@ class WhisperGenerationMixin(GenerationMixin):
         if not is_shortform:
             if return_timestamps is False:
                 raise ValueError(
-                    "You have passed more than 3000 mel input features (> 30 seconds) which automatically enables long-form generation which "
-                    "requires the model to predict timestamp tokens. Please either pass `return_timestamps=True` or make sure to pass no more than 3000 mel input features."
+                    "You have passed more than 3000 mel input features (> 30 seconds) which automatically "
+                    "enables long-form generation which requires the model to predict timestamp tokens. Please "
+                    "either pass `return_timestamps=True` or make sure to pass no more than 3000 mel input features."
                 )
 
             logger.info("Setting `return_timestamps=True` for long-form generation.")
@@ -1315,8 +1330,9 @@ class WhisperGenerationMixin(GenerationMixin):
         if return_timestamps and not hasattr(generation_config, "no_timestamps_token_id"):
             raise ValueError(
                 "You are trying to return timestamps, but the generation config is not properly set. "
-                "Make sure to initialize the generation config with the correct attributes that are needed such as `no_timestamps_token_id`. "
-                "For more details on how to generate the approtiate config, refer to https://github.com/huggingface/transformers/issues/21878#issuecomment-1451902363"
+                "Make sure to initialize the generation config with the correct attributes that are needed such as "
+                "`no_timestamps_token_id`. For more details on how to generate the approtiate config, refer to "
+                "https://github.com/huggingface/transformers/issues/21878#issuecomment-1451902363"
             )
 
         generation_config.return_timestamps = return_timestamps
@@ -1324,8 +1340,9 @@ class WhisperGenerationMixin(GenerationMixin):
         if hasattr(generation_config, "no_timestamps_token_id"):
             timestamp_begin = generation_config.no_timestamps_token_id + 1
         else:
-            # BC for models missing the `no_timestamps_token_id` in the generation config when generating short-form with no timestamps
-            # We set the timestamp begin token larger than the vocab size, such that the timestamp condition is never met in the decoding loop
+            # BC for models missing the `no_timestamps_token_id` in the generation config when generating short-form
+            # with no timestamps. We set the timestamp begin token larger than the vocab size, such that the
+            # timestamp condition is never met in the decoding loop
             timestamp_begin = self.config.vocab_size + 1
 
         return timestamp_begin
@@ -1352,8 +1369,8 @@ class WhisperGenerationMixin(GenerationMixin):
             if not hasattr(generation_config, "lang_to_id"):
                 raise ValueError(
                     "The generation config is outdated and is thus not compatible with the `language` argument "
-                    "to `generate`. Either set the language using the `forced_decoder_ids` in the model config, "
-                    "or update the generation config as per the instructions https://github.com/huggingface/transformers/issues/25084#issuecomment-1664398224"
+                    "to `generate`. Please update the generation config as per the instructions "
+                    "https://github.com/huggingface/transformers/issues/25084#issuecomment-1664398224"
                 )
             generation_config.language = language
 
@@ -1361,8 +1378,8 @@ class WhisperGenerationMixin(GenerationMixin):
             if not hasattr(generation_config, "task_to_id"):
                 raise ValueError(
                     "The generation config is outdated and is thus not compatible with the `task` argument "
-                    "to `generate`. Either set the task using the `forced_decoder_ids` in the model config, "
-                    "or update the generation config as per the instructions https://github.com/huggingface/transformers/issues/25084#issuecomment-1664398224"
+                    "to `generate`. Please update the generation config as per the instructions "
+                    "https://github.com/huggingface/transformers/issues/25084#issuecomment-1664398224"
                 )
             generation_config.task = task
 
@@ -1392,51 +1409,53 @@ class WhisperGenerationMixin(GenerationMixin):
                 )
             if language_token not in generation_config.lang_to_id:
                 raise ValueError(
-                    f"{language_token} is not supported by this specific model as it is not in the `generation_config.lang_to_id`."
-                    "(You should just add it to the generation config)"
+                    f"{language_token} is not supported by this specific model as it is not in the "
+                    "`generation_config.lang_to_id`. (You should just add it to the generation config)"
                 )
 
             return generation_config.lang_to_id[language_token]
 
         task = getattr(generation_config, "task", None)
         language = getattr(generation_config, "language", None)
-
-        forced_decoder_ids = generation_config.forced_decoder_ids
-        if forced_decoder_ids is not None:
-            if language is None and task is None and forced_decoder_ids[0][1] is None:
-                logger.warning_once(
-                    "Due to a bug fix in https://github.com/huggingface/transformers/pull/28687 transcription using a multilingual Whisper will default to language detection followed by transcription instead of translation to English."
-                    "This might be a breaking change for your use case. If you want to instead always translate your audio to English, make sure to pass `language='en'`."
-                )
-        elif hasattr(config, "forced_decoder_ids") and config.forced_decoder_ids is not None:
-            forced_decoder_ids = config.forced_decoder_ids
-
-        if forced_decoder_ids is not None and task is not None:
-            logger.warning_once(
-                f"You have passed task={task}, but also have set `forced_decoder_ids` to {forced_decoder_ids} which creates a conflict. `forced_decoder_ids` will be ignored in favor of task={task}."
-            )
-            forced_decoder_ids = None
-        elif forced_decoder_ids is not None and language is not None:
-            logger.warning_once(
-                f"You have passed language={language}, but also have set `forced_decoder_ids` to {forced_decoder_ids} which creates a conflict. `forced_decoder_ids` will be ignored in favor of language={language}."
-            )
-            forced_decoder_ids = None
-
         init_tokens = [generation_config.decoder_start_token_id]
-        if forced_decoder_ids is not None and forced_decoder_ids[0][0] == 1:
-            i = 1
-            while len(forced_decoder_ids) > 0 and forced_decoder_ids[0][0] == i:
-                init_tokens += [forced_decoder_ids[0][1]]
-                forced_decoder_ids = forced_decoder_ids[1:]
-                i += 1
 
-            if len(forced_decoder_ids) > 0:
-                raise ValueError(
-                    f"You are using token ids in `forced_decoder_ids` that do not seem to correctly follow the prompt pattern of Whisper. Make sure that {forced_decoder_ids} has an entry for all indices >= 1 and < {forced_decoder_ids[0][0]}.",
+        # TL;DR we silently ignore `forced_decoder_ids` (old flag) when `task` or `language` (new flags) are set.
+        # `forced_decoder_ids` is an old generation config attribute that is now deprecated in favor of `task` and
+        # `language` (see https://github.com/huggingface/transformers/pull/28687). Nevertheless, keep in mind that
+        # the original checkpoints all contain this attribute, and thus we should maintain backwards compatibility.
+        if task is None and language is None:
+            forced_decoder_ids = getattr(generation_config, "forced_decoder_ids", None)
+            # fallback: check the model config for forced_decoder_ids
+            if forced_decoder_ids is None and getattr(config, "forced_decoder_ids", None) is not None:
+                forced_decoder_ids = config.forced_decoder_ids
+
+            if forced_decoder_ids is not None:
+                logger.warning_once(
+                    "Using custom `forced_decoder_ids` from the (generation) config. This is deprecated in favor of "
+                    "the `task` and `language` flags/config options."
                 )
 
-        # from v4.39 the forced decoder ids are always None in favour of decoder input ids
-        generation_config.forced_decoder_ids = None
+                if forced_decoder_ids is not None and forced_decoder_ids[0][1] is None:
+                    logger.warning_once(
+                        "Transcription using a multilingual Whisper will default to language detection followed by "
+                        "transcription instead of translation to English. This might be a breaking change for your "
+                        "use case. If you want to instead always translate your audio to English, make sure to pass "
+                        "`language='en'`. See https://github.com/huggingface/transformers/pull/28687 for more details."
+                    )
+
+                if forced_decoder_ids is not None and forced_decoder_ids[0][0] == 1:
+                    i = 1
+                    while len(forced_decoder_ids) > 0 and forced_decoder_ids[0][0] == i:
+                        init_tokens += [forced_decoder_ids[0][1]]
+                        forced_decoder_ids = forced_decoder_ids[1:]
+                        i += 1
+
+                    if len(forced_decoder_ids) > 0:
+                        raise ValueError(
+                            f"You are using token ids in `forced_decoder_ids` that do not seem to correctly follow "
+                            f"the prompt pattern of Whisper. Make sure that {forced_decoder_ids} has an entry for all "
+                            f"indices >= 1 and < {forced_decoder_ids[0][0]}.",
+                        )
 
         is_lang_id_undefined = len(init_tokens) <= 1 or (len(init_tokens) > 1 and init_tokens[1] is None)
 
@@ -1444,7 +1463,9 @@ class WhisperGenerationMixin(GenerationMixin):
         if isinstance(language, (list, tuple)):
             if any(l is None for l in language):
                 raise TypeError(
-                    "Expected `language` to be `None`, a single string (e.g. `'en'`), or a list of strings with length equal to the batch size (e.g. `('en', 'fr')` for a batch size of 2). Got a list containing `None`."
+                    "Expected `language` to be `None`, a single string (e.g. `'en'`), or a list of strings with "
+                    "length equal to the batch size (e.g. `('en', 'fr')` for a batch size of 2). Got a list "
+                    "containing `None`."
                 )
             if len(language) != batch_size:
                 raise ValueError(
