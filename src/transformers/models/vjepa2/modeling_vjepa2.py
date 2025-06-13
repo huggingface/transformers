@@ -997,7 +997,7 @@ class VJEPA2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "vjepa2"
     main_input_name = "pixel_values_videos"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["VJEPA2Layer"]
+    _no_split_modules = ["VJEPA2Layer", "VJEPA2PoolerSelfAttentionLayer", "VJEPA2PoolerCrossAttentionLayer"]
     _supports_sdpa = True
     _supports_flash_attn_2 = True
 
