@@ -1522,10 +1522,10 @@ class SamHQModel(SamHQPreTrainedModel):
             This is specific to SAM-HQ's architecture.
         attention_similarity (`torch.FloatTensor`, *optional*):
             Attention similarity tensor, to be provided to the mask decoder for target-guided attention in case the
-            model is used for personalization as introduced in [PerSAM](https://arxiv.org/abs/2305.03048).
+            model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
         target_embedding (`torch.FloatTensor`, *optional*):
             Embedding of the target concept, to be provided to the mask decoder for target-semantic prompting in case
-            the model is used for personalization as introduced in [PerSAM](https://arxiv.org/abs/2305.03048).
+            the model is used for personalization as introduced in [PerSAM](https://huggingface.co/papers/2305.03048).
         intermediate_embeddings (`List[torch.FloatTensor]`, *optional*):
             Intermediate embeddings from vision encoder's non-windowed blocks, used by SAM-HQ for enhanced mask quality.
             Required when providing pre-computed image_embeddings instead of pixel_values.
