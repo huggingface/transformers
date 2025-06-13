@@ -109,8 +109,6 @@ class Qwen3MoeConfig(PretrainedConfig):
             Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 4096):
             Sliding window attention (SWA) window size. If not specified, will default to `4096`.
-        max_window_layers (`int`, *optional*, defaults to 28):
-            The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         decoder_sparse_step (`int`, *optional*, defaults to 1):
@@ -187,7 +185,6 @@ class Qwen3MoeConfig(PretrainedConfig):
         attention_bias=False,
         use_sliding_window=False,
         sliding_window=4096,
-        max_window_layers=28,
         attention_dropout=0.0,
         decoder_sparse_step=1,
         moe_intermediate_size=768,
@@ -207,7 +204,6 @@ class Qwen3MoeConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.use_sliding_window = use_sliding_window
         self.sliding_window = sliding_window if use_sliding_window else None
-        self.max_window_layers = max_window_layers
 
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
