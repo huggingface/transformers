@@ -21,6 +21,7 @@ on:
 
 env:
   HF_HOME: /mnt/cache
+  PT_HPU_LAZY_MODE: 0
   TRANSFORMERS_IS_CI: yes
   HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
@@ -33,7 +34,6 @@ jobs:
   setup:
     if: contains(fromJSON('["run_models_gpu", "run_trainer_and_fsdp_gpu"]'), inputs.job)
     name: Setup
-    needs: check_runners
     runs-on: ubuntu-latest
     outputs:
       slice_ids: ${{ steps.set-matrix.outputs.slice_ids }}
