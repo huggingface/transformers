@@ -31,7 +31,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import backend_empty_cache, require_soundfile, require_torch, slow, torch_device
+from transformers.testing_utils import cleanup, require_soundfile, require_torch, slow, torch_device
 from transformers.utils import is_soundfile_available
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -295,9 +295,10 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
             tmp.seek(0)
             self.audio, self.sampling_rate = soundfile.read(tmp.name)
 
+        cleanup(torch_device, gc_collect=True)
+
     def tearDown(self):
-        gc.collect()
-        backend_empty_cache(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     def test_text_only_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
