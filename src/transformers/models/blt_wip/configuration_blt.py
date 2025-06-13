@@ -15,7 +15,6 @@
 """BLT (Byte Latent Transformer) model configuration"""
 
 from enum import Enum
-from typing import Any, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -51,7 +50,7 @@ class BLTConfig(PretrainedConfig):
             Vocabulary size of the BLT model. Defines the number of different tokens (bytes) that can be represented.
         max_seqlen (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model can handle.
-        
+
         # Main architecture dimensions
         dim (`int`, *optional*, defaults to 512):
             Main dimension of the model.
@@ -63,7 +62,7 @@ class BLTConfig(PretrainedConfig):
             Dimension of each attention head. If not specified, computed as dim // n_heads.
         n_kv_heads (`int`, *optional*):
             Number of key-value heads for grouped query attention. If not specified, defaults to n_heads.
-        
+
         # Component-specific dimensions
         dim_global (`int`, *optional*, defaults to 512):
             Dimension of the global transformer component.
@@ -85,7 +84,7 @@ class BLTConfig(PretrainedConfig):
             Number of attention heads in the local encoder.
         n_kv_heads_global (`int`, *optional*):
             Number of key-value heads in the global transformer.
-        
+
         # Transformer configuration
         norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
@@ -95,13 +94,13 @@ class BLTConfig(PretrainedConfig):
             Multiplier for the feedforward network dimension.
         multiple_of (`int`, *optional*, defaults to 256):
             Make feedforward network dimension multiple of this value.
-        
+
         # Positional encoding
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         rope_use_fp32_in_outer_product (`bool`, *optional*, defaults to False):
             Whether to use fp32 in RoPE outer product computation.
-        
+
         # Attention configuration
         attn_impl (`str`, *optional*, defaults to "sdpa"):
             Attention implementation to use ("sdpa" or "flex_attention").
@@ -111,19 +110,19 @@ class BLTConfig(PretrainedConfig):
             Window length for local attention.
         use_rope (`bool`, *optional*, defaults to True):
             Whether to use rotary position embeddings.
-        
+
         # Initialization
         init_base_std (`float`, *optional*):
             Base standard deviation for weight initialization.
         init_std_factor (`str`, *optional*, defaults to "disabled"):
             Factor for adjusting initialization standard deviation.
-        
+
         # Embedding dimensions
         dim_token_emb (`int`, *optional*):
             Token embedding dimension.
         dim_token (`int`, *optional*):
             Token dimension.
-        
+
         # Patching configuration
         patch_in_forward (`bool`, *optional*, defaults to False):
             Whether to perform patching during forward pass.
@@ -147,7 +146,7 @@ class BLTConfig(PretrainedConfig):
             Maximum length of patches.
         entropy_model_checkpoint_dir (`str`, *optional*):
             Directory containing entropy model checkpoint.
-        
+
         # Cross attention configurations
         cross_attn_encoder (`bool`, *optional*, defaults to False):
             Whether to use cross attention in encoder.
@@ -169,7 +168,7 @@ class BLTConfig(PretrainedConfig):
             Whether to use flexible attention for cross attention.
         cross_attn_init_by_pooling (`bool`, *optional*, defaults to False):
             Whether to initialize cross attention by pooling.
-        
+
         # Encoder configurations
         use_local_encoder_transformer (`bool`, *optional*, defaults to False):
             Whether to use transformer in local encoder.
@@ -187,13 +186,13 @@ class BLTConfig(PretrainedConfig):
             String defining n-gram sizes.
         downsampling_by_pooling (`str`, *optional*):
             Type of pooling for downsampling.
-        
+
         # Model behavior
         share_encoder_decoder_emb (`bool`, *optional*, defaults to True):
             Whether to share encoder and decoder embeddings.
         weight_tying (`bool`, *optional*, defaults to False):
             Whether to tie input and output embeddings.
-        
+
         # Performance optimization
         sequence_parallel (`bool`, *optional*, defaults to False):
             Whether to use sequence parallelism.
@@ -203,11 +202,11 @@ class BLTConfig(PretrainedConfig):
             Whether to fuse sequence parallel operations.
         use_fsdp (`bool`, *optional*, defaults to True):
             Whether to use fully sharded data parallel.
-        
+
         # Parameter mixing
         pm_size (`int`, *optional*, defaults to 0):
             Parameter mixing size.
-        
+
         # Special tokens
         bos_token_id (`int`, *optional*, defaults to 1):
             The id of the "beginning-of-sequence" token.
@@ -215,7 +214,7 @@ class BLTConfig(PretrainedConfig):
             The id of the "end-of-sequence" token.
         pad_token_id (`int`, *optional*, defaults to -1):
             The id of the padding token.
-            
+
         # Patcher/Entropy model configuration
         patcher_vocab_size (`int`, *optional*, defaults to 256):
             Vocabulary size for the entropy model used in patching.
@@ -282,14 +281,12 @@ class BLTConfig(PretrainedConfig):
         self,
         vocab_size=256,
         max_seqlen=1024,
-        
         # Main architecture dimensions
         dim=512,
         n_layers=8,
         n_heads=8,
         head_dim=None,
         n_kv_heads=None,
-        
         # Component-specific dimensions
         dim_global=512,
         dim_local_decoder=512,
@@ -301,31 +298,25 @@ class BLTConfig(PretrainedConfig):
         n_heads_local_decoder=8,
         n_heads_local_encoder=8,
         n_kv_heads_global=None,
-        
         # Transformer configuration
         norm_eps=1e-5,
         dropout=0.0,
         ffn_dim_multiplier=1.0,
         multiple_of=256,
-        
         # Positional encoding
         rope_theta=10000.0,
         rope_use_fp32_in_outer_product=False,
-        
         # Attention configuration
         attn_impl="sdpa",
         attn_bias_type="causal",
         local_attention_window_len=None,
         use_rope=True,
-        
         # Initialization
         init_base_std=None,
         init_std_factor="disabled",
-        
         # Embedding dimensions
         dim_token_emb=None,
         dim_token=None,
-        
         # Patching configuration
         patch_in_forward=False,
         realtime_patching=True,
@@ -338,7 +329,6 @@ class BLTConfig(PretrainedConfig):
         patching_device="cuda",
         max_patch_length=None,
         entropy_model_checkpoint_dir=None,
-        
         # Cross attention configurations
         cross_attn_encoder=False,
         cross_attn_decoder=False,
@@ -350,7 +340,6 @@ class BLTConfig(PretrainedConfig):
         cross_attn_all_layers_encoder=False,
         cross_attn_use_flex_attention=True,
         cross_attn_init_by_pooling=False,
-        
         # Encoder configurations
         use_local_encoder_transformer=False,
         max_encoder_seq_length=None,
@@ -360,25 +349,20 @@ class BLTConfig(PretrainedConfig):
         encoder_enable_byte_ngrams=False,
         encoder_ngram_to_size_str=None,
         downsampling_by_pooling=None,
-        
         # Model behavior
         share_encoder_decoder_emb=True,
         weight_tying=False,
-        
         # Performance optimization
         sequence_parallel=False,
         loss_parallel=False,
         fuse_sequence_parallel=False,
         use_fsdp=True,
-        
         # Parameter mixing
         pm_size=0,
-        
         # Special tokens
         bos_token_id=1,
         eos_token_id=2,
         pad_token_id=-1,
-        
         # Patcher/Entropy model configuration
         patcher_vocab_size=256,
         patcher_dim=512,
@@ -402,21 +386,20 @@ class BLTConfig(PretrainedConfig):
         patcher_weight_tying=False,
         patcher_bos_token_id=1,
         patcher_eos_token_id=2,
-        
         # Inherited
         **kwargs,
     ):
         # Basic model configuration
         self.vocab_size = vocab_size
         self.max_seqlen = max_seqlen
-        
+
         # Main architecture dimensions
         self.dim = dim
         self.n_layers = n_layers
         self.n_heads = n_heads
         self.head_dim = head_dim
         self.n_kv_heads = n_kv_heads
-        
+
         # Component-specific dimensions
         self.dim_global = dim_global
         self.dim_local_decoder = dim_local_decoder
@@ -428,31 +411,31 @@ class BLTConfig(PretrainedConfig):
         self.n_heads_local_decoder = n_heads_local_decoder
         self.n_heads_local_encoder = n_heads_local_encoder
         self.n_kv_heads_global = n_kv_heads_global
-        
+
         # Transformer configuration
         self.norm_eps = norm_eps
         self.dropout = dropout
         self.ffn_dim_multiplier = ffn_dim_multiplier
         self.multiple_of = multiple_of
-        
+
         # Positional encoding
         self.rope_theta = rope_theta
         self.rope_use_fp32_in_outer_product = rope_use_fp32_in_outer_product
-        
+
         # Attention configuration
         self.attn_impl = attn_impl
         self.attn_bias_type = attn_bias_type
         self.local_attention_window_len = local_attention_window_len
         self.use_rope = use_rope
-        
+
         # Initialization
         self.init_base_std = init_base_std
         self.init_std_factor = InitStdFactor(init_std_factor)
-        
+
         # Embedding dimensions
         self.dim_token_emb = dim_token_emb
         self.dim_token = dim_token
-        
+
         # Patching configuration
         self.patch_in_forward = patch_in_forward
         self.realtime_patching = realtime_patching
@@ -465,7 +448,7 @@ class BLTConfig(PretrainedConfig):
         self.patching_device = patching_device
         self.max_patch_length = max_patch_length
         self.entropy_model_checkpoint_dir = entropy_model_checkpoint_dir
-        
+
         # Cross attention configurations
         self.cross_attn_encoder = cross_attn_encoder
         self.cross_attn_decoder = cross_attn_decoder
@@ -477,7 +460,7 @@ class BLTConfig(PretrainedConfig):
         self.cross_attn_all_layers_encoder = cross_attn_all_layers_encoder
         self.cross_attn_use_flex_attention = cross_attn_use_flex_attention
         self.cross_attn_init_by_pooling = cross_attn_init_by_pooling
-        
+
         # Encoder configurations
         self.use_local_encoder_transformer = use_local_encoder_transformer
         self.max_encoder_seq_length = max_encoder_seq_length
@@ -487,20 +470,20 @@ class BLTConfig(PretrainedConfig):
         self.encoder_enable_byte_ngrams = encoder_enable_byte_ngrams
         self.encoder_ngram_to_size_str = encoder_ngram_to_size_str
         self.downsampling_by_pooling = downsampling_by_pooling
-        
+
         # Model behavior
         self.share_encoder_decoder_emb = share_encoder_decoder_emb
         self.weight_tying = weight_tying
-        
+
         # Performance optimization
         self.sequence_parallel = sequence_parallel
         self.loss_parallel = loss_parallel
         self.fuse_sequence_parallel = fuse_sequence_parallel
         self.use_fsdp = use_fsdp
-        
+
         # Parameter mixing
         self.pm_size = pm_size
-        
+
         # Patcher/Entropy model configuration
         self.patcher_vocab_size = patcher_vocab_size
         self.patcher_dim = patcher_dim
@@ -526,14 +509,9 @@ class BLTConfig(PretrainedConfig):
         self.patcher_eos_token_id = patcher_eos_token_id
 
         # Handle hash byte group size validation
-        if (
-            self.encoder_hash_byte_group_size is not None
-            and type(self.encoder_hash_byte_group_size) == str
-        ):
+        if self.encoder_hash_byte_group_size is not None and type(self.encoder_hash_byte_group_size) == str:
             self.encoder_hash_byte_group_size = [
-                int(x)
-                for x in self.encoder_hash_byte_group_size.split(",")
-                if len(x) > 0
+                int(x) for x in self.encoder_hash_byte_group_size.split(",") if len(x) > 0
             ]
 
         super().__init__(
@@ -581,12 +559,7 @@ class BLTConfig(PretrainedConfig):
             patch_size = self.patch_size if self.patch_size is not None else 8
             return dim_token_emb * patch_size
         else:
-            return dim_token_emb * sum(
-                [
-                    pooling in self.downsampling_by_pooling
-                    for pooling in ["avg", "min", "max"]
-                ]
-            )
+            return dim_token_emb * sum([pooling in self.downsampling_by_pooling for pooling in ["avg", "min", "max"]])
 
     @property
     def decoder_dim_token_emb(self):
@@ -601,10 +574,10 @@ class BLTConfig(PretrainedConfig):
     def get_init_std_factor(self, depth: int) -> float:
         """
         Calculate the initialization standard deviation scaling factor for a given layer depth.
-        
+
         Args:
             depth: Current layer depth (0-indexed)
-            
+
         Returns:
             Scaling factor to divide the base initialization std by
         """
@@ -614,4 +587,4 @@ class BLTConfig(PretrainedConfig):
             return 1.0
 
 
-__all__ = ["BLTConfig", "InitStdFactor", "PatchingModeEnum"] 
+__all__ = ["BLTConfig", "InitStdFactor", "PatchingModeEnum"]
