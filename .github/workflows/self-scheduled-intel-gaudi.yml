@@ -316,7 +316,7 @@ jobs:
       [
         setup,
         check_runners,
-        run_models_gaudi,
+        # run_models_gaudi,
         run_examples_gaudi,
         run_deepspeed_gaudi,
         run_pipelines_gaudi,
