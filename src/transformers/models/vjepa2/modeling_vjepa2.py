@@ -537,17 +537,21 @@ class VJEPA2Encoder(nn.Module):
         )
 
 
-def apply_masks(x, masks) -> torch.Tensor:
+def apply_masks(tensor: torch.Tensor, masks: List[torch.Tensor]) -> torch.Tensor:
     """
-    :param x: tensor of shape [B (batch-size), N (num-patches), D (feature-dim)]
-    :param masks: list of tensors of shape [B, K] containing indices of K patches in [N] to keep
+    Args:
+        tensor (`torch.Tensor`):
+            Tensor of shape [batch_size, num_patches, feature_dim]
+        masks (`List[torch.Tensor]`):
+            List of tensors of shape [batch_size, num_patches] containing indices of patches to keep
     """
-    all_x = []
-    for m in masks:
-        mask_keep = m.unsqueeze(-1).repeat(1, 1, x.size(-1))
-        all_x += [torch.gather(x, dim=1, index=mask_keep)]
+    all_masked_tensors = []
+    for mask in masks:
+        mask = mask.to(tensor.device)
+        mask_keep = mask.unsqueeze(-1).repeat(1, 1, tensor.size(-1))
+        all_masked_tensors += [torch.gather(tensor, dim=1, index=mask_keep)]
 
-    return torch.cat(all_x, dim=0)
+    return torch.cat(all_masked_tensors, dim=0)
 
 
 class VJEPA2PredictorEmbeddings(nn.Module):
