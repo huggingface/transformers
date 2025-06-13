@@ -346,7 +346,7 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_video_classification(self):
-        checkpoint = "qubvel-hf/vjepa2-vitl-fpc16-256-ssv2"
+        checkpoint = "facebook/vjepa2-vitl-fpc16-256-ssv2"
 
         model = VJEPA2ForVideoClassification.from_pretrained(checkpoint).to(torch_device)
         video_processor = AutoVideoProcessor.from_pretrained(checkpoint)
