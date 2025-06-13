@@ -108,7 +108,7 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
     a single model that can take into account both the textual and visual content (layout, charts, ...) of a document.
 
     ColQwen2 is part of the ColVision model family, which was introduced with ColPali in the following paper:
-    [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://arxiv.org/abs/2407.01449).
+    [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://huggingface.co/papers/2407.01449).
     """
 )
 class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):

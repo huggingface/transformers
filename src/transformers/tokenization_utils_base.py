@@ -3389,9 +3389,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Returns:
             `List[int]`: The token type ids.
         """
+        cls_len = int(getattr(self, "cls_token_id", None) is not None)
+        sep_len = int(getattr(self, "sep_token_id", None) is not None)
+
         if token_ids_1 is None:
-            return len(token_ids_0) * [0]
-        return [0] * len(token_ids_0) + [1] * len(token_ids_1)
+            return [0] * (cls_len + len(token_ids_0) + sep_len)
+
+        return [0] * (cls_len + len(token_ids_0) + sep_len) + [1] * (len(token_ids_1) + sep_len)
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
