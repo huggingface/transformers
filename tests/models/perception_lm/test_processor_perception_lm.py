@@ -79,7 +79,6 @@ class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "chat_template": CHAT_TEMPLATE,
             "patch_size": 14,
             "pooling_ratio": 2,
-            "processor_class": "PerceptionLMProcessor",
         }  # fmt: skip
 
     def test_chat_template_is_saved(self):
