@@ -83,23 +83,23 @@ jobs:
             echo "slice_ids=[0, 1]" >> $GITHUB_OUTPUT
           fi
 
-  run_models_gaudi:
-    if: ${{ inputs.job == 'run_models_gaudi' }}
-    name: " "
-    needs: setup
-    strategy:
-      fail-fast: false
-      matrix:
-        machine_type: [1gaudi, 2gaudi]
-        slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
-    uses: ./.github/workflows/model_jobs_intel_gaudi.yml
-    with:
-      slice_id: ${{ matrix.slice_id }}
-      machine_type: ${{ matrix.machine_type }}
-      folder_slices: ${{ needs.setup.outputs.folder_slices }}
-      runner: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
+  # run_models_gaudi:
+  #   if: ${{ inputs.job == 'run_models_gaudi' }}
+  #   name: " "
+  #   needs: setup
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       machine_type: [1gaudi, 2gaudi]
+  #       slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
+  #   uses: ./.github/workflows/model_jobs_intel_gaudi.yml
+  #   with:
+  #     slice_id: ${{ matrix.slice_id }}
+  #     machine_type: ${{ matrix.machine_type }}
+  #     folder_slices: ${{ needs.setup.outputs.folder_slices }}
+  #     runner: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
 
-    secrets: inherit
+  #   secrets: inherit
 
   run_pipelines_gaudi:
     if: ${{ inputs.job == 'run_pipelines_gaudi' }}
@@ -126,7 +126,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e .[testing] "numpy<2.0.0" scipy scikit-learn
+          pip install -e .[testing,torch] "numpy<2.0.0" scipy scikit-learn
 
       - name: HL-SMI
         run: |
@@ -193,7 +193,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e .[testing] "numpy<2.0.0" scipy scikit-learn
+          pip install -e .[testing,torch] "numpy<2.0.0" scipy scikit-learn
 
       - name: HL-SMI
         run: |
@@ -264,7 +264,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e .[testing] "numpy<2.0.0" scipy scikit-learn
+          pip install -e .[testing,torch] "numpy<2.0.0" scipy scikit-learn
           pip install git+https://github.com/HabanaAI/DeepSpeed.git@1.20.0
 
       - name: HL-SMI

@@ -22,38 +22,38 @@ jobs:
 
     secrets: inherit
 
-  # pipeline:
-  #   name: Pipeline CI
-  #   uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
-  #   with:
-  #     job: run_pipelines_gaudi
-  #     ci_event: Scheduled CI (Intel Gaudi3)
-  #     runner_scale_set: itac-bm-emr-gaudi3-dell
-  #     slack_report_channel: "#transformers-ci-dummy"
-  #     report_repo_id: hf-internal-testing/transformers_daily_ci_gaudi3
+  pipeline-ci:
+    name: Pipeline CI
+    uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
+    with:
+      job: run_pipelines_gaudi
+      ci_event: Scheduled CI (Intel Gaudi3)
+      runner_scale_set: itac-bm-emr-gaudi3-dell
+      slack_report_channel: "#transformers-ci-dummy"
+      report_repo_id: hf-internal-testing/transformers_daily_ci_gaudi3
 
-  #   secrets: inherit
+    secrets: inherit
 
-  # example-ci:
-  #   name: Example CI
-  #   uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
-  #   with:
-  #     job: run_examples_gaudi
-  #     ci_event: Scheduled CI (Intel Gaudi3)
-  #     runner_scale_set: itac-bm-emr-gaudi3-dell
-  #     slack_report_channel: "#transformers-ci-dummy"
-  #     report_repo_id: hf-internal-testing/transformers_daily_ci_gaudi3
+  example-ci:
+    name: Example CI
+    uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
+    with:
+      job: run_examples_gaudi
+      ci_event: Scheduled CI (Intel Gaudi3)
+      runner_scale_set: itac-bm-emr-gaudi3-dell
+      slack_report_channel: "#transformers-ci-dummy"
+      report_repo_id: hf-internal-testing/transformers_daily_ci_gaudi3
 
-  #   secrets: inherit
+    secrets: inherit
 
-  # deepspeed-ci:
-  #   name: DeepSpeed CI
-  #   uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
-  #   with:
-  #     job: run_deepspeed_gaudi
-  #     ci_event: Scheduled CI (Intel Gaudi3)
-  #     runner_scale_set: itac-bm-emr-gaudi3-dell
-  #     slack_report_channel: "#transformers-ci-dummy"
-  #     report_repo_id: hf-internal-testing/transformers_daily_ci_gaudi3
+  deepspeed-ci:
+    name: DeepSpeed CI
+    uses: ./.github/workflows/self-scheduled-intel-gaudi.yml
+    with:
+      job: run_deepspeed_gaudi
+      ci_event: Scheduled CI (Intel Gaudi3)
+      runner_scale_set: itac-bm-emr-gaudi3-dell
+      slack_report_channel: "#transformers-ci-dummy"
+      report_repo_id: hf-internal-testing/transformers_daily_ci_gaudi3
 
-  #   secrets: inherit
+    secrets: inherit

@@ -33,7 +33,7 @@ jobs:
   run_models_gaudi:
     name: " "
     strategy:
-      max-parallel: 8
+      max-parallel: 1
       fail-fast: false
       matrix:
         folders: ${{ fromJson(inputs.folder_slices)[inputs.slice_id] }}
@@ -70,7 +70,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e .[testing] "numpy<2.0.0" scipy scikit-learn
+          pip install -e .[testing,torch] "numpy<2.0.0" scipy scikit-learn
 
       - name: HL-SMI
         run: |
