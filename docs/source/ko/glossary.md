@@ -323,7 +323,7 @@ RNN 모델과 달리 트랜스포머는 각 토큰의 위치 정보를 내부적
 
 머신러닝 모델이 쉽게 처리할 수 있도록 가공되지 않은 데이터를 정제하는 작업입니다. 예를 들어, 텍스트는 일반적으로 토크나이징(tokenization) 과정을 거칩니다. 다른 입력 유형에 대한 전처리 방식이 궁금하다면 [Preprocess](https://huggingface.co/docs/transformers/preprocessing) 튜토리얼을 참고해 보세요.
 
-### **"사전 학습된 모델 (pretrained model)"**
+### 사전 학습된 모델 (pretrained model)
 
 일부 데이터(예: 위키피디아 전체)로 사전 학습(pretraining)된 모델입니다. 사전 학습은 자기 지도 학습(self-supervised learning)의 목표를 포함하며, 예를 들어 문장을 읽고 다음 단어를 예측하거나 ([causal language modeling](#causal-language-modeling)) 참고, 일부 단어를 마스킹하고 이를 예측하는 방식([masked language modeling](#masked-language-modeling-mlm))이 있습니다.
 
