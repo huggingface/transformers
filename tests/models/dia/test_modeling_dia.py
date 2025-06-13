@@ -100,7 +100,7 @@ class DiaModelTester:
 
     def get_config(self):
         encoder_config = DiaEncoderConfig(
-            max_length=self.max_length,
+            max_position_embeddings=self.max_length,
             num_hidden_layers=self.num_hidden_layers,
             hidden_size=self.hidden_size,
             num_attention_heads=self.num_attention_heads,
@@ -112,7 +112,7 @@ class DiaModelTester:
         )
 
         decoder_config = DiaDecoderConfig(
-            max_length=self.max_length,
+            max_position_embeddings=self.max_length,
             num_hidden_layers=self.num_hidden_layers,
             hidden_size=self.decoder_hidden_size,
             intermediate_size=self.intermediate_size,
