@@ -16,7 +16,6 @@
 import inspect
 import tempfile
 import unittest
-from typing import Optional
 
 import pytest
 from pytest import mark
@@ -28,7 +27,9 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    DeviceProperties,
     Expectations,
+    get_device_properties,
     require_deterministic_for_xpu,
     require_flash_attn,
     require_torch,
@@ -36,7 +37,6 @@ from transformers.testing_utils import (
     require_torch_gpu,
     slow,
     torch_device,
-    unpack_device_properties,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -595,7 +595,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
     tokenizer = None
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
     # Depending on the hardware we get different logits / generations
-    device_properties: tuple[Optional[str], Optional[int], Optional[int]] = None
+    device_properties: DeviceProperties = None
 
     @classmethod
     def setUpClass(cls):
@@ -607,7 +607,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         cls.tokenizer.pad_token_id = cls.model.config.pad_token_id
         cls.tokenizer.padding_side = "left"
 
-        cls.device_properties = unpack_device_properties(properties=None)
+        cls.device_properties = get_device_properties()
 
     def test_simple_generate(self):
         expectations = Expectations(

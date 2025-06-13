@@ -23,12 +23,12 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
 from transformers.testing_utils import (
     Expectations,
     backend_empty_cache,
+    get_device_properties,
     require_torch_accelerator,
     require_torch_multi_accelerator,
     require_torchao,
     require_torchao_version_greater_or_equal,
     torch_device,
-    unpack_device_properties,
 )
 from transformers.utils import is_torch_available, is_torchao_available
 
@@ -552,7 +552,7 @@ class TorchAoSerializationFP8AcceleratorTest(TorchAoSerializationTest):
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
-        device_type, major, minor = unpack_device_properties(properties=None)
+        device_type, major, minor = get_device_properties()
         if device_type == "cuda" and major < 9:
             raise unittest.SkipTest("CUDA compute capability 9.0 or higher required for FP8 tests")
 
@@ -574,7 +574,7 @@ class TorchAoSerializationA8W4Test(TorchAoSerializationTest):
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
-        device_type, major, minor = unpack_device_properties(properties=None)
+        device_type, major, minor = get_device_properties()
         if device_type == "cuda" and major < 9:
             raise unittest.SkipTest("CUDA compute capability 9.0 or higher required for FP8 tests")
 

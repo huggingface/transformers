@@ -14,7 +14,6 @@
 """Testing suite for the PyTorch Gemma model."""
 
 import unittest
-from typing import Optional
 
 import pytest
 from packaging import version
@@ -22,8 +21,10 @@ from packaging import version
 from transformers import AutoModelForCausalLM, AutoTokenizer, GemmaConfig, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
+    DeviceProperties,
     Expectations,
     cleanup,
+    get_device_properties,
     require_bitsandbytes,
     require_flash_attn,
     require_read_token,
@@ -32,7 +33,6 @@ from transformers.testing_utils import (
     require_torch_gpu,
     slow,
     torch_device,
-    unpack_device_properties,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
@@ -109,11 +109,11 @@ class GemmaIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
     # This variable is used to determine which accelerator are we using for our runners (e.g. A10 or T4)
     # Depending on the hardware we get different logits / generations
-    device_properties: tuple[Optional[str], Optional[int], Optional[int]] = None
+    device_properties: DeviceProperties = None
 
     @classmethod
     def setUpClass(cls):
-        cls.device_properties = unpack_device_properties(properties=None)
+        cls.device_properties = get_device_properties()
 
     def tearDown(self):
         # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.

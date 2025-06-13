@@ -77,6 +77,7 @@ from transformers.testing_utils import (
     backend_empty_cache,
     backend_memory_allocated,
     backend_torch_accelerator_module,
+    get_device_properties,
     hub_retry,
     is_flaky,
     require_accelerate,
@@ -97,7 +98,6 @@ from transformers.testing_utils import (
     set_model_tester_for_less_flaky_test,
     slow,
     torch_device,
-    unpack_device_properties,
 )
 from transformers.utils import (
     CONFIG_NAME,
@@ -3775,7 +3775,7 @@ class ModelTesterMixin:
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        device_type, major, minor = unpack_device_properties(properties=None)
+        device_type, major, minor = get_device_properties()
         if device_type == "cuda" and major < 8:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
         elif device_type == "rocm" and major < 9:
@@ -3823,7 +3823,7 @@ class ModelTesterMixin:
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
-        device_type, major, minor = unpack_device_properties(properties=None)
+        device_type, major, minor = get_device_properties()
         if device_type == "cuda" and major < 8:
             self.skipTest(reason="This test requires an NVIDIA GPU with compute capability >= 8.0")
         elif device_type == "rocm" and major < 9:

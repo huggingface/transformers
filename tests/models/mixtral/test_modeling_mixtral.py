@@ -14,7 +14,6 @@
 """Testing suite for the PyTorch Mixtral model."""
 
 import unittest
-from typing import Optional
 
 import pytest
 
@@ -27,7 +26,6 @@ from transformers.testing_utils import (
     require_torch_gpu,
     slow,
     torch_device,
-    unpack_device_properties,
 )
 
 
@@ -143,15 +141,6 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch
 class MixtralIntegrationTest(unittest.TestCase):
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    # NOTE: This is not used in the test ?
-    device_properties: tuple[Optional[str], Optional[int], Optional[int]] = None
-
-    @classmethod
-    def setUpClass(cls):
-        cls.device_properties = unpack_device_properties(properties=None)
-
     @slow
     @require_torch_accelerator
     def test_small_model_logits(self):
