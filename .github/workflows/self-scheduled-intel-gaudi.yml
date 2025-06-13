@@ -62,6 +62,7 @@ jobs:
             echo "slice_ids=[0, 1]" >> $GITHUB_OUTPUT
           fi
 
+  # TODO: enable later
   # run_models_gpu:
   #   if: ${{ inputs.job == 'run_models_gpu' }}
   #   name: " "
@@ -286,9 +287,81 @@ jobs:
           name: ${{ env.machine_type }}_run_deepspeed_gpu_test_reports
           path: reports/${{ env.machine_type }}_run_deepspeed_gpu_test_reports
 
+  run_trainer_and_fsdp_gpu:
+    if: ${{ inputs.job == 'run_trainer_and_fsdp_gpu' }}
+    name: Trainer and FSDP tests
+    strategy:
+      fail-fast: false
+      matrix:
+        machine_type: [1gaudi, 2gaudi]
+        slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
+    runs-on:
+      group: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
+    container:
+      image: vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
+      options: --runtime=habana
+        --env HABANA_VISIBLE_DEVICES
+        --env HABANA_VISIBLE_MODULES
+        --env OMPI_MCA_btl_vader_single_copy_mechanism=none
+        --shm-size=64G
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          pip install -e .[testing,torch] "numpy<2.0.0" scipy scikit-learn
+
+      - name: HL-SMI
+        run: |
+          hl-smi
+          echo "HABANA_VISIBLE_DEVICES=${HABANA_VISIBLE_DEVICES}"
+          echo "HABANA_VISIBLE_MODULES=${HABANA_VISIBLE_MODULES}"
+
+      - name: Environment
+        run: python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        run: pip freeze
+
+      - name: Set `machine_type` for report and artifact names
+        shell: bash
+        run: |
+          if [ "${{ matrix.machine_type }}" = "1gaudi" ]; then
+            machine_type=single-gaudi
+          elif [ "${{ matrix.machine_type }}" = "2gaudi" ]; then
+            machine_type=multi-gaudi
+          else
+            machine_type=${{ matrix.machine_type }}
+          fi
+          echo "machine_type=$machine_type" >> $GITHUB_ENV
+
+      - name: Run all trainer and fsdp tests on Intel Gaudi
+        run: python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ env.machine_type }}_run_trainer_and_fsdp_gpu_test_reports tests/trainer -m "not not_device_test and not slow"
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: |
+          cat reports/${{ env.machine_type }}_run_trainer_and_fsdp_gpu_test_reports/failures_short.txt
+
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_trainer_and_fsdp_gpu_test_reports"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.machine_type }}_run_trainer_and_fsdp_gpu_test_reports
+
   send_results:
     name: Slack Report
-    needs: [setup, run_examples_gpu, run_deepspeed_gpu, run_pipelines_gpu]
+    needs:
+      [
+        setup,
+        run_examples_gpu,
+        run_pipelines_gpu,
+        run_deepspeed_gpu,
+        run_trainer_and_fsdp_gpu,
+      ]
     if: ${{ always() }}
     uses: huggingface/transformers/.github/workflows/slack-report.yml@main
     with:
