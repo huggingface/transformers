@@ -415,7 +415,9 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
         check_torch_load_is_safe()
         original_pixel_values = torch.load(filepath, map_location="cpu", weights_only=True)
-        assert torch.allclose(original_pixel_values, inputs.pixel_values.to(device="cpu", dtype=original_pixel_values.dtype))
+        assert torch.allclose(
+            original_pixel_values, inputs.pixel_values.to(device="cpu", dtype=original_pixel_values.dtype)
+        )
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=100)
@@ -511,7 +513,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=50)
-        EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image shows two deer, likely fawns, in a grassy area with trees in the background. The setting appears to be a forest or woodland, and the time of day seems to be either dawn or dusk, given the soft'  # fmt: skip
+        EXPECTED_DECODED_TEXT = "[INST]  \nWhat is shown in this image? [/INST] The image shows two deer, likely fawns, in a grassy area with trees in the background. The setting appears to be a forest or woodland, and the photo is taken during what seems to be either dawn or dusk, given"
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
