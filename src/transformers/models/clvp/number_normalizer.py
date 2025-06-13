@@ -15,7 +15,7 @@
 
 """English Normalizer class for CLVP."""
 
-import re
+import regex as re
 
 
 class EnglishNormalizer:
@@ -202,8 +202,8 @@ class EnglishNormalizer:
         text = re.sub(re.compile(r"([0-9][0-9\,]+[0-9])"), self._remove_commas, text)
         text = re.sub(re.compile(r"£([0-9\,]*[0-9])"), r"\1 pounds", text)
         text = re.sub(re.compile(r"\$([0-9\.\,]*[0-9])"), self._expand_dollars, text)
-        text = re.sub(re.compile(r"([0-9]+\.[0-9]+)"), self._expand_decimal_point, text)
-        text = re.sub(re.compile(r"[0-9]+(st|nd|rd|th)"), self._expand_ordinal, text)
+        text = re.sub(re.compile(r"([0-9]++\.[0-9]+)"), self._expand_decimal_point, text)
+        text = re.sub(re.compile(r"[0-9]++(st|nd|rd|th)"), self._expand_ordinal, text)
         text = re.sub(re.compile(r"[0-9]+"), self._expand_number, text)
         return text
 
