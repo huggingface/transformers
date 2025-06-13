@@ -42,14 +42,17 @@ class PerceptionLMImageProcessingTester:
         min_resolution=30,
         max_resolution=400,
         do_resize=True,
-        tile_size=None,
+        tile_size=16,
         do_normalize=True,
         image_mean=IMAGENET_STANDARD_MEAN,
         image_std=IMAGENET_STANDARD_STD,
         do_convert_rgb=True,
+        max_num_tiles=4,
+        vision_input_type="thumb+tile",
+        resample=Image.Resampling.BICUBIC, # dummy value
+        size = {"shortest_edge": 20}, # dummy value
     ):
         super().__init__()
-        size = size if size is not None else {"shortest_edge": 20}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -57,20 +60,28 @@ class PerceptionLMImageProcessingTester:
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
         self.do_resize = do_resize
-        self.tile_size = size
+        self.tile_size = tile_size
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
         self.do_convert_rgb = do_convert_rgb
+        self.max_num_tiles = max_num_tiles
+        self.vision_input_type = vision_input_type
+        self.resample = resample
+        self.size = size
 
     def prepare_image_processor_dict(self):
         return {
             "do_resize": self.do_resize,
-            "tile_size": self.size,
+            "tile_size": self.tile_size,
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
             "do_convert_rgb": self.do_convert_rgb,
+            "max_num_tiles": self.max_num_tiles,
+            "vision_input_type": self.vision_input_type,
+            "resample": self.resample,
+            "size": self.size,
         }
 
     def expected_output_image_shape(self, images):
@@ -93,6 +104,7 @@ class PerceptionLMImageProcessingTester:
 @require_vision
 class PerceptionLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     fast_image_processing_class = PerceptionLMImageProcessorFast if is_torchvision_available() else None
+    test_slow_image_processor = False
 
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->LlavaNext
     def setUp(self):
@@ -113,17 +125,20 @@ class PerceptionLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
             self.assertTrue(hasattr(image_processing, "image_mean"))
             self.assertTrue(hasattr(image_processing, "image_std"))
             self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
+            self.assertTrue(hasattr(image_processing, "max_num_tiles"))
+            self.assertTrue(hasattr(image_processing, "vision_input_type"))
 
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.test_image_processor_from_dict_with_kwargs
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processor_list:
             image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"shortest_edge": 20})
-            self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
+            self.assertEqual(image_processor.tile_size, 16)
+            self.assertEqual(image_processor.max_num_tiles, 4)
+            self.assertEqual(image_processor.vision_input_type, "thumb+tile")
 
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
-            self.assertEqual(image_processor.size, {"shortest_edge": 42})
-            self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
+            image_processor = image_processing_class.from_dict(self.image_processor_dict, tile_size=42, max_num_tiles=9)
+            self.assertEqual(image_processor.tile_size, 42)
+            self.assertEqual(image_processor.max_num_tiles, 9)
+            self.assertEqual(image_processor.vision_input_type, "thumb+tile")
 
     def test_call_pil(self):
         for image_processing_class in self.image_processor_list:
@@ -136,12 +151,12 @@ class PerceptionLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = (1, 1445, 3, 18, 18)
+            expected_output_image_shape = (1, 5, 3, 16, 16)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = (7, 1445, 3, 18, 18)
+            expected_output_image_shape = (7, 5, 3, 16, 16)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_call_numpy(self):
@@ -155,12 +170,12 @@ class PerceptionLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = (1, 1445, 3, 18, 18)
+            expected_output_image_shape = (1, 5, 3, 16, 16)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = (7, 1445, 3, 18, 18)
+            expected_output_image_shape = (7, 5, 3, 16, 16)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     def test_call_pytorch(self):
@@ -175,17 +190,17 @@ class PerceptionLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
 
             # Test not batched input
             encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-            expected_output_image_shape = (1, 1445, 3, 18, 18)
+            expected_output_image_shape = (1, 5, 3, 16, 16)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = (7, 1445, 3, 18, 18)
+            expected_output_image_shape = (7, 5, 3, 16, 16)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
     @unittest.skip(
-        reason="LlavaNextImageProcessor doesn't treat 4 channel PIL and numpy consistently yet"
-    )  # FIXME Amy
+        reason="PerceptionLMImageProcessor doesn't treat 4 channel PIL and numpy consistently yet"
+    )
     def test_call_numpy_4_channels(self):
         pass
 
@@ -196,49 +211,14 @@ class PerceptionLMImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
 
             # Test batched as a list of images
             encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-            expected_output_image_shape = (7, 1445, 3, 18, 18)
+            expected_output_image_shape = (7, 5, 3, 16, 16)
             self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
 
             # Test batched as a nested list of images, where each sublist is one batch
             image_inputs_nested = [image_inputs[:3], image_inputs[3:]]
             encoded_images_nested = image_processing(image_inputs_nested, return_tensors="pt").pixel_values
-            expected_output_image_shape = (7, 1445, 3, 18, 18)
+            expected_output_image_shape = (7, 5, 3, 16, 16)
             self.assertEqual(tuple(encoded_images_nested.shape), expected_output_image_shape)
 
             # Image processor should return same pixel values, independently of ipnut format
             self.assertTrue((encoded_images_nested == encoded_images).all())
-
-    def test_pad_for_patching(self):
-        for image_processing_class in self.image_processor_list:
-            if image_processing_class == self.fast_image_processing_class:
-                numpify = False
-                torchify = True
-                input_data_format = image_processing_class.data_format
-            else:
-                numpify = True
-                torchify = False
-                input_data_format = ChannelDimension.LAST
-            image_processing = image_processing_class(**self.image_processor_dict)
-            # Create odd-sized images
-            image_input = self.image_processor_tester.prepare_image_inputs(
-                equal_resolution=True,
-                numpify=numpify,
-                torchify=torchify,
-            )[0]
-            self.assertIn(image_input.shape, [(3, 400, 400), (400, 400, 3)])
-
-            # Test odd-width
-            image_shape = (400, 601)
-            encoded_images = image_processing._pad_for_patching(image_input, image_shape, input_data_format)
-            encoded_image_shape = (
-                encoded_images.shape[:-1] if input_data_format == ChannelDimension.LAST else encoded_images.shape[1:]
-            )
-            self.assertEqual(encoded_image_shape, image_shape)
-
-            # Test odd-height
-            image_shape = (503, 400)
-            encoded_images = image_processing._pad_for_patching(image_input, image_shape, input_data_format)
-            encoded_image_shape = (
-                encoded_images.shape[:-1] if input_data_format == ChannelDimension.LAST else encoded_images.shape[1:]
-            )
-            self.assertEqual(encoded_image_shape, image_shape)

@@ -97,7 +97,7 @@ class ImageTransform(object):
             image = F.convert_image_dtype(image, torch.float32)
 
         # Add chunk dim to make it compatible with existing dataloaders
-        image = image.view(1, -1, 3, self.size, self.size)
+        image = image.unsqueeze(-4)
         return image, (w, h)
 
 
