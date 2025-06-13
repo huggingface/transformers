@@ -101,32 +101,12 @@ def generate(
 def main(prompt: str = "my name is", model_name: str = "blt-1b"):
     device = "cuda"
 
-    # HF
     blt_repo = "itazap/blt-1b"
 
-    # Load model using from_pretrained
-    print("Loading model...")
     model = BLTModel.from_pretrained(blt_repo).to(device)
-
     tokenizer = BltTokenizer(vocab_size_unit_1=model.config.vocab_size, add_bos=True, add_eos=True)
 
     prompts = [prompt]
-
-    import torch
-    
-
-    def snapshot_state_dict(state_dict, n=3, filename='snapshot.txt'):
-        with open(filename, 'w') as f:
-            keys = list(state_dict.keys())
-        #    selected_keys = keys[:n] + keys[-n:] if len(keys) > 2 * n else keys
-            for key in keys:
-                f.write(f"{key}:\n")
-                f.write(f"{state_dict[key].flatten()[:5]}\n")  # Print first 5 values of each tensor
-                f.write("\n")
-        print(f"Snapshot saved to {filename}")
-
-    snapshot_state_dict(model.state_dict(), n=5, filename='demo_hf.txt')
-
 
     outputs = generate(prompts, model=model, tokenizer=tokenizer, max_gen_len=200, device=device)
 
