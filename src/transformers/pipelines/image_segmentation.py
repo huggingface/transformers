@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Union, overload
+from typing import Any, Union, overload
 
 import numpy as np
 
@@ -91,14 +91,14 @@ class ImageSegmentationPipeline(Pipeline):
         return preprocess_kwargs, {}, postprocess_kwargs
 
     @overload
-    def __call__(self, inputs: Union[str, "Image.Image"], **kwargs: Any) -> List[Dict[str, Any]]: ...
+    def __call__(self, inputs: Union[str, "Image.Image"], **kwargs: Any) -> list[dict[str, Any]]: ...
 
     @overload
-    def __call__(self, inputs: Union[List[str], List["Image.Image"]], **kwargs: Any) -> List[List[Dict[str, Any]]]: ...
+    def __call__(self, inputs: Union[list[str], list["Image.Image"]], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
 
     def __call__(
-        self, inputs: Union[str, "Image.Image", List[str], List["Image.Image"]], **kwargs: Any
-    ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
+        self, inputs: Union[str, "Image.Image", list[str], list["Image.Image"]], **kwargs: Any
+    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
         """
         Perform segmentation (detect masks & classes) in the image(s) passed as inputs.
 

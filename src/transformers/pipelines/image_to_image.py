@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any, List, Union, overload
+from typing import Any, Union, overload
 
 import numpy as np
 
@@ -88,11 +88,11 @@ class ImageToImagePipeline(Pipeline):
     def __call__(self, images: Union[str, "Image.Image"], **kwargs: Any) -> "Image.Image": ...
 
     @overload
-    def __call__(self, images: Union[List[str], List["Image.Image"]], **kwargs: Any) -> List["Image.Image"]: ...
+    def __call__(self, images: Union[list[str], list["Image.Image"]], **kwargs: Any) -> list["Image.Image"]: ...
 
     def __call__(
-        self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs: Any
-    ) -> Union["Image.Image", List["Image.Image"]]:
+        self, images: Union[str, list[str], "Image.Image", list["Image.Image"]], **kwargs: Any
+    ) -> Union["Image.Image", list["Image.Image"]]:
         """
         Transform the image(s) passed as inputs.
 

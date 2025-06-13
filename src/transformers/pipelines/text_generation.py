@@ -1,7 +1,7 @@
 import enum
 import itertools
 import types
-from typing import Any, Dict, List, overload
+from typing import Any, overload
 
 from ..generation import GenerationConfig
 from ..utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available
@@ -19,7 +19,7 @@ if is_tf_available():
 
     from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 
-ChatType = List[Dict[str, str]]
+ChatType = list[dict[str, str]]
 
 
 class ReturnType(enum.Enum):
@@ -33,7 +33,7 @@ class Chat:
     to this format because the rest of the pipeline code tends to assume that lists of messages are
     actually a batch of samples rather than messages in the same conversation."""
 
-    def __init__(self, messages: Dict):
+    def __init__(self, messages: dict):
         for message in messages:
             if not ("role" in message and "content" in message):
                 raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
@@ -234,16 +234,16 @@ class TextGenerationPipeline(Pipeline):
         return super()._parse_and_tokenize(*args, **kwargs)
 
     @overload
-    def __call__(self, text_inputs: str, **kwargs: Any) -> List[Dict[str, str]]: ...
+    def __call__(self, text_inputs: str, **kwargs: Any) -> list[dict[str, str]]: ...
 
     @overload
-    def __call__(self, text_inputs: List[str], **kwargs: Any) -> List[List[Dict[str, str]]]: ...
+    def __call__(self, text_inputs: list[str], **kwargs: Any) -> list[list[dict[str, str]]]: ...
 
     @overload
-    def __call__(self, text_inputs: ChatType, **kwargs: Any) -> List[Dict[str, ChatType]]: ...
+    def __call__(self, text_inputs: ChatType, **kwargs: Any) -> list[dict[str, ChatType]]: ...
 
     @overload
-    def __call__(self, text_inputs: List[ChatType], **kwargs: Any) -> List[List[Dict[str, ChatType]]]: ...
+    def __call__(self, text_inputs: list[ChatType], **kwargs: Any) -> list[list[dict[str, ChatType]]]: ...
 
     def __call__(self, text_inputs, **kwargs):
         """

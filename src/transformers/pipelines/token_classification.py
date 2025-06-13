@@ -1,6 +1,6 @@
 import types
 import warnings
-from typing import Any, Dict, List, Optional, Tuple, Union, overload
+from typing import Any, Optional, Union, overload
 
 import numpy as np
 
@@ -29,7 +29,7 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
     Handles arguments for token classification.
     """
 
-    def __call__(self, inputs: Union[str, List[str]], **kwargs):
+    def __call__(self, inputs: Union[str, list[str]], **kwargs):
         if inputs is not None and isinstance(inputs, (list, tuple)) and len(inputs) > 0:
             inputs = list(inputs)
             batch_size = len(inputs)
@@ -150,7 +150,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         grouped_entities: Optional[bool] = None,
         ignore_subwords: Optional[bool] = None,
         aggregation_strategy: Optional[AggregationStrategy] = None,
-        offset_mapping: Optional[List[Tuple[int, int]]] = None,
+        offset_mapping: Optional[list[tuple[int, int]]] = None,
         stride: Optional[int] = None,
     ):
         preprocess_params = {}
@@ -218,14 +218,14 @@ class TokenClassificationPipeline(ChunkPipeline):
         return preprocess_params, {}, postprocess_params
 
     @overload
-    def __call__(self, inputs: str, **kwargs: Any) -> List[Dict[str, str]]: ...
+    def __call__(self, inputs: str, **kwargs: Any) -> list[dict[str, str]]: ...
 
     @overload
-    def __call__(self, inputs: List[str], **kwargs: Any) -> List[List[Dict[str, str]]]: ...
+    def __call__(self, inputs: list[str], **kwargs: Any) -> list[list[dict[str, str]]]: ...
 
     def __call__(
-        self, inputs: Union[str, List[str]], **kwargs: Any
-    ) -> Union[List[Dict[str, str]], List[List[Dict[str, str]]]]:
+        self, inputs: Union[str, list[str]], **kwargs: Any
+    ) -> Union[list[dict[str, str]], list[list[dict[str, str]]]]:
         """
         Classify each token of the text(s) given as inputs.
 
@@ -371,10 +371,10 @@ class TokenClassificationPipeline(ChunkPipeline):
         sentence: str,
         input_ids: np.ndarray,
         scores: np.ndarray,
-        offset_mapping: Optional[List[Tuple[int, int]]],
+        offset_mapping: Optional[list[tuple[int, int]]],
         special_tokens_mask: np.ndarray,
         aggregation_strategy: AggregationStrategy,
-    ) -> List[dict]:
+    ) -> list[dict]:
         """Fuse various numpy arrays into dicts with all the information needed for aggregation"""
         pre_entities = []
         for idx, token_scores in enumerate(scores):
@@ -428,7 +428,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             pre_entities.append(pre_entity)
         return pre_entities
 
-    def aggregate(self, pre_entities: List[dict], aggregation_strategy: AggregationStrategy) -> List[dict]:
+    def aggregate(self, pre_entities: list[dict], aggregation_strategy: AggregationStrategy) -> list[dict]:
         if aggregation_strategy in {AggregationStrategy.NONE, AggregationStrategy.SIMPLE}:
             entities = []
             for pre_entity in pre_entities:
@@ -450,7 +450,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             return entities
         return self.group_entities(entities)
 
-    def aggregate_word(self, entities: List[dict], aggregation_strategy: AggregationStrategy) -> dict:
+    def aggregate_word(self, entities: list[dict], aggregation_strategy: AggregationStrategy) -> dict:
         word = self.tokenizer.convert_tokens_to_string([entity["word"] for entity in entities])
         if aggregation_strategy == AggregationStrategy.FIRST:
             scores = entities[0]["scores"]
@@ -480,7 +480,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         }
         return new_entity
 
-    def aggregate_words(self, entities: List[dict], aggregation_strategy: AggregationStrategy) -> List[dict]:
+    def aggregate_words(self, entities: list[dict], aggregation_strategy: AggregationStrategy) -> list[dict]:
         """
         Override tokens from a given word that disagree to force agreement on word boundaries.
 
@@ -508,7 +508,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             word_entities.append(self.aggregate_word(word_group, aggregation_strategy))
         return word_entities
 
-    def group_sub_entities(self, entities: List[dict]) -> dict:
+    def group_sub_entities(self, entities: list[dict]) -> dict:
         """
         Group together the adjacent tokens with the same entity predicted.
 
@@ -529,7 +529,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         }
         return entity_group
 
-    def get_tag(self, entity_name: str) -> Tuple[str, str]:
+    def get_tag(self, entity_name: str) -> tuple[str, str]:
         if entity_name.startswith("B-"):
             bi = "B"
             tag = entity_name[2:]
@@ -543,7 +543,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             tag = entity_name
         return bi, tag
 
-    def group_entities(self, entities: List[dict]) -> List[dict]:
+    def group_entities(self, entities: list[dict]) -> list[dict]:
         """
         Find and group together the adjacent tokens with the same entity predicted.
 

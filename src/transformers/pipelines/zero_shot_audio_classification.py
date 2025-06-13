@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections import UserDict
-from typing import Any, Dict, List, Union
+from typing import Any, Union
 
 import numpy as np
 import requests
@@ -67,7 +67,7 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
         # No specific FOR_XXX available yet
 
-    def __call__(self, audios: Union[np.ndarray, bytes, str, dict], **kwargs: Any) -> List[Dict[str, Any]]:
+    def __call__(self, audios: Union[np.ndarray, bytes, str, dict], **kwargs: Any) -> list[dict[str, Any]]:
         """
         Assign labels to the audio(s) passed as inputs.
 

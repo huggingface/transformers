@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Union, overload
+from typing import Any, Optional, Union, overload
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
 from .base import ChunkPipeline, build_pipeline_init_args
@@ -64,18 +64,18 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
 
     @overload
     def __call__(
-        self, image: Union[str, "Image.Image"], candidate_labels: Union[str, List[str]], **kwargs: Any
-    ) -> List[Dict[str, Any]]: ...
+        self, image: Union[str, "Image.Image"], candidate_labels: Union[str, list[str]], **kwargs: Any
+    ) -> list[dict[str, Any]]: ...
 
     @overload
-    def __call__(self, image: List[Dict[str, Any]], **kwargs: Any) -> List[List[Dict[str, Any]]]: ...
+    def __call__(self, image: list[dict[str, Any]], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
 
     def __call__(
         self,
-        image: Union[str, "Image.Image", List[Dict[str, Any]]],
-        candidate_labels: Optional[Union[str, List[str]]] = None,
+        image: Union[str, "Image.Image", list[dict[str, Any]]],
+        candidate_labels: Optional[Union[str, list[str]]] = None,
         **kwargs: Any,
-    ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
+    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
         """
         Detect objects (bounding boxes & classes) in the image(s) passed as inputs.
 
@@ -221,7 +221,7 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
 
         return results
 
-    def _get_bounding_box(self, box: "torch.Tensor") -> Dict[str, int]:
+    def _get_bounding_box(self, box: "torch.Tensor") -> dict[str, int]:
         """
         Turns list [xmin, xmax, ymin, ymax] into dict { "xmin": xmin, ... }
 

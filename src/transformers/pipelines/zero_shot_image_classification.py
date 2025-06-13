@@ -1,6 +1,6 @@
 import warnings
 from collections import UserDict
-from typing import Any, Dict, List, Union, overload
+from typing import Any, Union, overload
 
 from ..utils import (
     add_end_docstrings,
@@ -76,20 +76,20 @@ class ZeroShotImageClassificationPipeline(Pipeline):
 
     @overload
     def __call__(
-        self, image: Union[str, "Image.Image"], candidate_labels: List[str], **kwargs: Any
-    ) -> List[Dict[str, Any]]: ...
+        self, image: Union[str, "Image.Image"], candidate_labels: list[str], **kwargs: Any
+    ) -> list[dict[str, Any]]: ...
 
     @overload
     def __call__(
-        self, image: Union[List[str], List["Image.Image"]], candidate_labels: List[str], **kwargs: Any
-    ) -> List[List[Dict[str, Any]]]: ...
+        self, image: Union[list[str], list["Image.Image"]], candidate_labels: list[str], **kwargs: Any
+    ) -> list[list[dict[str, Any]]]: ...
 
     def __call__(
         self,
-        image: Union[str, List[str], "Image.Image", List["Image.Image"]],
-        candidate_labels: List[str],
+        image: Union[str, list[str], "Image.Image", list["Image.Image"]],
+        candidate_labels: list[str],
         **kwargs: Any,
-    ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
+    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
         """
         Assign labels to the image(s) passed as inputs.
 

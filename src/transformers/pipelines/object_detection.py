@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Dict, List, Union, overload
+from typing import TYPE_CHECKING, Any, Union, overload
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
 from .base import Pipeline, build_pipeline_init_args
@@ -69,14 +69,14 @@ class ObjectDetectionPipeline(Pipeline):
         return preprocess_params, {}, postprocess_kwargs
 
     @overload
-    def __call__(self, image: Union[str, "Image.Image"], *args: Any, **kwargs: Any) -> List[Dict[str, Any]]: ...
+    def __call__(self, image: Union[str, "Image.Image"], *args: Any, **kwargs: Any) -> list[dict[str, Any]]: ...
 
     @overload
     def __call__(
-        self, image: Union[List[str], List["Image.Image"]], *args: Any, **kwargs: Any
-    ) -> List[List[Dict[str, Any]]]: ...
+        self, image: Union[list[str], list["Image.Image"]], *args: Any, **kwargs: Any
+    ) -> list[list[dict[str, Any]]]: ...
 
-    def __call__(self, *args, **kwargs) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
+    def __call__(self, *args, **kwargs) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
         """
         Detect objects (bounding boxes & classes) in the image(s) passed as inputs.
 
@@ -176,7 +176,7 @@ class ObjectDetectionPipeline(Pipeline):
 
         return annotation
 
-    def _get_bounding_box(self, box: "torch.Tensor") -> Dict[str, int]:
+    def _get_bounding_box(self, box: "torch.Tensor") -> dict[str, int]:
         """
         Turns list [xmin, xmax, ymin, ymax] into dict { "xmin": xmin, ... }
 

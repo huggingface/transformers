@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Union, overload
+from typing import Any, Union, overload
 
 import numpy as np
 
@@ -113,7 +113,7 @@ class FillMaskPipeline(Pipeline):
 
     def preprocess(
         self, inputs, return_tensors=None, tokenizer_kwargs=None, **preprocess_parameters
-    ) -> Dict[str, GenericTensor]:
+    ) -> dict[str, GenericTensor]:
         if return_tensors is None:
             return_tensors = self.framework
         if tokenizer_kwargs is None:
@@ -246,14 +246,14 @@ class FillMaskPipeline(Pipeline):
         return preprocess_params, {}, postprocess_params
 
     @overload
-    def __call__(self, inputs: str, **kwargs: Any) -> List[Dict[str, Any]]: ...
+    def __call__(self, inputs: str, **kwargs: Any) -> list[dict[str, Any]]: ...
 
     @overload
-    def __call__(self, inputs: List[str], **kwargs: Any) -> List[List[Dict[str, Any]]]: ...
+    def __call__(self, inputs: list[str], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
 
     def __call__(
-        self, inputs: Union[str, List[str]], **kwargs: Any
-    ) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
+        self, inputs: Union[str, list[str]], **kwargs: Any
+    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
         """
         Fill the masked token in the text(s) given as inputs.
 
