@@ -1775,5 +1775,5 @@ __all__ = [
     "Glm4vModel",
     "Glm4vPreTrainedModel",
     "Glm4vProcessor",
-    "Glm4vTextModel",  # noqa: F822
+    "Glm4vTextModel",
 ]
