@@ -68,7 +68,6 @@ def merge_configurations(config_path: str, entropy_params_path: str) -> Dict[str
     # Create unified configuration
     unified_config = main_config.copy()['args']
     
-    # Ensure other integer parameters are properly typed
     for key in ["vocab_size", "dim", "n_layers", "n_heads", "max_seqlen"]:
         if key in unified_config and not isinstance(unified_config[key], int):
             unified_config[key] = int(unified_config[key])
@@ -204,7 +203,6 @@ def validate_unified_model(config: Dict[str, Any], weights: Dict[str, torch.Tens
             logger.info("Weight loading successful")
         except Exception as weight_error:
             logger.warning(f"Weight loading failed: {weight_error}")
-            logger.info("Model instantiation successful, but weight loading had issues")
         
     except Exception as e:
         logger.error(f"Model validation failed: {e}")
@@ -219,17 +217,6 @@ def push_to_hub(
     private: bool = False,
     token: Optional[str] = None,
 ) -> None:
-    """
-    Push the converted model to Hugging Face Hub.
-    
-    Args:
-        local_dir: Local directory containing the converted model files
-        repo_id: Repository ID on Hugging Face Hub (e.g., "username/model-name")
-        commit_message: Commit message for the upload
-        private: Whether to create a private repository
-        token: Hugging Face authentication token (if not provided, will use cached token)
-    """
-    logger.info(f"Pushing converted model to Hub: {repo_id}")
     
     try:
         # Upload the entire directory to the Hub
@@ -258,20 +245,6 @@ def convert_hf_blt_to_unified(
     hub_private: bool = False,
     hub_token: Optional[str] = None,
 ) -> None:
-    """
-    Convert BLT model from HuggingFace Hub format to unified format.
-    
-    Args:
-        model_id: HuggingFace model ID (e.g., "facebook/blt-1b")
-        output_dir: Output directory for unified model
-        config_name: Name for unified config file
-        weights_name: Name for unified weights file  
-        safe_serialization: Whether to use safetensors format
-        cache_dir: Cache directory for downloads
-        push_to_hub_repo: Repository ID to push the converted model to (optional)
-        hub_private: Whether to create a private repository on the Hub
-        hub_token: Hugging Face authentication token
-    """
     logger.info(f"Converting {model_id} to unified transformers format")
     
     file_paths = download_model_files(model_id, cache_dir)
@@ -309,17 +282,15 @@ def convert_hf_blt_to_unified(
 
     logger.info(f"Unified config and weights saved to {weights_path}")
     
-    # Create tokenizer config
     create_tokenizer_config(output_dir, unified_config)
 
     logger.info(f"Conversion completed, model saved to: {output_dir}")
     
-    # Push to Hub if requested
     if push_to_hub_repo:
         push_to_hub(
             local_dir=output_dir,
             repo_id=push_to_hub_repo,
-            commit_message=f"Upload unified BLT model converted from {model_id}",
+            commit_message=f"Upload BLT model converted",
             private=hub_private,
             token=hub_token,
         )
@@ -335,13 +306,11 @@ def main():
         "--model_id",
         type=str,
         default="facebook/blt-1b",
-        help="HuggingFace model ID (e.g., facebook/blt-1b)"
     )
     parser.add_argument(
         "--output_dir",
         type=str,
         default="./new_unified_blt_debug",
-        help="Output directory for unified model"
     )
     
     # Optional
@@ -349,7 +318,6 @@ def main():
         "--config_name",
         type=str,
         default="config.json",
-        help="Name for unified config file (default: config.json)"
     )
     parser.add_argument(
         "--weights_name",
@@ -374,10 +342,9 @@ def main():
     parser.add_argument(
         "--debug",
         action="store_true",
-        default=True,  # Enable debug by default for easier debugging
+        default=True,  
     )
     
-    # Hub upload arguments
     parser.add_argument(
         "--push_to_hub",
         type=str,
@@ -387,13 +354,11 @@ def main():
         "--hub_private",
         action="store_true",
         default=False,
-        help="Whether to create a private repository on the Hub"
     )
     parser.add_argument(
         "--hub_token",
         type=str,
         default="hf_your_token_here",
-        help="Hugging Face authentication token (if not provided, will use cached token)"
     )
     
     args = parser.parse_args()
