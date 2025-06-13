@@ -41,13 +41,20 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
         else:
             raise ValueError("At least one input is required.")
 
+        is_split_into_words = kwargs.get("is_split_into_words", False)
+        if is_split_into_words:
+            if isinstance(inputs, list) and all(isinstance(item, list) for item in inputs):
+                inputs = [" ".join(item) for item in inputs]
+            else:
+                raise ValueError("When is_split_into_words is True, inputs should be a list of lists of words.")
+
         offset_mapping = kwargs.get("offset_mapping")
         if offset_mapping:
             if isinstance(offset_mapping, list) and isinstance(offset_mapping[0], tuple):
                 offset_mapping = [offset_mapping]
             if len(offset_mapping) != batch_size:
                 raise ValueError("offset_mapping should have the same batch size as the input")
-        return inputs, offset_mapping
+        return inputs, is_split_into_words, offset_mapping
 
 
 class AggregationStrategy(ExplicitEnum):
@@ -151,9 +158,11 @@ class TokenClassificationPipeline(ChunkPipeline):
         ignore_subwords: Optional[bool] = None,
         aggregation_strategy: Optional[AggregationStrategy] = None,
         offset_mapping: Optional[List[Tuple[int, int]]] = None,
+        is_split_into_words: Optional[bool] = False,
         stride: Optional[int] = None,
     ):
         preprocess_params = {}
+        preprocess_params['is_split_into_words'] = is_split_into_words
         if offset_mapping is not None:
             preprocess_params["offset_mapping"] = offset_mapping
 
@@ -203,7 +212,7 @@ class TokenClassificationPipeline(ChunkPipeline):
                     f'"{aggregation_strategy}"`, please select another one instead.'
                 )
             else:
-                if self.tokenizer.is_fast:
+                if self.tokenizer.is_fast and not is_split_into_words:
                     tokenizer_params = {
                         "return_overflowing_tokens": True,
                         "padding": True,
@@ -251,15 +260,19 @@ class TokenClassificationPipeline(ChunkPipeline):
               exists if the offsets are available within the tokenizer
         """
 
-        _inputs, offset_mapping = self._args_parser(inputs, **kwargs)
+        _inputs, is_split_into_words, offset_mapping = self._args_parser(inputs, **kwargs)
+        kwargs['is_split_into_words'] = is_split_into_words
         if offset_mapping:
             kwargs["offset_mapping"] = offset_mapping
 
         return super().__call__(inputs, **kwargs)
 
-    def preprocess(self, sentence, offset_mapping=None, **preprocess_params):
+    def preprocess(self, sentence, is_split_into_words=False, offset_mapping=None, **preprocess_params):
         tokenizer_params = preprocess_params.pop("tokenizer_params", {})
         truncation = True if self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0 else False
+
+        if is_split_into_words:
+            tokenizer_params['is_split_into_words'] = True
         inputs = self.tokenizer(
             sentence,
             return_tensors=self.framework,
