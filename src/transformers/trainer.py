@@ -821,7 +821,7 @@ class Trainer:
     def _activate_neftune(self, model):
         r"""
         Activates the neftune as presented in this code: https://github.com/neelsjain/NEFTune and paper:
-        https://arxiv.org/abs/2310.05914
+        https://huggingface.co/papers/2310.05914
         """
         unwrapped_model = self.accelerator.unwrap_model(model)
 

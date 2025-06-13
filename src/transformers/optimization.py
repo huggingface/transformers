@@ -608,7 +608,7 @@ class Adafactor(Optimizer):
     AdaFactor pytorch implementation can be used as a drop in replacement for Adam original fairseq code:
     https://github.com/pytorch/fairseq/blob/master/fairseq/optim/adafactor.py
 
-    Paper: *Adafactor: Adaptive Learning Rates with Sublinear Memory Cost* https://arxiv.org/abs/1804.04235 Note that
+    Paper: *Adafactor: Adaptive Learning Rates with Sublinear Memory Cost* https://huggingface.co/papers/1804.04235 Note that
     this optimizer internally adjusts the learning rate depending on the `scale_parameter`, `relative_step` and
     `warmup_init` options. To use a manual (external) learning rate schedule you should set `scale_parameter=False` and
     `relative_step=False`.
@@ -642,7 +642,7 @@ class Adafactor(Optimizer):
         - Training without LR warmup or clip_threshold is not recommended.
 
            - use scheduled LR warm-up to fixed LR
-           - use clip_threshold=1.0 (https://arxiv.org/abs/1804.04235)
+           - use clip_threshold=1.0 (https://huggingface.co/papers/1804.04235)
         - Disable relative updates
         - Use scale_parameter=False
         - Additional optimizer operations like gradient clipping should not be used alongside Adafactor
