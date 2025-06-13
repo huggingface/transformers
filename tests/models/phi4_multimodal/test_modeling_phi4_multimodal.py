@@ -276,6 +276,7 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 @slow
 class Phi4MultimodalIntegrationTest(unittest.TestCase):
     checkpoint_path = "microsoft/Phi-4-multimodal-instruct"
+    revision = "refs/pr/70"
     image_url = "https://www.ilankelman.org/stopsigns/australia.jpg"
     audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/f2641_0_throatclearing.wav"
 
@@ -300,7 +301,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
     def test_text_only_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device
+            self.checkpoint_path, revision=self.revision, torch_dtype=torch.float16, device_map=torch_device
         )
 
         prompt = f"{self.user_token}What is the answer for 1+1? Explain it.{self.end_token}{self.assistant_token}"
@@ -319,7 +320,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
     def test_vision_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device
+            self.checkpoint_path, revision=self.revision, torch_dtype=torch.float16, device_map=torch_device
         )
 
         prompt = f"{self.user_token}<|image|>What is shown in this image?{self.end_token}{self.assistant_token}"
@@ -338,7 +339,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
     def test_multi_image_vision_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device
+            self.checkpoint_path, revision=self.revision, torch_dtype=torch.float16, device_map=torch_device
         )
 
         images = []
@@ -365,7 +366,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
     @require_soundfile
     def test_audio_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
-            self.checkpoint_path, torch_dtype=torch.float16, device_map=torch_device
+            self.checkpoint_path, revision=self.revision, torch_dtype=torch.float16, device_map=torch_device
         )
 
         prompt = f"{self.user_token}<|audio|>What is happening in this audio?{self.end_token}{self.assistant_token}"
