@@ -263,12 +263,26 @@ def compute_segments(
 
 # TODO: (Amy) Move to image_transforms
 # Copied from transformers.models.maskformer.image_processing_maskformer.convert_segmentation_map_to_binary_masks
-def convert_segmentation_map_to_binary_masks(
-    segmentation_map: "np.ndarray",
+def convert_segmentation_map_to_binary_masks_sorted(
+    segmentation_map: np.ndarray,
     instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
     ignore_index: Optional[int] = None,
     do_reduce_labels: bool = False,
+    sort_by_area: bool = True
 ):
+    """
+    Converts given segmentation map to binary masks with handling for overlapping instances.
+    
+    Args:
+        segmentation_map: A segmentation map of shape (height, width) where each value denotes a segment or class id.
+        instance_id_to_semantic_id: A mapping from instance IDs to semantic class IDs.
+        ignore_index: Label to be assigned to background pixels.
+        do_reduce_labels: Whether to decrement label values by 1.
+        sort_by_area: Whether to sort instances by area (largest to smallest) to handle overlaps.
+    
+    Returns:
+        Tuple containing binary masks and their corresponding labels.
+    """
     if do_reduce_labels and ignore_index is None:
         raise ValueError("If `do_reduce_labels` is True, `ignore_index` must be provided.")
 
@@ -281,6 +295,15 @@ def convert_segmentation_map_to_binary_masks(
     # Drop background label if applicable
     if ignore_index is not None:
         all_labels = all_labels[all_labels != ignore_index]
+    
+    if len(all_labels) == 0:
+        return np.zeros((0, *segmentation_map.shape), dtype=np.float32), np.array([], dtype=np.int64)
+
+    if sort_by_area:
+        # Sort instances by area (largest to smallest)
+        instance_areas = [(label, np.sum(segmentation_map == label)) for label in all_labels]
+        sorted_instances = [label for label, _ in sorted(instance_areas, key=lambda x: x[1], reverse=True)]
+        all_labels = np.array(sorted_instances)
 
     # Generate a binary mask for each object instance
     binary_masks = [(segmentation_map == i) for i in all_labels]
@@ -295,14 +318,16 @@ def convert_segmentation_map_to_binary_masks(
     if instance_id_to_semantic_id is not None:
         labels = np.zeros(all_labels.shape[0])
 
-        for label in all_labels:
-            class_id = instance_id_to_semantic_id[label + 1 if do_reduce_labels else label]
-            labels[all_labels == label] = class_id - 1 if do_reduce_labels else class_id
+        for i, label in enumerate(all_labels):
+            class_id = instance_id_to_semantic_id.get(
+                label + 1 if do_reduce_labels else label,
+                label  # Default to instance ID if mapping not found
+            )
+            labels[i] = class_id - 1 if do_reduce_labels else class_id
     else:
         labels = all_labels
 
     return binary_masks.astype(np.float32), labels.astype(np.int64)
-
 
 # Copied from transformers.models.maskformer.image_processing_maskformer.get_maskformer_resize_output_image_size with maskformer->mask2former
 def get_mask2former_resize_output_image_size(
@@ -554,7 +579,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         return rescale(image, rescale_factor, data_format=data_format, input_data_format=input_data_format)
 
     # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.convert_segmentation_map_to_binary_masks
-    def convert_segmentation_map_to_binary_masks(
+    def convert_segmentation_map_to_binary_masks_sorted(
         self,
         segmentation_map: "np.ndarray",
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
@@ -563,7 +588,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
     ):
         do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
-        return convert_segmentation_map_to_binary_masks(
+        return convert_segmentation_map_to_binary_masks_sorted(
             segmentation_map=segmentation_map,
             instance_id_to_semantic_id=instance_id_to_semantic_id,
             ignore_index=ignore_index,
@@ -945,7 +970,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
                 else:
                     instance_id = instance_id_to_semantic_id
                 # Use instance2class_id mapping per image
-                masks, classes = self.convert_segmentation_map_to_binary_masks(
+                masks, classes = self.convert_segmentation_map_to_binary_masks_sorted(
                     segmentation_map, instance_id, ignore_index=ignore_index, do_reduce_labels=do_reduce_labels
                 )
                 # We add an axis to make them compatible with the transformations library
