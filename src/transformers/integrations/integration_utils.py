@@ -106,6 +106,10 @@ def is_wandb_available():
     return importlib.util.find_spec("wandb") is not None
 
 
+def is_trackio_available():
+    return importlib.util.find_spec("trackio") is not None
+
+
 def is_clearml_available():
     return importlib.util.find_spec("clearml") is not None
 
@@ -625,6 +629,8 @@ def get_available_reporting_integrations():
         integrations.append("clearml")
     if is_swanlab_available():
         integrations.append("swanlab")
+    if is_trackio_available():
+        integrations.append("trackio")
     return integrations
 
 
@@ -1025,6 +1031,108 @@ class WandbCallback(TrainerCallback):
         if state.is_world_process_zero:
             metrics = rewrite_logs(metrics)
             self._wandb.log(metrics)
+
+
+class TrackioCallback(TrainerCallback):
+    """
+    A [`TrainerCallback`] that logs metrics to Trackio.
+    """
+
+    def __init__(self):
+        has_trackio = is_trackio_available()
+        if not has_trackio:
+            raise RuntimeError("TrackioCallback requires trackio to be installed. Run `pip install trackio`.")
+        if has_trackio:
+            import trackio
+
+            self._trackio = trackio
+        self._initialized = False
+
+    def setup(self, args, state, model, **kwargs):
+        """
+        Setup the optional Weights & Biases (*trackio*) integration.
+        """
+        if state.is_world_process_zero:
+            combined_dict = {**args.to_dict()}
+
+            if hasattr(model, "config") and model.config is not None:
+                model_config = model.config if isinstance(model.config, dict) else model.config.to_dict()
+                combined_dict = {**model_config, **combined_dict}
+            if hasattr(model, "peft_config") and model.peft_config is not None:
+                peft_config = model.peft_config
+                combined_dict = {**{"peft_config": peft_config}, **combined_dict}
+            trial_name = state.trial_name
+            init_args = {}
+            if trial_name is not None:
+                init_args["name"] = trial_name
+                init_args["group"] = args.run_name
+            elif args.run_name is not None:
+                init_args["name"] = args.run_name
+
+            self._trackio.init(
+                project=os.getenv("WANDB_PROJECT", "huggingface"),
+                **init_args,
+            )
+
+            # add config parameters (run may have been created manually)
+            self._trackio.config.update(combined_dict, allow_val_change=True)
+
+            # define default x-axis (for latest trackio versions)
+            if getattr(self._trackio, "define_metric", None):
+                self._trackio.define_metric("train/global_step")
+                self._trackio.define_metric("*", step_metric="train/global_step", step_sync=True)
+
+            # keep track of model topology and gradients, unsupported on TPU
+            _watch_model = os.getenv("WANDB_WATCH", "false")
+            if not is_torch_xla_available() and _watch_model in ("all", "parameters", "gradients"):
+                self._trackio.watch(model, log=_watch_model, log_freq=max(100, state.logging_steps))
+
+            # add number of model parameters to wandb config
+            try:
+                self._trackio.config["model/num_parameters"] = model.num_parameters()
+            except AttributeError:
+                logger.info(
+                    "Could not log the number of model parameters in Weights & Biases due to an AttributeError."
+                )
+        self._initialized = True
+
+    def on_train_begin(self, args, state, control, model=None, **kwargs):
+        if not self._initialized:
+            self.setup(args, state, model, **kwargs)
+
+    def on_train_end(self, args: TrainingArguments, state, control, model=None, processing_class=None, **kwargs):
+        self.trackio.finish()
+
+    def on_log(self, args, state, control, model=None, logs=None, **kwargs):
+        single_value_scalars = [
+            "train_runtime",
+            "train_samples_per_second",
+            "train_steps_per_second",
+            "train_loss",
+            "total_flos",
+        ]
+
+        if not self._initialized:
+            self.setup(args, state, model)
+        if state.is_world_process_zero:
+            for k, v in logs.items():
+                if k in single_value_scalars:
+                    self._trackio.run.summary[k] = v
+            non_scalar_logs = {k: v for k, v in logs.items() if k not in single_value_scalars}
+            non_scalar_logs = rewrite_logs(non_scalar_logs)
+            self._trackio.log({**non_scalar_logs, "train/global_step": state.global_step})
+
+    def on_save(self, args, state, control, **kwargs):
+        return
+
+    def on_predict(self, args, state, control, metrics, **kwargs):
+        if self._trackio is None:
+            return
+        if not self._initialized:
+            self.setup(args, state, **kwargs)
+        if state.is_world_process_zero:
+            metrics = rewrite_logs(metrics)
+            self._trackio.log(metrics)
 
 
 class CometCallback(TrainerCallback):
@@ -2323,6 +2431,7 @@ INTEGRATION_TO_CALLBACK = {
     "neptune": NeptuneCallback,
     "tensorboard": TensorBoardCallback,
     "wandb": WandbCallback,
+    "trackio": TrackioCallback,
     "codecarbon": CodeCarbonCallback,
     "clearml": ClearMLCallback,
     "dagshub": DagsHubCallback,
