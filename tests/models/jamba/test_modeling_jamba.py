@@ -558,7 +558,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
     tokenizer = None
     # This variable is used to determine which acclerator are we using for our runners (e.g. A10 or T4)
     # Depending on the hardware we get different logits / generations
-    device_properties: DeviceProperties = None
+    device_properties: DeviceProperties = (None, None, None)
 
     @classmethod
     def setUpClass(cls):
