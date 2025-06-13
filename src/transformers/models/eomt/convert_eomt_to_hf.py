@@ -24,7 +24,7 @@ import torch
 from accelerate import init_empty_weights
 from huggingface_hub import snapshot_download
 
-from transformers import EoMTConfig, EoMTForUniversalSegmentation, EoMTImageProcessor
+from transformers import EoMTConfig, EoMTForUniversalSegmentation, EoMTImageProcessorFast
 
 
 # fmt: off
@@ -244,7 +244,7 @@ def convert_model(
     else:
         MAPPINGS.update(MLP_MAPPINGS["vanilla_mlp"])
 
-    processor = EoMTImageProcessor(size=size, do_split_image=do_split_image, do_pad=do_pad)
+    processor = EoMTImageProcessorFast(size=size, do_split_image=do_split_image, do_pad=do_pad)
 
     # Save the config and processor
     if output_dir:

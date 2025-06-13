@@ -244,7 +244,7 @@ class EoMTPatchEmbeddings(Dinov2PatchEmbeddings):
 
 class EoMTEmbeddings(Dinov2Embeddings, nn.Module):
     def __init__(self, config: EoMTConfig) -> None:
-        nn.Module().__init__()
+        Dinov2Embeddings().__init__()
 
         self.config = config
         self.patch_size = config.patch_size

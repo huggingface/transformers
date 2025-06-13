@@ -343,16 +343,6 @@ class EoMTImageProcessorFast(BaseImageProcessorFast):
 
         return outputs
 
-    def __call__(self, images, segmentation_maps=None, instance_id_to_semantic_id=None, **kwargs):
-        # Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
-        # be passed in as positional arguments.
-        return super().__call__(
-            images,
-            segmentation_maps=segmentation_maps,
-            instance_id_to_semantic_id=instance_id_to_semantic_id,
-            **kwargs,
-        )
-
     def merge_image_patches(
         self,
         segmentation_logits: torch.Tensor,
@@ -446,7 +436,7 @@ class EoMTImageProcessorFast(BaseImageProcessorFast):
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
 
         output_size = get_target_size(size)
-        masks_queries_logits = F.interpolate(
+        masks_queries_logits = torch.nn.functional.interpolate(
             masks_queries_logits,
             size=output_size,
             mode="bilinear",
@@ -484,7 +474,7 @@ class EoMTImageProcessorFast(BaseImageProcessorFast):
         num_labels = class_queries_logits.shape[-1] - 1
 
         output_size = get_target_size(size)
-        masks_queries_logits = F.interpolate(
+        masks_queries_logits = torch.nn.functional.interpolate(
             masks_queries_logits,
             size=output_size,
             mode="bilinear",
@@ -531,8 +521,8 @@ class EoMTImageProcessorFast(BaseImageProcessorFast):
 
         size = size if size is not None else self.size
 
-        class_queries_logits = outputs.class_queries_logits
         masks_queries_logits = outputs.masks_queries_logits
+        class_queries_logits = outputs.class_queries_logits
 
         output_size = get_target_size(size)
         masks_queries_logits = torch.nn.functional.interpolate(

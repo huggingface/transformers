@@ -215,6 +215,10 @@ class EoMTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             torch.mean(torch.abs(image_encoding_slow.pixel_values - image_encoding_fast.pixel_values)).item(), 1e-3
         )
 
+        # Lets check whether 99.9% of mask_labels values match or not.
+        match_ratio = (image_encoding_slow.mask_labels[0] == image_encoding_fast.mask_labels[0]).float().mean().item()
+        self.assertGreaterEqual(match_ratio, 0.999, "Mask labels do not match between slow and fast image processor.")
+
     def test_slow_fast_equivalence_batched(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")
@@ -239,6 +243,12 @@ class EoMTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertLessEqual(
             torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
         )
+
+        for idx in range(len(dummy_maps)):
+            match_ratio = (encoding_slow.mask_labels[idx] == encoding_fast.mask_labels[idx]).float().mean().item()
+            self.assertGreaterEqual(
+                match_ratio, 0.999, "Mask labels do not match between slow and fast image processors."
+            )
 
     def test_post_process_semantic_segmentation(self):
         processor = self.image_processing_class(**self.image_processor_dict)
