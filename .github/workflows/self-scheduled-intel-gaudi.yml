@@ -105,7 +105,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e .[testing,torch] "numpy<2.0.0" scipy scikit-learn
+          pip install -e .[testing,torch] "numpy<2.0.0" scipy scikit-learn librosa soundfile
 
       - name: HL-SMI
         run: |
@@ -171,7 +171,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e .[testing,torch] "numpy<2.0.0" scipy scikit-learn
+          pip install -e .[testing,torch] "numpy<2.0.0" scipy scikit-learn librosa soundfile
 
       - name: HL-SMI
         run: |
@@ -241,7 +241,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e .[testing,torch] "numpy<2.0.0" scipy scikit-learn
+          pip install -e .[testing,torch] "numpy<2.0.0" scipy scikit-learn librosa soundfile
           pip install git+https://github.com/HabanaAI/DeepSpeed.git@1.20.0
 
       - name: HL-SMI
@@ -312,7 +312,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -e .[testing,torch] "numpy<2.0.0" scipy scikit-learn
+          pip install -e .[testing,torch] "numpy<2.0.0" scipy scikit-learn librosa soundfile
 
       - name: HL-SMI
         run: |
