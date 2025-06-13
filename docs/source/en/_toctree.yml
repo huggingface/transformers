@@ -727,6 +727,8 @@
         title: DiT
       - local: model_doc/dpt
         title: DPT
+      - local: model_doc/dust3r
+        title: Dust3R
       - local: model_doc/efficientformer
         title: EfficientFormer
       - local: model_doc/efficientnet
@@ -1124,4 +1126,3 @@
       title: Environment Variables
     title: Reference
   title: API
-
