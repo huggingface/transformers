@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import gc
 import tempfile
 import unittest
 
@@ -31,7 +30,14 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import cleanup, require_soundfile, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    cleanup,
+    require_soundfile,
+    require_torch,
+    require_torch_large_accelerator,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_soundfile_available
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -334,10 +340,13 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         output = output[:, inputs["input_ids"].shape[1] :]
         response = self.processor.batch_decode(output, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
-        EXPECTED_RESPONSE = "The image shows a vibrant scene at a street intersection in a city with a Chinese-influenced architectural"
+        EXPECTED_RESPONSE = (
+            'The image shows a vibrant scene at a traditional Chinese-style street entrance, known as a "gate"'
+        )
 
         self.assertEqual(response, EXPECTED_RESPONSE)
 
+    @require_torch_large_accelerator
     def test_multi_image_vision_text_generation(self):
         model = AutoModelForCausalLM.from_pretrained(
             self.checkpoint_path, revision=self.revision, torch_dtype=torch.float16, device_map=torch_device
