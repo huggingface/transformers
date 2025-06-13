@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 ## 개요[[overview]]
 
-RoBERTa 모델은 Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, Veselin Stoyanov가 제안한 논문 [RoBERTa: A Robustly Optimized BERT Pretraining Approach](https://arxiv.org/abs/1907.11692)에서 소개되었습니다. 이 모델은 2018년에 구글에서 발표한 BERT 모델을 기반으로 합니다.
+RoBERTa 모델은 Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, Veselin Stoyanov가 제안한 논문 [RoBERTa: A Robustly Optimized BERT Pretraining Approach](https://huggingface.co/papers/1907.11692)에서 소개되었습니다. 이 모델은 2018년에 구글에서 발표한 BERT 모델을 기반으로 합니다.
 
 RoBERTa는 BERT를 기반으로 하며, 주요 하이퍼파라미터를 수정하고, 사전 학습 단계에서 다음 문장 예측(Next Sentence Prediction)을 제거했으며, 훨씬 더 큰 미니 배치 크기와 학습률을 사용하여 학습을 진행했습니다.
 

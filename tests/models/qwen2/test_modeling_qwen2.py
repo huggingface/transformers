@@ -31,7 +31,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils.import_utils import is_torch_greater_or_equal
 
 
 if is_torch_available():
@@ -246,7 +245,6 @@ class Qwen2IntegrationTest(unittest.TestCase):
 
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
-            convert_and_export_with_cache,
         )
 
         qwen_model = "Qwen/Qwen2-0.5B"
@@ -287,8 +285,13 @@ class Qwen2IntegrationTest(unittest.TestCase):
         max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
 
         # Static Cache + export
-        strict = is_torch_greater_or_equal("2.7.0")  # Due to https://github.com/pytorch/pytorch/issues/150994
-        exported_program = convert_and_export_with_cache(model, strict=strict)
+        from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
+
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
+        strict = version.parse(torch.__version__) != version.parse(
+            "2.7.0"
+        )  # Due to https://github.com/pytorch/pytorch/issues/150994
+        exported_program = exportable_module.export(strict=strict)
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
             exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
         )

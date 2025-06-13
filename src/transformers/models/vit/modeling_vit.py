@@ -593,7 +593,7 @@ class ViTPooler(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    ViT Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://arxiv.org/abs/2111.09886).
+    ViT Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://huggingface.co/papers/2111.09886).
 
     <Tip>
 
