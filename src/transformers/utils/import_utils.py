@@ -393,6 +393,13 @@ def get_torch_version():
     return _torch_version
 
 
+def get_torch_major_and_minor_version() -> str:
+    if _torch_version == "N/A":
+        return "N/A"
+    parsed_version = version.parse(_torch_version)
+    return str(parsed_version.major) + "." + str(parsed_version.minor)
+
+
 def is_torch_sdpa_available():
     if not is_torch_available():
         return False
@@ -473,6 +480,24 @@ def is_torch_cuda_available():
         import torch
 
         return torch.cuda.is_available()
+    else:
+        return False
+
+
+def is_cuda_platform():
+    if is_torch_available():
+        import torch
+
+        return torch.version.cuda is not None
+    else:
+        return False
+
+
+def is_rocm_platform():
+    if is_torch_available():
+        import torch
+
+        return torch.version.hip is not None
     else:
         return False
 
@@ -995,8 +1020,14 @@ def is_torch_xpu_available(check_device=False):
 
 
 @lru_cache()
-def is_bitsandbytes_available():
-    if not is_torch_available() or not _bitsandbytes_available:
+def is_bitsandbytes_available(check_library_only=False) -> bool:
+    if not _bitsandbytes_available:
+        return False
+
+    if check_library_only:
+        return True
+
+    if not is_torch_available():
         return False
 
     import torch

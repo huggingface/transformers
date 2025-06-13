@@ -905,6 +905,8 @@
     - sections:
       - local: model_doc/timesformer
         title: TimeSformer
+      - local: model_doc/vjepa2
+        title: V-JEPA 2
       - local: model_doc/videomae
         title: VideoMAE
       - local: model_doc/vivit

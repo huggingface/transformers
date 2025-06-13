@@ -339,7 +339,7 @@ trainer = trl.SFTTrainer(
 trainer.train()
 ```
 
-해당 방법에 대한 자세한 내용은 [원본 리포지토리](https://github.com/jiaweizzhao/GaLore) 또는 [논문](https://arxiv.org/abs/2403.03507)을 참고하세요.
+해당 방법에 대한 자세한 내용은 [원본 리포지토리](https://github.com/jiaweizzhao/GaLore) 또는 [논문](https://huggingface.co/papers/2403.03507)을 참고하세요.
 
 현재 GaLore 레이어로 간주되는 Linear 레이어만 훈련 할수 있으며, 저계수 분해를 사용하여 훈련되고 나머지 레이어는 기존 방식으로 최적화됩니다.
 
@@ -421,7 +421,7 @@ args = TrainingArguments(
 model_id = "google/gemma-2b"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(0)
+model = AutoModelForCausalLM.from_pretrained(model_id).to(0)
 
 trainer = trl.SFTTrainer(
     model=model, 

@@ -853,12 +853,12 @@ class LossKwargs(TypedDict, total=False):
     Keyword arguments to be passed to the loss function
 
     Attributes:
-        num_items_in_batch (`int`, *optional*):
+        num_items_in_batch (`Optional[torch.Tensor]`, *optional*):
             Number of items in the batch. It is recommended to pass it when
             you are doing gradient accumulation.
     """
 
-    num_items_in_batch: Optional[int]
+    num_items_in_batch: Optional["torch.Tensor"]
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:

@@ -1069,7 +1069,7 @@ def _get_resolved_checkpoint_files(
                 os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index"))
                 or os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, TF2_WEIGHTS_NAME))
             ):
-                raise EnvironmentError(
+                raise OSError(
                     f"Error no file named {_add_variant(WEIGHTS_NAME, variant)} found in directory"
                     f" {pretrained_model_name_or_path} but there is a file for TensorFlow weights. Use"
                     " `from_tf=True` to load this model from those weights."
@@ -1077,18 +1077,18 @@ def _get_resolved_checkpoint_files(
             elif not use_safetensors and os.path.isfile(
                 os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME)
             ):
-                raise EnvironmentError(
+                raise OSError(
                     f"Error no file named {_add_variant(WEIGHTS_NAME, variant)} found in directory"
                     f" {pretrained_model_name_or_path} but there is a file for Flax weights. Use `from_flax=True`"
                     " to load this model from those weights."
                 )
             elif use_safetensors:
-                raise EnvironmentError(
+                raise OSError(
                     f"Error no file named {_add_variant(SAFE_WEIGHTS_NAME, variant)} found in directory"
                     f" {pretrained_model_name_or_path}."
                 )
             else:
-                raise EnvironmentError(
+                raise OSError(
                     f"Error no file named {_add_variant(WEIGHTS_NAME, variant)}, {_add_variant(SAFE_WEIGHTS_NAME, variant)},"
                     f" {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME + '.index'} or {FLAX_WEIGHTS_NAME} found in directory"
                     f" {pretrained_model_name_or_path}."
@@ -1156,7 +1156,7 @@ def _get_resolved_checkpoint_files(
                             )
                         cached_file_kwargs["revision"] = revision
                         if resolved_archive_file is None:
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {_add_variant(SAFE_WEIGHTS_NAME, variant)} or {_add_variant(SAFE_WEIGHTS_INDEX_NAME, variant)} "
                                 "and thus cannot be loaded with `safetensors`. Please make sure that the model has "
@@ -1222,13 +1222,13 @@ def _get_resolved_checkpoint_files(
                             "local_files_only": local_files_only,
                         }
                         if has_file(pretrained_model_name_or_path, TF2_WEIGHTS_NAME, **has_file_kwargs):
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file for TensorFlow weights."
                                 " Use `from_tf=True` to load this model from those weights."
                             )
                         elif has_file(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME, **has_file_kwargs):
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file for Flax weights. Use"
                                 " `from_flax=True` to load this model from those weights."
@@ -1236,25 +1236,25 @@ def _get_resolved_checkpoint_files(
                         elif variant is not None and has_file(
                             pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs
                         ):
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file without the variant"
                                 f" {variant}. Use `variant=None` to load this model from those weights."
                             )
                         else:
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {_add_variant(WEIGHTS_NAME, variant)}, {_add_variant(SAFE_WEIGHTS_NAME, variant)},"
                                 f" {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or {FLAX_WEIGHTS_NAME}."
                             )
 
-            except EnvironmentError:
+            except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
                 # to the original exception.
                 raise
             except Exception as e:
                 # For any other exception, we throw a generic error.
-                raise EnvironmentError(
+                raise OSError(
                     f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it"
                     " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                     f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
@@ -1881,7 +1881,7 @@ class ModuleUtilsMixin:
         Get number of (optionally, non-embeddings) floating-point operations for the forward and backward passes of a
         batch with this transformer model. Default approximation neglects the quadratic dependency on the number of
         tokens (valid if `12 * d_model << sequence_length`) as laid out in [this
-        paper](https://arxiv.org/pdf/2001.08361.pdf) section 2.1. Should be overridden for transformers with parameter
+        paper](https://huggingface.co/papers/2001.08361) section 2.1. Should be overridden for transformers with parameter
         re-use e.g. Albert or Universal Transformers, or if doing long-range modeling with very high sequence lengths.
 
         Args:
