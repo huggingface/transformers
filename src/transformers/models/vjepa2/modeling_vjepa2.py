@@ -1206,8 +1206,8 @@ class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
 
         >>> device = "cuda"
 
-        >>> video_processor = AutoVideoProcessor.from_pretrained("facebook/vjepa2-vitl-fpc64-256")
-        >>> model = VJEPA2ForVideoClassification.from_pretrained("facebook/vjepa2-vitl-fpc64-256").to(device)
+        >>> video_processor = AutoVideoProcessor.from_pretrained("facebook/vjepa2-vitl-fpc16-256-ssv2")
+        >>> model = VJEPA2ForVideoClassification.from_pretrained("facebook/vjepa2-vitl-fpc16-256-ssv2").to(device)
 
         >>> video = np.ones((64, 256, 256, 3))  # 64 frames, 256x256 RGB
         >>> inputs = video_processor(video, return_tensors="pt").to(device)
