@@ -1,11 +1,8 @@
-import json
 import logging
 import os
 
 import torch
-from huggingface_hub import hf_hub_download
 
-from transformers.models.blt_wip.configuration_blt import BLTConfig
 from transformers.models.blt_wip.modeling_blt_wip import BLTModel
 from transformers.models.blt_wip.tokenizers.blt_tokenizer import BltTokenizer
 

@@ -50,11 +50,7 @@ def text2bytes_bpe_delims(
     # Remove the '▁' characters
     bpe_strs = []
     for i, bpe_str in enumerate(cur_bpe_strs):
-        if (
-            len(bpe_strs) <= 1
-            and all([c == " " for s in bpe_strs for c in s])
-            and not all(c == "▁" for c in bpe_str)
-        ):
+        if len(bpe_strs) <= 1 and all([c == " " for s in bpe_strs for c in s]) and not all(c == "▁" for c in bpe_str):
             # Remove leading space for first non space token.
             bpe_str = bpe_str.replace("▁", "")
         elif i == 0 and all(c == "▁" for c in bpe_str):
@@ -93,9 +89,7 @@ class BltTokenizer(Tokenizer):
         self.bpe_id = BPE_ID
         self.bpe_tokenizer_path = bpe_tokenizer_path
         if bpe_delim:
-            self.bpe_tokenizer = SentencePieceTokenizer(
-                model_path=self.bpe_tokenizer_path
-            )
+            self.bpe_tokenizer = SentencePieceTokenizer(model_path=self.bpe_tokenizer_path)
         else:
             self.bpe_tokenizer = None
         self.bpe_delim = bpe_delim
@@ -106,9 +100,7 @@ class BltTokenizer(Tokenizer):
     def get_vocab_size(self) -> int:
         return self.n_words
 
-    def encode(
-        self, text: str, add_bos: bool | None = None, add_eos: bool | None = None
-    ):
+    def encode(self, text: str, add_bos: bool | None = None, add_eos: bool | None = None):
         if add_bos is None:
             add_bos = self.add_bos
         if add_eos is None:
@@ -143,11 +135,7 @@ class BltTokenizer(Tokenizer):
                     tokens = tokens[: k + 1]
                     break
         return bytes(
-            [
-                tok - self.offsetting_special_char
-                for tok in tokens
-                if tok - self.offsetting_special_char >= 0
-            ]
+            [tok - self.offsetting_special_char for tok in tokens if tok - self.offsetting_special_char >= 0]
         ).decode("utf-8", errors="ignore")
 
     def get_token_offsets(self, text: str, tokens: list[int] | None = None):

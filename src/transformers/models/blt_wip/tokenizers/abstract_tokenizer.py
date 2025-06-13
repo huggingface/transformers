@@ -12,9 +12,7 @@ class Tokenizer(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_token_offsets(
-        self, text: str, tokens: list[int] | None = None
-    ) -> tuple[list[str], list[int]]:
+    def get_token_offsets(self, text: str, tokens: list[int] | None = None) -> tuple[list[str], list[int]]:
         """Return the offsets of the tokens in the original text. Only used for evaluation."""
         pass
 
