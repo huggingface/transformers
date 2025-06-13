@@ -1166,8 +1166,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    VJEPA2 Model transformer with a video classification head on top (a linear layer on top of the average pooled hidden
-    states of all tokens) e.g. for ImageNet.
+    V-JEPA 2 Model transformer with a video classification head on top (a linear layer on top of the attentive pooler).
     """
 )
 class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
