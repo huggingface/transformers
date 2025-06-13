@@ -81,10 +81,23 @@ class Wav2Vec2Processor(ProcessorMixin):
         **kwargs: Unpack[Wav2Vec2ProcessorKwargs],
     ):
         """
-        This method forwards all its arguments to Wav2Vec2FeatureExtractor's
-        [`~Wav2Vec2FeatureExtractor.__call__`] and returns its output.
-        """
+        This method forwards all arguments to Wav2Vec2FeatureExtractor's [`~Wav2Vec2FeatureExtractor.__call__`] and/or
+        PreTrainedTokenizer’s [`~PreTrainedTokenizer.__call__`] and returns their outputs.  Invocation of either or
+        both methods are determined by the presence of the `audio` and `text` arguments.
 
+        Important Args:
+            audio:
+                When the first argument is an audio array, or the `audio` argument is present,
+                Wav2Vec2FeatureExtractor's [`~Wav2Vec2FeatureExtractor.__call__`] will be invoked.
+            text:
+                When the `text` argument is present, PreTrainedTokenizer’s [`~PreTrainedTokenizer.__call__`] will be invoked.
+
+        If both args above are present, both call() methods will be invoked.  Please refer to the docstring of Wav2Vec2FeatureExtractor's
+        [`~Wav2Vec2FeatureExtractor.__call__`] and PreTrainedTokenizer’s [`~PreTrainedTokenizer.__call__`] for more information.
+
+        This method returns the results of each call() method.  If both are invoked, the output will be a dictionary
+        containing the results of both calls.
+        """
         if "raw_speech" in kwargs:
             warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
             audio = kwargs.pop("raw_speech")
@@ -121,8 +134,24 @@ class Wav2Vec2Processor(ProcessorMixin):
 
     def pad(self, *args, **kwargs):
         """
-        This method forwards all its arguments to Wav2Vec2FeatureExtractor's
-        [`~Wav2Vec2FeatureExtractor.pad`] and returns its output.
+        This method operates on batches of extracted features and/or tokenized text. It forwards all arguments to
+        Wav2Vec2FeatureExtractor's [`~Wav2Vec2FeatureExtractor.pad`] and/or PreTrainedTokenizer’s [`~PreTrainedTokenizer.pad`]
+        and returns their outputs.  Invocation of either or both methods are determined by the presence of the `input_features`
+        and `labels` arguments.
+
+        Important Args:
+            input_features:
+                When the first argument is a dictionary containing a batch of tensors, or the `input_features` argument is present,
+                Wav2Vec2FeatureExtractor's [`~Wav2Vec2FeatureExtractor.pad`] will be invoked.
+            labels:
+                When the `label` argument is present, PreTrainedTokenizer’s [`~PreTrainedTokenizer.pad`] will be invoked on the
+                batch of input_ids.
+
+        If both args above are present, both pad() methods will be invoked.  Please refer to the docstring of Wav2Vec2FeatureExtractor's
+        [`~Wav2Vec2FeatureExtractor.pad`] and PreTrainedTokenizer’s [`~PreTrainedTokenizer.pad`] for more information.
+
+        This method returns the results of each pad() method.  If both are invoked, the output will be a dictionary
+        containing the results of both pads.
         """
         # For backward compatibility
         if self._in_target_context_manager:
