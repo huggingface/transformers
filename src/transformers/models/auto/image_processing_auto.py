@@ -478,7 +478,6 @@ class AutoImageProcessor:
                 raise initial_exception
 
         image_processor_type = config_dict.get("image_processor_type", None)
-        print("image_processor_type", image_processor_type)
         image_processor_auto_map = None
         if "AutoImageProcessor" in config_dict.get("auto_map", {}):
             image_processor_auto_map = config_dict["auto_map"]["AutoImageProcessor"]
