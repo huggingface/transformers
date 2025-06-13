@@ -401,7 +401,7 @@ class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         input_length = inputs["input_ids"].shape[1]
         generate_ids_without_inputs = generate_ids[:, input_length:]
 
-        EXPECTED_DECODED_TEXT = ['The bar plot displays the values of four categories: step, horror, mood, and lumber', 'The video shows a group of people in green shirts and white shorts performing a dance routine on']  # fmt: skip
+        EXPECTED_DECODED_TEXT = ['The bar plot displays the values of four categories: step, horror, mood, and lumber', 'The video shows a group of people in green shirts and white shorts performing a jump rope routine']  # fmt: skip
 
         self.assertEqual(
             processor.batch_decode(
