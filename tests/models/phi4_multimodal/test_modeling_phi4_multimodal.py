@@ -31,6 +31,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_soundfile,
     require_torch,
@@ -340,9 +341,13 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         output = output[:, inputs["input_ids"].shape[1] :]
         response = self.processor.batch_decode(output, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
-        EXPECTED_RESPONSE = (
-            'The image shows a vibrant scene at a traditional Chinese-style street entrance, known as a "gate"'
-        )
+        EXPECTED_RESPONSES = Expectations(
+            {
+                ("cuda", 7): 'The image shows a vibrant scene at a traditional Chinese-style street entrance, known as a "gate"',
+                ("cuda", 8): 'The image shows a vibrant scene at a street intersection in a city with a Chinese-influenced architectural',
+            }
+        )  # fmt: skip
+        EXPECTED_RESPONSE = EXPECTED_RESPONSES.get_expectation()
 
         self.assertEqual(response, EXPECTED_RESPONSE)
 
