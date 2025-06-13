@@ -1,0 +1,75 @@
+{
+  "name": "@jridgewell/sourcemap-codec",
+  "version": "1.5.0",
+  "description": "Encode/decode sourcemap mappings",
+  "keywords": [
+    "sourcemap",
+    "vlq"
+  ],
+  "main": "dist/sourcemap-codec.umd.js",
+  "module": "dist/sourcemap-codec.mjs",
+  "types": "dist/types/sourcemap-codec.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": [
+      {
+        "types": "./dist/types/sourcemap-codec.d.ts",
+        "browser": "./dist/sourcemap-codec.umd.js",
+        "require": "./dist/sourcemap-codec.umd.js",
+        "import": "./dist/sourcemap-codec.mjs"
+      },
+      "./dist/sourcemap-codec.umd.js"
+    ],
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "benchmark": "run-s build:rollup benchmark:*",
+    "benchmark:install": "cd benchmark && npm install",
+    "benchmark:only": "node --expose-gc benchmark/index.js",
+    "build": "run-s -n build:*",
+    "build:rollup": "rollup -c rollup.config.js",
+    "build:ts": "tsc --project tsconfig.build.json",
+    "lint": "run-s -n lint:*",
+    "lint:prettier": "npm run test:lint:prettier -- --write",
+    "lint:ts": "npm run test:lint:ts -- --fix",
+    "prebuild": "rm -rf dist",
+    "prepublishOnly": "npm run preversion",
+    "preversion": "run-s test build",
+    "test": "run-s -n test:lint test:only",
+    "test:debug": "mocha --inspect-brk",
+    "test:lint": "run-s -n test:lint:*",
+    "test:lint:prettier": "prettier --check '{src,test}/**/*.ts'",
+    "test:lint:ts": "eslint '{src,test}/**/*.ts'",
+    "test:only": "mocha",
+    "test:coverage": "c8 mocha",
+    "test:watch": "mocha --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jridgewell/sourcemap-codec.git"
+  },
+  "author": "Rich Harris",
+  "license": "MIT",
+  "devDependencies": {
+    "@rollup/plugin-typescript": "8.3.0",
+    "@types/mocha": "10.0.6",
+    "@types/node": "17.0.15",
+    "@typescript-eslint/eslint-plugin": "5.10.0",
+    "@typescript-eslint/parser": "5.10.0",
+    "benchmark": "2.1.4",
+    "c8": "7.11.2",
+    "eslint": "8.7.0",
+    "eslint-config-prettier": "8.3.0",
+    "mocha": "9.2.0",
+    "npm-run-all": "4.1.5",
+    "prettier": "2.5.1",
+    "rollup": "2.64.0",
+    "source-map": "0.6.1",
+    "source-map-js": "1.0.2",
+    "sourcemap-codec": "1.4.8",
+    "tsx": "4.7.1",
+    "typescript": "4.5.4"
+  }
+}
