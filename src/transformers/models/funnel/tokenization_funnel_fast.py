@@ -150,13 +150,13 @@ class FunnelTokenizerFast(PreTrainedTokenizerFast):
         - pair of sequences: `[CLS] A [SEP] B [SEP]`
 
         Args:
-            token_ids_0 (`list[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (`list[int]`, *optional*):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         output = [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
 
