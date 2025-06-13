@@ -18,7 +18,7 @@ import copy
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -259,7 +259,7 @@ class XLMProphetNetSeq2SeqLMOutput(ModelOutput):
         logits_ngram (`torch.FloatTensor` of shape `(batch_size, ngram * decoder_sequence_length, config.vocab_size)`):
             Prediction scores of the predict stream language modeling head (scores for each vocabulary token before
             SoftMax).
-        past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
             num_attn_heads, decoder_sequence_length, embed_size_per_head)`).
 
@@ -310,15 +310,15 @@ class XLMProphetNetSeq2SeqLMOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     logits_ngram: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_ngram_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_ngram_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[tuple[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    decoder_ngram_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    decoder_ngram_attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
 
     @property
     def decoder_cross_attentions(self):
@@ -344,7 +344,7 @@ class XLMProphetNetSeq2SeqModelOutput(ModelOutput):
             hidden_size)` is output.
         last_hidden_state_ngram (`torch.FloatTensor` of shape `(batch_size,ngram * decoder_sequence_length, config.vocab_size)`, *optional*):
             Sequence of predict stream hidden-states at the output of the last layer of the decoder of the model.
-        past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
             num_attn_heads, decoder_sequence_length, embed_size_per_head)`).
 
@@ -396,15 +396,15 @@ class XLMProphetNetSeq2SeqModelOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor
     last_hidden_state_ngram: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_ngram_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_ngram_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[tuple[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    decoder_ngram_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    decoder_ngram_attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
 
     @property
     def decoder_cross_attentions(self):
@@ -429,7 +429,7 @@ class XLMProphetNetDecoderModelOutput(ModelOutput):
             hidden_size)` is output.
         last_hidden_state_ngram (`torch.FloatTensor` of shape `(batch_size, ngram * decoder_sequence_length, config.vocab_size)`):
             Sequence of predict stream hidden-states at the output of the last layer of the decoder of the model.
-        past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
             num_attn_heads, decoder_sequence_length, embed_size_per_head)`).
 
@@ -468,12 +468,12 @@ class XLMProphetNetDecoderModelOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor
     last_hidden_state_ngram: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Tuple[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    hidden_states_ngram: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    ngram_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    hidden_states_ngram: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    ngram_attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -490,7 +490,7 @@ class XLMProphetNetDecoderLMOutput(ModelOutput):
         logits_ngram (`torch.FloatTensor` of shape `(batch_size, ngram * decoder_sequence_length, config.vocab_size)`):
             Prediction scores of the predict stream language modeling head (scores for each vocabulary token before
             SoftMax).
-        past_key_values (`List[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`list[torch.FloatTensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size,
             num_attn_heads, decoder_sequence_length, embed_size_per_head)`).
 
@@ -530,12 +530,12 @@ class XLMProphetNetDecoderLMOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
     logits_ngram: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Tuple[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    hidden_states_ngram: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    ngram_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    hidden_states_ngram: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
+    ngram_attentions: Optional[tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 class XLMProphetNetPreTrainedModel(PreTrainedModel):
@@ -655,9 +655,9 @@ class XLMProphetNetAttention(nn.Module):
         key_value_states: Optional[Tensor] = None,
         attention_mask: Optional[Tensor] = None,
         layer_head_mask: Optional[Tensor] = None,
-        past_key_value: Optional[Tuple[Tensor]] = None,
+        past_key_value: Optional[tuple[Tensor]] = None,
         output_attentions: bool = False,
-    ) -> Tuple[Tensor, Optional[Tensor]]:
+    ) -> tuple[Tensor, Optional[Tensor]]:
         batch_size, tgt_len, hidden_size = hidden_states.size()
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -810,7 +810,7 @@ class XLMProphetNetNgramSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states,
-        past_key_value: Optional[Tuple[Tensor]] = None,
+        past_key_value: Optional[tuple[Tensor]] = None,
         attention_mask=None,
         layer_head_mask=None,
         extended_predict_attention_mask=None,
@@ -1262,7 +1262,7 @@ class XLMProphetNetEncoder(XLMProphetNetPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         Returns:
 
@@ -1402,13 +1402,13 @@ class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, XLMProphetNetDecoderModelOutput]:
+    ) -> Union[tuple, XLMProphetNetDecoderModelOutput]:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
@@ -1773,15 +1773,15 @@ class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        encoder_outputs: Optional[tuple] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, XLMProphetNetSeq2SeqModelOutput]:
+    ) -> Union[tuple, XLMProphetNetSeq2SeqModelOutput]:
         r"""
         Returns:
 
@@ -1896,7 +1896,7 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
@@ -1904,7 +1904,7 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, XLMProphetNetSeq2SeqLMOutput]:
+    ) -> Union[tuple, XLMProphetNetSeq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[-100, 0, ...,
@@ -2128,14 +2128,14 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, XLMProphetNetDecoderLMOutput]:
+    ) -> Union[tuple, XLMProphetNetDecoderLMOutput]:
         r"""
         encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if

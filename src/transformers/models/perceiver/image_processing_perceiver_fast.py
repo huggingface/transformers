@@ -67,9 +67,9 @@ class PerceiverImageProcessorFast(BaseImageProcessorFast):
         Args:
             image (`"torch.Tensor"`):
                 Image to center crop.
-            crop_size (`Dict[str, int]`):
+            crop_size (`dict[str, int]`):
                 Desired output size after applying the center crop.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image.
 
         Returns:

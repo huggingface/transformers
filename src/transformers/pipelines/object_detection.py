@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Dict, List, Union, overload
+from typing import TYPE_CHECKING, Any, Union, overload
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
 from .base import Pipeline, build_pipeline_init_args
@@ -69,19 +69,19 @@ class ObjectDetectionPipeline(Pipeline):
         return preprocess_params, {}, postprocess_kwargs
 
     @overload
-    def __call__(self, image: Union[str, "Image.Image"], *args: Any, **kwargs: Any) -> List[Dict[str, Any]]: ...
+    def __call__(self, image: Union[str, "Image.Image"], *args: Any, **kwargs: Any) -> list[dict[str, Any]]: ...
 
     @overload
     def __call__(
-        self, image: Union[List[str], List["Image.Image"]], *args: Any, **kwargs: Any
-    ) -> List[List[Dict[str, Any]]]: ...
+        self, image: Union[list[str], list["Image.Image"]], *args: Any, **kwargs: Any
+    ) -> list[list[dict[str, Any]]]: ...
 
-    def __call__(self, *args, **kwargs) -> Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]]:
+    def __call__(self, *args, **kwargs) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
         """
         Detect objects (bounding boxes & classes) in the image(s) passed as inputs.
 
         Args:
-            inputs (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+            inputs (`str`, `list[str]`, `PIL.Image` or `list[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing an HTTP(S) link pointing to an image
@@ -105,7 +105,7 @@ class ObjectDetectionPipeline(Pipeline):
 
             - **label** (`str`) -- The class label identified by the model.
             - **score** (`float`) -- The score attributed by the model for that label.
-            - **box** (`List[Dict[str, int]]`) -- The bounding box of detected object in image's original size.
+            - **box** (`list[dict[str, int]]`) -- The bounding box of detected object in image's original size.
         """
         # After deprecation of this is completed, remove the default `None` value for `images`
         if "images" in kwargs and "inputs" not in kwargs:
@@ -176,7 +176,7 @@ class ObjectDetectionPipeline(Pipeline):
 
         return annotation
 
-    def _get_bounding_box(self, box: "torch.Tensor") -> Dict[str, int]:
+    def _get_bounding_box(self, box: "torch.Tensor") -> dict[str, int]:
         """
         Turns list [xmin, xmax, ymin, ymax] into dict { "xmin": xmin, ... }
 
@@ -184,7 +184,7 @@ class ObjectDetectionPipeline(Pipeline):
             box (`torch.Tensor`): Tensor containing the coordinates in corners format.
 
         Returns:
-            bbox (`Dict[str, int]`): Dict containing the coordinates in corners format.
+            bbox (`dict[str, int]`): Dict containing the coordinates in corners format.
         """
         if self.framework != "pt":
             raise ValueError("The ObjectDetectionPipeline is only available in PyTorch.")

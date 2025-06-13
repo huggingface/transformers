@@ -16,7 +16,7 @@
 
 import itertools
 import math
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -165,7 +165,7 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
 
     def _process_images_for_pan_and_scan(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_pan_and_scan: bool,
         pan_and_scan_min_crop_size: int,
         pan_and_scan_max_num_crops: int,
@@ -190,7 +190,7 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List[List["torch.Tensor"]],
+        images: list[list["torch.Tensor"]],
         do_resize: bool,
         size: SizeDict,
         do_pan_and_scan: Optional[bool],
@@ -203,8 +203,8 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:
         # Group images by size for batched processing

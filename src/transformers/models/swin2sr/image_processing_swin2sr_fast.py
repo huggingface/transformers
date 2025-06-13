@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for Swin2SR."""
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature, ChannelDimension, get_image_size
 from ...image_processing_utils_fast import (
@@ -95,7 +95,7 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_rescale: bool,
         rescale_factor: float,
         do_pad: bool,

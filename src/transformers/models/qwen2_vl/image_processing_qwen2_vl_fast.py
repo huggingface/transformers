@@ -19,7 +19,7 @@
 # limitations under the License.
 """Fast Image processor class for Qwen2-VL."""
 
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -124,15 +124,15 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         patch_size: int,
         temporal_patch_size: int,
         merge_size: int,
@@ -146,11 +146,11 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         Args:
             images (`ImageInput`):
                 Image or batch of images to preprocess. Expects pixel values ranging from 0 to 255. If pixel values range from 0 to 1, set `do_rescale=False`.
-            vision_info (`List[Dict]`, *optional*):
+            vision_info (`list[Dict]`, *optional*):
                 Optional list of dictionaries containing additional information about vision inputs.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after resizing. `shortest_edge` and `longest_edge` keys must be present.
             interpolation (`InterpolationMode`):
                 Resampling filter to use if resizing the image.
@@ -160,9 +160,9 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                 Scale factor to use if rescaling the image.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
                 Mean to use if normalizing the image. Can be a float or a list of floats corresponding to the number of channels in the image.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
                 Standard deviation to use if normalizing the image. Can be a float or a list of floats corresponding to the number of channels in the image.
             patch_size (`int`, *optional*, defaults to `self.patch_size`):
                 The spatial patch size of the vision encoder.
@@ -253,13 +253,13 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         images: ImageInput,
         videos: VideoInput = None,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[dict[str, int]] = None,
         resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image_mean: Optional[Union[float, list[float]]] = None,
+        image_std: Optional[Union[float, list[float]]] = None,
         min_pixels: Optional[int] = None,
         max_pixels: Optional[int] = None,
         patch_size: Optional[int] = None,

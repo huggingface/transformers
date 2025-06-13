@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import flax
 import flax.linen as nn
@@ -182,8 +182,8 @@ class FlaxCLIPTextModelOutput(ModelOutput):
 
     text_embeds: jnp.ndarray = None
     last_hidden_state: jnp.ndarray = None
-    hidden_states: Optional[Tuple[jnp.ndarray, ...]] = None
-    attentions: Optional[Tuple[jnp.ndarray, ...]] = None
+    hidden_states: Optional[tuple[jnp.ndarray, ...]] = None
+    attentions: Optional[tuple[jnp.ndarray, ...]] = None
 
 
 @flax.struct.dataclass
@@ -215,7 +215,7 @@ class FlaxCLIPOutput(ModelOutput):
     text_model_output: FlaxBaseModelOutputWithPooling = None
     vision_model_output: FlaxBaseModelOutputWithPooling = None
 
-    def to_tuple(self) -> Tuple[Any]:
+    def to_tuple(self) -> tuple[Any]:
         return tuple(
             self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
@@ -641,7 +641,7 @@ class FlaxCLIPTextPreTrainedModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensor
         input_ids = jnp.zeros(input_shape, dtype="i4")
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape)
@@ -712,7 +712,7 @@ class FlaxCLIPVisionPreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: CLIPVisionConfig,
-        input_shape: Optional[Tuple] = None,
+        input_shape: Optional[tuple] = None,
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
@@ -723,7 +723,7 @@ class FlaxCLIPVisionPreTrainedModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensor
         pixel_values = jax.random.normal(rng, input_shape)
 
@@ -783,7 +783,7 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: CLIPConfig,
-        input_shape: Optional[Tuple] = None,
+        input_shape: Optional[tuple] = None,
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
@@ -794,7 +794,7 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensor
         input_ids = jnp.zeros(input_shape[0], dtype="i4")
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape[0])

@@ -212,7 +212,7 @@ class NotebookTrainingTracker(NotebookProgressBar):
     An object tracking the updates of an ongoing training with progress bars and a nice table reporting metrics.
 
     Args:
-        num_steps (`int`): The number of steps during training. column_names (`List[str]`, *optional*):
+        num_steps (`int`): The number of steps during training. column_names (`list[str]`, *optional*):
             The list of column names for the metrics table (will be inferred from the first call to
             [`~utils.notebook.NotebookTrainingTracker.write_line`] if not set).
     """
@@ -238,7 +238,7 @@ class NotebookTrainingTracker(NotebookProgressBar):
         Write the values in the inner table.
 
         Args:
-            values (`Dict[str, float]`): The values to display.
+            values (`dict[str, float]`): The values to display.
         """
         if self.inner_table is None:
             self.inner_table = [list(values.keys()), list(values.values())]

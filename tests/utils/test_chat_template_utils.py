@@ -328,7 +328,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             """
             return x
 
-        # Single-element tuples should just be the type itself, or List[type] for variable-length inputs
+        # Single-element tuples should just be the type itself, or list[type] for variable-length inputs
         with self.assertRaises(TypeHintParsingException):
             get_json_schema(fn)
 
@@ -346,7 +346,7 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             """
             return x
 
-        # Variable length inputs should be specified with List[type], not Tuple[type, ...]
+        # Variable length inputs should be specified with list[type], not tuple[type, ...]
         with self.assertRaises(TypeHintParsingException):
             get_json_schema(fn)
 

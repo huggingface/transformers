@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -210,7 +210,7 @@ class InstructBlipVideoModel(InstructBlipModel):
         interpolate_pos_encoding: bool = False,
         use_cache: Optional[bool] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[Tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
+    ) -> Union[tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # step 1: forward the images through the vision encoder,
@@ -381,7 +381,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         interpolate_pos_encoding: bool = False,
         use_cache: Optional[bool] = None,
         **kwargs: Unpack[KwargsForCausalLM],
-    ) -> Union[Tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
+    ) -> Union[tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
         r"""
         ```python
         >>> from transformers import InstructBlipVideoProcessor, InstructBlipVideoForConditionalGeneration
@@ -395,7 +395,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         ...     Decode the video with PyAV decoder.
         ...     Args:
         ...         container (`av.container.input.InputContainer`): PyAV container.
-        ...         indices (`List[int]`): List of frame indices to decode.
+        ...         indices (`list[int]`): List of frame indices to decode.
         ...     Returns:
         ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
         ...     '''

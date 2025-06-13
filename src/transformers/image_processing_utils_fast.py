@@ -382,7 +382,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Args:
             image (`"torch.Tensor"`):
                 Image to center crop.
-            size (`Dict[str, int]`):
+            size (`dict[str, int]`):
                 Size of the output image.
 
         Returns:
@@ -666,12 +666,12 @@ class SemanticSegmentationMixin:
         Args:
             outputs ([`MobileNetV2ForSemanticSegmentation`]):
                 Raw outputs of the model.
-            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
+            target_sizes (`list[Tuple]` of length `batch_size`, *optional*):
                 List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
                 predictions will not be resized.
 
         Returns:
-            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            semantic_segmentation: `list[torch.Tensor]` of length `batch_size`, where each item is a semantic
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
             specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """

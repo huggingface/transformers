@@ -16,7 +16,7 @@
 Feature extractor class for Whisper
 """
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -169,8 +169,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
     @staticmethod
     # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
     def zero_mean_unit_var_norm(
-        input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value: float = 0.0
-    ) -> List[np.ndarray]:
+        input_values: list[np.ndarray], attention_mask: list[np.ndarray], padding_value: float = 0.0
+    ) -> list[np.ndarray]:
         """
         Every array in the list is normalized to have zero mean and unit variance
         """
@@ -191,7 +191,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
         truncation: bool = True,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -209,7 +209,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         the STFT computation if available, otherwise a slower NumPy based one.
 
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
                 stereo, i.e. single float per timestep.
@@ -316,7 +316,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         )
         input_features = extract_fbank_features(input_features[0], device)
 
-        if isinstance(input_features[0], List):
+        if isinstance(input_features[0], list):
             padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
 
         else:

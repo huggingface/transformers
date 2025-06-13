@@ -20,7 +20,7 @@ import collections.abc
 import math
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -77,8 +77,8 @@ class TFViTMAEModelOutput(ModelOutput):
     last_hidden_state: Optional[tf.Tensor] = None
     mask: Optional[tf.Tensor] = None
     ids_restore: Optional[tf.Tensor] = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: tuple[tf.Tensor] | None = None
+    attentions: tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -100,8 +100,8 @@ class TFViTMAEDecoderOutput(ModelOutput):
     """
 
     logits: Optional[tf.Tensor] = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: tuple[tf.Tensor] | None = None
+    attentions: tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -132,8 +132,8 @@ class TFViTMAEForPreTrainingOutput(ModelOutput):
     logits: Optional[tf.Tensor] = None
     mask: Optional[tf.Tensor] = None
     ids_restore: Optional[tf.Tensor] = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: tuple[tf.Tensor] | None = None
+    attentions: tuple[tf.Tensor] | None = None
 
 
 def get_2d_sincos_pos_embed(embed_dim, grid_size, add_cls_token=False):
@@ -447,7 +447,7 @@ class TFViTMAESelfAttention(keras.layers.Layer):
         head_mask: tf.Tensor,
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         batch_size = shape_list(hidden_states)[0]
         mixed_query_layer = self.query(inputs=hidden_states)
         mixed_key_layer = self.key(inputs=hidden_states)
@@ -545,7 +545,7 @@ class TFViTMAEAttention(keras.layers.Layer):
         head_mask: tf.Tensor,
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         self_outputs = self.self_attention(
             hidden_states=input_tensor, head_mask=head_mask, output_attentions=output_attentions, training=training
         )
@@ -646,7 +646,7 @@ class TFViTMAELayer(keras.layers.Layer):
         head_mask: tf.Tensor,
         output_attentions: bool,
         training: bool = False,
-    ) -> Tuple[tf.Tensor]:
+    ) -> tuple[tf.Tensor]:
         attention_outputs = self.attention(
             # in ViTMAE, layernorm is applied before self-attention
             input_tensor=self.layernorm_before(inputs=hidden_states),
@@ -708,7 +708,7 @@ class TFViTMAEEncoder(keras.layers.Layer):
         output_hidden_states: bool,
         return_dict: bool,
         training: bool = False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutput, tuple[tf.Tensor]]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -782,7 +782,7 @@ class TFViTMAEMainLayer(keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: bool = False,
         interpolate_pos_encoding: bool = False,
-    ) -> Union[TFViTMAEModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFViTMAEModelOutput, tuple[tf.Tensor]]:
         embedding_output, mask, ids_restore = self.embeddings(
             pixel_values=pixel_values,
             training=training,
@@ -892,7 +892,7 @@ VIT_MAE_START_DOCSTRING = r"""
 
 VIT_MAE_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`np.ndarray`, `tf.Tensor`, `list[tf.Tensor]` ``dict[str, tf.Tensor]` or `dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
             for details.
 
@@ -950,7 +950,7 @@ class TFViTMAEModel(TFViTMAEPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
         interpolate_pos_encoding: bool = False,
-    ) -> Union[TFViTMAEModelOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFViTMAEModelOutput, tuple[tf.Tensor]]:
         r"""
         Returns:
 
@@ -1219,12 +1219,12 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         )
         return patchified_pixel_values
 
-    def unpatchify(self, patchified_pixel_values, original_image_size: Optional[Tuple[int, int]] = None):
+    def unpatchify(self, patchified_pixel_values, original_image_size: Optional[tuple[int, int]] = None):
         """
         Args:
             patchified_pixel_values (`tf.Tensor` of shape `(batch_size, num_patches, patch_size**2 * num_channels)`:
                 Patchified pixel values.
-            original_image_size (`Tuple[int, int]`, *optional*):
+            original_image_size (`tuple[int, int]`, *optional*):
                 Original image size.
 
         Returns:
@@ -1301,7 +1301,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
         interpolate_pos_encoding: bool = False,
-    ) -> Union[TFViTMAEForPreTrainingOutput, Tuple[tf.Tensor]]:
+    ) -> Union[TFViTMAEForPreTrainingOutput, tuple[tf.Tensor]]:
         r"""
         Returns:
 

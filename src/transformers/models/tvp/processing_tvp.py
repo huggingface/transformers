@@ -55,12 +55,12 @@ class TvpProcessor(ProcessorMixin):
         the above two methods for more information.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            videos (`List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, `List[List[PIL.Image.Image]]`, `List[List[np.ndarray]]`,:
-                `List[List[torch.Tensor]]`): The video or batch of videos to be prepared. Each video should be a list
+            videos (`list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`, `list[list[PIL.Image.Image]]`, `list[list[np.ndarray]]`,:
+                `list[list[torch.Tensor]]`): The video or batch of videos to be prepared. Each video should be a list
                 of frames, which can be either PIL images or NumPy arrays. In case of NumPy arrays/PyTorch tensors,
                 each frame should be of shape (H, W, C), where H and W are frame height and width, and C is a number of
                 channels.

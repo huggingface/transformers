@@ -265,7 +265,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         Returns the added tokens in the vocabulary as a dictionary of index to AddedToken.
 
         Returns:
-            `Dict[str, int]`: The added tokens.
+            `dict[str, int]`: The added tokens.
         """
         return self._tokenizer.get_added_tokens_decoder()
 
@@ -274,7 +274,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         Returns the added tokens in the vocabulary as a dictionary of token to index.
 
         Returns:
-            `Dict[str, int]`: The added tokens.
+            `dict[str, int]`: The added tokens.
         """
         return {k.content: v for v, k in sorted(self.added_tokens_decoder.items(), key=lambda item: item[0])}
 
@@ -354,7 +354,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             tokens (`str` or `Iterable[str]`): One or several token(s) to convert to token id(s).
 
         Returns:
-            `int` or `List[int]`: The token id or list of token ids.
+            `int` or `list[int]`: The token id or list of token ids.
         """
         if isinstance(tokens, str):
             return self._convert_token_to_id_with_added_voc(tokens)
@@ -405,13 +405,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         added tokens.
 
         Args:
-            ids (`int` or `List[int]`):
+            ids (`int` or `list[int]`):
                 The token id (or token ids) to convert to tokens.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
 
         Returns:
-            `str` or `List[str]`: The decoded token(s).
+            `str` or `list[str]`: The decoded token(s).
         """
         if isinstance(ids, int):
             return self._tokenizer.id_to_token(ids)
@@ -551,9 +551,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         )
 
         # Convert encoding to dict
-        # `Tokens` has type: Tuple[
-        #                       List[Dict[str, List[List[int]]]] or List[Dict[str, 2D-Tensor]],
-        #                       List[EncodingFast]
+        # `Tokens` has type: tuple[
+        #                       list[dict[str, list[list[int]]]] or list[dict[str, 2D-Tensor]],
+        #                       list[EncodingFast]
         #                    ]
         # with nested dimensions corresponding to batch, overflows, sequence length
         tokens_and_encodings = [
@@ -749,7 +749,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         as the current one.
 
         Args:
-            text_iterator (generator of `List[str]`):
+            text_iterator (generator of `list[str]`):
                 The training corpus. Should be a generator of batches of texts, for instance a list of lists of texts
                 if you have everything in memory.
             vocab_size (`int`):
@@ -758,10 +758,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 The total number of sequences in the iterator. This is used to provide meaningful progress tracking
             new_special_tokens (list of `str` or `AddedToken`, *optional*):
                 A list of new special tokens to add to the tokenizer you are training.
-            special_tokens_map (`Dict[str, str]`, *optional*):
+            special_tokens_map (`dict[str, str]`, *optional*):
                 If you want to rename some of the special tokens this tokenizer uses, pass along a mapping old special
                 token name to new special token name in this argument.
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to the trainer from the 🤗 Tokenizers library.
 
         Returns:

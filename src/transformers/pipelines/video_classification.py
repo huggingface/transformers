@@ -13,7 +13,7 @@
 # limitations under the License.
 import warnings
 from io import BytesIO
-from typing import Any, Dict, List, Optional, Union, overload
+from typing import Any, Optional, Union, overload
 
 import requests
 
@@ -78,17 +78,17 @@ class VideoClassificationPipeline(Pipeline):
         return preprocess_params, {}, postprocess_params
 
     @overload
-    def __call__(self, inputs: str, **kwargs: Any) -> List[Dict[str, Any]]: ...
+    def __call__(self, inputs: str, **kwargs: Any) -> list[dict[str, Any]]: ...
 
     @overload
-    def __call__(self, inputs: List[str], **kwargs: Any) -> List[List[Dict[str, Any]]]: ...
+    def __call__(self, inputs: list[str], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
 
-    def __call__(self, inputs: Optional[Union[str, List[str]]] = None, **kwargs):
+    def __call__(self, inputs: Optional[Union[str, list[str]]] = None, **kwargs):
         """
         Assign labels to the video(s) passed as inputs.
 
         Args:
-            inputs (`str`, `List[str]`):
+            inputs (`str`, `list[str]`):
                 The pipeline handles three types of videos:
 
                 - A string containing a http link pointing to a video

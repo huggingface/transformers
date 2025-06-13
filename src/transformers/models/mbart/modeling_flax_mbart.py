@@ -17,7 +17,7 @@
 import math
 import random
 from functools import partial
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional
 
 import flax.linen as nn
 import jax
@@ -203,7 +203,7 @@ MBART_DECODE_INPUTS_DOCSTRING = r"""
         decoder_position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
             range `[0, config.max_position_embeddings - 1]`.
-        past_key_values (`Dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
+        past_key_values (`dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
             Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
             auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
         output_attentions (`bool`, *optional*):
@@ -321,7 +321,7 @@ class FlaxMBartAttention(nn.Module):
         attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
         deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ) -> tuple[jnp.ndarray]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -441,7 +441,7 @@ class FlaxMBartEncoderLayer(nn.Module):
         attention_mask: jnp.ndarray,
         output_attentions: bool = True,
         deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ) -> tuple[jnp.ndarray]:
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, attn_weights = self.self_attn(hidden_states=hidden_states, attention_mask=attention_mask)
@@ -565,7 +565,7 @@ class FlaxMBartDecoderLayer(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = True,
         deterministic: bool = True,
-    ) -> Tuple[jnp.ndarray]:
+    ) -> tuple[jnp.ndarray]:
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
@@ -947,7 +947,7 @@ class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
     def __init__(
         self,
         config: MBartConfig,
-        input_shape: Tuple[int] = (1, 1),
+        input_shape: tuple[int] = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
@@ -956,7 +956,7 @@ class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
         # make sure initialization pass will work for FlaxMBartForSequenceClassificationModule

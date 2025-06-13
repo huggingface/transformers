@@ -19,7 +19,7 @@
 import collections
 import math
 from collections.abc import Iterable
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -120,7 +120,7 @@ class PvtPatchEmbeddings(nn.Module):
         interpolated_embeddings = interpolated_embeddings.reshape(1, -1, height * width).permute(0, 2, 1)
         return interpolated_embeddings
 
-    def forward(self, pixel_values: torch.Tensor) -> Tuple[torch.Tensor, int, int]:
+    def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, int, int]:
         batch_size, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
@@ -197,7 +197,7 @@ class PvtEfficientSelfAttention(nn.Module):
         height: int,
         width: int,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         query_layer = self.transpose_for_scores(self.query(hidden_states))
 
         if self.sequences_reduction_ratio > 1:
@@ -270,7 +270,7 @@ class PvtAttention(nn.Module):
 
     def forward(
         self, hidden_states: torch.Tensor, height: int, width: int, output_attentions: bool = False
-    ) -> Tuple[torch.Tensor]:
+    ) -> tuple[torch.Tensor]:
         self_outputs = self.self(hidden_states, height, width, output_attentions)
 
         attention_output = self.output(self_outputs[0])
@@ -408,7 +408,7 @@ class PvtEncoder(nn.Module):
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -499,7 +499,7 @@ class PvtModel(PvtPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

@@ -17,7 +17,7 @@
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -52,11 +52,11 @@ class ViltForImagesAndTextClassificationOutput(ModelOutput):
             Classification (or regression if config.num_labels==1) loss.
         logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (`List[tuple(torch.FloatTensor)]`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        hidden_states (`list[tuple(torch.FloatTensor)]`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             List of tuples of `torch.FloatTensor` (one for each image-text pair, each tuple containing the output of
             the embeddings + one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`List[tuple(torch.FloatTensor)]`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        attentions (`list[tuple(torch.FloatTensor)]`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             List of tuples of `torch.FloatTensor` (one for each image-text pair, each tuple containing the attention
             weights of shape `(batch_size, num_heads, sequence_length, sequence_length)`. Attentions weights after the
             attention softmax, used to compute the weighted average in the self-attention heads.
@@ -64,8 +64,8 @@ class ViltForImagesAndTextClassificationOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[List[Tuple[torch.FloatTensor]]] = None
-    attentions: Optional[List[Tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[list[tuple[torch.FloatTensor]]] = None
+    attentions: Optional[list[tuple[torch.FloatTensor]]] = None
 
 
 class ViltEmbeddings(nn.Module):
@@ -619,7 +619,7 @@ class ViltModel(ViltPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[BaseModelOutputWithPooling, Tuple[torch.FloatTensor]]:
+    ) -> Union[BaseModelOutputWithPooling, tuple[torch.FloatTensor]]:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
             Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
@@ -778,7 +778,7 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[MaskedLMOutput, Tuple[torch.FloatTensor]]:
+    ) -> Union[MaskedLMOutput, tuple[torch.FloatTensor]]:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
             Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
@@ -956,7 +956,7 @@ class ViltForQuestionAnswering(ViltPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[SequenceClassifierOutput, Tuple[torch.FloatTensor]]:
+    ) -> Union[SequenceClassifierOutput, tuple[torch.FloatTensor]]:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
             Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
@@ -1062,7 +1062,7 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[SequenceClassifierOutput, Tuple[torch.FloatTensor]]:
+    ) -> Union[SequenceClassifierOutput, tuple[torch.FloatTensor]]:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
             Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
@@ -1167,7 +1167,7 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[ViltForImagesAndTextClassificationOutput, Tuple[torch.FloatTensor]]:
+    ) -> Union[ViltForImagesAndTextClassificationOutput, tuple[torch.FloatTensor]]:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
             Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
@@ -1297,7 +1297,7 @@ class ViltForTokenClassification(ViltPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[TokenClassifierOutput, Tuple[torch.FloatTensor]]:
+    ) -> Union[TokenClassifierOutput, tuple[torch.FloatTensor]]:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
             Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.

@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for LLaVa-NeXT."""
 
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_processing_utils_fast import (
@@ -56,7 +56,7 @@ if is_torchvision_available():
 
 class LlavaNextFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     """
-    image_grid_pinpoints (`List[List[int]]`, *optional*):
+    image_grid_pinpoints (`list[list[int]]`, *optional*):
         A list of possible resolutions to use for processing high resolution images. The best resolution is selected
         based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
         method.
@@ -65,7 +65,7 @@ class LlavaNextFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
         number of patches in the batch. Padding will be applied to the bottom and right with zeros.
     """
 
-    image_grid_pinpoints: Optional[List[List[int]]]
+    image_grid_pinpoints: Optional[list[list[int]]]
     do_pad: Optional[bool]
 
 
@@ -168,7 +168,7 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
         size: tuple,
         patch_size: int,
         interpolation: "F.InterpolationMode",
-    ) -> List["torch.Tensor"]:
+    ) -> list["torch.Tensor"]:
         """
         Process an image with variable resolutions by dividing it into patches.
 
@@ -185,7 +185,7 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
                 Resampling filter to use if resizing the image.
 
         Returns:
-            List["torch.Tensor"]: A list of NumPy arrays containing the processed image patches.
+            list["torch.Tensor"]: A list of NumPy arrays containing the processed image patches.
         """
         if not isinstance(grid_pinpoints, list):
             raise TypeError("grid_pinpoints must be a list of possible resolutions.")
@@ -207,17 +207,17 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
 
     def _pad_for_batching(
         self,
-        pixel_values: List["torch.Tensor"],
-    ) -> List["torch.Tensor"]:
+        pixel_values: list["torch.Tensor"],
+    ) -> list["torch.Tensor"]:
         """
         Pads images on the `num_of_patches` dimension with zeros to form a batch of same number of patches.
 
         Args:
-            pixel_values (`List[torch.Tensor]`):
+            pixel_values (`list[torch.Tensor]`):
                 An array of pixel values of each images of shape (`batch_size`, `num_patches`, `image_in_3D`)
 
         Returns:
-            List[`torch.Tensor`]: The padded images.
+            list[`torch.Tensor`]: The padded images.
         """
         max_patch = max(len(x) for x in pixel_values)
         pixel_values = [
@@ -229,18 +229,18 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
 
     def _preprocess(
         self,
-        images: List["torch.Tensor"],
+        images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        image_grid_pinpoints: List[List[int]],
+        image_grid_pinpoints: list[list[int]],
         interpolation: Optional["F.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, List[float]]],
-        image_std: Optional[Union[float, List[float]]],
+        image_mean: Optional[Union[float, list[float]]],
+        image_std: Optional[Union[float, list[float]]],
         do_pad: bool,
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:

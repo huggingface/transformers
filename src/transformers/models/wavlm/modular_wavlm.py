@@ -1,5 +1,5 @@
 import math
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -81,7 +81,7 @@ class WavLMAttention(nn.Module):
         position_bias: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         index=0,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Attention layer with relative attention"""
         bsz, tgt_len, _ = hidden_states.size()
 

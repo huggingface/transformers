@@ -16,7 +16,7 @@
 import inspect
 import math
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Callable, Optional, Union
 
 import numpy as np
 import torch
@@ -72,7 +72,7 @@ class LogitsProcessorList(list):
             scores (`torch.FloatTensor` of shape `(batch_size, config.vocab_size)`):
                 Prediction scores of a language modeling head. These can be logits for each vocabulary when not using
                 beam search or log softmax for each vocabulary token when using beam search
-            kwargs (`Dict[str, Any]`, *optional*):
+            kwargs (`dict[str, Any]`, *optional*):
                 Additional kwargs that are specific to a logits processor.
 
         Return:
@@ -103,7 +103,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     Args:
         min_length (`int`):
             The minimum length below which the score of `eos_token_id` is set to `-float("Inf")`.
-        eos_token_id (`Union[int, List[int], torch.Tensor]`):
+        eos_token_id (`Union[int, list[int], torch.Tensor]`):
             The id(s) of the *end-of-sequence* token.
         device (`str`, *optional*, defaults to `"cpu"`):
             The device to allocate the tensors.
@@ -134,7 +134,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, min_length: int, eos_token_id: Union[int, List[int], torch.Tensor], device: str = "cpu"):
+    def __init__(self, min_length: int, eos_token_id: Union[int, list[int], torch.Tensor], device: str = "cpu"):
         if not isinstance(min_length, int) or min_length < 0:
             raise ValueError(f"`min_length` has to be a non-negative integer, but is {min_length}")
 
@@ -167,7 +167,7 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
             input length.
         min_new_tokens (`int`):
             The minimum *new* tokens length below which the score of `eos_token_id` is set to `-float("Inf")`.
-        eos_token_id (`Union[int, List[int], torch.Tensor]`):
+        eos_token_id (`Union[int, list[int], torch.Tensor]`):
             The id(s) of the *end-of-sequence* token.
         device (`str`, *optional*, defaults to `"cpu"`):
             The device to allocate the tensors.
@@ -197,7 +197,7 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
         self,
         prompt_length_to_skip: int,
         min_new_tokens: int,
-        eos_token_id: Union[int, List[int], torch.Tensor],
+        eos_token_id: Union[int, list[int], torch.Tensor],
         device: str = "cpu",
     ):
         for arg_name, arg_value in [
@@ -917,7 +917,7 @@ def _get_generated_ngrams(banned_ngrams, prev_input_ids, ngram_size, cur_len):
 
 def _calc_banned_ngram_tokens(
     ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int, cur_len: int
-) -> List[Iterable[int]]:
+) -> list[Iterable[int]]:
     """Copied from fairseq for no_repeat_ngram in beam_search"""
     if cur_len + 1 < ngram_size:
         # return no banned tokens if we haven't generated no_repeat_ngram_size tokens yet
@@ -1074,7 +1074,7 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
     </Tip>
 
     Args:
-        sequence_bias (`List[List[Union[List[int], float]]]`):
+        sequence_bias (`list[list[Union[list[int], float]]]`):
             List of lists that maps a sequence of tokens to its bias term (e.g. `[[[10, 45], -2.0],
             [[64], -7.5]]`). Positive biases increase the odds of the
             sequence being selected, while negative biases do the opposite. If a sequence has a length of 1, its bias
@@ -1123,7 +1123,7 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, sequence_bias: List[List[Union[List[int], float]]]):
+    def __init__(self, sequence_bias: list[list[Union[list[int], float]]]):
         self.sequence_bias = sequence_bias
         self._validate_arguments()
         self._convert_list_arguments_into_dict()
@@ -1250,9 +1250,9 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
     </Tip>
 
     Args:
-        bad_words_ids (`List[List[int]]`):
+        bad_words_ids (`list[list[int]]`):
             List of list of token ids that are not allowed to be generated.
-        eos_token_id (`Union[int, List[int], torch.Tensor]`, *optional*):
+        eos_token_id (`Union[int, list[int], torch.Tensor]`, *optional*):
             The id(s) of the *end-of-sequence* token.
 
     Examples:
@@ -1291,7 +1291,7 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
     """
 
     def __init__(
-        self, bad_words_ids: List[List[int]], eos_token_id: Optional[Union[int, List[int], torch.Tensor]] = None
+        self, bad_words_ids: list[list[int]], eos_token_id: Optional[Union[int, list[int], torch.Tensor]] = None
     ):
         self.bad_word_ids = bad_words_ids
         self._validate_arguments()
@@ -1332,7 +1332,7 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     generation. See [Autoregressive Entity Retrieval](https://huggingface.co/papers/2010.00904) for more information.
 
     Args:
-        prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`):
+        prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], list[int]]`):
             This function constraints the beam search to allowed tokens only at each step. This function takes 2
             arguments `inputs_ids` and the batch ID `batch_id`. It has to return a list with the allowed tokens for the
             next generation step conditioned on the previously generated tokens `inputs_ids` and the batch ID
@@ -1373,7 +1373,7 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]], num_beams: int):
+    def __init__(self, prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], list[int]], num_beams: int):
         self._prefix_allowed_tokens_fn = prefix_allowed_tokens_fn
         self._num_beams = num_beams
 
@@ -1586,7 +1586,7 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
     Args:
         max_length (`int`):
             The maximum length of the sequence to be generated.
-        eos_token_id (`Union[int, List[int], torch.Tensor]`):
+        eos_token_id (`Union[int, list[int], torch.Tensor]`):
             The id(s) of the *end-of-sequence* token.
         device (`str`, *optional*, defaults to `"cpu"`):
             The device to allocate the tensors.
@@ -1613,7 +1613,7 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, max_length: int, eos_token_id: Union[int, List[int], torch.Tensor], device: str = "cpu"):
+    def __init__(self, max_length: int, eos_token_id: Union[int, list[int], torch.Tensor], device: str = "cpu"):
         self.max_length = max_length
 
         if not isinstance(eos_token_id, torch.Tensor):
@@ -1666,7 +1666,7 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
         exponential_decay_length_penalty (`tuple(int, float)`):
             This tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates where penalty
             starts and `decay_factor` represents the factor of exponential decay
-        eos_token_id (`Union[int, List[int], torch.Tensor]`):
+        eos_token_id (`Union[int, list[int], torch.Tensor]`):
             The id(s) of the *end-of-sequence* token.
         input_ids_seq_length (`int`):
             The length of the input sequence.
@@ -1726,8 +1726,8 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
 
     def __init__(
         self,
-        exponential_decay_length_penalty: Tuple[int, float],
-        eos_token_id: Union[int, List[int], torch.Tensor],
+        exponential_decay_length_penalty: tuple[int, float],
+        eos_token_id: Union[int, list[int], torch.Tensor],
         input_ids_seq_length: int,
     ):
         self.regulation_start = exponential_decay_length_penalty[0] + input_ids_seq_length
@@ -2326,13 +2326,13 @@ class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
     </Tip>
 
     Args:
-        eos_token_id (`Union[int, List[int], torch.Tensor]`):
+        eos_token_id (`Union[int, list[int], torch.Tensor]`):
             The id(s) of the *end-of-sequence* token.
         min_eos_p (`float`, *optional*):
             Minimum end of speech threshold.
     """
 
-    def __init__(self, eos_token_id: Union[int, List[int], torch.Tensor], min_eos_p: float, device: str = "cpu"):
+    def __init__(self, eos_token_id: Union[int, list[int], torch.Tensor], min_eos_p: float, device: str = "cpu"):
         if not isinstance(eos_token_id, torch.Tensor):
             if isinstance(eos_token_id, int):
                 eos_token_id = [eos_token_id]
@@ -2569,7 +2569,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
     Args:
         ngram_len (`int`):
             Ngram length.
-        keys (`List[int]`):
+        keys (`list[int]`):
             A sequence of watermarking keys, one for each depth.
         sampling_table_size (`int`):
             Size of the sampling table.
@@ -2610,7 +2610,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
     def __init__(
         self,
         ngram_len: int,
-        keys: List[int],
+        keys: list[int],
         sampling_table_size: int,
         sampling_table_seed: int,
         context_history_size: int,
@@ -2808,7 +2808,7 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
 
     def _compute_keys(
         self, n_minus_1_grams: torch.LongTensor, indices: torch.LongTensor
-    ) -> Tuple[torch.LongTensor, torch.LongTensor]:
+    ) -> tuple[torch.LongTensor, torch.LongTensor]:
         """Computes random keys for each ngram and depth.
 
         Args:

@@ -16,7 +16,7 @@
 
 import os
 from shutil import copyfile
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
@@ -161,8 +161,8 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
         return [1 if x in all_special_ids else 0 for x in seq]
 
     def get_special_tokens_mask(
-        self, token_ids_0: List, token_ids_1: Optional[List] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list, token_ids_1: Optional[list] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """Get list where entries are [1] if a token is [eos] or [pad] else 0."""
         if already_has_special_tokens:
             return self._special_token_mask(token_ids_0)
@@ -171,7 +171,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
         else:
             return self._special_token_mask(token_ids_0 + token_ids_1) + [1]
 
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> list[int]:
         """
         Build model inputs from a sequence by adding eos to the end. no bos token is added to the front.
 
@@ -192,7 +192,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "

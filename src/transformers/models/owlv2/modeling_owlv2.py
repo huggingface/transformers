@@ -16,7 +16,7 @@
 
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -69,7 +69,7 @@ class Owlv2Output(ModelOutput):
         image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The image embeddings obtained by applying the projection layer to the pooled output of
             [`Owlv2VisionModel`].
-        text_model_output (Tuple[`BaseModelOutputWithPooling`]):
+        text_model_output (tuple[`BaseModelOutputWithPooling`]):
             The output of the [`Owlv2TextModel`].
         vision_model_output (`BaseModelOutputWithPooling`):
             The output of the [`Owlv2VisionModel`].
@@ -83,7 +83,7 @@ class Owlv2Output(ModelOutput):
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
-    def to_tuple(self) -> Tuple[Any]:
+    def to_tuple(self) -> tuple[Any]:
         return tuple(
             self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
@@ -188,14 +188,14 @@ class Owlv2ObjectDetectionOutput(ModelOutput):
         class_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
             Class embeddings of all image patches. OWLv2 represents images as a set of image patches where the total
             number of patches is (image_size / patch_size)**2.
-        text_model_output (Tuple[`BaseModelOutputWithPooling`]):
+        text_model_output (tuple[`BaseModelOutputWithPooling`]):
             The output of the [`Owlv2TextModel`].
         vision_model_output (`BaseModelOutputWithPooling`):
             The output of the [`Owlv2VisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[Dict] = None
+    loss_dict: Optional[dict] = None
     logits: Optional[torch.FloatTensor] = None
     objectness_logits: Optional[torch.FloatTensor] = None
     pred_boxes: Optional[torch.FloatTensor] = None
@@ -205,7 +205,7 @@ class Owlv2ObjectDetectionOutput(ModelOutput):
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
-    def to_tuple(self) -> Tuple[Any]:
+    def to_tuple(self) -> tuple[Any]:
         return tuple(
             self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
@@ -240,7 +240,7 @@ class Owlv2ImageGuidedObjectDetectionOutput(ModelOutput):
         class_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
             Class embeddings of all image patches. OWLv2 represents images as a set of image patches where the total
             number of patches is (image_size / patch_size)**2.
-        text_model_output (Tuple[`BaseModelOutputWithPooling`]):
+        text_model_output (tuple[`BaseModelOutputWithPooling`]):
             The output of the [`Owlv2TextModel`].
         vision_model_output (`BaseModelOutputWithPooling`):
             The output of the [`Owlv2VisionModel`].
@@ -255,7 +255,7 @@ class Owlv2ImageGuidedObjectDetectionOutput(ModelOutput):
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
 
-    def to_tuple(self) -> Tuple[Any]:
+    def to_tuple(self) -> tuple[Any]:
         return tuple(
             self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
             for k in self.keys()
@@ -404,7 +404,7 @@ class Owlv2Attention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         bsz, tgt_len, embed_dim = hidden_states.size()
@@ -512,7 +512,7 @@ class Owlv2EncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -619,7 +619,7 @@ class Owlv2Encoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`).
@@ -705,7 +705,7 @@ class Owlv2TextTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
@@ -787,7 +787,7 @@ class Owlv2TextModel(Owlv2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
@@ -837,7 +837,7 @@ class Owlv2VisionTransformer(nn.Module):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -896,7 +896,7 @@ class Owlv2VisionModel(Owlv2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Examples:
         ```python
@@ -1060,7 +1060,7 @@ class Owlv2Model(Owlv2PreTrainedModel):
         interpolate_pos_encoding: bool = False,
         return_base_image_embeds: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Owlv2Output]:
+    ) -> Union[tuple, Owlv2Output]:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
@@ -1180,7 +1180,7 @@ class Owlv2ClassPredictionHead(nn.Module):
         image_embeds: torch.FloatTensor,
         query_embeds: Optional[torch.FloatTensor],
         query_mask: Optional[torch.Tensor],
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor]:
         image_class_embeds = self.dense0(image_embeds)
         if query_embeds is None:
             device = image_class_embeds.device
@@ -1325,7 +1325,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         image_feats: torch.FloatTensor,
         query_embeds: Optional[torch.FloatTensor] = None,
         query_mask: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor]:
         """
         Args:
             image_feats:
@@ -1348,7 +1348,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor]:
         # Encode text and image
         outputs = self.owlv2(
             pixel_values=pixel_values,
@@ -1398,7 +1398,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
-    ) -> Tuple[torch.FloatTensor]:
+    ) -> tuple[torch.FloatTensor]:
         # Get Owlv2Model vision embeddings (same as CLIP)
         vision_outputs = self.owlv2.vision_model(
             pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, return_dict=True

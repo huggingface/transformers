@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import numpy as np
 import tensorflow as tf
@@ -267,7 +267,7 @@ class TFConvNextV2Stage(keras.layers.Layer):
             Number of output channels.
         depth (`int`):
             Number of residual blocks.
-        drop_path_rates(`List[float]`):
+        drop_path_rates(`list[float]`):
             Stochastic depth rates for each layer.
     """
 
@@ -279,7 +279,7 @@ class TFConvNextV2Stage(keras.layers.Layer):
         kernel_size: int = 2,
         stride: int = 2,
         depth: int = 2,
-        drop_path_rates: Optional[List[float]] = None,
+        drop_path_rates: Optional[list[float]] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -369,7 +369,7 @@ class TFConvNextV2Encoder(keras.layers.Layer):
         hidden_states: tf.Tensor,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, TFBaseModelOutputWithNoAttention]:
+    ) -> Union[tuple, TFBaseModelOutputWithNoAttention]:
         all_hidden_states = () if output_hidden_states else None
 
         for i, layer_module in enumerate(self.stages):
@@ -414,7 +414,7 @@ class TFConvNextV2MainLayer(keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPooling, tuple[tf.Tensor]]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -522,7 +522,7 @@ CONVNEXTV2_START_DOCSTRING = r"""
 
 CONVNEXTV2_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]`, `Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`np.ndarray`, `tf.Tensor`, `list[tf.Tensor]`, `dict[str, tf.Tensor]` or `dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`ConvNextImageProcessor.__call__`] for details.
 
@@ -560,7 +560,7 @@ class TFConvNextV2Model(TFConvNextV2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPoolingAndNoAttention, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPoolingAndNoAttention, tuple[tf.Tensor]]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -631,7 +631,7 @@ class TFConvNextV2ForImageClassification(TFConvNextV2PreTrainedModel, TFSequence
         return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Union[TFImageClassifierOutputWithNoAttention, Tuple[tf.Tensor]]:
+    ) -> Union[TFImageClassifierOutputWithNoAttention, tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,

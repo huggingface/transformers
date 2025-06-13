@@ -18,7 +18,7 @@ import json
 import os
 import re
 import unicodedata
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
@@ -430,8 +430,8 @@ class FlaubertTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+    ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. An XLM sequence has the following format:
@@ -458,8 +458,8 @@ class FlaubertTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
+        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+    ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
@@ -486,7 +486,7 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         return [1] + ([0] * len(token_ids_0)) + [1]
 
     # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return

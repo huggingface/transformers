@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Optional, Union
 
 import torch
 from torch import nn
@@ -54,8 +54,8 @@ class VJEPA2WithMaskedInputPredictorOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor
     masked_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     target_hidden_state: Optional[torch.FloatTensor] = None
 
 
@@ -87,8 +87,8 @@ class VJEPA2WithMaskedInputModelOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor
     masked_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
     predictor_output: Optional[VJEPA2WithMaskedInputPredictorOutput] = None
 
     def to_tuple(self):
@@ -328,7 +328,7 @@ class VJEPA2RopeAttention(nn.Module):
         position_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         head_mask: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -449,7 +449,7 @@ class VJEPA2Layer(GradientCheckpointingLayer):
         position_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> tuple[torch.Tensor, ...]:
         # Self-Attention
         residual = hidden_states
         hidden_states = self.norm1(hidden_states)
@@ -581,10 +581,10 @@ class VJEPA2PredictorEmbeddings(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        context_mask: List[torch.Tensor],
-        target_mask: List[torch.Tensor],
+        context_mask: list[torch.Tensor],
+        target_mask: list[torch.Tensor],
         mask_index: int = 1,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         hidden_states : encoder outputs (context)
         context_mask: tokens of the context (outputs from the encoder)
@@ -688,8 +688,8 @@ class VJEPA2Predictor(nn.Module):
     def forward(
         self,
         encoder_hidden_states: torch.Tensor,
-        context_mask: List[torch.Tensor],
-        target_mask: List[torch.Tensor],
+        context_mask: list[torch.Tensor],
+        target_mask: list[torch.Tensor],
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -816,9 +816,9 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         self,
         pixel_values_videos: torch.Tensor,
         context_head_mask: Optional[torch.Tensor] = None,
-        context_mask: Optional[List[torch.Tensor]] = None,
+        context_mask: Optional[list[torch.Tensor]] = None,
         target_head_mask: Optional[torch.Tensor] = None,
-        target_mask: Optional[List[torch.Tensor]] = None,
+        target_mask: Optional[list[torch.Tensor]] = None,
         skip_predictor: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,

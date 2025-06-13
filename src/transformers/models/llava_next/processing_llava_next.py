@@ -16,7 +16,7 @@
 Processor class for LLaVa-NeXT.
 """
 
-from typing import List, Union
+from typing import Union
 
 import numpy as np
 
@@ -104,7 +104,7 @@ class LlavaNextProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[LlavaNextProcessorKwargs],
@@ -117,10 +117,10 @@ class LlavaNextProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `list[str]`, `list[list[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
@@ -232,14 +232,14 @@ class LlavaNextProcessor(ProcessorMixin):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
         Args:
-            image_sizes (List[List[str]], *optional*):
+            image_sizes (list[list[str]], *optional*):
                 The input sizes formatted as (height, width) per each image.
-            video_sizes (List[List[str]], *optional*):
+            video_sizes (list[list[str]], *optional*):
                 The input sizes formatted as (num_frames, height, width) per each video.
-            audio_lengths (List[int], *optional*):
+            audio_lengths (list[int], *optional*):
                 The input length formatted as per each audio.
         Returns:
-            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
+            dict[str, list[int]]: A dictionary mapping each modality ("image", "video", "audio")
             to a list containing the number of placeholder tokens required. If the model doesn't accept
             a certain modality or no input sizes are provided, the dict value is set to an empty list.
         """

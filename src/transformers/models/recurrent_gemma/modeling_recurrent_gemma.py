@@ -16,7 +16,7 @@
 """PyTorch RecurrentGemma model."""
 
 import math
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -166,7 +166,7 @@ class RecurrentGemmaSdpaAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         use_cache: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -299,7 +299,7 @@ class RecurrentGemmaRglru(nn.Module):
         self,
         activations: torch.Tensor,
         position_ids: torch.Tensor,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_len, lru_width = activations.shape
         reset = position_ids[:, :, None] == 0
 
@@ -346,7 +346,7 @@ class RecurrentGemmaRglru(nn.Module):
         reset: torch.Tensor,
         recurrent_states: Union[torch.Tensor, None],
         acc_dtype: torch.dtype = torch.float32,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Runs the recurrence of a linear RNN.
 
         Args:
@@ -419,7 +419,7 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
         attention_mask: torch.Tensor,
         cache_position: torch.Tensor,
         use_cache: bool = True,
-    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         _, seq_len, _ = input_states.shape
 
         y_branch = self.linear_y(input_states)
@@ -488,7 +488,7 @@ class RecurrentGemmaDecoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         cache_position: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
-    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         raw_activations = activations
         inputs_normalized = self.temporal_pre_norm(raw_activations)  # RMSNorm introduces slight slight differences
 
@@ -611,7 +611,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
+    ) -> Union[tuple, BaseModelOutputWithNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -747,7 +747,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, CausalLMOutput]:
+    ) -> Union[tuple, CausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

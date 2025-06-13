@@ -15,7 +15,7 @@
 """Processor class for Pop2Piano."""
 
 import os
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -51,11 +51,11 @@ class Pop2PianoProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        audio: Union[np.ndarray, List[float], List[np.ndarray]] = None,
-        sampling_rate: Optional[Union[int, List[int]]] = None,
+        audio: Union[np.ndarray, list[float], list[np.ndarray]] = None,
+        sampling_rate: Optional[Union[int, list[int]]] = None,
         steps_per_beat: int = 2,
         resample: Optional[bool] = True,
-        notes: Union[List, TensorType] = None,
+        notes: Union[list, TensorType] = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,

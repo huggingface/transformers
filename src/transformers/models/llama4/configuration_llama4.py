@@ -210,11 +210,11 @@ class Llama4TextConfig(PretrainedConfig):
                 `beta_slow` (`float`, *optional*):
                     Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
                     ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
+                `short_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to short contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
+                `long_factor` (`list[float]`, *optional*):
                     Only used with 'longrope'. The scaling factor to be applied to long contexts (<
                     `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
                     size divided by the number of attention heads divided by 2
@@ -224,7 +224,7 @@ class Llama4TextConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
             <TODO>
             <TODO>
-        no_rope_layers (`List[int]`, *optional*):
+        no_rope_layers (`list[int]`, *optional*):
             List with at least the same length as the number of layers in the model.
             A `1` at an index position indicates that the corresponding layer will use RoPE,
             while a `0` indicates that it's a NoPE layer.

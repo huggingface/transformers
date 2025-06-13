@@ -17,7 +17,7 @@
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -80,8 +80,8 @@ class UniSpeechSatForPreTrainingOutput(ModelOutput):
     projected_states: Optional[torch.FloatTensor] = None
     projected_quantized_states: Optional[torch.FloatTensor] = None
     codevector_perplexity: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    attentions: Optional[tuple[torch.FloatTensor]] = None
 
 
 class UniSpeechSatPositionalConvEmbedding(Wav2Vec2PositionalConvEmbedding):
@@ -261,7 +261,7 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel, Wav2Vec2Model):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, UniSpeechSatBaseModelOutput]:
+    ) -> Union[tuple, UniSpeechSatBaseModelOutput]:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
@@ -387,7 +387,7 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, UniSpeechSatForPreTrainingOutput]:
+    ) -> Union[tuple, UniSpeechSatForPreTrainingOutput]:
         r"""
         Example:
 

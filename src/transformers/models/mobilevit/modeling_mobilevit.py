@@ -17,7 +17,7 @@
 """PyTorch MobileViT model."""
 
 import math
-from typing import Dict, Optional, Set, Tuple, Union
+from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -260,7 +260,7 @@ class MobileViTAttention(nn.Module):
         self.output = MobileViTSelfOutput(config, hidden_size)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads: Set[int]) -> None:
+    def prune_heads(self, heads: set[int]) -> None:
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
@@ -413,7 +413,7 @@ class MobileViTLayer(nn.Module):
             config, in_channels=2 * in_channels, out_channels=in_channels, kernel_size=config.conv_kernel_size
         )
 
-    def unfolding(self, features: torch.Tensor) -> Tuple[torch.Tensor, Dict]:
+    def unfolding(self, features: torch.Tensor) -> tuple[torch.Tensor, dict]:
         patch_width, patch_height = self.patch_width, self.patch_height
         patch_area = int(patch_width * patch_height)
 
@@ -464,7 +464,7 @@ class MobileViTLayer(nn.Module):
         }
         return patches, info_dict
 
-    def folding(self, patches: torch.Tensor, info_dict: Dict) -> torch.Tensor:
+    def folding(self, patches: torch.Tensor, info_dict: dict) -> torch.Tensor:
         patch_width, patch_height = self.patch_width, self.patch_height
         patch_area = int(patch_width * patch_height)
 

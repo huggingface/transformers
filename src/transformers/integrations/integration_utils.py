@@ -29,7 +29,7 @@ import tempfile
 from dataclasses import asdict, fields
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Union
+from typing import TYPE_CHECKING, Any, Literal, Optional, Union
 
 import numpy as np
 import packaging.version
@@ -1692,7 +1692,7 @@ class NeptuneCallback(TrainerCallback):
 
         raise Exception("The trainer doesn't have a NeptuneCallback configured.")
 
-    def on_log(self, args, state, control, logs: Optional[Dict[str, float]] = None, **kwargs):
+    def on_log(self, args, state, control, logs: Optional[dict[str, float]] = None, **kwargs):
         if not state.is_world_process_zero:
             return
 

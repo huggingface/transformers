@@ -42,25 +42,25 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
             The num of channels in out for the initial convolution layer.
         stem_act_func (`str`, *optional*, defaults to `"relu"`):
             The activation function for the initial convolution layer.
-        image_size (`Tuple[int, int]`, *optional*, defaults to `[640, 640]`):
+        image_size (`tuple[int, int]`, *optional*, defaults to `[640, 640]`):
             The size (resolution) of each image.
-        conv_layer_kernel_sizes (`List[List[List[int]]]`, *optional*):
+        conv_layer_kernel_sizes (`list[list[list[int]]]`, *optional*):
             A list of stage-wise kernel sizes. If `None`, defaults to:
             `[[[3, 3], [3, 3], [3, 3]], [[3, 3], [1, 3], [3, 3], [3, 1]], [[3, 3], [3, 3], [3, 1], [1, 3]], [[3, 3], [3, 1], [1, 3], [3, 3]]]`.
-        conv_layer_strides (`List[List[int]]`, *optional*):
+        conv_layer_strides (`list[list[int]]`, *optional*):
             A list of stage-wise strides. If `None`, defaults to:
             `[[1, 2, 1], [2, 1, 1, 1], [2, 1, 1, 1], [2, 1, 1, 1]]`.
-        hidden_sizes (`List[int]`, *optional*, defaults to `[64, 64, 128, 256, 512]`):
+        hidden_sizes (`list[int]`, *optional*, defaults to `[64, 64, 128, 256, 512]`):
             Dimensionality (hidden size) at each stage.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        out_features (`List[str]`, *optional*):
+        out_features (`list[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
             corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
-        out_indices (`List[int]`, *optional*):
+        out_indices (`list[int]`, *optional*):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
             If unset and `out_features` is unset, will default to the last stage.

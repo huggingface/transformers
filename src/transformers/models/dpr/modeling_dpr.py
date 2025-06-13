@@ -15,7 +15,7 @@
 """PyTorch DPR model for Open Domain Question Answering."""
 
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import Tensor, nn
@@ -63,8 +63,8 @@ class DPRContextEncoderOutput(ModelOutput):
     """
 
     pooler_output: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -91,8 +91,8 @@ class DPRQuestionEncoderOutput(ModelOutput):
     """
 
     pooler_output: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -124,8 +124,8 @@ class DPRReaderOutput(ModelOutput):
     start_logits: torch.FloatTensor
     end_logits: Optional[torch.FloatTensor] = None
     relevance_logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
 
 
 @auto_docstring
@@ -172,7 +172,7 @@ class DPREncoder(DPRPreTrainedModel):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = False,
-    ) -> Union[BaseModelOutputWithPooling, Tuple[Tensor, ...]]:
+    ) -> Union[BaseModelOutputWithPooling, tuple[Tensor, ...]]:
         outputs = self.bert_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -224,7 +224,7 @@ class DPRSpanPredictor(DPRPreTrainedModel):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = False,
-    ) -> Union[DPRReaderOutput, Tuple[Tensor, ...]]:
+    ) -> Union[DPRReaderOutput, tuple[Tensor, ...]]:
         # notations: N - number of questions in a batch, M - number of passages per questions, L - sequence length
         n_passages, sequence_length = input_ids.size() if input_ids is not None else inputs_embeds.size()[:2]
         # feed encoder
@@ -328,7 +328,7 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[DPRContextEncoderOutput, Tuple[Tensor, ...]]:
+    ) -> Union[DPRContextEncoderOutput, tuple[Tensor, ...]]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. To match pretraining, DPR input sequence should be
@@ -433,7 +433,7 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[DPRQuestionEncoderOutput, Tuple[Tensor, ...]]:
+    ) -> Union[DPRQuestionEncoderOutput, tuple[Tensor, ...]]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. To match pretraining, DPR input sequence should be
@@ -538,9 +538,9 @@ class DPRReader(DPRPretrainedReader):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[DPRReaderOutput, Tuple[Tensor, ...]]:
+    ) -> Union[DPRReaderOutput, tuple[Tensor, ...]]:
         r"""
-        input_ids (`Tuple[torch.LongTensor]` of shapes `(n_passages, sequence_length)`):
+        input_ids (`tuple[torch.LongTensor]` of shapes `(n_passages, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. It has to be a sequence triplet with 1) the question
             and 2) the passages titles and 3) the passages texts To match pretraining, DPR `input_ids` sequence should
             be formatted with [CLS] and [SEP] with the format:

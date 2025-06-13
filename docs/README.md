@@ -278,7 +278,7 @@ Here's an example of a single value return:
 
 ```python
     Returns:
-        `List[int]`: A list of integers in the range [0, 1] --- 1 for a special token, 0 for a sequence token.
+        `list[int]`: A list of integers in the range [0, 1] --- 1 for a special token, 0 for a sequence token.
 ```
 
 Here's an example of a tuple return, comprising several objects:
