@@ -421,7 +421,7 @@ def write_model(
                 tqdm.write(f"Processing: {key.ljust(50)}  ->\t {v}, {values.shape}")
                 state_dict[v] = values
             elif _OFFLINE_QUANT_COMPATIBLE and "feed_forward.experts." in new_key:
-                # for experts, we need to split expert for offline quantiation purpose and don't need to fuse
+                # for experts, we need to split expert for offline quantization purpose and don't need to fuse
                 expert_lists = []
                 for k in current_parameter:
                     expert_lists.append(

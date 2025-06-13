@@ -131,7 +131,7 @@ class VisualBertEmbeddings(nn.Module):
                 visual_position_embeddings *= image_text_alignment_mask.to(dtype=dtype).unsqueeze(-1)
                 visual_position_embeddings = visual_position_embeddings.sum(2)
 
-                # We want to averge along the alignment_number dimension.
+                # We want to average along the alignment_number dimension.
                 image_text_alignment_mask = image_text_alignment_mask.to(dtype=dtype).sum(2)
 
                 if (image_text_alignment_mask == 0).sum() != 0:
@@ -556,7 +556,7 @@ class VisualBertForPreTrainingOutput(ModelOutput):
 @auto_docstring(
     custom_intro="""
     The model can behave as an encoder (with only self-attention) following the architecture described in [Attention is
-    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    all you need](https://huggingface.co/papers/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
     Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
     """
 )

@@ -31,7 +31,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 ## Overview
 
-The EfficientFormer model was proposed in [EfficientFormer: Vision Transformers at MobileNet Speed](https://arxiv.org/abs/2206.01191)
+The EfficientFormer model was proposed in [EfficientFormer: Vision Transformers at MobileNet Speed](https://huggingface.co/papers/2206.01191)
 by Yanyu Li, Geng Yuan, Yang Wen, Eric Hu, Georgios Evangelidis, Sergey Tulyakov, Yanzhi Wang, Jian Ren.  EfficientFormer proposes a
 dimension-consistent pure transformer that can be run on mobile devices for dense prediction tasks like image classification, object
 detection and semantic segmentation.

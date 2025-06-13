@@ -347,7 +347,6 @@ class Phi3IntegrationTest(unittest.TestCase):
         from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
-            convert_and_export_with_cache,
         )
 
         model_id = "microsoft/Phi-4-mini-instruct"
@@ -399,7 +398,10 @@ class Phi3IntegrationTest(unittest.TestCase):
         max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
 
         # Static Cache + export
-        exported_program = convert_and_export_with_cache(model)
+        from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
+
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
+        exported_program = exportable_module.export()
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
             exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
         )

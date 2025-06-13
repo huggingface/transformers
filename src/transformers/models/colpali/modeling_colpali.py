@@ -101,7 +101,7 @@ class ColPaliForRetrievalOutput(ModelOutput):
     single model that can take into account both the textual and visual content (layout, charts, etc.) of a document.
 
     ColPali is part of the ColVision model family, which was first introduced in the following paper:
-    [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://arxiv.org/abs/2407.01449).
+    [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://huggingface.co/papers/2407.01449).
     """
 )
 class ColPaliForRetrieval(ColPaliPreTrainedModel):

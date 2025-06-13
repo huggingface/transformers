@@ -31,7 +31,7 @@ You can do so by running the following command: `pip install -U transformers==4.
 ## Overview
 
 The ErnieM model was proposed in [ERNIE-M: Enhanced Multilingual Representation by Aligning
-Cross-lingual Semantics with Monolingual Corpora](https://arxiv.org/abs/2012.15674)  by Xuan Ouyang, Shuohuan Wang, Chao Pang, Yu Sun,
+Cross-lingual Semantics with Monolingual Corpora](https://huggingface.co/papers/2012.15674)  by Xuan Ouyang, Shuohuan Wang, Chao Pang, Yu Sun,
 Hao Tian, Hua Wu, Haifeng Wang.
 
 The abstract from the paper is the following:

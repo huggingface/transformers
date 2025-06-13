@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The Funnel Transformer model was proposed in the paper [Funnel-Transformer: Filtering out Sequential Redundancy for
-Efficient Language Processing](https://arxiv.org/abs/2006.03236). It is a bidirectional transformer model, like
+Efficient Language Processing](https://huggingface.co/papers/2006.03236). It is a bidirectional transformer model, like
 BERT, but with a pooling operation after each block of layers, a bit like in traditional convolutional neural networks
 (CNN) in computer vision.
 

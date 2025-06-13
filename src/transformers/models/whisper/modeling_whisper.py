@@ -89,7 +89,7 @@ def _compute_mask_indices(
 ) -> np.ndarray:
     """
     Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
-    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
+    ASR](https://huggingface.co/papers/1904.08779). Note that this method is not optimized to run on TPU and should be run on
     CPU as part of the preprocessing during training.
 
     Args:
@@ -703,7 +703,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
             if self.training:
                 dropout_probability = torch.rand([])
@@ -956,7 +956,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
                     f" {head_mask.size()[0]}."
                 )
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             if self.training:
@@ -1061,7 +1061,7 @@ class WhisperModel(WhisperPreTrainedModel):
     ):
         """
         Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://arxiv.org/abs/1904.08779).
+        [SpecAugment](https://huggingface.co/papers/1904.08779).
         """
 
         # `config.apply_spec_augment` can set masking to False
@@ -1141,7 +1141,7 @@ class WhisperModel(WhisperPreTrainedModel):
 
             If you want to change padding behavior, you should read
             [`modeling_whisper._prepare_decoder_attention_mask`] and modify to your needs. See diagram 1 in [the BART
-            paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+            paper](https://huggingface.co/papers/1910.13461) for more information on the default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
 
@@ -1311,7 +1311,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
 
             If you want to change padding behavior, you should read
             [`modeling_whisper._prepare_decoder_attention_mask`] and modify to your needs. See diagram 1 in [the BART
-            paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+            paper](https://huggingface.co/papers/1910.13461) for more information on the default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
 

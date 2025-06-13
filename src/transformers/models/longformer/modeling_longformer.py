@@ -1417,7 +1417,7 @@ class LongformerModel(LongformerPreTrainedModel):
     """
     This class copied code from [`RobertaModel`] and overwrote standard self-attention with longformer self-attention
     to provide the ability to process long sequences following the self-attention approach described in [Longformer:
-    the Long-Document Transformer](https://arxiv.org/abs/2004.05150) by Iz Beltagy, Matthew E. Peters, and Arman Cohan.
+    the Long-Document Transformer](https://huggingface.co/papers/2004.05150) by Iz Beltagy, Matthew E. Peters, and Arman Cohan.
     Longformer self-attention combines a local (sliding window) and global attention to extend to long documents
     without the O(n^2) increase in memory and compute.
 
@@ -1549,7 +1549,7 @@ class LongformerModel(LongformerPreTrainedModel):
             attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
             for classification, the <s> token should be given global attention. For QA, all question tokens should also
-            have global attention. Please refer to the [Longformer paper](https://arxiv.org/abs/2004.05150) for more
+            have global attention. Please refer to the [Longformer paper](https://huggingface.co/papers/2004.05150) for more
             details. Mask values selected in `[0, 1]`:
 
             - 0 for local attention (a sliding window attention),
@@ -1701,7 +1701,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
             attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
             for classification, the <s> token should be given global attention. For QA, all question tokens should also
-            have global attention. Please refer to the [Longformer paper](https://arxiv.org/abs/2004.05150) for more
+            have global attention. Please refer to the [Longformer paper](https://huggingface.co/papers/2004.05150) for more
             details. Mask values selected in `[0, 1]`:
 
             - 0 for local attention (a sliding window attention),
@@ -1814,7 +1814,7 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
             attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
             for classification, the <s> token should be given global attention. For QA, all question tokens should also
-            have global attention. Please refer to the [Longformer paper](https://arxiv.org/abs/2004.05150) for more
+            have global attention. Please refer to the [Longformer paper](https://huggingface.co/papers/2004.05150) for more
             details. Mask values selected in `[0, 1]`:
 
             - 0 for local attention (a sliding window attention),
@@ -1938,7 +1938,7 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
             attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
             for classification, the <s> token should be given global attention. For QA, all question tokens should also
-            have global attention. Please refer to the [Longformer paper](https://arxiv.org/abs/2004.05150) for more
+            have global attention. Please refer to the [Longformer paper](https://huggingface.co/papers/2004.05150) for more
             details. Mask values selected in `[0, 1]`:
 
             - 0 for local attention (a sliding window attention),
@@ -2068,7 +2068,7 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
             attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
             for classification, the <s> token should be given global attention. For QA, all question tokens should also
-            have global attention. Please refer to the [Longformer paper](https://arxiv.org/abs/2004.05150) for more
+            have global attention. Please refer to the [Longformer paper](https://huggingface.co/papers/2004.05150) for more
             details. Mask values selected in `[0, 1]`:
 
             - 0 for local attention (a sliding window attention),
@@ -2164,7 +2164,7 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
             attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
             for classification, the <s> token should be given global attention. For QA, all question tokens should also
-            have global attention. Please refer to the [Longformer paper](https://arxiv.org/abs/2004.05150) for more
+            have global attention. Please refer to the [Longformer paper](https://huggingface.co/papers/2004.05150) for more
             details. Mask values selected in `[0, 1]`:
 
             - 0 for local attention (a sliding window attention),

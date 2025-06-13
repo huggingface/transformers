@@ -325,7 +325,7 @@ class Llama4TextAttention(nn.Module):
             query_states = self.qk_norm(query_states)
             key_states = self.qk_norm(key_states)
 
-        # Use temperature tuning from https://arxiv.org/abs/2501.19399) to NoROPE layers
+        # Use temperature tuning from https://huggingface.co/papers/2501.19399) to NoROPE layers
         if self.attn_temperature_tuning and not self.use_rope:
             attn_scales = (
                 torch.log(torch.floor((cache_position.float() + 1.0) / self.floor_scale) + 1.0) * self.attn_scale + 1.0

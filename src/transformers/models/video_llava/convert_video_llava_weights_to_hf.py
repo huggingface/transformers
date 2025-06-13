@@ -37,7 +37,7 @@ Example for creating the old state dict file with Python:
 
     # load model
     kwargs = {"device_map": "auto", "torch_dtype": torch.float16}
-    model = VideoLlavaForCausalLM.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", low_cpu_mem_usage=True, **kwargs)
+    model = VideoLlavaForCausalLM.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", **kwargs)
 
     # load vision tower
     model.get_vision_tower().load_model()

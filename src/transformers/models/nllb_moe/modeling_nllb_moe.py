@@ -95,7 +95,7 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
-    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
     function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
     experts is too unbalanced.
 
@@ -1013,7 +1013,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None, None)
@@ -1285,7 +1285,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.layerdrop) else False

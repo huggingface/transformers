@@ -61,7 +61,7 @@ def load_balancing_loss_func(
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
-    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
     function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
     experts is too unbalanced.
 
@@ -593,7 +593,7 @@ class MultiplierProcessor(torch.autograd.Function):
 def sparsemixer(scores, jitter_eps, training, top_k=2):
     """
     Sparse mixer function to select top-k experts and compute multipliers.
-    Based on the paper: https://arxiv.org/pdf/2409.12136
+    Based on the paper: https://huggingface.co/papers/2409.12136
     We first replace the TopK(·) function as random sampling of discrete variables
     in model training. Then, following Liu et al. (2023a) and Liu et al. (2023b), we apply Heun's
     third order method to approximate the expert routing gradient and construct a modified

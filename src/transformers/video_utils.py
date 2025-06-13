@@ -74,6 +74,9 @@ class VideoMetadata:
     duration: float
     video_backend: str
 
+    def __getitem__(self, item):
+        return getattr(self, item)
+
 
 def is_valid_video_frame(frame):
     return isinstance(frame, PIL.Image.Image) or (
@@ -163,7 +166,7 @@ def make_batched_videos(videos) -> List[Union["np.ndarray", "torch.Tensor"]]:
         videos = [np.array(videos)[None, ...]]
     # nested batch so we need to unflatten
     elif isinstance(videos[0], (list, tuple)) and is_valid_video(videos[0][0]):
-        return [video for sublist in videos for video in sublist]
+        videos = [video for sublist in videos for video in sublist]
     return convert_pil_frames_to_video(videos)
 
 

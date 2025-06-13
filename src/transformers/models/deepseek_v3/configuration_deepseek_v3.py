@@ -53,7 +53,7 @@ class DeepseekV3Config(PretrainedConfig):
             `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         n_shared_experts (`int`, *optional*, defaults to 1):
             Number of shared experts.

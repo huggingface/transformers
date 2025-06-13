@@ -108,7 +108,7 @@ def expand_to_square(image: np.array, background_color, input_data_format) -> np
 class LlavaNextImageProcessor(BaseImageProcessor):
     r"""
     Constructs a LLaVa-NeXT image processor. Based on [`CLIPImageProcessor`] with incorporation of additional techniques
-    for processing high resolution images as explained in the [LLaVa paper](https://arxiv.org/abs/2310.03744).
+    for processing high resolution images as explained in the [LLaVa paper](https://huggingface.co/papers/2310.03744).
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):

@@ -534,7 +534,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
                 {
                     ("xpu", 3): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
                     ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.",
-                    ("cuda", 8): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
+                    ("cuda", 8): 'If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.',
                 }
             )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -618,9 +618,9 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         actual_logits = output.logits[0, -1, :5].cpu()
         expected_logits_all = Expectations(
             {
-                ("xpu", 3): torch.tensor([9.1562, 8.9141, 5.0664, 1.6855, 3.2324]),
-                ("cuda", 7): torch.tensor([9.0781, 8.8750, 5.0781, 1.6221, 3.2207]),
-                ("cuda", 8): torch.tensor([9.0703, 8.8750, 5.0781, 1.6279, 3.2207]),
+                ("xpu", 3): torch.tensor([9.1562, 8.9141, 5.0664, 1.6855, 3.2324], dtype=actual_logits.dtype),
+                ("cuda", 7): torch.tensor([9.0781, 8.8750, 5.0781, 1.6221, 3.2207], dtype=actual_logits.dtype),
+                ("cuda", 8): torch.tensor([9.0703, 8.8750, 5.0781, 1.6279, 3.2207], dtype=actual_logits.dtype),
             }
         )
 
@@ -665,7 +665,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
                 {
                     ("xpu", 3): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
                     ("cuda", 7): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
-                    ("cuda", 8): "If I had to write a haiku for this one, it would be:.\\nA dock on a lake.\\nA mountain in the distance.\\nA long exposure.",
+                    ("cuda", 8): 'If I had to write a haiku for this one, it would be:.\\nA dock in the lake.\\nA mountain in the distance.\\nA long exposure.',
                  }
             )  # fmt: skip
         expected_output = expected_outputs.get_expectation()

@@ -514,7 +514,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         model_sdpa = DiffLlamaForCausalLM.from_pretrained(
             "kajuma/DiffLlama-0.3B-handcut",
             torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
         ).to(torch_device)
 
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
@@ -522,7 +521,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         model_eager = DiffLlamaForCausalLM.from_pretrained(
             "kajuma/DiffLlama-0.3B-handcut",
             torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
             attn_implementation="eager",
         ).to(torch_device)
 

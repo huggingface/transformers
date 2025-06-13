@@ -414,7 +414,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
                 on the batch ID `batch_id` and the previously generated tokens `inputs_ids`. This argument is useful
                 for constrained generation conditioned on the prefix, as described in [Autoregressive Entity
-                Retrieval](https://arxiv.org/abs/2010.00904).
+                Retrieval](https://huggingface.co/papers/2010.00904).
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed to avoid deadlocking with
                 `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).

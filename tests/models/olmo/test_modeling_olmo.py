@@ -334,7 +334,6 @@ class OlmoIntegrationTest(unittest.TestCase):
 
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
-            convert_and_export_with_cache,
         )
 
         olmo_model = "allenai/OLMo-1B-hf"
@@ -382,7 +381,10 @@ class OlmoIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, eager_generated_text)
 
         # Static Cache + export
-        exported_program = convert_and_export_with_cache(model)
+        from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
+
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
+        exported_program = exportable_module.export()
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
             exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
         )

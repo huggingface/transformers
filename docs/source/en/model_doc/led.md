@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The LED model was proposed in [Longformer: The Long-Document Transformer](https://arxiv.org/abs/2004.05150) by Iz
+The LED model was proposed in [Longformer: The Long-Document Transformer](https://huggingface.co/papers/2004.05150) by Iz
 Beltagy, Matthew E. Peters, Arman Cohan.
 
 The abstract from the paper is the following:

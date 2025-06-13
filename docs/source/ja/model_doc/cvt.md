@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-CvT モデルは、Haping Wu、Bin Xiao、Noel Codella、Mengchen Liu、Xiyang Dai、Lu Yuan、Lei Zhang によって [CvT: Introduction Convolutions to Vision Transformers](https://arxiv.org/abs/2103.15808) で提案されました。畳み込みビジョン トランスフォーマー (CvT) は、ViT に畳み込みを導入して両方の設計の長所を引き出すことにより、[ビジョン トランスフォーマー (ViT)](vit) のパフォーマンスと効率を向上させます。
+CvT モデルは、Haping Wu、Bin Xiao、Noel Codella、Mengchen Liu、Xiyang Dai、Lu Yuan、Lei Zhang によって [CvT: Introduction Convolutions to Vision Transformers](https://huggingface.co/papers/2103.15808) で提案されました。畳み込みビジョン トランスフォーマー (CvT) は、ViT に畳み込みを導入して両方の設計の長所を引き出すことにより、[ビジョン トランスフォーマー (ViT)](vit) のパフォーマンスと効率を向上させます。
 
 論文の要約は次のとおりです。
 

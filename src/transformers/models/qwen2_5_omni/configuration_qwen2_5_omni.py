@@ -239,7 +239,7 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 32768):
@@ -256,7 +256,8 @@ class Qwen2_5OmniTextConfig(PretrainedConfig):
         sliding_window (`int`, *optional*, defaults to 32768):
             Sliding window attention (SWA) window size. If not specified, will default to `4096`.
         max_window_layers (`int`, *optional*, defaults to 28):
-            The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
+            The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
+            additional layer afterwards will use SWA (Sliding Window Attention).
         layer_types (`list`, *optional*):
             Attention pattern for each layer.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -585,7 +586,7 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 32768):
@@ -606,7 +607,8 @@ class Qwen2_5OmniTalkerConfig(PretrainedConfig):
         sliding_window (`int`, *optional*, defaults to 32768):
             Sliding window attention (SWA) window size. If not specified, will default to `4096`.
         max_window_layers (`int`, *optional*, defaults to 28):
-            The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
+            The number of layers using full attention. The first `max_window_layers` layers will use full attention, while any
+            additional layer afterwards will use SWA (Sliding Window Attention).
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         rope_scaling (`Dict`, *optional*):

@@ -592,7 +592,7 @@ JUKEBOX_START_DOCSTRING = r"""
 
 @add_start_docstrings(
     """The Hierarchical VQ-VAE model used in Jukebox. This model follows the Hierarchical VQVAE paper from [Will Williams, Sam
-Ringer, Tom Ash, John Hughes, David MacLeod, Jamie Dougherty](https://arxiv.org/abs/2002.08111).
+Ringer, Tom Ash, John Hughes, David MacLeod, Jamie Dougherty](https://huggingface.co/papers/2002.08111).
 
     """,
     JUKEBOX_START_DOCSTRING,

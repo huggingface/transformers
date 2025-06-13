@@ -121,7 +121,7 @@ ViTが導入した主な変更点は、画像をTransformerに供給する方法
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/convolution.gif"/>
 </div>
 
-<small>[Convolution Arithmetic for Deep Learning](https://arxiv.org/abs/1603.07285) からの基本的なパディングやストライドのない畳み込み。</small>
+<small>[Convolution Arithmetic for Deep Learning](https://huggingface.co/papers/1603.07285) からの基本的なパディングやストライドのない畳み込み。</small>
 
 この出力を別の畳み込み層に供給し、各連続した層ごとに、ネットワークはホットドッグやロケットのようなより複雑で抽象的なものを学習します。畳み込み層の間には、特徴の次元を削減し、特徴の位置の変動に対してモデルをより堅牢にするためにプーリング層を追加するのが一般的です。
 

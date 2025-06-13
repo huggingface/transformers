@@ -36,7 +36,7 @@ logger = logging.get_logger(__name__)
 
 class CpmAntLayerNorm(nn.Module):
     """
-    We use Root Mean Square (RMS) Layer Normalization, please see https://arxiv.org/abs/1910.07467 for details."
+    We use Root Mean Square (RMS) Layer Normalization, please see https://huggingface.co/papers/1910.07467 for details."
     """
 
     def __init__(self, config: CpmAntConfig):

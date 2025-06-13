@@ -179,6 +179,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
     ):
+        logger.warning_once(
+            "TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We "
+            "recommend migrating to PyTorch classes or pinning your version of Transformers."
+        )
         if config is None:
             raise ValueError("config cannot be None")
 

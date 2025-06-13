@@ -189,7 +189,7 @@ _deps = [
     "tiktoken",
     "timm<=1.0.11",
     "tokenizers>=0.21,<0.22",
-    "torch>=2.1,<2.7",  # Installing torch 2.7 results in slower compiled LLMs. Pinned while we investigate.
+    "torch>=2.1",
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",

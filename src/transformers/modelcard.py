@@ -83,7 +83,7 @@ class ModelCard:
 
     Please read the following paper for details and explanation on the sections: "Model Cards for Model Reporting" by
     Margaret Mitchell, Simone Wu, Andrew Zaldivar, Parker Barnes, Lucy Vasserman, Ben Hutchinson, Elena Spitzer,
-    Inioluwa Deborah Raji and Timnit Gebru for the proposal behind model cards. Link: https://arxiv.org/abs/1810.03993
+    Inioluwa Deborah Raji and Timnit Gebru for the proposal behind model cards. Link: https://huggingface.co/papers/1810.03993
 
     Note: A model card can be loaded and saved to disk.
     """
@@ -92,7 +92,7 @@ class ModelCard:
         warnings.warn(
             "The class `ModelCard` is deprecated and will be removed in version 5 of Transformers", FutureWarning
         )
-        # Recommended attributes from https://arxiv.org/abs/1810.03993 (see papers)
+        # Recommended attributes from https://huggingface.co/papers/1810.03993 (see papers)
         self.model_details = kwargs.pop("model_details", {})
         self.intended_use = kwargs.pop("intended_use", {})
         self.factors = kwargs.pop("factors", {})

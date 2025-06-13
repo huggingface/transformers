@@ -49,9 +49,9 @@ class ShieldGemma2IntegrationTest(unittest.TestCase):
         response = requests.get(url)
         image = Image.open(BytesIO(response.content))
 
-        model = ShieldGemma2ForImageClassification.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
-        ).to(torch_device)
+        model = ShieldGemma2ForImageClassification.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(
+            torch_device
+        )
 
         inputs = processor(images=[image]).to(torch_device)
         output = model(**inputs)

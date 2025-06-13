@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The mT5 model was presented in [mT5: A massively multilingual pre-trained text-to-text transformer](https://arxiv.org/abs/2010.11934) by Linting Xue, Noah Constant, Adam Roberts, Mihir Kale, Rami Al-Rfou, Aditya
+The mT5 model was presented in [mT5: A massively multilingual pre-trained text-to-text transformer](https://huggingface.co/papers/2010.11934) by Linting Xue, Noah Constant, Adam Roberts, Mihir Kale, Rami Al-Rfou, Aditya
 Siddhant, Aditya Barua, Colin Raffel.
 
 The abstract from the paper is the following:

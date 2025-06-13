@@ -296,7 +296,7 @@ def sigmoid_focal_loss(
     inputs: Tensor, labels: Tensor, num_masks: int, alpha: float = 0.25, gamma: float = 2
 ) -> Tensor:
     r"""
-    Focal loss proposed in [Focal Loss for Dense Object Detection](https://arxiv.org/abs/1708.02002) originally used in
+    Focal loss proposed in [Focal Loss for Dense Object Detection](https://huggingface.co/papers/1708.02002) originally used in
     RetinaNet. The loss is computed as follows:
 
     $$ \mathcal{L}_{\text{focal loss} = -(1 - p_t)^{\gamma}\log{(p_t)} $$
@@ -734,7 +734,7 @@ class DetrDecoder(nn.Module):
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
 
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             if self.training:
@@ -1215,7 +1215,7 @@ class MaskFormerPixelDecoder(nn.Module):
     def __init__(self, *args, feature_size: int = 256, mask_feature_size: int = 256, **kwargs):
         r"""
         Pixel Decoder Module proposed in [Per-Pixel Classification is Not All You Need for Semantic
-        Segmentation](https://arxiv.org/abs/2107.06278). It first runs the backbone's features into a Feature Pyramid
+        Segmentation](https://huggingface.co/papers/2107.06278). It first runs the backbone's features into a Feature Pyramid
         Network creating a list of feature maps. Then, it projects the last one to the correct `mask_size`.
 
         Args:
@@ -1342,7 +1342,7 @@ class MaskFormerPixelLevelModule(nn.Module):
     def __init__(self, config: MaskFormerConfig):
         """
         Pixel Level Module proposed in [Per-Pixel Classification is Not All You Need for Semantic
-        Segmentation](https://arxiv.org/abs/2107.06278). It runs the input image through a backbone and a pixel
+        Segmentation](https://huggingface.co/papers/2107.06278). It runs the input image through a backbone and a pixel
         decoder, generating an image feature map and pixel embeddings.
 
         Args:

@@ -108,6 +108,10 @@ class BatchFeature(UserDict):
 
         # Get a function reference for the correct framework
         if tensor_type == TensorType.TENSORFLOW:
+            logger.warning_once(
+                "TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We "
+                "recommend migrating to PyTorch classes or pinning your version of Transformers."
+            )
             if not is_tf_available():
                 raise ImportError(
                     "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
@@ -138,6 +142,10 @@ class BatchFeature(UserDict):
 
             is_tensor = torch.is_tensor
         elif tensor_type == TensorType.JAX:
+            logger.warning_once(
+                "TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We "
+                "recommend migrating to PyTorch classes or pinning your version of Transformers."
+            )
             if not is_flax_available():
                 raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
             import jax.numpy as jnp  # noqa: F811

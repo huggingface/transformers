@@ -343,7 +343,7 @@ class TFLayoutLMv3SelfAttention(keras.layers.Layer):
 
     def cogview_attention(self, attention_scores: tf.Tensor, alpha: Union[float, int] = 32):
         """
-        https://arxiv.org/abs/2105.13290 Section 2.4 Stabilization of training: Precision Bottleneck Relaxation
+        https://huggingface.co/papers/2105.13290 Section 2.4 Stabilization of training: Precision Bottleneck Relaxation
         (PB-Relax). A replacement of the original keras.layers.Softmax(axis=-1)(attention_scores). Seems the new
         attention_probs will result in a slower speed and a little bias. Can use
         tf.debugging.assert_near(standard_attention_probs, cogview_attention_probs, atol=1e-08) for comparison. The

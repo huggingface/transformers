@@ -18,7 +18,7 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The ViTMatte model was proposed in [Boosting Image Matting with Pretrained Plain Vision Transformers](https://arxiv.org/abs/2305.15272) by Jingfeng Yao, Xinggang Wang, Shusheng Yang, Baoyuan Wang.
+The ViTMatte model was proposed in [Boosting Image Matting with Pretrained Plain Vision Transformers](https://huggingface.co/papers/2305.15272) by Jingfeng Yao, Xinggang Wang, Shusheng Yang, Baoyuan Wang.
 ViTMatte leverages plain [Vision Transformers](vit) for the task of image matting, which is the process of accurately estimating the foreground object in images and videos.
 
 The abstract from the paper is the following:
@@ -31,7 +31,7 @@ The original code can be found [here](https://github.com/hustvl/ViTMatte).
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vitmatte_architecture.png"
 alt="drawing" width="600"/>
 
-<small> ViTMatte high-level overview. Taken from the <a href="https://arxiv.org/abs/2305.15272">original paper.</a> </small>
+<small> ViTMatte high-level overview. Taken from the <a href="https://huggingface.co/papers/2305.15272">original paper.</a> </small>
 
 ## Resources
 

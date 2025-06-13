@@ -407,12 +407,6 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             normalized_1 = F.softmax(out_shared_prefix_last_tokens)
             torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
 
-    @unittest.skip(
-        "Not currently compatible. Fails with - NotImplementedError: Cannot copy out of meta tensor; no data!"
-    )
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "microsoft/udop-large"
@@ -614,12 +608,6 @@ class UdopEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
             normalized_0 = F.softmax(out_last_tokens)
             normalized_1 = F.softmax(out_shared_prefix_last_tokens)
             torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
-
-    @unittest.skip(
-        "Not currently compatible. Fails with - NotImplementedError: Cannot copy out of meta tensor; no data!"
-    )
-    def test_save_load_low_cpu_mem_usage(self):
-        pass
 
 
 @require_torch

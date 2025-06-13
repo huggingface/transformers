@@ -56,13 +56,15 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
         if not hasattr(model.config, "use_cache") or model.config.use_cache is False:
             raise ValueError("The model must have caching enabled to be performant.")
 
-        if not hasattr(model.config, "layer_types"):
-            # If `layer_types` is not specified explicitly in the config, there is only 1 type of layers, so
-            # export will use `StaticCache` by default.
-            logging.info("Using `StaticCache` for export as `layer_types` is not specified in the config.")
-            self.model = TorchExportableModuleWithStaticCache(model)
-        else:
+        if hasattr(model.config, "layer_types") and getattr(model.config, "sliding_window", None) is not None:
             self.model = TorchExportableModuleWithHybridCache(model, max_batch_size, max_cache_len)
+        else:
+            # If `layer_types` is not specified explicitly in the config or `sliding_window` is null,
+            # there is only 1 type of layers, so export will use `StaticCache` by default.
+            logging.info(
+                "Using `StaticCache` for export as `layer_types` is not specified or `sliding_window` is `null` in the config."
+            )
+            self.model = TorchExportableModuleWithStaticCache(model)
 
     def forward(
         self,
@@ -399,12 +401,6 @@ class TorchExportableModuleWithHybridCache(torch.nn.Module):
         # Verify the model is configured for HybridCache
         if not self.model.config.use_cache:
             raise AssertionError("Model must have caching enabled")
-
-        if (
-            not hasattr(self.model.config, "cache_implementation")
-            or self.model.config.cache_implementation != "hybrid"
-        ):
-            raise AssertionError("Model must use 'hybrid' cache implementation")
 
         # Initialize the HybridCache
         self.cache = HybridCache(

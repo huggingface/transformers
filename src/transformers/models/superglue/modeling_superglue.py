@@ -582,7 +582,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
 
     Paul-Edouard Sarlin, Daniel DeTone, Tomasz Malisiewicz, and Andrew
     Rabinovich. SuperGlue: Learning Feature Matching with Graph Neural
-    Networks. In CVPR, 2020. https://arxiv.org/abs/1911.11763
+    Networks. In CVPR, 2020. https://huggingface.co/papers/1911.11763
     """
 
     def __init__(self, config: SuperGlueConfig) -> None:

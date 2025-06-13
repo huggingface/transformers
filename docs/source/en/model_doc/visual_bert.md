@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The VisualBERT model was proposed in [VisualBERT: A Simple and Performant Baseline for Vision and Language](https://arxiv.org/pdf/1908.03557) by Liunian Harold Li, Mark Yatskar, Da Yin, Cho-Jui Hsieh, Kai-Wei Chang.
+The VisualBERT model was proposed in [VisualBERT: A Simple and Performant Baseline for Vision and Language](https://huggingface.co/papers/1908.03557) by Liunian Harold Li, Mark Yatskar, Da Yin, Cho-Jui Hsieh, Kai-Wei Chang.
 VisualBERT is a neural network trained on a variety of (image, text) pairs.
 
 The abstract from the paper is the following:

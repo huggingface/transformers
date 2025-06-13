@@ -170,7 +170,7 @@ class TFRegNetShortCut(keras.layers.Layer):
 
 class TFRegNetSELayer(keras.layers.Layer):
     """
-    Squeeze and Excitation layer (SE) proposed in [Squeeze-and-Excitation Networks](https://arxiv.org/abs/1709.01507).
+    Squeeze and Excitation layer (SE) proposed in [Squeeze-and-Excitation Networks](https://huggingface.co/papers/1709.01507).
     """
 
     def __init__(self, in_channels: int, reduced_channels: int, **kwargs):

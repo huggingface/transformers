@@ -795,7 +795,7 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
     """
 
     The model builds upon the GPT2 architecture to perform autoregressive prediction of actions in an offline RL
-    setting. Refer to the paper for more details: https://arxiv.org/abs/2106.01345
+    setting. Refer to the paper for more details: https://huggingface.co/papers/2106.01345
 
     """
 

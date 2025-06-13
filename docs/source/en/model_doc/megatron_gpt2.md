@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The MegatronGPT2 model was proposed in [Megatron-LM: Training Multi-Billion Parameter Language Models Using Model
-Parallelism](https://arxiv.org/abs/1909.08053) by Mohammad Shoeybi, Mostofa Patwary, Raul Puri, Patrick LeGresley,
+Parallelism](https://huggingface.co/papers/1909.08053) by Mohammad Shoeybi, Mostofa Patwary, Raul Puri, Patrick LeGresley,
 Jared Casper and Bryan Catanzaro.
 
 The abstract from the paper is the following:

@@ -418,7 +418,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             `bitsandbytes`.
         llm_int8_threshold (`float`, *optional*, defaults to 6.0):
             This corresponds to the outlier threshold for outlier detection as described in `LLM.int8() : 8-bit Matrix
-            Multiplication for Transformers at Scale` paper: https://arxiv.org/abs/2208.07339 Any hidden states value
+            Multiplication for Transformers at Scale` paper: https://huggingface.co/papers/2208.07339 Any hidden states value
             that is above this threshold will be considered an outlier and the operation on those values will be done
             in fp16. Values are usually normally distributed, that is, most values are in the range [-3.5, 3.5], but
             there are some exceptional systematic outliers that are very differently distributed for large models.

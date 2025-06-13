@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The PEGASUS-X model was proposed in [Investigating Efficiently Extending Transformers for Long Input Summarization](https://arxiv.org/abs/2208.04347)  by Jason Phang, Yao Zhao and Peter J. Liu.
+The PEGASUS-X model was proposed in [Investigating Efficiently Extending Transformers for Long Input Summarization](https://huggingface.co/papers/2208.04347)  by Jason Phang, Yao Zhao and Peter J. Liu.
 
 PEGASUS-X (PEGASUS eXtended) extends the PEGASUS models for long input summarization through additional long input pretraining and using staggered block-local attention with global tokens in the encoder.
 

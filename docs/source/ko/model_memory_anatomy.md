@@ -187,7 +187,7 @@ GPU memory occupied: 14949 MB.
 
 이러한 지식은 성능 병목 현상을 분석할 때 도움이 될 수 있습니다.
 
-이 내용은 [Data Movement Is All You Need: A Case Study on Optimizing Transformers 2020](https://arxiv.org/abs/2007.00072)을 참고하였습니다.
+이 내용은 [Data Movement Is All You Need: A Case Study on Optimizing Transformers 2020](https://huggingface.co/papers/2007.00072)을 참고하였습니다.
 
 
 ## 모델의 메모리 구조 [[anatomy-of-models-memory]]

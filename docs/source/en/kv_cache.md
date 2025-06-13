@@ -261,7 +261,9 @@ A cache can also work in iterative generation settings where there is back-and-f
 
 For iterative generation with a cache, start by initializing an empty cache class and then you can feed in your new prompts. Keep track of dialogue history with a [chat template](./chat_templating).
 
-The example below demonstrates how to use a cache for iterative generation.
+The following example demonstrates [Llama-2-7b-chat-hf](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf). If you’re using a different chat-style model, [`~PreTrainedTokenizer.apply_chat_template`] may process messages differently. It might cut out important tokens depending on how the Jinja template is written.
+
+For example, some models use special `<think> ... </think>` tokens during reasoning. These could get lost during re-encoding, causing indexing issues. You might need to manually remove or adjust extra tokens from the completions to keep things stable.
 
 ```py
 import torch
@@ -281,7 +283,6 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 user_prompts = ["Hello, what's your name?", "Btw, yesterday I was on a rock concert."]
 
 past_key_values = DynamicCache()
-max_cache_length = past_key_values.get_max_length()
 
 messages = []
 for prompt in user_prompts:

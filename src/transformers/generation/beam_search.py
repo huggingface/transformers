@@ -154,7 +154,7 @@ class BeamSearchScorer(BeamScorer):
             [`~transformers.BeamSearchScorer.finalize`].
         num_beam_groups (`int`, *optional*, defaults to 1):
             Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
-            See [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
+            See [this paper](https://huggingface.co/papers/1610.02424) for more details.
         max_length (`int`, *optional*):
             The maximum length of the sequence to be generated.
     """
@@ -448,7 +448,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
             [`~transformers.BeamSearchScorer.finalize`].
         num_beam_groups (`int`, *optional*, defaults to 1):
             Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
-            See [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
+            See [this paper](https://huggingface.co/papers/1610.02424) for more details.
         max_length (`int`, *optional*):
             The maximum length of the sequence to be generated.
     """

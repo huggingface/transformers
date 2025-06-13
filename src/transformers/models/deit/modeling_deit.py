@@ -587,7 +587,7 @@ class DeiTPooler(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    DeiT Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://arxiv.org/abs/2111.09886).
+    DeiT Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://huggingface.co/papers/2111.09886).
 
     <Tip>
 
