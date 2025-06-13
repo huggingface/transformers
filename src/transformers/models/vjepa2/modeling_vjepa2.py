@@ -654,13 +654,18 @@ class VJEPA2Predictor(nn.Module):
         self.proj = nn.Linear(config.pred_hidden_size, config.hidden_size, bias=True)
 
     def sort_tokens(self, hidden_states, position_masks, argsort, head_mask=None):
+        # gather position masks
+        argsort = argsort.to(position_masks.device)
         position_masks = torch.gather(position_masks, dim=1, index=argsort)
-        hidden_states = torch.gather(
-            hidden_states,
-            dim=1,
-            index=argsort.unsqueeze(-1).expand(-1, -1, hidden_states.size(-1)),
-        )
+
+        # gather hidden states
+        argsort = argsort.to(hidden_states.device)
+        hidden_states_argsort = argsort.unsqueeze(-1).expand(-1, -1, hidden_states.size(-1))
+        hidden_states = torch.gather(hidden_states, dim=1, index=hidden_states_argsort)
+
+        # gather head mask
         if head_mask is not None and head_mask[0] is not None:
+            argsort = argsort.to(head_mask.device)
             head_mask = head_mask.permute(1, 0, 2, 3, 4)
             argsort_4d = (
                 argsort.unsqueeze(1)
@@ -678,15 +683,14 @@ class VJEPA2Predictor(nn.Module):
             )
             head_mask = torch.gather(head_mask, dim=4, index=argsort_5d)
             head_mask = head_mask.permute(1, 0, 2, 3, 4)
+
         return hidden_states, position_masks, head_mask
 
     def unsort_tokens(self, hidden_states, argsort):
+        argsort = argsort.to(hidden_states.device)
         reverse_argsort = torch.argsort(argsort, dim=1)
-        hidden_states = torch.gather(
-            hidden_states,
-            dim=1,
-            index=reverse_argsort.unsqueeze(-1).expand(-1, -1, hidden_states.size(-1)),
-        )
+        reverse_argsort = reverse_argsort.unsqueeze(-1).expand(-1, -1, hidden_states.size(-1))
+        hidden_states = torch.gather(hidden_states, dim=1, index=reverse_argsort)
         return hidden_states
 
     @can_return_tuple
