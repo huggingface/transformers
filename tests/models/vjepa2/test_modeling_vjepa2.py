@@ -343,3 +343,22 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
         # verify the last hidden states
         expected_shape = torch.Size((1, num_masks, 1024))
         self.assertEqual(outputs.predictor_output.last_hidden_state.shape, expected_shape)
+
+    @slow
+    def test_video_classification(self):
+        checkpoint = "qubvel-hf/vjepa2-vitl-fpc16-256-ssv2"
+
+        model = VJEPA2ForVideoClassification.from_pretrained(checkpoint).to(torch_device)
+        video_processor = AutoVideoProcessor.from_pretrained(checkpoint)
+
+        sample_video = np.ones((16, 3, 256, 256))
+        inputs = video_processor(sample_video, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        self.assertEqual(outputs.logits.shape, (1, 174))
+
+        expected_logits = torch.tensor([0.8814, -0.1195, -0.6389], device=torch_device)
+        resulted_logits = outputs.logits[0, 100:103]
+        torch.testing.assert_close(resulted_logits, expected_logits, rtol=1e-3, atol=1e-3)
