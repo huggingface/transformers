@@ -15,10 +15,7 @@
 
 import unittest
 
-import numpy as np
-import requests
-from parameterized import parameterized
-
+from huggingface_hub import hf_hub_download
 from transformers import (
     AutoProcessor,
     AutoTokenizer,
@@ -311,16 +308,16 @@ TEST_MODEL_PATH = "shumingh/plm_1b_hf"
 class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained(TEST_MODEL_PATH)
-        # image_file = hf_hub_download(
-        #     repo_id="raushan-testing-hf/images_test", filename="llava_v1_5_radar.jpg", repo_type="dataset"
-        # )
-        # video_file = hf_hub_download(
-        #     repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
-        # )
-        self.image_file = (
-            "/home/smhu/code/occhi/apps/plm/dummy_datasets/image/images/14496_0.PNG"
+        self.image_file = hf_hub_download(
+            repo_id="shumingh/perception_lm_test_images",
+            filename="14496_0.PNG",
+            repo_type="dataset",
         )
-        self.video_file = "/home/smhu/code/occhi/apps/plm/dummy_datasets/video/videos/GUWR5TyiY-M_000012_000022.mp4"
+        self.video_file = hf_hub_download(
+            repo_id="shumingh/perception_lm_test_videos",
+            filename="GUWR5TyiY-M_000012_000022.mp4",
+            repo_type="dataset",
+        )
         self.conversation1 = [
             {
                 "role": "user",
