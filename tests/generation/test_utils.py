@@ -1012,7 +1012,7 @@ class GenerationTesterMixin:
                 self.skipTest(reason="Stateful models don't support contrastive search generation")
 
             # won't fix: FSMT and Reformer have a different cache variable type (and format).
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
                 self.skipTest(reason="Won't fix: old model with different cache format")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
@@ -1041,7 +1041,7 @@ class GenerationTesterMixin:
                 self.skipTest(reason="Stateful models don't support contrastive search generation")
 
             # won't fix: FSMT and Reformer have a different cache variable type (and format).
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
                 self.skipTest(reason="Won't fix: old model with different cache format")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
@@ -1081,10 +1081,8 @@ class GenerationTesterMixin:
             if model_class._is_stateful:
                 self.skipTest(reason="Stateful models don't support contrastive search generation")
 
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer", "speech2text"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
                 self.skipTest(reason="Won't fix: old model with different cache format")
-            if any(model_name in model_class.__name__.lower() for model_name in ["gptbigcode"]):
-                self.skipTest(reason="TODO: fix me")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
 
@@ -1123,22 +1121,16 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
                 self.skipTest(reason="Stateful models don't support assisted generation")
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
                 self.skipTest(reason="Won't fix: old model with different cache format")
             if any(
                 model_name in model_class.__name__.lower()
                 for model_name in [
-                    "bigbirdpegasus",
-                    "led",
-                    "mega",
                     "moshi",
-                    "speech2text",
                     "git",
                     "prophetnet",
-                    "seamlessm4t",
-                    "clvp",
                     "mllama",  # special cache sizes
-                    "blip2",  # overridden `generate()`
+                    "blip2",  # overridden `generate()` all BLIP models
                     "instructblip",
                     "instructblipvideo",
                 ]
@@ -1207,23 +1199,16 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
                 self.skipTest(reason="Stateful models don't support assisted generation")
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
                 self.skipTest(reason="Won't fix: old model with different cache format")
             if any(
                 model_name in model_class.__name__.lower()
                 for model_name in [
-                    "bigbirdpegasus",
-                    "led",
-                    "mega",
                     "moshi",
-                    "speech2text",
                     "git",
                     "prophetnet",
-                    "seamlessm4t",
-                    "clvp",
-                    "fuyu",
                     "mllama",  # special cache sizes
-                    "blip2",  # overridden `generate()`
+                    "blip2",  # overridden `generate()` for all BLIP models
                     "instructblip",
                     "instructblipvideo",
                     *VLM_CLASS_NAMES,  # shouldn't suggest image tokens
@@ -1335,22 +1320,16 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             if model_class._is_stateful:
                 self.skipTest(reason="Stateful models don't support assisted generation")
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["reformer"]):
                 self.skipTest(reason="Won't fix: old model with different cache format")
             if any(
                 model_name in model_class.__name__.lower()
                 for model_name in [
-                    "bigbirdpegasus",
-                    "led",
-                    "mega",
                     "moshi",
-                    "speech2text",
                     "git",
                     "prophetnet",
-                    "seamlessm4t",
-                    "clvp",
                     "mllama",  # special cache sizes
-                    "blip2",  # overridden `generate()`
+                    "blip2",  # overridden `generate()` for all BLIP models
                     "instructblip",
                     "instructblipvideo",
                 ]
@@ -2038,12 +2017,15 @@ class GenerationTesterMixin:
     @pytest.mark.generate
     def test_generate_with_quant_cache(self):
         for model_class in self.all_generative_model_classes:
-            if not model_class._supports_quantized_cache:
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+
+            if (
+                config.get_text_config(decoder=True).is_encoder_decoder
+                or not model_class._supports_default_dynamic_cache()
+            ):
                 self.skipTest(reason="This model does not support the quantized cache format")
 
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             config.is_decoder = True
-
             model = model_class(config).to(torch_device).eval()
             generation_kwargs = {
                 "max_new_tokens": 5,
@@ -2460,14 +2442,10 @@ class GenerationTesterMixin:
         # Past Key Value States -- a few notes here:
         # 1. Its inner sequence length is with respect to the inputs of the latest forward pass, hence the "-1"
         # 2. We ignore models that have unique cache structures (e.g. mamba) or are in need of refatoring to match the
-        #    standard cache format (e.g.gptbigcode )
+        #    standard cache format (e.g.mamba architecture )
         models_without_standard_cache = (
             "bamba",
-            "ctrl",
-            "fsmt",
             "granitemoehybrid",
-            "gptbigcode",
-            "mega",
             "reformer",
             "jamba",
             "mamba",

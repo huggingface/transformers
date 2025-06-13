@@ -187,7 +187,7 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
 
 
 class XLNetRelativeAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, layer_idx=None):
         super().__init__()
 
         if config.d_model % config.n_head != 0:
@@ -214,6 +214,7 @@ class XLNetRelativeAttention(nn.Module):
 
         self.layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.dropout)
+        self.layer_idx = layer_idx
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -322,6 +323,7 @@ class XLNetRelativeAttention(nn.Module):
         target_mapping=None,
         head_mask=None,
         output_attentions=False,
+        cache_position=None,
     ):
         if g is not None:
             # Two-stream attention with relative positional encoding.
