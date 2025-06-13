@@ -160,7 +160,7 @@ class GenerationConfig(PushToHubMixin):
             Number of beams for beam search. 1 means no beam search.
         num_beam_groups (`int`, *optional*, defaults to 1):
             Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
-            [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
+            [this paper](https://huggingface.co/papers/1610.02424) for more details.
         penalty_alpha (`float`, *optional*):
             The values balance the model confidence and the degeneration penalty in contrastive search decoding.
         dola_layers (`str` or `List[int]`, *optional*):
@@ -171,7 +171,7 @@ class GenerationConfig(PushToHubMixin):
             If a list of integers, it must contain the indices of the layers to use for candidate premature layers in DoLa.
             The 0-th layer is the word embedding layer of the model. Set to `'low'` to improve long-answer reasoning tasks,
             `'high'` to improve short-answer tasks. Check the [documentation](https://github.com/huggingface/transformers/blob/main/docs/source/en/generation_strategies.md)
-            or [the paper](https://arxiv.org/abs/2309.03883) for more details.
+            or [the paper](https://huggingface.co/papers/2309.03883) for more details.
 
         > Parameters that control the cache
 
@@ -216,25 +216,25 @@ class GenerationConfig(PushToHubMixin):
             the expected conditional probability of predicting a random token next, given the partial text already
             generated. If set to float < 1, the smallest set of the most locally typical tokens with probabilities that
             add up to `typical_p` or higher are kept for generation. See [this
-            paper](https://arxiv.org/pdf/2202.00666.pdf) for more details.
+            paper](https://huggingface.co/papers/2202.00666) for more details.
         epsilon_cutoff (`float`, *optional*, defaults to 0.0):
             If set to float strictly between 0 and 1, only tokens with a conditional probability greater than
             `epsilon_cutoff` will be sampled. In the paper, suggested values range from 3e-4 to 9e-4, depending on the
             size of the model. See [Truncation Sampling as Language Model
-            Desmoothing](https://arxiv.org/abs/2210.15191) for more details.
+            Desmoothing](https://huggingface.co/papers/2210.15191) for more details.
         eta_cutoff (`float`, *optional*, defaults to 0.0):
             Eta sampling is a hybrid of locally typical sampling and epsilon sampling. If set to float strictly between
             0 and 1, a token is only considered if it is greater than either `eta_cutoff` or `sqrt(eta_cutoff) *
             exp(-entropy(softmax(next_token_logits)))`. The latter term is intuitively the expected next token
             probability, scaled by `sqrt(eta_cutoff)`. In the paper, suggested values range from 3e-4 to 2e-3,
             depending on the size of the model. See [Truncation Sampling as Language Model
-            Desmoothing](https://arxiv.org/abs/2210.15191) for more details.
+            Desmoothing](https://huggingface.co/papers/2210.15191) for more details.
         diversity_penalty (`float`, *optional*, defaults to 0.0):
             This value is subtracted from a beam's score if it generates a token same as any beam from other group at a
             particular time. Note that `diversity_penalty` is only effective if `group beam search` is enabled.
         repetition_penalty (`float`, *optional*, defaults to 1.0):
             The parameter for repetition penalty. 1.0 means no penalty. See [this
-            paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
+            paper](https://huggingface.co/papers/1909.05858) for more details.
         encoder_repetition_penalty (`float`, *optional*, defaults to 1.0):
             The parameter for encoder_repetition_penalty. An exponential penalty on sequences that are not in the
             original input. 1.0 means no penalty.
@@ -358,7 +358,7 @@ class GenerationConfig(PushToHubMixin):
             (defined by `num_assistant_tokens`) is not yet reached. The assistant's confidence threshold is adjusted throughout the speculative iterations to reduce the number of unnecessary draft and target forward passes, biased towards avoiding false negatives.
             `assistant_confidence_threshold` value is persistent over multiple generation calls with the same assistant model.
             It is an unsupervised version of the dynamic speculation lookahead
-            from Dynamic Speculation Lookahead Accelerates Speculative Decoding of Large Language Models <https://arxiv.org/abs/2405.04304>.
+            from Dynamic Speculation Lookahead Accelerates Speculative Decoding of Large Language Models <https://huggingface.co/papers/2405.04304>.
         prompt_lookup_num_tokens (`int`, *optional*):
             The number of tokens to be output as candidate tokens.
         max_matching_ngram_size (`int`, *optional*):
@@ -1049,13 +1049,13 @@ class GenerationConfig(PushToHubMixin):
                     _commit_hash=commit_hash,
                 )
                 commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
-            except EnvironmentError:
+            except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
                 raise
             except Exception:
                 # For any other exception, we throw a generic error.
-                raise EnvironmentError(
+                raise OSError(
                     f"Can't load the configuration of '{pretrained_model_name}'. If you were trying to load it"
                     " from 'https://huggingface.co/models', make sure you don't have a local directory with the same"
                     f" name. Otherwise, make sure '{pretrained_model_name}' is the correct path to a directory"
@@ -1067,9 +1067,7 @@ class GenerationConfig(PushToHubMixin):
             config_dict = cls._dict_from_json_file(resolved_config_file)
             config_dict["_commit_hash"] = commit_hash
         except (json.JSONDecodeError, UnicodeDecodeError):
-            raise EnvironmentError(
-                f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file."
-            )
+            raise OSError(f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file.")
 
         if is_local:
             logger.info(f"loading configuration file {resolved_config_file}")
@@ -1398,7 +1396,7 @@ class BaseWatermarkingConfig(ABC):
 class WatermarkingConfig(BaseWatermarkingConfig):
     """
     Class that holds arguments for watermark generation and should be passed into `GenerationConfig` during `generate`.
-    See [this paper](https://arxiv.org/abs/2306.04634) for more details on the arguments.
+    See [this paper](https://huggingface.co/papers/2306.04634) for more details on the arguments.
 
     Accepts the following keys:
         - greenlist_ratio (`float`):
