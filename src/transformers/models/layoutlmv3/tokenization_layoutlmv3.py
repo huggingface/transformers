@@ -559,16 +559,16 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         sequences with word-level normalized bounding boxes and optional labels.
 
         Args:
-            text (`str`, `list[str]`, `list[list[str]]`):
+            text (`str`, `List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string, a list of strings
                 (words of a single example or questions of a batch of examples) or a list of list of strings (batch of
                 words).
-            text_pair (`list[str]`, `list[list[str]]`):
+            text_pair (`List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence should be a list of strings
                 (pretokenized string).
-            boxes (`list[list[int]]`, `list[list[list[int]]]`):
+            boxes (`List[List[int]]`, `List[List[List[int]]]`):
                 Word-level bounding boxes. Each bounding box should be normalized to be on a 0-1000 scale.
-            word_labels (`list[int]`, `list[list[int]]`, *optional*):
+            word_labels (`List[int]`, `List[List[int]]`, *optional*):
                 Word-level integer labels (for token classification tasks such as FUNSD, CORD).
         """
 
@@ -596,18 +596,18 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         if text_pair is not None:
             # in case text + text_pair are provided, text = questions, text_pair = words
             if not _is_valid_text_input(text):
-                raise ValueError("text input must of type `str` (single example) or `list[str]` (batch of examples). ")
+                raise ValueError("text input must of type `str` (single example) or `List[str]` (batch of examples). ")
             if not isinstance(text_pair, (list, tuple)):
                 raise ValueError(
-                    "Words must be of type `list[str]` (single pretokenized example), "
-                    "or `list[list[str]]` (batch of pretokenized examples)."
+                    "Words must be of type `List[str]` (single pretokenized example), "
+                    "or `List[List[str]]` (batch of pretokenized examples)."
                 )
         else:
             # in case only text is provided => must be words
             if not isinstance(text, (list, tuple)):
                 raise ValueError(
-                    "Words must be of type `list[str]` (single pretokenized example), "
-                    "or `list[list[str]]` (batch of pretokenized examples)."
+                    "Words must be of type `List[str]` (single pretokenized example), "
+                    "or `List[List[str]]` (batch of pretokenized examples)."
                 )
 
         if text_pair is not None:
@@ -957,9 +957,9 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         `__call__` should be used instead.
 
         Args:
-            text (`str`, `list[str]`, `list[list[str]]`):
+            text (`str`, `List[str]`, `List[List[str]]`):
                 The first sequence to be encoded. This can be a string, a list of strings or a list of list of strings.
-            text_pair (`list[str]` or `list[int]`, *optional*):
+            text_pair (`List[str]` or `List[int]`, *optional*):
                 Optional second sequence to be encoded. This can be a list of strings (words of a single example) or a
                 list of list of strings (words of a batch of examples).
         """
@@ -1283,17 +1283,17 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         Truncates a sequence pair in-place following the strategy.
 
         Args:
-            ids (`list[int]`):
+            ids (`List[int]`):
                 Tokenized input ids of the first sequence. Can be obtained from a string by chaining the `tokenize` and
                 `convert_tokens_to_ids` methods.
-            token_boxes (`list[list[int]]`):
+            token_boxes (`List[List[int]]`):
                 Bounding boxes of the first sequence.
-            pair_ids (`list[int]`, *optional*):
+            pair_ids (`List[int]`, *optional*):
                 Tokenized input ids of the second sequence. Can be obtained from a string by chaining the `tokenize`
                 and `convert_tokens_to_ids` methods.
-            pair_token_boxes (`list[list[int]]`, *optional*):
+            pair_token_boxes (`List[List[int]]`, *optional*):
                 Bounding boxes of the second sequence.
-            labels (`list[int]`, *optional*):
+            labels (`List[int]`, *optional*):
                 Labels of the first sequence (for token classification tasks).
             num_tokens_to_remove (`int`, *optional*, defaults to 0):
                 Number of tokens to remove using the truncation strategy.
@@ -1317,7 +1317,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
                 sequence returned. The value of this argument defines the number of additional tokens.
 
         Returns:
-            `tuple[list[int], list[int], list[int]]`: The truncated `ids`, the truncated `pair_ids` and the list of
+            `Tuple[List[int], List[int], List[int]]`: The truncated `ids`, the truncated `pair_ids` and the list of
             overflowing tokens. Note: The *longest_first* strategy returns empty list of overflowing tokens if a pair
             of sequences (or a batch of pairs) is provided.
         """
@@ -1408,7 +1408,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
 
         Args:
             encoded_inputs:
-                Dictionary of tokenized inputs (`list[int]`) or batch of tokenized inputs (`list[list[int]]`).
+                Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
             max_length: maximum length of the returned list and optionally padding length (see below).
                 Will truncate by taking into account the special tokens.
             padding_strategy: PaddingStrategy to use for padding.

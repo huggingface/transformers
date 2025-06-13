@@ -134,7 +134,7 @@ class BasicTokenizer:
         Basic Tokenization of a piece of text. For sub-word tokenization, see WordPieceTokenizer.
 
         Args:
-            never_split (`list[str]`, *optional*)
+            never_split (`List[str]`, *optional*)
                 Kept for backward compatibility purposes. Now implemented directly at the base class level (see
                 [`PreTrainedTokenizer.tokenize`]) List of token not to split.
         """
