@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 # Mamba
 
-The Mamba model was proposed in [Mamba: Linear-Time Sequence Modeling with Selective State Spaces](https://huggingface.co/papers/2312.00752) by Albert Gu and Tri Dao.
+[Mamba](https://huggingface.co/papers/2312.00752) is a selective structured state space model (SSMs) designed to work around Transformers computational inefficiency when dealing with long sequences.  It is a completely attention-free architecture, and comprised of a combination of H3 and gated MLP blocks (Mamba block). Mamba's "content-based reasoning" allows it to focus on specific parts of an input depending on the current token. Mamba also uses a new hardware-aware parallel algorithm to compensate for the lack of convolutional operations. As a result, Mamba has fast inference and can scale to very long sequences.
 
 You can find all the original Mamba checkpoints under the [State Space Models](https://huggingface.co/state-spaces) organization.
 

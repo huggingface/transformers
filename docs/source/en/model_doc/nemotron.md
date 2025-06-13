@@ -114,7 +114,7 @@ If you find our work helpful, please consider citing our paper:
       author={Saurav Muralidharan and Sharath Turuvekere Sreenivas and Raviraj Joshi and Marcin Chochowski and Mostofa Patwary and Mohammad Shoeybi and Bryan Catanzaro and Jan Kautz and Pavlo Molchanov},
       journal={arXiv preprint arXiv:2407.14679},
       year={2024},
-      url={https://huggingface.co/papers/2407.14679},
+      url={https://arxiv.org/abs/2407.14679},
 }
 ```
 
