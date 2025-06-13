@@ -728,26 +728,26 @@ def _infer_parameter_dtype(
     return old_param is not None and old_param.is_contiguous(), casting_dtype
 
 
-def _add_prefix_to_device(param_device,param_name): 
+def _add_prefix_to_device(param_device,param_name):
 
     """
     Takes an integer device and adds the correct hardware prefix ( e.g., 'npu:') to it. 
     logic is similar to 'infer_auto_device_map' in 'accelerate library' 
-    """ 
+    """
     if isinstance(param_device, int):
-        if torch.npu.is_available(): 
+        if torch.npu.is_available():
             device_type_str  = 'npu'
-        elif torch.cuda.is_available(): 
+        elif torch.cuda.is_available():
             device_type_str  = 'cuda'
-        elif torch.mlu.is_available(): 
+        elif torch.mlu.is_available():
             device_type_str  = 'mlu'
-        elif torch.xpu.is_available(): 
+        elif torch.xpu.is_available():
             device_type_str  = 'xpu'
-        elif torch.sdaa.is_available(): 
+        elif torch.sdaa.is_available():
             device_type_str  = 'sdaa'
-        elif torch.musa.is_available(): 
+        elif torch.musa.is_available():
             device_type_str  = 'musa'
-        elif torch.hpu.is_available(): 
+        elif torch.hpu.is_available():
             device_type_str  = 'hpu'
         else:
             raise ValueError(
@@ -756,7 +756,7 @@ def _add_prefix_to_device(param_device,param_name):
             )
         return(f'{device_type_str}:{param_device}')
     return param_device
-    
+
 def _load_parameter_into_model(model: "PreTrainedModel", param_name: str, tensor: torch.Tensor):
     """Cast a single parameter `param_name` into the `model`, with value `tensor`."""
     module, param_type = get_module_from_name(model, param_name)
@@ -850,7 +850,7 @@ def _load_state_dict_into_meta_model(
                     raise ValueError(f"{param_name} doesn't have any device set.")
                 else:
                     param_device = device_map[module_layer.group()]
-                    param_device = _add_prefix_to_device(param_device, param_name) 
+                    param_device = _add_prefix_to_device(param_device, param_name)
 
             if param_device == "disk":
                 if not is_safetensors:
