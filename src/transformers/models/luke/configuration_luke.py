@@ -68,7 +68,7 @@ class LukeConfig(PretrainedConfig):
         use_entity_aware_attention (`bool`, *optional*, defaults to `True`):
             Whether or not the model should use the entity-aware self-attention mechanism proposed in [LUKE: Deep
             Contextualized Entity Representations with Entity-aware Self-attention (Yamada et
-            al.)](https://arxiv.org/abs/2010.01057).
+            al.)](https://huggingface.co/papers/2010.01057).
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
         pad_token_id (`int`, *optional*, defaults to 1):

@@ -1430,7 +1430,7 @@ class TFSwinDecoder(keras.layers.Layer):
 
 @add_start_docstrings(
     "Swin Model with a decoder on top for masked image modeling, as proposed in"
-    " [SimMIM](https://arxiv.org/abs/2111.09886).",
+    " [SimMIM](https://huggingface.co/papers/2111.09886).",
     SWIN_START_DOCSTRING,
 )
 class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
