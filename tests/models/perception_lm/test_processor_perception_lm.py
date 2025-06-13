@@ -34,8 +34,7 @@ if is_torch_available():
     import torch
 
 
-TEST_MODEL_PATH = "/checkpoint/vision_encoder/smhu/debug/plm_hf_1b"
-
+TEST_MODEL_PATH = "shumingh/plm_1b_hf"
 
 @require_vision
 class PerceptionLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):

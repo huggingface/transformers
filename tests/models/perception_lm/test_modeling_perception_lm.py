@@ -306,9 +306,7 @@ class PerceptionLMForConditionalGenerationModelTest(
         pass
 
 
-TEST_MODEL_PATH = "/checkpoint/vision_encoder/smhu/debug/plm_hf_1b"
-
-
+TEST_MODEL_PATH = "shumingh/plm_1b_hf"
 @require_torch
 class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
