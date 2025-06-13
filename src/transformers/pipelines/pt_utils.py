@@ -185,7 +185,7 @@ class PipelineChunkIterator(PipelineIterator):
             # Try to return next item
             processed = next(self.subiterator)
         except StopIteration:
-            # When a preprocess iterator ends, we can start lookig at the next item
+            # When a preprocess iterator ends, we can start looking at the next item
             # ChunkIterator will keep feeding until ALL elements of iterator
             # all have created their subiterator and have been iterating against.
             #
