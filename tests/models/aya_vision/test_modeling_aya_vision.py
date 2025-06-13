@@ -347,7 +347,8 @@ class AyaVisionIntegrationTest(unittest.TestCase):
     @classmethod
     def get_model(cls):
         # Use 4-bit on T4
-        load_in_4bit = get_device_properties()[0] == "cuda" and get_device_properties()[1] < 8
+        device_type, major, _ = get_device_properties()
+        load_in_4bit = (device_type == "cuda") and (major < 8)
         torch_dtype = None if load_in_4bit else torch.float16
 
         if cls.model is None:
