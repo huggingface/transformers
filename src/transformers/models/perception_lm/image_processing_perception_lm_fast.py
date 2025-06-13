@@ -85,7 +85,6 @@ class PerceptionLMImageProcessorFast(BaseImageProcessorFast):
         **kwargs: Unpack[PerceptionLMFastImageProcessorKwargs]
     ) -> BatchFeature:
         # Group images by size for batched transformation
-        del kwargs
         if images:
             grouped_images, grouped_images_index = group_images_by_shape(images)
             resized_images_grouped = {}

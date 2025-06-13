@@ -73,12 +73,6 @@ class PerceptionLMProcessor(ProcessorMixin):
     """
 
     attributes = ["video_processor", "image_processor", "tokenizer"]
-    valid_kwargs = [
-        "chat_template",
-        "patch_size",
-        "image_token",
-        "num_additional_image_tokens",
-    ]
     image_processor_class = "AutoImageProcessor"
     video_processor_class = "AutoVideoProcessor"
     tokenizer_class = "AutoTokenizer"
@@ -191,7 +185,6 @@ class PerceptionLMProcessor(ProcessorMixin):
                 num_media_tokens = (height // self.patch_size // self.pooling_ratio) * (
                     width // self.patch_size // self.pooling_ratio
                 ) * num_tiles
-                print("num_media_tokens", num_media_tokens)
                 media_token_list.append(num_media_tokens)
             sample = ""
             for i, num_media_tokens in enumerate(media_token_list):

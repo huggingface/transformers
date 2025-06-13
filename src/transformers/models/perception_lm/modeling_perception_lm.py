@@ -52,7 +52,6 @@ class PerceptionEncoder(PreTrainedModel):
             ref_feat_shape=config.ref_feat_shape,
             embed_dim=config.width,
         )
-        self.eva_pe._initialize_weights = lambda x: x  # disable weight initialization
 
     def forward(self, x):
         x = self.eva_pe(x)
@@ -67,18 +66,18 @@ class AdaptiveAvgPooling(nn.Module):
         super(AdaptiveAvgPooling, self).__init__()
         self.pooling_ratio = pooling_ratio
 
-    def forward(self, x):
-        b, num_tokens, c = x.shape
+    def forward(self, hidden_states):
+        b, num_tokens, c = hidden_states.shape
         h = int(math.sqrt(num_tokens))
         if h * h != num_tokens:
             raise ValueError(f"num_tokens {num_tokens} is expected to be a square number")
 
         shape = (h // self.pooling_ratio, h // self.pooling_ratio)
-        x = x.permute(0, 2, 1).reshape(b, -1, h, h)
-        x = F.adaptive_avg_pool2d(x, shape)
-        x = x.flatten(2).transpose(1, 2)
+        hidden_states = hidden_states.permute(0, 2, 1).reshape(b, -1, h, h)
+        hidden_states = F.adaptive_avg_pool2d(hidden_states, shape)
+        hidden_states = hidden_states.flatten(2).transpose(1, 2)
 
-        return x
+        return hidden_states
 
 
 class PerceptionLMMultiModalProjector(nn.Module):
@@ -125,6 +124,7 @@ class PerceptionLMPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_quantized_cache = True
     _supports_static_cache = True
+    _supports_flex_attn = True
     _supports_attention_backend = True
 
     def _init_weights(self, module):

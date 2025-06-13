@@ -428,7 +428,6 @@ def write_model(
             vision_config=vision_config.to_dict(),
             projector_pooling_ratio=projector_pooling_ratio,
             image_token_id=image_token_id,
-            tie_word_embeddings=tie_word_embeddings,
         )
 
         config.save_pretrained(tmp_model_path)
