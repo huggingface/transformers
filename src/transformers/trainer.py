@@ -1015,6 +1015,7 @@ class Trainer:
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
             "persistent_workers": self.args.dataloader_persistent_workers,
+            "multiprocessing_context": "fork" if torch.backends.mps.is_available() else None,
         }
 
         if not isinstance(dataset, torch.utils.data.IterableDataset):
