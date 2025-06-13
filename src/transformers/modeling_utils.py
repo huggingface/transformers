@@ -731,8 +731,8 @@ def _infer_parameter_dtype(
 def _add_prefix_to_device(param_device,param_name):
 
     """
-    Takes an integer device and adds the correct hardware prefix ( e.g., 'npu:') to it. 
-    logic is similar to 'infer_auto_device_map' in 'accelerate library' 
+    Takes an integer device and adds the correct hardware prefix ( e.g., 'npu:') to it.
+    logic is similar to 'infer_auto_device_map' in 'accelerate library'
     """
     if isinstance(param_device, int):
         if torch.npu.is_available():
