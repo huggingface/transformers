@@ -43,7 +43,7 @@ pipe = pipeline(
     task="image-text-to-text",
     model="deepseek-community/deepseek-vl-7b-chat",
     device=0,
-    torch_dtype=torch.bfloat16
+    torch_dtype=torch.float16
 )
 
 messages = [
@@ -101,7 +101,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt"
-).to("cuda")
+).to(model.device, dtype=model.dtype)
 
 generated_ids = model.generate(**inputs, max_new_tokens=128)
 generated_ids_trimmed = [
@@ -178,10 +178,12 @@ model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
     inputs = processor.apply_chat_template(
         messages,
         add_generation_prompt=True,
+        padding=True,
+        truncation=True,
         tokenize=True,
         return_dict=True,
         return_tensors="pt"
-    ).to("cuda")
+    ).to(model.device, dtype=model.dtype)
 
     generated_ids = model.generate(**inputs, max_new_tokens=128)
     generated_ids_trimmed = [
