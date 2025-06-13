@@ -1101,7 +1101,7 @@ class TrackioCallback(TrainerCallback):
             self.setup(args, state, model, **kwargs)
 
     def on_train_end(self, args: TrainingArguments, state, control, model=None, processing_class=None, **kwargs):
-        self.trackio.finish()
+        self._trackio.finish()
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
         single_value_scalars = [
@@ -1115,9 +1115,6 @@ class TrackioCallback(TrainerCallback):
         if not self._initialized:
             self.setup(args, state, model)
         if state.is_world_process_zero:
-            for k, v in logs.items():
-                if k in single_value_scalars:
-                    self._trackio.run.summary[k] = v
             non_scalar_logs = {k: v for k, v in logs.items() if k not in single_value_scalars}
             non_scalar_logs = rewrite_logs(non_scalar_logs)
             self._trackio.log({**non_scalar_logs, "train/global_step": state.global_step})
