@@ -96,8 +96,8 @@ jobs:
     with:
       slice_id: ${{ matrix.slice_id }}
       machine_type: ${{ matrix.machine_type }}
-      runner_scale_set: ${{ inputs.runner_scale_set }}
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
+      runner: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
 
     secrets: inherit
 

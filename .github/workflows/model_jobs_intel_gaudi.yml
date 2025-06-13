@@ -9,7 +9,7 @@ on:
       slice_id:
         required: true
         type: number
-      runner_scale_set:
+      runner:
         required: true
         type: string
       machine_type:
@@ -38,7 +38,7 @@ jobs:
       matrix:
         folders: ${{ fromJson(inputs.folder_slices)[inputs.slice_id] }}
     runs-on:
-      group: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
+      group: ${{ inputs.runner }}
     container:
       image: vault.habana.ai/gaudi-docker/1.20.1/ubuntu22.04/habanalabs/pytorch-installer-2.6.0:latest
       options: --runtime=habana
