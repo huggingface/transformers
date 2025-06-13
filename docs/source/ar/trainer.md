@@ -377,7 +377,7 @@ trainer = trl.SFTTrainer(
 
 trainer.train()
 ```
-يمكنك قراءة المزيد حول الطريقة في [المستودع الأصلي](https://github.com/jiaweizzhao/GaLore) أو [الورقة البحثية](https://arxiv.org/abs/2403.03507).
+يمكنك قراءة المزيد حول الطريقة في [المستودع الأصلي](https://github.com/jiaweizzhao/GaLore) أو [الورقة البحثية](https://huggingface.co/papers/2403.03507).
 
 حاليًا، يمكنك فقط تدريب الطبقات الخطية التي تعتبر طبقات GaLore وستستخدم التحلل  ذو الرتبة المنخفضة للتدريب بينما سيتم تحسين الطبقات المتبقية بالطريقة التقليدية.
 
@@ -459,7 +459,7 @@ args = TrainingArguments(
 model_id = "google/gemma-2b"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id، low_cpu_mem_usage=True).to(0)
+model = AutoModelForCausalLM.from_pretrained(model_id).to(0)
 
 trainer = trl.SFTTrainer(
     model=model،
@@ -503,7 +503,7 @@ args = TrainingArguments(
 # تحميل النموذج والمجزىء اللغوي
 model_id = "google/gemma-2b"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(0)
+model = AutoModelForCausalLM.from_pretrained(model_id).to(0)
 
 # تهيئة المدرب
 trainer = Trainer(
@@ -547,7 +547,7 @@ args = TrainingArguments(
 model_id = "google/gemma-2b"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(0)
+model = AutoModelForCausalLM.from_pretrained(model_id).to(0)
 
 trainer = trl.SFTTrainer(
     model=model, 
