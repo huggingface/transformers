@@ -25,6 +25,7 @@ from ...generation.logits_process import (
     DiaEOSChannelFilterLogitsProcessor,
     DiaEOSDelayPatternLogitsProcessor,
     LogitsProcessorList,
+    TemperatureLogitsWarper,
 )
 from ...generation.stopping_criteria import StoppingCriteriaList
 from ...generation.streamers import BaseStreamer
@@ -54,30 +55,23 @@ class DiaGenerationMixin(GenerationMixin):
         negative_prompt_ids: Optional[torch.Tensor] = None,
         negative_prompt_attention_mask: Optional[torch.Tensor] = None,
     ) -> LogitsProcessorList:
+        # Need either custom order or custom processor instead
+        # (Temporarily disabling those for the super function)
+        original_guidance_scale = generation_config.guidance_scale
+        original_temperature = generation_config.temperature
+        generation_config.guidance_scale = None
+        generation_config.temperature = None
+
+        # Get base processors and those we can integrate easily
         custom_processors = LogitsProcessorList()
 
-        cfg_processor = None
-        if generation_config.guidance_scale is not None and generation_config.guidance_scale != 1:
-            cfg_processor = DiaClassifierFreeGuidanceLogitsProcessor(
-                guidance_scale=generation_config.guidance_scale,
-                guidance_top_k=generation_config.top_k,
-            )
-            # Avoid adding CFG again
-            generation_config.guidance_scale = None
+        if original_temperature is not None and original_temperature != 1.0:
+            custom_processors.append(TemperatureLogitsWarper(original_temperature))
 
         custom_processors.append(
             DiaEOSChannelFilterLogitsProcessor(
                 num_channels=len(self.config.delay_pattern),
                 eos_token_id=self.config.eos_token_id,
-            )
-        )
-
-        custom_processors.append(
-            DiaEOSDelayPatternLogitsProcessor(
-                delay_pattern=self.config.delay_pattern,
-                eos_token_id=self.config.eos_token_id,
-                max_generation_len=generation_config.max_length,
-                device=device,
             )
         )
 
@@ -93,9 +87,26 @@ class DiaGenerationMixin(GenerationMixin):
             negative_prompt_attention_mask=negative_prompt_attention_mask,
         )
 
-        # We need to guarantee CFG to be at the first position (after flattening)
-        if cfg_processor is not None:
+        # Custom processors we need at specific positions
+        if original_guidance_scale is not None and original_guidance_scale != 1:
+            cfg_processor = DiaClassifierFreeGuidanceLogitsProcessor(
+                guidance_scale=original_guidance_scale,
+                guidance_top_k=generation_config.top_k,
+            )
             merged_processors.insert(0, cfg_processor)
+
+        merged_processors.append(
+            DiaEOSDelayPatternLogitsProcessor(
+                delay_pattern=self.config.delay_pattern,
+                eos_token_id=self.config.eos_token_id,
+                max_generation_len=generation_config.max_length,
+                device=device,
+            )
+        )
+
+        # Enable temporarily disabled values back
+        generation_config.guidance_scale = original_guidance_scale
+        generation_config.temperature = original_temperature
 
         return merged_processors
 
