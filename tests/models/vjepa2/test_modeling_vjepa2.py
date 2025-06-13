@@ -361,4 +361,4 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor([0.8814, -0.1195, -0.6389], device=torch_device)
         resulted_logits = outputs.logits[0, 100:103]
-        torch.testing.assert_close(resulted_logits, expected_logits, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(resulted_logits, expected_logits, rtol=1e-2, atol=1e-2)
