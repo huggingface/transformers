@@ -21,6 +21,7 @@ from packaging import version
 
 from transformers import AutoTokenizer, MistralConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
+    DeviceProperties,
     Expectations,
     backend_empty_cache,
     cleanup,
@@ -114,7 +115,7 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
 class MistralIntegrationTest(unittest.TestCase):
     # This variable is used to determine which accelerator are we using for our runners (e.g. A10 or T4)
     # Depending on the hardware we get different logits / generations
-    device_properties = None
+    device_properties: DeviceProperties = (None, None, None)
 
     @classmethod
     def setUpClass(cls):
@@ -279,7 +280,7 @@ class MistralIntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.3.0"):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
 
-        if self.device_properties == ("cuda", 7):
+        if self.device_properties[0] == "cuda" and self.device_properties[1] == 7:
             self.skipTest(reason="This test is failing (`torch.compile` fails) on Nvidia T4 GPU.")
 
         NUM_TOKENS_TO_GENERATE = 40

@@ -19,6 +19,7 @@ import pytest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GlmConfig, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     require_flash_attn,
     require_torch,
     require_torch_large_accelerator,
@@ -118,10 +119,17 @@ class GlmIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_9b_eager(self):
-        EXPECTED_TEXTS = [
-            "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
-            "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
-        ]
+        expected_texts = Expectations({
+            ("cuda", None): [
+                "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
+                "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
+            ],
+            ("rocm", (9, 5)) : [
+                "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
+                "Hi today I am going to show you how to make a simple and easy to make a paper airplane. First",
+            ]
+        })  # fmt: skip
+        EXPECTED_TEXTS = expected_texts.get_expectation()
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
