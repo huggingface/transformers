@@ -28,6 +28,10 @@ on:
         default: ''
         required: false
         type: string
+      report_repo_id:
+        required: true
+        type: string
+
 
 env:
   HF_HOME: /mnt/cache
@@ -204,75 +208,6 @@ jobs:
         with:
           name: ${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports
           path: /transformers/reports/${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports
-
-  run_pipelines_tf_gpu:
-    if: ${{ inputs.job == 'run_pipelines_tf_gpu' }}
-    name: TensorFlow pipelines
-    strategy:
-      fail-fast: false
-      matrix:
-        machine_type: [aws-g4dn-4xlarge-cache, aws-g4dn-12xlarge-cache]
-    runs-on:
-      group: '${{ matrix.machine_type }}'
-    container:
-      image: huggingface/transformers-tensorflow-gpu
-      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    steps:
-      - name: Update clone
-        working-directory: /transformers
-        run: |
-          git fetch && git checkout ${{ github.sha }}
-
-      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
-        working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
-
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
-      - name: Environment
-        working-directory: /transformers
-        run: |
-          python3 utils/print_env.py
-
-      - name: Show installed libraries and their versions
-        working-directory: /transformers
-        run: pip freeze
-
-      - name: Set `machine_type` for report and artifact names
-        working-directory: /transformers
-        shell: bash
-        run: |
-          echo "${{ matrix.machine_type }}"
-
-          if [ "${{ matrix.machine_type }}" = "aws-g4dn-4xlarge-cache" ]; then
-            machine_type=single-gpu
-          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
-            machine_type=multi-gpu
-          else
-            machine_type=${{ matrix.machine_type }}
-          fi
-
-          echo "$machine_type"
-          echo "machine_type=$machine_type" >> $GITHUB_ENV
-
-      - name: Run all pipeline tests on GPU
-        working-directory: /transformers
-        run: |
-          python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ env.machine_type }}_run_pipelines_tf_gpu_test_reports tests/pipelines
-
-      - name: Failure short reports
-        if: ${{ always() }}
-        run: |
-          cat /transformers/reports/${{ env.machine_type }}_run_pipelines_tf_gpu_test_reports/failures_short.txt
-
-      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_pipelines_tf_gpu_test_reports"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.machine_type }}_run_pipelines_tf_gpu_test_reports
-          path: /transformers/reports/${{ env.machine_type }}_run_pipelines_tf_gpu_test_reports
 
   run_examples_gpu:
     if: ${{ inputs.job == 'run_examples_gpu' }}
@@ -567,7 +502,6 @@ jobs:
       run_models_gpu,
       run_trainer_and_fsdp_gpu,
       run_pipelines_torch_gpu,
-      run_pipelines_tf_gpu,
       run_examples_gpu,
       run_torch_cuda_extensions_gpu,
       run_quantization_torch_gpu,
@@ -584,15 +518,21 @@ jobs:
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
       quantization_matrix: ${{ needs.setup.outputs.quantization_matrix }}
       ci_event: ${{ inputs.ci_event }}
+      report_repo_id: ${{ inputs.report_repo_id }}
 
     secrets: inherit
 
-  check_new_model_failures:
-    if: ${{ always() && inputs.ci_event == 'Daily CI' && inputs.job == 'run_models_gpu' && needs.send_results.result == 'success' }}
-    name: Check new model failures
+  check_new_failures:
+    if: ${{ always() && inputs.ci_event == 'Daily CI' && needs.send_results.result == 'success' }}
+    name: Check new failures
     needs: send_results
-    uses: ./.github/workflows/check_failed_model_tests.yml
+    uses: ./.github/workflows/check_failed_tests.yml
     with:
       docker: ${{ inputs.docker }}
       start_sha: ${{ github.sha }}
+      job: ${{ inputs.job }}
+      slack_report_channel: ${{ inputs.slack_report_channel }}
+      ci_event: ${{ inputs.ci_event }}
+      report_repo_id: ${{ inputs.report_repo_id }}
+
     secrets: inherit

@@ -98,7 +98,7 @@ CANINE は生の文字で動作するため、**トークナイザーなし**で
 
 ## Resources
 
-- [テキスト分類タスクガイド](../tasks/sequence_classification)
+- [テキスト分類タスクガイド(英語版)](../../en/tasks/sequence_classification)
 - [トークン分類タスクガイド](../tasks/token_classification)
 - [質問回答タスク ガイド](../tasks/question_answering)
 - [多肢選択タスク ガイド](../tasks/multiple_choice)

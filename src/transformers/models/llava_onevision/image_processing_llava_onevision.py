@@ -14,7 +14,8 @@
 # limitations under the License.
 """Image processor class for LLaVa-Onevision."""
 
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -315,6 +316,14 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
 
         return resized_image
 
+    # Copied from transformers.models.llava_next.image_processing_llava_next.LlavaNextImageProcessor._get_padding_size
+    def _get_padding_size(self, original_resolution: tuple, target_resolution: tuple):
+        original_height, original_width = original_resolution
+        target_height, target_width = target_resolution
+        paste_x, r_x = divmod(target_width - original_width, 2)
+        paste_y, r_y = divmod(target_height - original_height, 2)
+        return (paste_y, paste_y + r_y), (paste_x, paste_x + r_x)
+
     # Copied from transformers.models.llava_next.image_processing_llava_next.LlavaNextImageProcessor._pad_for_patching
     def _pad_for_patching(
         self, image: np.array, target_resolution: tuple, input_data_format: ChannelDimension
@@ -322,13 +331,10 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         """
         Pad an image to a target resolution while maintaining aspect ratio.
         """
-        target_height, target_width = target_resolution
-        new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format)
+        new_resolution = get_patch_output_size(image, target_resolution, input_data_format)
+        padding = self._get_padding_size(new_resolution, target_resolution)
 
-        paste_x, r_x = divmod(target_width - new_width, 2)
-        paste_y, r_y = divmod(target_height - new_height, 2)
-
-        padded_image = self.pad(image, padding=((paste_y, paste_y + r_y), (paste_x, paste_x + r_x)))
+        padded_image = self.pad(image, padding=padding)
 
         return padded_image
 
@@ -436,6 +442,85 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         ]
 
         return pixel_values
+
+    # Copied from transformers.models.llava.image_processing_llava.LlavaImageProcessor.pad_to_square
+    def pad_to_square(
+        self,
+        image: np.ndarray,
+        background_color: Union[int, Tuple[int, int, int]] = 0,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.array:
+        """
+        Pads an image to a square based on the longest edge.
+
+        Args:
+            image (`np.ndarray`):
+                The image to pad.
+            background_color (`int` or `Tuple[int, int, int]`, *optional*, defaults to 0):
+                The color to use for the padding. Can be an integer for single channel or a
+                tuple of integers representing for multi-channel images. If passed as integer
+                in mutli-channel mode, it will default to `0` in subsequent channels.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                If unset, will use same as the input image.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the input image. Can be one of:
+                    - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                    - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                If unset, will use the inferred format of the input image.
+
+        Returns:
+            `np.ndarray`: The padded image.
+        """
+        height, width = get_image_size(image, input_data_format)
+        num_channels = image.shape[0] if input_data_format == ChannelDimension.FIRST else image.shape[-1]
+
+        if height == width:
+            image = (
+                to_channel_dimension_format(image, data_format, input_data_format)
+                if data_format is not None
+                else image
+            )
+            return image
+
+        max_dim = max(height, width)
+
+        # Ensure background_color is the correct shape
+        if isinstance(background_color, int):
+            background_color = [background_color]
+        elif len(background_color) != num_channels:
+            raise ValueError(
+                f"background_color must have no more than {num_channels} elements to match the number of channels"
+            )
+
+        if input_data_format == ChannelDimension.FIRST:
+            result = np.zeros((num_channels, max_dim, max_dim), dtype=image.dtype)
+            for i, color in enumerate(background_color):
+                result[i, :, :] = color
+            if width > height:
+                start = (max_dim - height) // 2
+                result[:, start : start + height, :] = image
+            else:
+                start = (max_dim - width) // 2
+                result[:, :, start : start + width] = image
+        else:
+            result = np.zeros((max_dim, max_dim, num_channels), dtype=image.dtype)
+            for i, color in enumerate(background_color):
+                result[:, :, i] = color
+            if width > height:
+                start = (max_dim - height) // 2
+                result[start : start + height, :, :] = image
+            else:
+                start = (max_dim - width) // 2
+                result[:, start : start + width, :] = image
+
+        image = (
+            to_channel_dimension_format(result, data_format, input_data_format) if data_format is not None else result
+        )
+        return image
 
     def _preprocess(
         self,
@@ -595,6 +680,17 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
         do_pad = do_pad if do_pad is not None else self.do_pad
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
+        if isinstance(images, (tuple, list)) and isinstance(images[0], (tuple, list)):
+            # if the first element is a list, we assume that all elements are lists
+            batch_num_images = [len(x) for x in images]
+        elif isinstance(images, (tuple, list)):
+            # treat this as a single-image case for backward compatibility
+            batch_num_images = [1] * len(images)
+        else:
+            batch_num_images = [1]
+        # only single image patching is supported
+        need_patching = [n == 1 for n in batch_num_images for _ in range(n)]
+
         images = make_flat_list_of_images(images)
 
         if not valid_images(images):
@@ -630,25 +726,34 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
+        size_tuple = (
+            (size["height"], size["width"])
+            if "height" in size and "width" in size
+            else (size["shortest_edge"], size["shortest_edge"])
+        )
+
         new_images = []
         image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
-        for image in images:
-            # convert image into a list of patches
-            # we intentionally use the same data format as the input data format
-            size_tuple = (
-                (size["height"], size["width"])
-                if "height" in size and "width" in size
-                else (size["shortest_edge"], size["shortest_edge"])
-            )
-            image_patches = self.get_image_patches(
-                image,
-                image_grid_pinpoints,
-                size=size_tuple,
-                patch_size=size_tuple[0],
-                resample=resample,
-                data_format=input_data_format,
-                input_data_format=input_data_format,
-            )
+        for i, image in enumerate(images):
+            if need_patching[i]:
+                # convert image into a list of patches
+                # we intentionally use the same data format as the input data format
+                image_patches = self.get_image_patches(
+                    image,
+                    image_grid_pinpoints,
+                    size=size_tuple,
+                    patch_size=size_tuple[0],
+                    resample=resample,
+                    data_format=input_data_format,
+                    input_data_format=input_data_format,
+                )
+            else:
+                padded_image = self.pad_to_square(
+                    image=image,
+                    background_color=tuple(int(x * 255) for x in self.image_mean),
+                    input_data_format=input_data_format,
+                )
+                image_patches = [padded_image]
 
             # preprocess patches
             pixel_values = self._preprocess(
@@ -671,7 +776,8 @@ class LlavaOnevisionImageProcessor(BaseImageProcessor):
             processed_images = self._pad_for_batching(new_images)
 
         return BatchFeature(
-            data={"pixel_values": processed_images, "image_sizes": image_sizes}, tensor_type=return_tensors
+            data={"pixel_values": processed_images, "image_sizes": image_sizes, "batch_num_images": batch_num_images},
+            tensor_type=return_tensors,
         )
 
 

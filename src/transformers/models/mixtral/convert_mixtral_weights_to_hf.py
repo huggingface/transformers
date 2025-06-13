@@ -227,7 +227,7 @@ def main():
     parser.add_argument(
         "--model_size",
         choices=["7B"],
-        help="'f' models correspond to the finetuned versions, and are specific to the Mixtral official release. For more details on Mixtral, checkout the original repo: https://huggingface.co/mistral-ai",
+        help="'f' models correspond to the finetuned versions, and are specific to the Mixtral official release. For more details on Mixtral, check out the original repo: https://huggingface.co/mistral-ai",
         default="7B",
     )
     parser.add_argument("--output_dir", help="Location to write HF model", required=True)

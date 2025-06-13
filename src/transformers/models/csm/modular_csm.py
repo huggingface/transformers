@@ -21,6 +21,7 @@ import torch.nn as nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -240,8 +241,12 @@ class CsmDepthDecoderModel(LlamaModel):
 
         inputs_embeds = self.inputs_embeds_projector(inputs_embeds)
 
-        causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+        causal_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
         )
 
         hidden_states = inputs_embeds
@@ -590,22 +595,23 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
             # =======================================
             # TODO: @eustlb, this should be batched !!!
             # but requires making sure batched inference of the codec model works as intended
-            audio_tokens_list = []
-            for batch_input_values, batch_input_values_cutoffs in zip(input_values, input_values_cutoffs):
-                batch_input_values_cutoffs = batch_input_values_cutoffs[batch_input_values_cutoffs >= 0]
-                for i in range(batch_input_values_cutoffs.shape[0] - 1):
-                    start_idx = batch_input_values_cutoffs[i]
-                    end_idx = batch_input_values_cutoffs[i + 1]
-                    audio_batch = batch_input_values[..., start_idx:end_idx]
-                    codec_outputs = self.codec_model.encode(audio_batch.unsqueeze(0))
-                    codebook_ids = codec_outputs.audio_codes.transpose(1, -1)
-                    audio_tokens_list.append(codebook_ids[0])
+            with torch.no_grad():
+                audio_tokens_list = []
+                for batch_input_values, batch_input_values_cutoffs in zip(input_values, input_values_cutoffs):
+                    batch_input_values_cutoffs = batch_input_values_cutoffs[batch_input_values_cutoffs >= 0]
+                    for i in range(batch_input_values_cutoffs.shape[0] - 1):
+                        start_idx = batch_input_values_cutoffs[i]
+                        end_idx = batch_input_values_cutoffs[i + 1]
+                        audio_batch = batch_input_values[..., start_idx:end_idx]
+                        codec_outputs = self.codec_model.encode(audio_batch.unsqueeze(0))
+                        codebook_ids = codec_outputs.audio_codes.transpose(1, -1)
+                        audio_tokens_list.append(codebook_ids[0])
 
-            max_audio_frames = max(el.shape[0] for el in audio_tokens_list)
-            batched_audio_token_ids = torch.stack(
-                [nn.functional.pad(el, (0, 0, 0, max_audio_frames - el.shape[0])) for el in audio_tokens_list]
-            )
-            audio_codes_mask = self.codec_model.get_audio_codes_mask(input_values_mask)
+                max_audio_frames = max(el.shape[0] for el in audio_tokens_list)
+                batched_audio_token_ids = torch.stack(
+                    [nn.functional.pad(el, (0, 0, 0, max_audio_frames - el.shape[0])) for el in audio_tokens_list]
+                )
+                audio_codes_mask = self.codec_model.get_audio_codes_mask(input_values_mask)
             # =======================================
             audio_token_id = self.config.audio_token_id
             audio_token_mask = input_ids == audio_token_id
@@ -627,6 +633,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
             if labels is not None:
                 labels_expanded = labels.unsqueeze(-1).repeat(1, 1, self.config.num_codebooks)
                 labels_expanded[audio_token_mask] = batched_audio_token_ids[audio_codes_mask]
+                labels_expanded[audio_eos_token_mask] = audio_eos_frame_ids
                 # mask depth decoder
                 depth_decoder_ignore_frames_idxs = (labels == -101).nonzero(as_tuple=True)
                 labels_expanded[depth_decoder_ignore_frames_idxs[0], depth_decoder_ignore_frames_idxs[1], 1:] = -100
@@ -720,7 +727,7 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
         >>> from transformers import CsmForConditionalGeneration, AutoProcessor
         >>> from datasets import load_dataset, Audio
 
-        >>> model_id = "eustlb/csm-1b"
+        >>> model_id = "sesame/csm-1b"
         >>> torch_device = "cuda" if torch.cuda.is_available() else "cpu"
 
         >>> processor = AutoProcessor.from_pretrained(model_id)
@@ -834,61 +841,6 @@ class CsmForConditionalGeneration(CsmPreTrainedModel, CsmGenerationMixin):
             else None,
             depth_decoder_attentions=depth_decoder_outputs.attentions if depth_decoder_outputs is not None else None,
         )
-
-    @staticmethod
-    def _prepare_4d_causal_attention_mask_with_cache_position(
-        attention_mask: torch.Tensor,
-        sequence_length: int,
-        target_length: int,
-        dtype: torch.dtype,
-        cache_position: torch.Tensor,
-        batch_size: int,
-        **kwargs,
-    ):
-        """
-        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
-        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
-
-        Args:
-            attention_mask (`torch.Tensor`):
-                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape
-                `(batch_size, 1, query_length, key_value_length)`.
-            sequence_length (`int`):
-                The sequence length being processed.
-            target_length (`int`):
-                The target length: when generating with static cache, the mask should be as long as the static cache,
-                to account for the 0 padding, the part of the cache that is not filled yet.
-            dtype (`torch.dtype`):
-                The dtype to use for the 4D attention mask.
-            cache_position (`torch.Tensor`):
-                Indices depicting the position of the input sequence tokens in the sequence.
-            batch_size (`torch.Tensor`):
-                Batch size.
-        """
-        if attention_mask is not None and attention_mask.dim() == 4:
-            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-            causal_mask = attention_mask
-        else:
-            min_dtype = torch.finfo(dtype).min
-            causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=cache_position.device
-            )
-            if sequence_length != 1:
-                causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
-            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
-            if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
-                mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
-                padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
-
-        return causal_mask
 
 
 __all__ = [

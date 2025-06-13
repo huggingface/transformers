@@ -46,6 +46,7 @@ from ..dynamic_module_utils import (
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..integrations.fsdp import is_fsdp_managed_module
+from ..masking_utils import create_masks_for_generate
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..pytorch_utils import isin_mps_friendly
 from ..tokenization_utils import ExtensionsTrie
@@ -74,9 +75,11 @@ from .candidate_generator import (
 from .configuration_utils import (
     NEED_SETUP_CACHE_CLASSES_MAPPING,
     QUANT_BACKEND_CLASSES_MAPPING,
+    CompileConfig,
     GenerationConfig,
     GenerationMode,
 )
+from .continuous_batching import ContinuousMixin
 from .logits_process import (
     EncoderNoRepeatNGramLogitsProcessor,
     EncoderRepetitionPenaltyLogitsProcessor,
@@ -350,7 +353,7 @@ GenerateBeamOutput = Union[GenerateBeamDecoderOnlyOutput, GenerateBeamEncoderDec
 GenerateOutput = Union[GenerateNonBeamOutput, GenerateBeamOutput]
 
 
-class GenerationMixin:
+class GenerationMixin(ContinuousMixin):
     """
     A class containing all functions for auto-regressive text generation, to be used as a mixin in model classes.
     Inheriting from this class causes the model to have special generation-related behavior, such as loading a
@@ -633,7 +636,7 @@ class GenerationMixin:
             and attention_mask is not None
             and attention_mask.ndim == 2
         ):
-            if model_inputs["inputs_embeds"] is not None:
+            if not self.config.is_encoder_decoder and model_inputs["inputs_embeds"] is not None:
                 batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
             else:
                 batch_size, sequence_length = model_inputs[input_ids_key].shape[:2]
@@ -649,12 +652,20 @@ class GenerationMixin:
                 causal_mask_creation_function = getattr(
                     decoder, "_prepare_4d_causal_attention_mask_with_cache_position", None
                 )
+
+            # If it's not defined, it means the model uses the new general mask API
             if causal_mask_creation_function is None:  # can't be found
-                logger.warning_once(
-                    f"{self.__class__.__name__} has no `_prepare_4d_causal_attention_mask_with_cache_position` method "
-                    "defined in its base modeling class. Compiled forward passes will be sub-optimal. If you're "
-                    "writing code, see Llama for an example implementation. If you're a user, please report this "
-                    "issue on GitHub."
+                token_type_ids = getattr(model_input, "token_type_ids", None)
+                # Some models may overwrite the general one
+                causal_mask_creation_function = getattr(self, "create_masks_for_generate", create_masks_for_generate)
+                attention_mask = causal_mask_creation_function(
+                    config=self.config,
+                    # we only need batch size, seq_length and dtype here - we don't care about the values of the embeddings
+                    input_embeds=torch.empty((batch_size, sequence_length), dtype=self.dtype),
+                    attention_mask=attention_mask,
+                    cache_position=cache_position,
+                    past_key_values=past_key_values,
+                    token_type_ids=token_type_ids,
                 )
             else:
                 attention_mask = causal_mask_creation_function(
@@ -1087,10 +1098,10 @@ class GenerationMixin:
     def _get_logits_processor(
         self,
         generation_config: GenerationConfig,
-        input_ids_seq_length: int,
-        encoder_input_ids: torch.LongTensor,
-        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
-        logits_processor: Optional[LogitsProcessorList],
+        input_ids_seq_length: Optional[int] = None,
+        encoder_input_ids: torch.LongTensor = None,
+        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
+        logits_processor: Optional[LogitsProcessorList] = None,
         device: Optional[str] = None,
         model_kwargs: Optional[Dict[str, Any]] = None,
         negative_prompt_ids: Optional[torch.Tensor] = None,
@@ -1102,6 +1113,8 @@ class GenerationMixin:
         """
         # instantiate processors list
         processors = LogitsProcessorList()
+        if logits_processor is None:
+            logits_processor = []
 
         if generation_config.guidance_scale is not None and generation_config.guidance_scale != 1:
             processors.append(
@@ -1171,7 +1184,7 @@ class GenerationMixin:
             )
         if (
             generation_config.min_length is not None
-            and generation_config._eos_token_tensor is not None
+            and getattr(generation_config, "_eos_token_tensor", None) is not None
             and generation_config.min_length > 0
         ):
             processors.append(
@@ -1183,7 +1196,7 @@ class GenerationMixin:
             )
         if (
             generation_config.min_new_tokens is not None
-            and generation_config._eos_token_tensor is not None
+            and getattr(generation_config, "_eos_token_tensor", None) is not None
             and generation_config.min_new_tokens > 0
         ):
             processors.append(
@@ -1245,12 +1258,6 @@ class GenerationMixin:
                     begin_index,
                     device=device,
                 )
-            )
-        if generation_config.forced_decoder_ids is not None:
-            # TODO (sanchit): move this exception to GenerationConfig.validate() when TF & FLAX are aligned with PT
-            raise ValueError(
-                "You have explicitly specified `forced_decoder_ids`. Please remove the `forced_decoder_ids` argument "
-                "in favour of `input_ids` or `decoder_input_ids` respectively.",
             )
 
         # TODO (joao): find a strategy to specify the order of the processors
@@ -1752,16 +1759,21 @@ class GenerationMixin:
                 use_model_defaults is None and model_base_version >= version.parse("4.50.0")
             ):
                 modified_values = {}
-                default_generation_config = GenerationConfig()
-                for key, default_value in default_generation_config.__dict__.items():
+                global_default_generation_config = GenerationConfig()
+                model_generation_config = self.generation_config
+                # we iterate over the model's generation config: it may hold custom keys, which we'll want to copy
+                for key, model_gen_config_value in model_generation_config.__dict__.items():
                     if key.startswith("_") or key == "transformers_version":  # metadata
                         continue
-                    custom_gen_config_value = getattr(generation_config, key)
-                    model_gen_config_value = getattr(self.generation_config, key)
-                    if custom_gen_config_value == default_value and model_gen_config_value != default_value:
+                    global_default_value = getattr(global_default_generation_config, key, None)
+                    custom_gen_config_value = getattr(generation_config, key, None)
+                    if (
+                        custom_gen_config_value == global_default_value
+                        and model_gen_config_value != global_default_value
+                    ):
                         modified_values[key] = model_gen_config_value
                         setattr(generation_config, key, model_gen_config_value)
-                if len(modified_values) > 0:
+                if use_model_defaults is None and len(modified_values) > 0:
                     logger.warning_once(
                         f"`generation_config` default values have been modified to match model-specific defaults: "
                         f"{modified_values}. If this is not desired, please set these values explicitly."
@@ -1964,6 +1976,7 @@ class GenerationMixin:
             and "jamba" not in self.__class__.__name__.lower()
             and "zamba" not in self.__class__.__name__.lower()
             and "bamba" not in self.__class__.__name__.lower()
+            and "minimax" not in self.__class__.__name__.lower()
         )
 
     def _prepare_cache_for_generation(
@@ -1980,7 +1993,9 @@ class GenerationMixin:
         instantiated, writes it to `model_kwargs`, under the name expected by the model.
         """
 
-        cache_name = "past_key_values" if "mamba" not in self.__class__.__name__.lower() else "cache_params"
+        is_hybrid_cache = any(class_name in self.__class__.__name__.lower() for class_name in ["mamba", "falconh1"])
+        cache_name = "past_key_values" if not is_hybrid_cache else "cache_params"
+
         requires_cross_attention_cache = (
             self.config.is_encoder_decoder or model_kwargs.get("encoder_outputs") is not None
         )
@@ -2328,12 +2343,18 @@ class GenerationMixin:
                     - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
         # 0. If requested, load an arbitrary generation recipe from the Hub and run it instead
+        trust_remote_code = kwargs.pop("trust_remote_code", None)
         if custom_generate is not None:
-            trust_remote_code = kwargs.pop("trust_remote_code", None)
             # Get all `generate` arguments in a single variable. Custom functions are responsible for handling them:
-            # they receive the same inputs as `generate`, only with `model` instead of `self`. They can access to
-            # methods from `GenerationMixin` through `model`.
-            global_keys_to_exclude = {"self", "kwargs"}
+            # they receive the same inputs as `generate`, with `model` instead of `self` and excluding the arguments to
+            # trigger the custom generation. They can access to methods from `GenerationMixin` through `model`.
+            global_keys_to_exclude = {
+                "self",
+                "kwargs",
+                "global_keys_to_exclude",
+                "trust_remote_code",
+                "custom_generate",
+            }
             generate_arguments = {key: value for key, value in locals().items() if key not in global_keys_to_exclude}
             generate_arguments.update(kwargs)
 
@@ -2544,6 +2565,11 @@ class GenerationMixin:
                 **model_kwargs,
             )
         elif generation_mode == GenerationMode.DOLA_GENERATION:
+            if not trust_remote_code:
+                logger.warning_once(
+                    "DoLa Decoding is scheduled to be moved to a `custom_generate` repository in v4.55.0. "
+                    "To prevent loss of backward compatibility, add `trust_remote_code=True` to your `generate` call."
+                )
             if self._is_stateful:
                 # DoLa decoding was not designed for stateful models, and would require some changes
                 raise ValueError(
@@ -2561,6 +2587,11 @@ class GenerationMixin:
             )
 
         elif generation_mode == GenerationMode.CONTRASTIVE_SEARCH:
+            if not trust_remote_code:
+                logger.warning_once(
+                    "Contrastive Search is scheduled to be moved to a `custom_generate` repository in v4.55.0. "
+                    "To prevent loss of backward compatibility, add `trust_remote_code=True` to your `generate` call."
+                )
             if not model_kwargs["use_cache"]:
                 raise ValueError("Contrastive search requires `use_cache=True`")
             if self._is_stateful:
@@ -2618,6 +2649,10 @@ class GenerationMixin:
             )
 
         elif generation_mode == GenerationMode.GROUP_BEAM_SEARCH:
+            logger.warning_once(
+                "Group Beam Search is scheduled to be moved to a `custom_generate` repository in v4.55.0. "
+                "To prevent loss of backward compatibility, add `trust_remote_code=True` to your `generate` call."
+            )
             # 11. prepare beam search scorer
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
@@ -2648,6 +2683,10 @@ class GenerationMixin:
             )
 
         elif generation_mode == GenerationMode.CONSTRAINED_BEAM_SEARCH:
+            logger.warning_once(
+                "Constrained Beam Search is scheduled to be moved to a `custom_generate` repository in v4.55.0. "
+                "To prevent loss of backward compatibility, add `trust_remote_code=True` to your `generate` call."
+            )
             final_constraints = []
             if generation_config.constraints is not None:
                 final_constraints = generation_config.constraints
@@ -3532,6 +3571,19 @@ class GenerationMixin:
         compile_forward = self._valid_auto_compile_criteria(model_kwargs, generation_config)
         if compile_forward:
             os.environ["TOKENIZERS_PARALLELISM"] = "0"
+            # If we use FA2 and a static cache, we cannot compile with fullgraph
+            if self.config._attn_implementation == "flash_attention_2" and getattr(
+                model_kwargs.get("past_key_values"), "is_compileable", False
+            ):
+                if generation_config.compile_config is None:
+                    generation_config.compile_config = CompileConfig(fullgraph=False)
+                # only raise warning if the user passed an explicit compile-config (otherwise, simply change the default without confusing the user)
+                elif generation_config.compile_config.fullgraph:
+                    logger.warning_once(
+                        "When using Flash Attention 2 and a static cache, you cannot use the option `CompileConfig(fullgraph=True)` as "
+                        "FA2 introduces graph breaks. We overrode the option with `fullgraph=False`."
+                    )
+                    generation_config.compile_config.fullgraph = False
             model_forward = self.get_compiled_call(generation_config.compile_config)
 
         if generation_config.prefill_chunk_size is not None:

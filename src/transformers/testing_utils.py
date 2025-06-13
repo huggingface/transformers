@@ -97,6 +97,7 @@ from .utils import (
     is_grokadamw_available,
     is_hadamard_available,
     is_hqq_available,
+    is_huggingface_hub_greater_or_equal,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -115,6 +116,7 @@ from .utils import (
     is_peft_available,
     is_phonemizer_available,
     is_pretty_midi_available,
+    is_psutil_available,
     is_pyctcdecode_available,
     is_pytesseract_available,
     is_pytest_available,
@@ -129,6 +131,7 @@ from .utils import (
     is_seqio_available,
     is_soundfile_available,
     is_spacy_available,
+    is_speech_available,
     is_spqr_available,
     is_sudachi_available,
     is_sudachi_projection_available,
@@ -538,6 +541,21 @@ def require_torch_greater_or_equal(version: str):
         return unittest.skipUnless(is_torch_greater_or_equal(version), f"test requires PyTorch version >= {version}")(
             test_case
         )
+
+    return decorator
+
+
+def require_huggingface_hub_greater_or_equal(version: str):
+    """
+    Decorator marking a test that requires huggingface_hub version >= `version`.
+
+    These tests are skipped when huggingface_hub version is less than `version`.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(
+            is_huggingface_hub_greater_or_equal(version), f"test requires huggingface_hub version >= {version}"
+        )(test_case)
 
     return decorator
 
@@ -1036,6 +1054,19 @@ def require_torch_gpu(test_case):
     return unittest.skipUnless(torch_device == "cuda", "test requires CUDA")(test_case)
 
 
+def require_large_cpu_ram(test_case, memory: float = 80):
+    """Decorator marking a test that requires a CPU RAM with more than `memory` GiB of memory."""
+    if not is_psutil_available():
+        return test_case
+
+    import psutil
+
+    return unittest.skipUnless(
+        psutil.virtual_memory().total / 1024**3 > memory,
+        f"test requires a machine with more than {memory} GiB of CPU RAM memory",
+    )(test_case)
+
+
 def require_torch_large_gpu(test_case, memory: float = 20):
     """Decorator marking a test that requires a CUDA GPU with more than `memory` GiB of memory."""
     if torch_device != "cuda":
@@ -1458,6 +1489,13 @@ def require_tiktoken(test_case):
     Decorator marking a test that requires TikToken. These tests are skipped when TikToken isn't installed.
     """
     return unittest.skipUnless(is_tiktoken_available(), "test requires TikToken")(test_case)
+
+
+def require_speech(test_case):
+    """
+    Decorator marking a test that requires speech. These tests are skipped when speech isn't available.
+    """
+    return unittest.skipUnless(is_speech_available(), "test requires torchaudio")(test_case)
 
 
 def get_gpu_count():
@@ -3008,6 +3046,11 @@ if is_torch_available():
         "cpu": 0,
         "default": 0,
     }
+    BACKEND_RESET_PEAK_MEMORY_STATS = {
+        "cuda": torch.cuda.reset_peak_memory_stats,
+        "cpu": None,
+        "default": None,
+    }
     BACKEND_MEMORY_ALLOCATED = {
         "cuda": torch.cuda.memory_allocated,
         "cpu": 0,
@@ -3028,6 +3071,7 @@ else:
     BACKEND_EMPTY_CACHE = {"default": None}
     BACKEND_DEVICE_COUNT = {"default": lambda: 0}
     BACKEND_RESET_MAX_MEMORY_ALLOCATED = {"default": None}
+    BACKEND_RESET_PEAK_MEMORY_STATS = {"default": None}
     BACKEND_MAX_MEMORY_ALLOCATED = {"default": 0}
     BACKEND_MEMORY_ALLOCATED = {"default": 0}
     BACKEND_SYNCHRONIZE = {"default": None}
@@ -3056,6 +3100,7 @@ if is_torch_xpu_available():
     BACKEND_MANUAL_SEED["xpu"] = torch.xpu.manual_seed
     BACKEND_DEVICE_COUNT["xpu"] = torch.xpu.device_count
     BACKEND_RESET_MAX_MEMORY_ALLOCATED["xpu"] = torch.xpu.reset_peak_memory_stats
+    BACKEND_RESET_PEAK_MEMORY_STATS["xpu"] = torch.xpu.reset_peak_memory_stats
     BACKEND_MAX_MEMORY_ALLOCATED["xpu"] = torch.xpu.max_memory_allocated
     BACKEND_MEMORY_ALLOCATED["xpu"] = torch.xpu.memory_allocated
     BACKEND_SYNCHRONIZE["xpu"] = torch.xpu.synchronize
@@ -3082,6 +3127,10 @@ def backend_device_count(device: str):
 
 def backend_reset_max_memory_allocated(device: str):
     return _device_agnostic_dispatch(device, BACKEND_RESET_MAX_MEMORY_ALLOCATED)
+
+
+def backend_reset_peak_memory_stats(device: str):
+    return _device_agnostic_dispatch(device, BACKEND_RESET_PEAK_MEMORY_STATS)
 
 
 def backend_max_memory_allocated(device: str):

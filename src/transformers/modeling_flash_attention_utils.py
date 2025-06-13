@@ -40,11 +40,13 @@ if is_flash_attn_2_available():
 
 # patch functions in package `flash-attn` when using flash-attention on Ascend NPU.
 if is_torch_npu_available():
-    from torch_npu import npu_rotary_mul as apply_rotary_emb  # noqa
-
     from .integrations.npu_flash_attention import index_first_axis, pad_input, unpad_input
+    from .integrations.npu_flash_attention import npu_apply_rotary_emb as apply_rotary_emb  # noqa
     from .integrations.npu_flash_attention import npu_flash_attn_func as flash_attn_func
     from .integrations.npu_flash_attention import npu_flash_attn_varlen_func as flash_attn_varlen_func
+
+
+_flash_supports_window_size = False
 
 
 if flash_attn_func:
@@ -148,6 +150,12 @@ def _upad_input(
             Maximum sequence length in batch (`max_seqlen_in_batch_q` for the target sequence i.e. query, `max_seqlen_in_batch_k` for the source sequence i.e. key/value).
     """
     indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
+
+    # With static caches, the k/v states may be larger than the mask -> we need to slice them to avoid generating garbage
+    # It's a bit of an anti-pattern, but otherwise we silently compute wrong attentions scores
+    if key_layer.shape[1] > (seq_len := attention_mask.shape[-1]):
+        key_layer, value_layer = key_layer[:, :seq_len, :, :], value_layer[:, :seq_len, :, :]
+
     batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
     key_layer = index_first_axis(key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k)
@@ -273,7 +281,7 @@ def fa_peft_integration_check(
 
 
 flash_241 = is_flash_attn_greater_or_equal("2.4.1")
-deterministic_g = os.environ.get("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
+deterministic_g = None
 
 
 def _flash_attention_forward(
@@ -336,6 +344,9 @@ def _flash_attention_forward(
 
     if flash_241:
         if deterministic is None:
+            global deterministic_g
+            if deterministic_g is None:
+                deterministic_g = os.environ.get("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
             deterministic = deterministic_g
         flash_kwargs["deterministic"] = deterministic
 
@@ -421,9 +432,9 @@ class FlashAttentionKwargs(TypedDict, total=False):
     Keyword arguments for Flash Attention with Compile.
 
     Attributes:
-        cu_seq_lens_q (`torch.LongTensor`, *optional*)
+        cumulative_seqlens_q (`torch.LongTensor`, *optional*)
             Gets cumulative sequence length for query state.
-        cu_seq_lens_k (`torch.LongTensor`, *optional*)
+        cumulative_seqlens_k (`torch.LongTensor`, *optional*)
             Gets cumulative sequence length for key state.
         max_length_q (`int`, *optional*):
             Maximum sequence length for query state.
@@ -431,7 +442,7 @@ class FlashAttentionKwargs(TypedDict, total=False):
             Maximum sequence length for key state.
     """
 
-    cu_seq_lens_q: Optional[torch.LongTensor]
-    cu_seq_lens_k: Optional[torch.LongTensor]
+    cumulative_seqlens_q: Optional[torch.LongTensor]
+    cumulative_seqlens_k: Optional[torch.LongTensor]
     max_length_q: Optional[int]
     max_length_k: Optional[int]

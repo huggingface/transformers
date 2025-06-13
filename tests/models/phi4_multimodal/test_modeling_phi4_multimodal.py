@@ -31,7 +31,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
+from transformers.testing_utils import backend_empty_cache, require_soundfile, require_torch, slow, torch_device
 from transformers.utils import is_soundfile_available
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -296,7 +296,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.cuda.empty_cache()
+        backend_empty_cache(torch_device)
 
     def test_text_only_generation(self):
         model = AutoModelForCausalLM.from_pretrained(

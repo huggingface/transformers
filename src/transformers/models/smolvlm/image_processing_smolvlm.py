@@ -20,7 +20,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -846,6 +847,47 @@ class SmolVLMImageProcessor(BaseImageProcessor):
             encoding["cols"] = images_list_cols
 
         return encoding
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*)
+                Any kwargs to override defaults of the image processor.
+        Returns:
+            `int`: Number of patches per image.
+        """
+        do_image_splitting = images_kwargs.get("do_image_splitting", None) or self.do_image_splitting
+        max_image_size = images_kwargs.get("max_image_size", None) or self.max_image_size
+        size = images_kwargs.get("size", None) or self.size
+
+        if do_image_splitting:
+            height, width = _resize_output_size_rescale_to_max_len(height, width, max_len=size["longest_edge"])
+            height, width = _resize_output_size_scale_below_upper_bound(height, width, max_len=4096)
+            aspect_ratio = width / height
+
+            if width >= height:
+                resized_width = math.ceil(width / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
+                resized_height = int(width / aspect_ratio)
+                resized_height = math.ceil(height / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
+            elif height > width:
+                resized_height = math.ceil(height / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
+                resized_width = int(height * aspect_ratio)
+                resized_width = math.ceil(width / max_image_size["longest_edge"]) * max_image_size["longest_edge"]
+
+            max_height = max_width = max_image_size["longest_edge"]
+            if resized_height > max_height or resized_width > max_width:
+                # Calculate the number of splits
+                num_rows = math.ceil(resized_height / max_height)
+                num_cols = math.ceil(resized_width / max_width)
+                num_patches = num_rows * num_cols + 1
+
+        return num_patches
 
 
 __all__ = ["SmolVLMImageProcessor"]

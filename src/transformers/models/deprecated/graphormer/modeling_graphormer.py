@@ -15,7 +15,8 @@
 """PyTorch Graphormer model."""
 
 import math
-from typing import Iterable, Iterator, List, Optional, Tuple, Union
+from collections.abc import Iterable, Iterator
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn

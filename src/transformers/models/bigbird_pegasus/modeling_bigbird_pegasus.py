@@ -16,7 +16,7 @@
 
 import copy
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -29,7 +29,9 @@ from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
     _prepare_4d_attention_mask,
+    _prepare_4d_attention_mask_for_sdpa,
 )
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -39,20 +41,14 @@ from ...modeling_outputs import (
     Seq2SeqQuestionAnsweringModelOutput,
     Seq2SeqSequenceClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    auto_docstring,
-    is_torch_flex_attn_available,
-    is_torchdynamo_compiling,
-    logging,
-)
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import auto_docstring, is_torch_flex_attn_available, is_torchdynamo_compiling, logging
 from .configuration_bigbird_pegasus import BigBirdPegasusConfig
 
 
 if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import BlockMask
-
-    from ...integrations.flex_attention import make_flex_block_causal_mask
+    from ...integrations.flex_attention import BlockMask, make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
@@ -1179,6 +1175,37 @@ class BigBirdPegasusEncoderAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bart.modeling_bart.eager_attention_forward
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: Optional[float] = None,
+    dropout: float = 0.0,
+    head_mask: Optional[torch.Tensor] = None,
+    **kwargs,
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+
+    if head_mask is not None:
+        attn_weights = attn_weights * head_mask.view(1, -1, 1, 1)
+
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 # Copied from transformers.models.bart.modeling_bart.BartAttention with BartConfig->BigBirdPegasusConfig, Bart->BigBirdPegasusDecoder
 class BigBirdPegasusDecoderAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -1231,17 +1258,25 @@ class BigBirdPegasusDecoderAttention(nn.Module):
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         cache_position: Optional[torch.Tensor] = None,
+        # TODO: we need a refactor so that the different attention modules can get their specific kwargs
+        # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        bsz, tgt_len, _ = hidden_states.size()
+
+        # determine input shapes
+        bsz, tgt_len = hidden_states.shape[:-1]
+        src_len = key_value_states.shape[1] if is_cross_attention else tgt_len
+
+        q_input_shape = (bsz, tgt_len, -1, self.head_dim)
+        kv_input_shape = (bsz, src_len, -1, self.head_dim)
 
         # get query proj
-        query_states = self.q_proj(hidden_states).view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        query_states = query_states * self.scaling
+        query_states = self.q_proj(hidden_states).view(*q_input_shape).transpose(1, 2)
 
         if past_key_value is not None:
             if isinstance(past_key_value, EncoderDecoderCache):
@@ -1262,8 +1297,8 @@ class BigBirdPegasusDecoderAttention(nn.Module):
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
-            key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-            value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+            key_states = key_states.view(*kv_input_shape).transpose(1, 2)
+            value_states = value_states.view(*kv_input_shape).transpose(1, 2)
 
             if past_key_value is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
@@ -1275,66 +1310,27 @@ class BigBirdPegasusDecoderAttention(nn.Module):
                 if is_cross_attention:
                     past_key_value.is_updated[self.layer_idx] = True
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = query_states.reshape(*proj_shape)
-        key_states = key_states.reshape(*proj_shape)
-        value_states = value_states.reshape(*proj_shape)
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            output_attentions=output_attentions,
+            head_mask=layer_head_mask,
+            **kwargs,
+        )
 
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        if attention_mask is not None:
-            attention_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if layer_head_mask is not None:
-            if layer_head_mask.size() != (self.num_heads,):
-                raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
-                    f" {layer_head_mask.size()}"
-                )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to be reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
-        else:
-            attn_weights_reshaped = None
-
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.bmm(attn_probs, value_states)
-
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz * self.num_heads, tgt_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-
-        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned across GPUs when using tensor-parallelism.
-        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
-
+        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights_reshaped, past_key_value
+        return attn_output, attn_weights, past_key_value
 
 
 class BigBirdPegasusEncoderLayer(nn.Module):
@@ -1434,6 +1430,7 @@ class BigBirdPegasusDecoderLayer(nn.Module):
             dropout=config.attention_dropout,
             is_decoder=True,
             bias=config.use_bias,
+            config=config,
             layer_idx=layer_idx,
         )
         self.dropout = config.dropout
@@ -1447,6 +1444,7 @@ class BigBirdPegasusDecoderLayer(nn.Module):
             dropout=config.attention_dropout,
             is_decoder=True,
             bias=config.use_bias,
+            config=config,
             layer_idx=layer_idx,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -1510,7 +1508,6 @@ class BigBirdPegasusDecoderLayer(nn.Module):
             residual = hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
-            # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             hidden_states, cross_attn_weights, past_key_value = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
@@ -1602,23 +1599,32 @@ class BigBirdPegasusPreTrainedModel(PreTrainedModel):
         }
         return dummy_inputs
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
+    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_causal_mask
     def _update_causal_mask(
         self,
-        attention_mask: Union[torch.Tensor, "BlockMask"],
+        attention_mask: Optional[Union[torch.Tensor, "BlockMask"]],
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        output_attentions: bool = False,
     ):
+        if self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
+            # Other attention flavors support in-built causal (when `mask is None`)
+            # while we need to create our specific block mask regardless
+            elif attention_mask is None:
+                attention_mask = make_flex_block_causal_mask(
+                    torch.ones(
+                        size=(input_tensor.shape[0], input_tensor.shape[1]),
+                        device=attention_mask.device,
+                    )
+                )
+            return attention_mask
+
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
-        if self.config._attn_implementation == "flex_attention":
-            if isinstance(attention_mask, torch.Tensor):
-                attention_mask = make_flex_block_causal_mask(attention_mask)
-            return attention_mask
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
@@ -1627,7 +1633,7 @@ class BigBirdPegasusPreTrainedModel(PreTrainedModel):
         using_compilable_cache = past_key_values.is_compileable if past_key_values is not None else False
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_compilable_cache and not output_attentions:
+        if self.config._attn_implementation == "sdpa" and not using_compilable_cache:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -1661,7 +1667,6 @@ class BigBirdPegasusPreTrainedModel(PreTrainedModel):
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
             and attention_mask.device.type in ["cuda", "xpu", "npu"]
-            and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
@@ -1672,7 +1677,7 @@ class BigBirdPegasusPreTrainedModel(PreTrainedModel):
         return causal_mask
 
     @staticmethod
-    # Copied from transformers.models.llama.modeling_llama.LlamaPreTrainedModel._prepare_4d_causal_attention_mask_with_cache_position
+    # Copied from transformers.models.gptj.modeling_gptj.GPTJModel._prepare_4d_causal_attention_mask_with_cache_position
     def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor,
         sequence_length: int,
@@ -1726,6 +1731,42 @@ class BigBirdPegasusPreTrainedModel(PreTrainedModel):
                 )
 
         return causal_mask
+
+    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_cross_attn_mask
+    def _update_cross_attn_mask(
+        self,
+        encoder_hidden_states: Union[torch.Tensor, None],
+        encoder_attention_mask: Union[torch.Tensor, None],
+        input_shape: torch.Size,
+        inputs_embeds: torch.Tensor,
+    ):
+        # expand encoder attention mask
+        if encoder_hidden_states is not None and encoder_attention_mask is not None:
+            if self.config._attn_implementation == "flash_attention_2":
+                encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
+            elif self.config._attn_implementation == "sdpa":
+                # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
+                # the manual implementation that requires a 4D causal mask in all cases.
+                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+                encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
+                    encoder_attention_mask,
+                    inputs_embeds.dtype,
+                    tgt_len=input_shape[-1],
+                )
+            elif self.config._attn_implementation == "flex_attention":
+                if isinstance(encoder_attention_mask, torch.Tensor):
+                    encoder_attention_mask = make_flex_block_causal_mask(
+                        encoder_attention_mask,
+                        query_length=input_shape[-1],
+                        is_causal=False,
+                    )
+            else:
+                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+                encoder_attention_mask = _prepare_4d_attention_mask(
+                    encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+                )
+
+        return encoder_attention_mask
 
 
 class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
@@ -2172,9 +2213,13 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
         # retrieve input_ids and inputs_embeds
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
-
-        if input_ids is not None:
-            input_ids = input_ids.view(-1, input_ids.shape[-1])
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+            input_ids = input_ids.view(-1, input_shape[-1])
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -2207,28 +2252,26 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
             if isinstance(past_key_values, EncoderDecoderCache)
             else past_key_values
         )
-        causal_mask = self._update_causal_mask(
+
+        attention_mask = self._update_causal_mask(
             attention_mask,
             inputs_embeds,
             cache_position,
             self_attn_cache,
-            output_attentions,
         )
-
-        # expand encoder attention mask
-        if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _prepare_4d_attention_mask(
-                encoder_attention_mask, inputs_embeds.dtype, tgt_len=seq_length
-            )
+        encoder_attention_mask = self._update_cross_attn_mask(
+            encoder_hidden_states,
+            encoder_attention_mask,
+            input_shape,
+            inputs_embeds,
+        )
 
         # embed positions
-        position_ids = cache_position.unsqueeze(0)
-        position_ids = self.embed_positions(
-            (batch_size, seq_length), past_key_values_length, position_ids=position_ids
-        )
-        position_ids = position_ids.to(inputs_embeds.device)
-        hidden_states = inputs_embeds + position_ids
+        positions = self.embed_positions(input, past_key_values_length, position_ids=cache_position)
+        positions = positions.to(inputs_embeds.device)
+
+        hidden_states = inputs_embeds + positions
+
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # decoder layers
@@ -2258,7 +2301,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
-                    causal_mask,
+                    attention_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
                     head_mask[idx] if head_mask is not None else None,
@@ -2271,7 +2314,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=causal_mask,
+                    attention_mask=attention_mask,
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
                     layer_head_mask=(head_mask[idx] if head_mask is not None else None),
@@ -2979,7 +3022,7 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):

@@ -13,6 +13,7 @@
 # limitations under the License.from typing import List, Union
 from typing import List, Union
 
+from ..generation import GenerationConfig
 from ..utils import is_torch_available
 from .base import Pipeline
 
@@ -30,6 +31,10 @@ class TextToAudioPipeline(Pipeline):
     """
     Text-to-audio generation pipeline using any `AutoModelForTextToWaveform` or `AutoModelForTextToSpectrogram`. This
     pipeline generates an audio file from an input text and optional other conditional inputs.
+
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
 
     Example:
 
@@ -74,6 +79,12 @@ class TextToAudioPipeline(Pipeline):
 
     See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=text-to-speech).
     """
+
+    _pipeline_calls_generate = True
+    # Make sure the docstring is updated when the default generation config is changed
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+    )
 
     def __init__(self, *args, vocoder=None, sampling_rate=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -192,9 +203,9 @@ class TextToAudioPipeline(Pipeline):
         forward_params=None,
         generate_kwargs=None,
     ):
-        if self.assistant_model is not None:
+        if getattr(self, "assistant_model", None) is not None:
             generate_kwargs["assistant_model"] = self.assistant_model
-        if self.assistant_tokenizer is not None:
+        if getattr(self, "assistant_tokenizer", None) is not None:
             generate_kwargs["tokenizer"] = self.tokenizer
             generate_kwargs["assistant_tokenizer"] = self.assistant_tokenizer
 
