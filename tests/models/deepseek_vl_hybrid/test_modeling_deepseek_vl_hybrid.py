@@ -283,7 +283,7 @@ class DeepseekVLHybridModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
 @require_torch
 @require_torch_accelerator
 @slow
-class DeepseekVLIntegrationTest(unittest.TestCase):
+class DeepseekVLHybridIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.model_id = "deepseek-community/deepseek-vl-7b-chat"
 
