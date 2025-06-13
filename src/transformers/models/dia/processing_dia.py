@@ -262,12 +262,12 @@ class DiaProcessor(ProcessorMixin):
             pad_value=-1,
             precomp=revert_precomp,
             T=seq_len,
-        )
+        ).transpose(1, 2)
 
         # retrieve the correct sequences each
         audios = []
         for i in range(start_of_generation_idx.shape[0]):
-            output_i = output_sequences[i, start_of_generation_idx[i] : end_of_generation_idx[i]].transpose(1, 2)
+            output_i = output_sequences[i, :, start_of_generation_idx[i] : end_of_generation_idx[i]]
             # TODO: see above, dac doesn't work in batches yet
             audio_i = self.audio_tokenizer.decode(audio_codes=output_i).audio_values
             audios.append(audio_i)
