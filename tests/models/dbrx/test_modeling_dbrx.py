@@ -37,9 +37,6 @@ class DbrxModelTester(CausalLMModelTester):
         self,
         parent,
         clip_qkv=8,
-        d_model=32,  # DBRX has an unusual name for this
-        n_heads=4,  # And this
-        n_layers=2,  # And this
         rope_theta=500000,
         attn_config_model_type="",
         moe_jitter_eps=0,
@@ -55,7 +52,6 @@ class DbrxModelTester(CausalLMModelTester):
         # Call parent init
         super().__init__(
             parent=parent,
-            num_attention_heads=n_heads,
             hidden_dropout_prob=resid_pdrop,
             attention_probs_dropout_prob=resid_pdrop,
             initializer_range=initializer_range,
@@ -65,13 +61,10 @@ class DbrxModelTester(CausalLMModelTester):
 
         # Set DBRX's unusual params
         self.clip_qkv = clip_qkv
-        self.d_model = d_model
-        self.n_heads = n_heads
-        self.n_layers = n_layers
 
         # DBRX takes sub-configurations for the FFN and attention layers, so we need to set that correctly here
         self.ffn_config = {
-            "ffn_hidden_size": self.d_model,
+            "ffn_hidden_size": self.hidden_size,
             "moe_jitter_eps": moe_jitter_eps,
             "moe_loss_weight": moe_loss_weight,
             "moe_num_experts": moe_num_experts,

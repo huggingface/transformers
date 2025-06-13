@@ -186,6 +186,13 @@ class CausalLMModelTester:
         return list(signature(self.config_class.__init__).parameters.keys())
 
     def get_config(self):
+        kwargs = {}
+        common_name_to_model_name = {val: key for key, val in self.config_class.attribute_map.items()}
+        for k in self.config_args + self.forced_config_args:
+            if hasattr(self, k) and k != "self":
+                kwargs[k] = getattr(self, k)
+            elif k in common_name_to_model_name and hasattr(self, common_name_to_model_name[k]):
+                kwargs[k] = getattr(self, common_name_to_model_name[k])
         kwargs = {
             k: getattr(self, k) for k in self.config_args + self.forced_config_args if hasattr(self, k) and k != "self"
         }
