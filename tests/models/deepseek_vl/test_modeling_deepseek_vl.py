@@ -18,16 +18,12 @@ import re
 import tempfile
 import unittest
 
-import numpy as np
-import requests
-
 from transformers import (
     AutoProcessor,
     DeepseekVLConfig,
     DeepseekVLForConditionalGeneration,
     DeepseekVLModel,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     require_torch,
@@ -44,10 +40,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor,
 
 if is_torch_available():
     import torch
-
-
-if is_vision_available():
-    from PIL import Image
 
 
 class DeepseekVLModelTester:
@@ -252,7 +244,9 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
         self.model_id = "deepseek-community/deepseek-vl-1.3b-chat"
 
     def test_model_text_generation(self):
-        model = DeepseekVLForConditionalGeneration.from_pretrained(self.model_id, torch_dtype="auto", device_map="auto")
+        model = DeepseekVLForConditionalGeneration.from_pretrained(
+            self.model_id, torch_dtype="auto", device_map="auto"
+        )
         model.to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -261,14 +255,19 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
-                    {"type": "text", "text": "Describe this image."}
-                ]
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                    },
+                    {"type": "text", "text": "Describe this image."},
+                ],
             }
         ]
         EXPECTED_TEXT = 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: Describe this image.\n\nAssistant:In the image, a majestic snow leopard is captured in a moment of tranquility. The snow leopard'  # fmt: skip
 
-        inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt")
+        inputs = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        )
         inputs = inputs.to(model.device, dtype=model.dtype)
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         text = processor.decode(output[0], skip_special_tokens=True)
@@ -279,7 +278,9 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
         )
 
     def test_model_text_generation_batched(self):
-        model = DeepseekVLForConditionalGeneration.from_pretrained(self.model_id, torch_dtype="auto", device_map="auto")
+        model = DeepseekVLForConditionalGeneration.from_pretrained(
+            self.model_id, torch_dtype="auto", device_map="auto"
+        )
         model.to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -289,27 +290,35 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
-                        {"type": "text", "text": "Describe this image."}
-                    ]
+                        {
+                            "type": "image",
+                            "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        },
+                        {"type": "text", "text": "Describe this image."},
+                    ],
                 }
             ],
             [
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
-                        {"type": "text", "text": "What animal do you see in the image?"}
-                    ]
+                        {
+                            "type": "image",
+                            "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        },
+                        {"type": "text", "text": "What animal do you see in the image?"},
+                    ],
                 }
             ],
         ]
         EXPECTED_TEXT = [
-            'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: Describe this image.\n\nAssistant:In the image, a majestic snow leopard is captured in a moment of tranquility. The snow leopard',  # fmt: skip
-            'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: What animal do you see in the image?\n\nAssistant:I see a bear in the image.What is the significance of the color red in the'  # fmt: skip
+            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: Describe this image.\n\nAssistant:In the image, a majestic snow leopard is captured in a moment of tranquility. The snow leopard",  # fmt: skip
+            "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: What animal do you see in the image?\n\nAssistant:I see a bear in the image.What is the significance of the color red in the",  # fmt: skip
         ]
 
-        inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, padding=True, return_dict=True, return_tensors="pt")
+        inputs = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, padding=True, return_dict=True, return_tensors="pt"
+        )
         inputs = inputs.to(model.device, dtype=model.dtype)
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         text = processor.batch_decode(output, skip_special_tokens=True)
@@ -317,7 +326,9 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT, text)
 
     def test_model_text_generation_with_multi_image(self):
-        model = DeepseekVLForConditionalGeneration.from_pretrained(self.model_id, torch_dtype="auto", device_map="auto")
+        model = DeepseekVLForConditionalGeneration.from_pretrained(
+            self.model_id, torch_dtype="auto", device_map="auto"
+        )
         model.to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -329,13 +340,15 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
                     {"type": "text", "text": "What's the difference between"},
                     {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
                     {"type": "text", "text": " and "},
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"}
-                ]
+                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                ],
             }
         ]
         EXPECTED_TEXT = "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nUser: What's the difference between and \n\nAssistant:The image is a photograph featuring two cats lying on a pink blanket. The cat on the left is"  # fmt: skip
 
-        inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt")
+        inputs = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+        )
         inputs = inputs.to(model.device, dtype=model.dtype)
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         text = processor.decode(output[0], skip_special_tokens=True)
