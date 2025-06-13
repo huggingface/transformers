@@ -14,11 +14,57 @@ rendered properly in your Markdown viewer.
 
 -->
 
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+           <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
+
 # RoCBert
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[RoCBert] is a BERT model that is specifically designed for the Chinese language. It is built to resist tricks and attacks, like misspellings or similar-looking words, that usually confuse language models.
+
+You can find all the original [Model name] checkpoints under the [RoCBert](link) collection.
+
+> [!TIP]
+> Click on the RoCBert models in the right sidebar for more examples of how to apply RoCBert to different chinese NLP tasks.
+
+<hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```py
+from transformers import pipeline
+
+pipeline = pipeline(
+    task="text-classification",
+    model="hfl/rocbert-base"
+)
+pipeline("称呼") #Example Chinese input
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```py
+# pip install datasets
+import torch
+from datasets import load_dataset
+from transformers import AutoProcessor, AutoTokenizer
+
+model_name = "hfl/rocbert-base"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModel.from_pretrained(model_name)
+
+text = "大家好，无论谁正在阅读这篇文章"
+
+inputs = tokenizer 
+
+
+```
+</hfoption>
+</hfoptions>
+
+
 
 ## Overview
 
