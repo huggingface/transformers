@@ -60,11 +60,11 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import EoMTForUniversalSegmentation, EoMTImageProcessor
+from transformers import EoMTForUniversalSegmentation, AutoImageProcessor
 
 
 model_id = "yaswanthgali/ade20k_semantic_eomt_large_512-hf"
-processor = EoMTImageProcessor.from_pretrained(model_id)
+processor = AutoImageProcessor.from_pretrained(model_id)
 model = EoMTForUniversalSegmentation.from_pretrained(model_id)
 
 image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
@@ -82,7 +82,7 @@ with torch.inference_mode():
     outputs = model(**inputs)
 
 # Prepare the original image size in the format (height, width)
-original_image_sizes = [(image.size[1], image.size[0])]
+original_image_sizes = [(image.height, image.width)]
 
 # Post-process the model outputs to get final segmentation prediction
 preds = processor.post_process_semantic_segmentation(
@@ -100,7 +100,7 @@ plt.show()
 
 ### Instance Segmentation
 
-The EoMT model performs instance segmentation using padded inference. The input image is resized so that the longer side matches the target input size, and the shorter side is zero-padded to form a square. The image is then normalized and passed through the model. The postporcessing is similar to panoptic segmentation except the stuff classes are removed (.e.g only thing class are kept).
+The EoMT model performs instance segmentation using padded inference. The input image is resized so that the longer side matches the target input size, and the shorter side is zero-padded to form a square. The resulting mask and class logits are combined through post-processing (adapted from Mask2Former) to produce a unified instance segmentation map, along with segment metadata like segment id, class labels and confidence scores.
 
 > **Note:**  
 > To use a custom target size, specify the size as a dictionary in the following format:  
@@ -113,11 +113,11 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import EoMTForUniversalSegmentation, EoMTImageProcessor
+from transformers import EoMTForUniversalSegmentation, AutoImageProcessor
 
 
 model_id = "yaswanthgali/coco_instance_eomt_large_640-hf"
-processor = EoMTImageProcessor.from_pretrained(model_id)
+processor = AutoImageProcessor.from_pretrained(model_id)
 model = EoMTForUniversalSegmentation.from_pretrained(model_id)
 
 image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
@@ -132,13 +132,12 @@ with torch.inference_mode():
     outputs = model(**inputs)
 
 # Prepare the original image size in the format (height, width)
-original_image_sizes = [(image.size[1], image.size[0])]
+original_image_sizes = [(image.height, image.width)]
 
 # Post-process the model outputs to get final segmentation prediction
 preds = processor.post_process_instance_segmentation(
     outputs,
     original_image_sizes=original_image_sizes,
-    stuff_classes=[0, 45],  # Pass the list of stuff classes to exclude from mask.
 )
 
 # Visualize the segmentation mask
@@ -158,11 +157,11 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import EoMTForUniversalSegmentation, EoMTImageProcessor
+from transformers import EoMTForUniversalSegmentation, AutoImageProcessor
 
 
 model_id = "yaswanthgali/coco_panoptic_eomt_large_640-hf"
-processor = EoMTImageProcessor.from_pretrained(model_id)
+processor = AutoImageProcessor.from_pretrained(model_id)
 model = EoMTForUniversalSegmentation.from_pretrained(model_id)
 
 image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
@@ -177,7 +176,7 @@ with torch.inference_mode():
     outputs = model(**inputs)
 
 # Prepare the original image size in the format (height, width)
-original_image_sizes = [(image.size[1], image.size[0])]
+original_image_sizes = [(image.height, image.width)]
 
 # Post-process the model outputs to get final segmentation prediction
 preds = processor.post_process_panoptic_segmentation(
@@ -195,10 +194,18 @@ plt.show()
 ## EoMTImageProcessor
 
 [[autodoc]] EoMTImageProcessor
+    - preprocess
+    - post_process_semantic_segmentation
+    - post_process_instance_segmentation
+    - post_process_panoptic_segmentation
 
 ## EoMTImageProcessorFast
 
 [[autodoc]] EoMTImageProcessorFast
+    - preprocess
+    - post_process_semantic_segmentation
+    - post_process_instance_segmentation
+    - post_process_panoptic_segmentation
 
 ## EoMTConfig
 
