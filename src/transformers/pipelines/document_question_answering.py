@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import re
-from typing import Any, Dict, List, Optional, Tuple, Union, overload
+from typing import Any, Optional, Union, overload
 
 import numpy as np
 
@@ -214,23 +214,23 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         self,
         image: Union["Image.Image", str],
         question: str,
-        word_boxes: Optional[Tuple[str, List[float]]] = None,
+        word_boxes: Optional[tuple[str, list[float]]] = None,
         **kwargs: Any,
-    ) -> List[Dict[str, Any]]: ...
+    ) -> list[dict[str, Any]]: ...
 
     @overload
-    def __call__(self, image: Dict[str, Any], **kwargs: Any) -> List[Dict[str, Any]]: ...
+    def __call__(self, image: dict[str, Any], **kwargs: Any) -> list[dict[str, Any]]: ...
 
     @overload
-    def __call__(self, image: List[Dict[str, Any]], **kwargs: Any) -> List[List[Dict[str, Any]]]: ...
+    def __call__(self, image: list[dict[str, Any]], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
 
     def __call__(
         self,
-        image: Union["Image.Image", str, List[Dict[str, Any]]],
+        image: Union["Image.Image", str, list[dict[str, Any]]],
         question: Optional[str] = None,
-        word_boxes: Optional[Tuple[str, List[float]]] = None,
+        word_boxes: Optional[tuple[str, list[float]]] = None,
         **kwargs: Any,
-    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+    ) -> Union[dict[str, Any], list[dict[str, Any]]]:
         """
         Answer the question(s) given as inputs by using the document(s). A document is defined as an image and an
         optional list of (word, box) tuples which represent the text in the document. If the `word_boxes` are not
@@ -309,7 +309,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         padding="do_not_pad",
         doc_stride=None,
         max_seq_len=None,
-        word_boxes: Optional[Tuple[str, List[float]]] = None,
+        word_boxes: Optional[tuple[str, list[float]]] = None,
         lang=None,
         tesseract_config="",
         timeout=None,

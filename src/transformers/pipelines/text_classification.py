@@ -1,6 +1,6 @@
 import inspect
 import warnings
-from typing import Any, Dict, List, Union
+from typing import Any, Union
 
 import numpy as np
 
@@ -122,9 +122,9 @@ class TextClassificationPipeline(Pipeline):
 
     def __call__(
         self,
-        inputs: Union[str, List[str], Dict[str, str], List[Dict[str, str]]],
+        inputs: Union[str, list[str], dict[str, str], list[dict[str, str]]],
         **kwargs: Any,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Classify the text(s) given as inputs.
 
@@ -169,7 +169,7 @@ class TextClassificationPipeline(Pipeline):
         else:
             return result
 
-    def preprocess(self, inputs, **tokenizer_kwargs) -> Dict[str, GenericTensor]:
+    def preprocess(self, inputs, **tokenizer_kwargs) -> dict[str, GenericTensor]:
         return_tensors = self.framework
         if isinstance(inputs, dict):
             return self.tokenizer(**inputs, return_tensors=return_tensors, **tokenizer_kwargs)

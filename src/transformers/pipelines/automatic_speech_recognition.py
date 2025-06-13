@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import numpy as np
 import requests
@@ -211,7 +211,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
         super().__init__(model, tokenizer, feature_extractor, device=device, torch_dtype=torch_dtype, **kwargs)
 
-    def __call__(self, inputs: Union[np.ndarray, bytes, str, dict], **kwargs: Any) -> List[Dict[str, Any]]:
+    def __call__(self, inputs: Union[np.ndarray, bytes, str, dict], **kwargs: Any) -> list[dict[str, Any]]:
         """
         Transcribe the audio sequence(s) given as inputs to text. See the [`AutomaticSpeechRecognitionPipeline`]
         documentation for more information.
@@ -547,7 +547,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         return {"is_last": is_last, **out, **extra}
 
     def postprocess(
-        self, model_outputs, decoder_kwargs: Optional[Dict] = None, return_timestamps=None, return_language=None
+        self, model_outputs, decoder_kwargs: Optional[dict] = None, return_timestamps=None, return_language=None
     ):
         # Optional return types
         optional = {}
