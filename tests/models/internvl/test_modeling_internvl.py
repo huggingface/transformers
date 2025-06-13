@@ -27,11 +27,13 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_av,
     require_bitsandbytes,
+    require_deterministic_for_xpu,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -45,9 +47,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
-        InternVLForConditionalGeneration,
-    )
+    from transformers import InternVLForConditionalGeneration, InternVLModel
 
 
 if is_vision_available():
@@ -177,7 +177,7 @@ class InternVLVisionText2TextModelTester:
         model = InternVLForConditionalGeneration(config=config)
         model.to(torch_device)
         model.eval()
-        with torch.autocast(device_type="cuda", dtype=torch.float16):
+        with torch.autocast(device_type=torch_device, dtype=torch.float16):
             logits = model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
@@ -189,7 +189,7 @@ class InternVLVisionText2TextModelTester:
 
 @require_torch
 class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (InternVLForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (InternVLForConditionalGeneration, InternVLModel) if is_torch_available() else ()
     all_generative_model_classes = (InternVLForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -279,11 +279,12 @@ class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 class InternVLQwen2IntegrationTest(unittest.TestCase):
     def setUp(self):
         self.small_model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
         self.medium_model_checkpoint = "OpenGVLab/InternVL3-2B-hf"
+        cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -291,38 +292,51 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
     def test_qwen2_small_model_integration_generate(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
 
-        prompt = "<|im_start|>user\n<image>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.bfloat16)
+        prompt = (
+            "<|im_start|>user\n<IMG_CONTEXT>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
+        )
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
         with torch.no_grad():
             generate_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        expected_output = "The image shows two cats lying on a pink blanket. The cat on the left is a tabby"
+        expected_output = "The image shows two cats lying on a pink surface, which appears to be a bed or couch."
+
         self.assertEqual(decoded_output, expected_output)
 
     def test_qwen2_small_model_integration_forward(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
 
-        prompt = "<|im_start|>user\n<image>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.bfloat16)
+        prompt = (
+            "<|im_start|>user\n<IMG_CONTEXT>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
+        )
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
 
         # Forward
         with torch.inference_mode():
             output = model(**inputs)
 
         actual_logits = output.logits[0, -1, :5].cpu()
-        expected_logits = torch.tensor([11.9375, 14.8750, 14.0625, 10.7500, 6.9062], dtype=torch.bfloat16)
+        expected_logits_all = Expectations(
+            {
+                ("xpu", 3): torch.tensor([11.7500, 14.7500, 14.1250, 10.5625, 6.7812], dtype=torch.float16),
+                ("cuda", 7): torch.tensor([11.9531, 14.7031, 14.2734, 10.6562,  6.9219], dtype=torch.float16),
+                ("cuda", 8): torch.tensor([11.9609, 14.7188, 14.2734, 10.6484,  6.9141], dtype=torch.float16),
+            }
+        )  # fmt: skip
+        expected_logits = expected_logits_all.get_expectation()
+
         self.assertTrue(
             torch.allclose(actual_logits, expected_logits, atol=0.1),
             f"Actual logits: {actual_logits}"
@@ -330,25 +344,35 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             f"\nDifference: {torch.abs(actual_logits - expected_logits)}",
         )
 
+    @require_deterministic_for_xpu
     def test_qwen2_small_model_integration_generate_text_only(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         prompt = "<|im_start|>user\nWrite a haiku<|im_end|>\n<|im_start|>assistant\n"
-        inputs = processor(text=prompt, return_tensors="pt").to(torch_device, dtype=torch.bfloat16)
+        inputs = processor(text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
         with torch.no_grad():
             generate_ids = model.generate(**inputs, max_new_tokens=200, do_sample=False)
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        expected_output = "Whispers of dawn,\nSilent whispers of the night,\nNew day's light begins."
+
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "Whispers of dawn,\nSilent whispers of the night,\nNew day's light.",
+                ("cuda", 7): 'Whispers of dawn,\nSilent whispers of night,\nPeace in the stillness.',
+                ("cuda", 8): 'Whispers of dawn,\nSilent whispers of night,\nPeace in the stillness.',
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
         self.assertEqual(decoded_output, expected_output)
 
     def test_qwen2_small_model_integration_generate_chat_template(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         messages = [
             {
@@ -362,30 +386,32 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
 
         inputs = processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
-        ).to(torch_device, dtype=torch.bfloat16)
+        ).to(torch_device, dtype=torch.float16)
         with torch.no_grad():
             generate_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        expected_output = "The image shows two cats lying on a pink blanket. The cat on the left is a tabby"
+        expected_output = "The image shows two cats lying on a pink surface, which appears to be a bed or couch."
+
         self.assertEqual(decoded_output, expected_output)
 
+    @require_deterministic_for_xpu
     def test_qwen2_small_model_integration_batched_generate(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         # Prepare inputs
         prompt = [
-            "<|im_start|>user\n<image>\nWrite a haiku for this image<|im_end|>\n<|im_start|>assistant\n",
-            "<|im_start|>user\n<image>\nDescribe this image<|im_end|>\n<|im_start|>assistant\n",
+            "<|im_start|>user\n<IMG_CONTEXT>\nWrite a haiku for this image<|im_end|>\n<|im_start|>assistant\n",
+            "<|im_start|>user\n<IMG_CONTEXT>\nDescribe this image<|im_end|>\n<|im_start|>assistant\n",
         ]
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
         image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
 
         inputs = processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
-            torch_device, dtype=torch.bfloat16
+            torch_device, dtype=torch.float16
         )
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
@@ -393,6 +419,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         expected_output = "user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature's peace."  # fmt: skip
+
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -400,7 +427,15 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         )
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Gate of'  # fmt: skip
+
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Gate"',
+                ("cuda", 7): 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese archway, known as a "Chinese Gate" or "Chinese Gate of',
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -410,12 +445,12 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
     def test_qwen2_small_model_integration_batched_generate_multi_image(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         # Prepare inputs
         prompt = [
-            "<|im_start|>user\n<image>\nWrite a haiku for this image<|im_end|>\n<|im_start|>assistant\n",
-            "<|im_start|>user\n<image><image>\nWhat are the differences between these two images?<|im_end|>\n<|im_start|>assistant\n",
+            "<|im_start|>user\n<IMG_CONTEXT>\nWrite a haiku for this image<|im_end|>\n<|im_start|>assistant\n",
+            "<|im_start|>user\n<IMG_CONTEXT><IMG_CONTEXT>\nWhat are the differences between these two images?<|im_end|>\n<|im_start|>assistant\n",
         ]
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
         image2 = Image.open(
@@ -434,7 +469,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         )
 
         inputs = processor(text=prompt, images=[[image1], [image2, image3]], padding=True, return_tensors="pt").to(
-            torch_device, dtype=torch.bfloat16
+            torch_device, dtype=torch.float16
         )
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
@@ -451,7 +486,14 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = 'user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the differences:\n\n1. **Angle'  # fmt: skip
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the differences:\n\n1. **Foreground",
+                ("cuda", 7): "user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the differences:\n\n1. **Foreground",
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -485,12 +527,20 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
+            num_frames=8,
         ).to(torch_device, dtype=torch.float16)
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-        expected_output = 'The man is performing a forehand shot.'  # fmt: skip
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "The man is performing a volley.",
+                ("cuda", 7): "The man is performing a forehand shot.",
+                ("rocm", (9, 5)): "The man is performing a volley shot.",
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -498,10 +548,11 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         )
 
     @require_av
+    @require_deterministic_for_xpu
     def test_qwen2_small_model_integration_interleaved_images_videos(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, torch_dtype=torch.bfloat16, device_map=torch_device
+            self.small_model_checkpoint, torch_dtype=torch.float16, device_map=torch_device
         )
         messages = [
             [
@@ -552,13 +603,21 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
             padding=True,
-        ).to(torch_device, dtype=torch.bfloat16)
+            num_frames=8,
+        ).to(torch_device, dtype=torch.float16)
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
-        expected_output = 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image**: This shows the Statue of Liberty on Liberty Island, with the'  # fmt: skip
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image:**\n   - The Statue of Liberty is prominently featured on an",
+                ("cuda", 7): 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image:**\n   - The Statue of Liberty is prominently featured on an',
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -566,7 +625,13 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         )
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nA forehand shot'  # fmt: skip
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot.",
+                ("cuda", 7): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nA forehand shot',
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -575,7 +640,9 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
 
         # Check third output
         decoded_output = processor.decode(output[2], skip_special_tokens=True)
-        expected_output = "user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature's peace."  # fmt: skip
+        expected_output = (
+            "user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature's peace."
+        )
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -584,11 +651,12 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 class InternVLLlamaIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.small_model_checkpoint = "OpenGVLab/InternVL2_5-2B-MPO-hf"
         self.medium_model_checkpoint = "OpenGVLab/InternVL2_5-8B-MPO-hf"
+        cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -596,13 +664,15 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
     def test_llama_small_model_integration_generate(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
 
-        prompt = "<|im_start|>user\n<image>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.bfloat16)
+        prompt = (
+            "<|im_start|>user\n<IMG_CONTEXT>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
+        )
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
         with torch.no_grad():
             generate_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
             decoded_output = processor.decode(
@@ -614,26 +684,37 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
     def test_llama_small_model_integration_forward(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
 
-        prompt = "<|im_start|>user\n<image>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.bfloat16)
+        prompt = (
+            "<|im_start|>user\n<IMG_CONTEXT>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
+        )
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
 
         # Forward
         with torch.inference_mode():
             output = model(**inputs)
 
         actual_logits = output.logits[0, -1, :5].cpu()
-        expected_logits = torch.tensor([-9.8750, -0.4258, 1.4844, -10.3125, -10.3125], dtype=torch.bfloat16)
+
+        expected_logits_all = Expectations(
+            {
+                ("xpu", 3): torch.tensor([-9.8750, -0.5703, 1.4297, -10.3125, -10.3125], dtype=torch.float16),
+                ("cuda", 7): torch.tensor([-9.8750,  -0.4861,   1.4648, -10.3359, -10.3359], dtype=torch.float16),
+                ("cuda", 8): torch.tensor([-9.8906,  -0.4995,   1.4473, -10.3359, -10.3438], dtype=torch.float16),
+            }
+        )  # fmt: skip
+        expected_logits = torch.tensor(expected_logits_all.get_expectation(), dtype=torch.float16)
+
         # The original implementation and the transformers implementation do not match exactly, hence the higher tolerance.
         # The difference is likely due to the different implementations of the attention mechanism (different order of operations)
         # between the transformers Llama model and the original InternLM model.
         # The difference has almost no effect on the output tokens, but it does affect the logits a lot more.
         self.assertTrue(
-            torch.allclose(actual_logits, expected_logits, atol=1),
+            torch.allclose(actual_logits, expected_logits, atol=1e-3),
             f"Actual logits: {actual_logits}"
             f"\nExpected logits: {expected_logits}"
             f"\nDifference: {torch.abs(actual_logits - expected_logits)}",
@@ -642,22 +723,30 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
     def test_llama_small_model_integration_generate_text_only(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         prompt = "<|im_start|>user\nWrite a haiku<|im_end|>\n<|im_start|>assistant\n"
-        inputs = processor(text=prompt, return_tensors="pt").to(torch_device, dtype=torch.bfloat16)
+        inputs = processor(text=prompt, return_tensors="pt").to(torch_device, dtype=torch.float16)
         with torch.no_grad():
             generate_ids = model.generate(**inputs, max_new_tokens=200, do_sample=False)
             decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
-        expected_output = "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake."
+
+        expected_outputs = Expectations(
+            {
+                ("cuda", 7): "Autumn leaves fall,\nNature's breath, a gentle sigh,\nSilent whispers.",
+                ("cuda", 8): "Autumn leaves fall,\nNature's breath, a silent sigh,\nWinter's chill approaches.",
+            }
+        )
+        expected_output = expected_outputs.get_expectation()
+
         self.assertEqual(decoded_output, expected_output)
 
     def test_llama_small_model_integration_generate_chat_template(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         messages = [
             {
@@ -671,7 +760,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
 
         inputs = processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
-        ).to(torch_device, dtype=torch.bfloat16)
+        ).to(torch_device, dtype=torch.float16)
         with torch.no_grad():
             generate_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
             decoded_output = processor.decode(
@@ -683,25 +772,33 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
     def test_llama_small_model_integration_batched_generate(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         # Prepare inputs
         prompt = [
-            "<|im_start|>user\n<image>\nWrite a haiku for this image<|im_end|>\n<|im_start|>assistant\n",
-            "<|im_start|>user\n<image>\nDescribe this image<|im_end|>\n<|im_start|>assistant\n",
+            "<|im_start|>user\n<IMG_CONTEXT>\nWrite a haiku for this image<|im_end|>\n<|im_start|>assistant\n",
+            "<|im_start|>user\n<IMG_CONTEXT>\nDescribe this image<|im_end|>\n<|im_start|>assistant\n",
         ]
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
         image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
 
         inputs = processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
-            torch_device, dtype=torch.bfloat16
+            torch_device, dtype=torch.float16
         )
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
-        expected_output = 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.'  # fmt: skip
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden path leads to calm lake,\nNature's peaceful grace.",
+                ("cuda", 7): 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.',
+                ("cuda", 8): 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.',
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
+
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -710,7 +807,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese gate in the background, adorned with red and gold colors and Chinese characters'  # fmt: skip
+        expected_output = "user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese gate in the background, adorned with red and gold colors and Chinese characters"
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -720,12 +817,12 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
     def test_llama_small_model_integration_batched_generate_multi_image(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.float16
         )
         # Prepare inputs
         prompt = [
-            "<|im_start|>user\n<image>\nWrite a haiku for this image<|im_end|>\n<|im_start|>assistant\n",
-            "<|im_start|>user\n<image><image>\nWhat are the difference between these two images?<|im_end|>\n<|im_start|>assistant\n",
+            "<|im_start|>user\n<IMG_CONTEXT>\nWrite a haiku for this image<|im_end|>\n<|im_start|>assistant\n",
+            "<|im_start|>user\n<IMG_CONTEXT><IMG_CONTEXT>\nWhat are the difference between these two images?<|im_end|>\n<|im_start|>assistant\n",
         ]
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
         image2 = Image.open(
@@ -744,7 +841,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         )
 
         inputs = processor(text=prompt, images=[[image1], [image2, image3]], padding=True, return_tensors="pt").to(
-            torch_device, dtype=torch.bfloat16
+            torch_device, dtype=torch.float16
         )
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
@@ -752,7 +849,8 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
-        expected_output = 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nA wooden path leads to the sea,\nPeaceful, still waters.'  # fmt: skip
+        expected_output = "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors."
+
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -761,7 +859,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = 'user\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After closely examining the images again, I can see that there are several differences'  # fmt: skip
+        expected_output = "user\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After closely examining the images again, I can see that there are several differences"
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -795,6 +893,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
+            num_frames=8,
         ).to(torch_device, dtype=torch.float16)
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
@@ -811,7 +910,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
     def test_llama_small_model_integration_interleaved_images_videos(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            self.small_model_checkpoint, torch_dtype=torch.bfloat16, device_map=torch_device
+            self.small_model_checkpoint, torch_dtype=torch.float16, device_map=torch_device
         )
         messages = [
             [
@@ -862,13 +961,21 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
             padding=True,
-        ).to(torch_device, dtype=torch.bfloat16)
+            num_frames=8,
+        ).to(torch_device, dtype=torch.float16)
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
-        expected_output = 'user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. Upon closer inspection, the differences between the two images are:\n\n1. **'  # fmt: skip
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After re-examining the images, I can see that they are actually",
+                ("cuda", 7): 'user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. Upon closer inspection, the differences between the two images are:\n\n1. **',
+                ("cuda", 8): 'user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After re-examining the images, I can see that there are no',
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -877,7 +984,14 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common shot in tennis where the player swings the racket across their'  # fmt: skip
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common shot in tennis where the player swings the racket across their",
+                ("cuda", 7): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common stroke in tennis where the player swings the racket across their',
+                ("cuda", 8): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common stroke in tennis where the player swings the racket across their',
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -886,7 +1000,14 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
 
         # Check third output
         decoded_output = processor.decode(output[2], skip_special_tokens=True)
-        expected_output = 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nA wooden path leads to the sea,\nPeaceful, untouched dreams.'  # fmt: skip
+        expected_outputs = Expectations(
+            {
+                ("xpu", 3): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.",
+                ("cuda", 7): 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.',
+                ("cuda", 8): 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.',
+            }
+        )  # fmt: skip
+        expected_output = expected_outputs.get_expectation()
         self.assertEqual(
             decoded_output,
             expected_output,

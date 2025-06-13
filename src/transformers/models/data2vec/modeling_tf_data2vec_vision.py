@@ -1336,7 +1336,7 @@ class TFData2VecVisionPyramidPoolingModule(keras.layers.Layer):
 class TFData2VecVisionUperHead(keras.layers.Layer):
     """
     Unified Perceptual Parsing for Scene Understanding. This head is the implementation of
-    [UPerNet](https://arxiv.org/abs/1807.10221).
+    [UPerNet](https://huggingface.co/papers/1807.10221).
 
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
@@ -1446,7 +1446,7 @@ class TFData2VecVisionUperHead(keras.layers.Layer):
 class TFData2VecVisionFCNHead(keras.layers.Layer):
     """
     Fully Convolution Networks for Semantic Segmentation. This head is implemented from
-    [FCNNet](https://arxiv.org/abs/1411.4038).
+    [FCNNet](https://huggingface.co/papers/1411.4038).
 
     Args:
         config (Data2VecVisionConfig): Configuration.
@@ -1666,7 +1666,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
             features[i + 2] = ops[i + 2](features[i + 2])
 
         logits = self.decode_head(features)
-        # Tranpose the logits to maintain consistency in the output formats.
+        # Transpose the logits to maintain consistency in the output formats.
         transposed_logits = tf.transpose(logits, perm=[0, 3, 1, 2])
 
         auxiliary_logits = None

@@ -36,7 +36,7 @@ def _replace_with_eetq_linear(
     """
     Private method that wraps the recursion for module replacement.
 
-    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
+    Returns the converted model and a boolean that indicates if the conversion has been successful or not.
     """
     if current_key_name is None:
         current_key_name = []

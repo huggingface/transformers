@@ -271,7 +271,7 @@ class FlaxMinLengthLogitsProcessor(FlaxLogitsProcessor):
 
 class FlaxSuppressTokensAtBeginLogitsProcessor(FlaxLogitsProcessor):
     r"""
-    [`FlaxLogitsProcessor`] supressing a list of tokens as soon as the `generate` function starts generating using
+    [`FlaxLogitsProcessor`] suppressing a list of tokens as soon as the `generate` function starts generating using
     `begin_index` tokens. This should ensure that the tokens defined by `begin_suppress_tokens` are not sampled at the
     beginning of the generation.
 

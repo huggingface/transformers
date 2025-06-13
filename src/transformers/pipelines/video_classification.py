@@ -13,7 +13,7 @@
 # limitations under the License.
 import warnings
 from io import BytesIO
-from typing import List, Union
+from typing import Any, Dict, List, Optional, Union, overload
 
 import requests
 
@@ -77,7 +77,13 @@ class VideoClassificationPipeline(Pipeline):
             postprocess_params["function_to_apply"] = "softmax"
         return preprocess_params, {}, postprocess_params
 
-    def __call__(self, inputs: Union[str, List[str]] = None, **kwargs):
+    @overload
+    def __call__(self, inputs: str, **kwargs: Any) -> List[Dict[str, Any]]: ...
+
+    @overload
+    def __call__(self, inputs: List[str], **kwargs: Any) -> List[List[Dict[str, Any]]]: ...
+
+    def __call__(self, inputs: Optional[Union[str, List[str]]] = None, **kwargs):
         """
         Assign labels to the video(s) passed as inputs.
 

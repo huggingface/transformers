@@ -67,12 +67,12 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
             The token used for masking single token values. This is the token used when training this model with masked
             language modeling (MLM). This is the token that the PEGASUS encoder will try to predict during pretraining.
             It corresponds to *[MASK2]* in [PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive
-            Summarization](https://arxiv.org/pdf/1912.08777.pdf).
+            Summarization](https://huggingface.co/papers/1912.08777).
         mask_token_sent (`str`, *optional*, defaults to `"<mask_1>"`):
             The token used for masking whole target sentences. This is the token used when training this model with gap
             sentences generation (GSG). This is the sentence that the PEGASUS decoder will try to predict during
             pretraining. It corresponds to *[MASK1]* in [PEGASUS: Pre-training with Extracted Gap-sentences for
-            Abstractive Summarization](https://arxiv.org/pdf/1912.08777.pdf).
+            Abstractive Summarization](https://huggingface.co/papers/1912.08777).
         additional_special_tokens (`List[str]`, *optional*):
             Additional special tokens used by the tokenizer. If no additional_special_tokens are provided <mask_2> and
             <unk_2, ..., unk_102> are used as additional special tokens corresponding to the [original PEGASUS
@@ -147,10 +147,6 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
         self.vocab_file = vocab_file
-
-    @property
-    def can_save_slow_tokenizer(self) -> bool:
-        return os.path.isfile(self.vocab_file) if self.vocab_file else False
 
     def _special_token_mask(self, seq):
         all_special_ids = set(self.all_special_ids)  # call it once instead of inside list comp
