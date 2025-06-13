@@ -75,7 +75,6 @@ class PerceptionEncoder(PreTrainedModel):
             ref_feat_shape=config.ref_feat_shape,
             embed_dim=config.width,
         )
-        self.eva_pe._initialize_weights = lambda x: x  # disable weight initialization
 
     def forward(self, x):
         x = self.eva_pe(x)
