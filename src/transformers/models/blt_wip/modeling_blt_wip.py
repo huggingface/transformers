@@ -1481,60 +1481,33 @@ class BLTModel(BLTPreTrainedModel):
 
         # Initialize patcher if needed
         if config.patch_in_forward:
-            if config.realtime_patching and config.entropy_model_checkpoint_dir is not None:
-                # Load entropy model directly
-                entropy_model_checkpoint_dir = config.entropy_model_checkpoint_dir
-                
-                if not os.path.exists(entropy_model_checkpoint_dir):
-                    raise FileNotFoundError(f"Entropy model checkpoint directory not found: {entropy_model_checkpoint_dir}")
-                
-                # Load entropy model parameters
-                params_path = os.path.join(entropy_model_checkpoint_dir, "params.json")
-                if not os.path.exists(params_path):
-                    raise FileNotFoundError(f"params.json not found in: {entropy_model_checkpoint_dir}")
-                
-                with open(params_path) as fr:
-                    reloaded = json.loads(fr.read())
+            # Create patcher with config
+            self.patcher = BLTPatcher(config)
+            # Set patcher to eval mode and disable gradients
+            self.patcher.eval()
+            for param in self.patcher.parameters():
+                param.requires_grad = False
+        else:
+            self.patcher = None
 
-                torch.set_default_dtype(torch.bfloat16)
-                model_params = reloaded["entropy_model"]
-                logger.warning(
-                    "Update checkpoint to load attn and sliding window args from checkpoint"
-                )
-                
-                # Override patcher configuration with actual entropy model parameters from checkpoint
-                config.patcher_dim = model_params["dim"]
-                config.patcher_n_layers = model_params["n_layers"]
-                config.patcher_n_heads = model_params["n_heads"]
-                config.patcher_max_seqlen = model_params["max_seqlen"]
-                config.patcher_ffn_dim_multiplier = model_params["ffn_dim_multiplier"]
-                config.patcher_vocab_size = model_params["vocab_size"]
-                # Use sensible defaults for parameters not in checkpoint
-                config.patcher_attn_bias_type = "local_block_causal"
-                config.patcher_attn_impl = "sdpa"  # originally xformers
-                config.patcher_sliding_window = 512
-                
-                # BLTPatcher will extract patcher_ parameters from config directly
-                self.patcher = BLTPatcher(config)
-                
-                state_path = os.path.join(
-                    entropy_model_checkpoint_dir, "consolidated.pth"
+    def init_weights(self):
+        self.local_encoder.init_weights()
+        self.global_transformer.init_weights()
+        self.local_decoder.init_weights()
+
+        if self.encoder_hash_tok_embedding is not None:
+            emb_std = self.local_encoder.dim ** (-0.5)
+            for emb in self.encoder_hash_tok_embedding:
+                nn.init.trunc_normal_(
+                    emb.weight,
+                    mean=0.0,
+                    std=emb_std,
+                    a=-3 * emb_std,
+                    b=3 * emb_std,
                 )
 
-                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-                self.patcher.load_state_dict(
-                    torch.load(state_path, map_location=device)["model"], strict=False
-                )
-                self.patcher.to(device)
-                self.patcher = self.patcher.eval()
-                # no grads for the model:
-                for param in self.patcher.parameters():
-                    param.requires_grad = False
-            else:
-                self.patcher = None
-        
-        # Initialize weights and apply final processing
-        self.post_init()
+        if self.patcher is not None:
+            self.patcher.init_weights()
 
     def _patch_ids_from_lengths(self, patch_lengths: torch.Tensor, seq_len: int) -> torch.Tensor:
         """
@@ -1772,22 +1745,6 @@ class BLTModel(BLTPreTrainedModel):
         )
         return output
 
-    def init_weights(self):
-        self.local_encoder.init_weights()
-        self.global_transformer.init_weights()
-        self.local_decoder.init_weights()
-
-        if self.encoder_hash_tok_embedding is not None:
-            emb_std = self.local_encoder.dim ** (-0.5)
-            for emb in self.encoder_hash_tok_embedding:
-                nn.init.trunc_normal_(
-                    emb.weight,
-                    mean=0.0,
-                    std=emb_std,
-                    a=-3 * emb_std,
-                    b=3 * emb_std,
-                )
-
 
 class BLTPatcher(BLTPreTrainedModel):
     def __init__(self, config):
@@ -1876,15 +1833,13 @@ class BLTPatcher(BLTPreTrainedModel):
         threshold_add: Optional[float] = None,
         monotonicity: bool = False,
         max_patch_length: Optional[int] = None,
-        patching_batch_size: int = 1,  # Changed from Optional[int] = None to int = 1
+        patching_batch_size: int = 1,
         device: Optional[str] = None,
         enable_grad: bool = False,
     ):
         attn_impl = self.attn_impl if attn_impl is None else attn_impl
 
         # Handle chunked processing for entropy calculation
-        #   grad_context = nullcontext() if enable_grad else torch.no_grad()
-        #  with grad_context:
         entropies = []
         preds = []
         max_length = min(getattr(self, "max_length", 8192), self.max_seqlen)
@@ -1929,7 +1884,7 @@ class BLTPatcher(BLTPreTrainedModel):
         concat_entropies = concat_entropies.reshape(token_values.shape)
         concat_preds = torch.cat(preds, dim=0)
         concat_preds = concat_preds.reshape(token_values.shape[0], -1)
-            
+        
         # Always compute patch lengths from concatenated entropies
         bs, seq_len = token_values.shape
         seq_len_next_tok = seq_len + 1 if include_next_token else seq_len
@@ -1977,33 +1932,61 @@ class BLTPatcher(BLTPreTrainedModel):
         
         return concat_entropies, patch_lengths, concat_preds
 
-    def reset_parameters(self, init_std=None):
-        self.norm.reset_parameters()
-
     def init_weights(self):
-        self.reset_parameters()
-        init_std = self.dim ** (-0.5)
+        """Initialize weights for the patcher model"""
+        # Initialize RoPE embeddings
+        self.rope_embeddings.reset_parameters()
+        
+        # Initialize norm layer
+        self.norm.reset_parameters()
+        
+        # Initialize token embeddings
+        emb_std = self.dim ** (-0.5)
         nn.init.trunc_normal_(
             self.tok_embeddings.weight,
             mean=0.0,
-            std=init_std,
-            a=-3 * init_std,
-            b=3 * init_std,
+            std=emb_std,
+            a=-3 * emb_std,
+            b=3 * emb_std,
         )
         
-        self.rope_embeddings.reset_parameters()
+        # Initialize transformer layers
         for depth, layer in enumerate(self.layers):
             factor = self.config.get_init_std_factor(depth)
             layer.init_weights(self.init_base_std, factor)
-
+        
+        # Initialize output layer if not weight tied
         if not self.weight_tying:
             nn.init.trunc_normal_(
                 self.output.weight,
                 mean=0.0,
-                std=init_std,
-                a=-3 * init_std,
-                b=3 * init_std,
+                std=emb_std,
+                a=-3 * emb_std,
+                b=3 * emb_std,
             )
+
+    def _init_weights(self, module):
+        """Initialize weights for a specific module"""
+        if isinstance(module, nn.Linear):
+            nn.init.trunc_normal_(
+                module.weight,
+                mean=0.0,
+                std=self.init_base_std or (self.dim ** (-0.5)),
+                a=-3 * (self.init_base_std or (self.dim ** (-0.5))),
+                b=3 * (self.init_base_std or (self.dim ** (-0.5))),
+            )
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            nn.init.trunc_normal_(
+                module.weight,
+                mean=0.0,
+                std=self.init_base_std or (self.dim ** (-0.5)),
+                a=-3 * (self.init_base_std or (self.dim ** (-0.5))),
+                b=3 * (self.init_base_std or (self.dim ** (-0.5))),
+            )
+
+
 
     @staticmethod
     def entropy(scores):
