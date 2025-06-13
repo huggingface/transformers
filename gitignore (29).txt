@@ -1,0 +1,4 @@
+# Node, Next.js, and general secrets
+.env
+.env.local
+.env.*.local

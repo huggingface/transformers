@@ -1,32 +1,21 @@
-# Security Policy
+# Stripe Secret & Webhook Security
 
-## Hugging Face Hub, remote artefacts, and remote code
+## Do
+- Store all Stripe keys in a `.env` file, never in code.
+- Add `.env` to your `.gitignore`.
+- Rotate any keys that were ever committed.
+- Set up Stripe webhooks in your dashboard for each environment.
+- Use Stripe test keys (`sk_test_...`) for development.
+- Review logs and audit for accidental leaks.
 
-Transformers is open-source software that is tightly coupled to the Hugging Face Hub. While you have the ability to use it
-offline with pre-downloaded model weights, it provides a very simple way to download, use, and manage models locally.
+## Do Not
+- Do not expose `STRIPE_SECRET_KEY` to the frontend or in public repos.
+- Do not log full webhook payloads containing sensitive information.
+- Do not commit `.env` or real secrets to source control.
 
-When downloading artefacts that have been uploaded by others on any platform, you expose yourself to risks. Please
-read below for the security recommendations in order to keep your runtime and local environment safe.
+## Management
+- Periodically rotate and review Stripe API keys and webhooks.
+- Remove all unused or test webhooks from your Stripe dashboard.
+- Use Stripe’s dashboard to monitor for suspicious activity.
 
-### Remote artefacts
-
-Models uploaded on the Hugging Face Hub come in different formats. We heavily recommend uploading and downloading
-models in the [`safetensors`](https://github.com/huggingface/safetensors) format (which is the default prioritized
-by the transformers library), as developed specifically to prevent arbitrary code execution on your system.
-
-To avoid loading models from unsafe formats(e.g. [pickle](https://docs.python.org/3/library/pickle.html), you should use the `use_safetensors` parameter. If doing so, in the event that no .safetensors file is present, transformers will error when loading the model.
-
-### Remote code
-
-#### Modeling
-
-Transformers supports many model architectures, but is also the bridge between your Python runtime and models that
-are stored in model repositories on the Hugging Face Hub.
-
-These models require the `trust_remote_code=True` parameter to be set when using them; please **always** verify
-the content of the modeling files when using this argument. We recommend setting a revision in order to ensure you
-protect yourself from updates on the repository.
-
-## Reporting a Vulnerability
-
-Feel free to submit vulnerability reports to [security@huggingface.co](mailto:security@huggingface.co), where someone from the HF security team will review and recommend next steps. If reporting a vulnerability specific to open source, please note [Huntr](https://huntr.com) is a vulnerability disclosure program for open source software.
+> For help, see the official [Stripe Node.js docs](https://stripe.com/docs/keys#nodejs) and [webhook docs](https://stripe.com/docs/webhooks).
