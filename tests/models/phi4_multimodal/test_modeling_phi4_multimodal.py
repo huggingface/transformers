@@ -283,7 +283,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
     def setUp(self):
         # Currently, the Phi-4 checkpoint on the hub is not working with the latest Phi-4 code, so the slow integration tests
         # won't pass without using the correct revision (refs/pr/70)
-        self.processor = AutoProcessor.from_pretrained(self.checkpoint_path)
+        self.processor = AutoProcessor.from_pretrained(self.checkpoint_path, revision=self.revision)
         self.generation_config = GenerationConfig(max_new_tokens=20, do_sample=False)
         self.user_token = "<|user|>"
         self.assistant_token = "<|assistant|>"
