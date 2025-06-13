@@ -555,7 +555,7 @@ class Glm4vVisionBlock(Qwen2_5_VLVisionBlock):
         self.mlp = Glm4VisionMlp(config, bias=False)
 
 
-class Glm4vDecoderLayer(GradientCheckpointingLayer):
+class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Glm4vTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -640,7 +640,7 @@ class Glm4vDecoderLayer(GradientCheckpointingLayer):
 
 class Glm4vPreTrainedModel(Qwen2_5_VLPreTrainedModel):
     config_class = Glm4vConfig
-    _no_split_modules = ["Glm4vDecoderLayer", "Glm4vVisionBlock"]
+    _no_split_modules = ["Glm4vTextDecoderLayer", "Glm4vVisionBlock"]
     _skip_keys_device_placement = "past_key_values"
 
     def _init_weights(self, module):
@@ -915,7 +915,7 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [Glm4vDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [Glm4vTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self._attn_implementation = config._attn_implementation
         self.norm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -1066,7 +1066,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
     base_model_prefix = ""
     _checkpoint_conversion_mapping = None
     config_class = Glm4vConfig
-    _no_split_modules = ["Glm4vDecoderLayer", "Glm4vVisionBlock"]
+    _no_split_modules = ["Glm4vTextDecoderLayer", "Glm4vVisionBlock"]
 
     def __init__(self, config):
         super().__init__(config)
