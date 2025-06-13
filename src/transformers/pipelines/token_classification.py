@@ -162,7 +162,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         stride: Optional[int] = None,
     ):
         preprocess_params = {}
-        preprocess_params['is_split_into_words'] = is_split_into_words
+        preprocess_params["is_split_into_words"] = is_split_into_words
         if offset_mapping is not None:
             preprocess_params["offset_mapping"] = offset_mapping
 
@@ -261,7 +261,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         """
 
         _inputs, is_split_into_words, offset_mapping = self._args_parser(inputs, **kwargs)
-        kwargs['is_split_into_words'] = is_split_into_words
+        kwargs["is_split_into_words"] = is_split_into_words
         if offset_mapping:
             kwargs["offset_mapping"] = offset_mapping
 
@@ -272,7 +272,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         truncation = True if self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0 else False
 
         if is_split_into_words:
-            tokenizer_params['is_split_into_words'] = True
+            tokenizer_params["is_split_into_words"] = True
         inputs = self.tokenizer(
             sentence,
             return_tensors=self.framework,
