@@ -1157,6 +1157,42 @@ class PretrainedConfig(PushToHubMixin):
             config_to_return = self
         return config_to_return
 
+    @classmethod
+    def from_text_vision_configs(cls, text_config, vision_config, **kwargs):
+        r"""
+        Instantiate a model config (or a derived class) from text model configuration and vision model
+        configuration.
+
+        Returns:
+            [`PreTrainedConfig`]: An instance of a configuration object
+        """
+
+        warnings.warn(
+            "The `from_text_vision_configs` method is deprecated and will be removed in v4.60 of Transformers. Please instantiate"
+            "the config class directly with `MyConfig(text_config=text_config, vision_config=vision_config, **kwargs)` instead.",
+            FutureWarning,
+        )
+
+        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+
+    @classmethod
+    def from_text_audio_configs(cls, text_config, audio_config, **kwargs):
+        r"""
+        Instantiate a model config (or a derived class) from text model configuration and audio model
+        configuration.
+
+        Returns:
+            [`PreTrainedConfig`]: An instance of a configuration object
+        """
+
+        warnings.warn(
+            "The `from_text_audio_configs` method is deprecated and will be removed in v4.60 of Transformers. Please instantiate"
+            "the config class directly with `MyConfig(text_config=text_config, audio_config=audio_config, **kwargs)` instead.",
+            FutureWarning,
+        )
+
+        return cls(text_config=text_config.to_dict(), audio_config=audio_config.to_dict(), **kwargs)
+
 
 def get_configuration_file(configuration_files: list[str]) -> str:
     """

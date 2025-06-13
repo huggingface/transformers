@@ -383,7 +383,11 @@ class Pix2StructModelTester:
         return config, input_ids, attention_mask, flattened_patches
 
     def get_config(self, text_config, vision_config):
-        return Pix2StructConfig.from_text_vision_configs(text_config, vision_config, projection_dim=64)
+        return Pix2StructConfig(
+            text_config=self.text_config,
+            vision_config=self.vision_config,
+            projection_dim=64,
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()

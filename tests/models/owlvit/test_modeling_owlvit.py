@@ -371,7 +371,11 @@ class OwlViTModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return OwlViTConfig.from_text_vision_configs(self.text_config, self.vision_config, projection_dim=64)
+        return OwlViTConfig(
+            text_config=self.text_config,
+            vision_config=self.vision_config,
+            projection_dim=64,
+        )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
         model = OwlViTModel(config).to(torch_device).eval()
@@ -583,7 +587,11 @@ class OwlViTForObjectDetectionTester:
         return config, pixel_values, input_ids, attention_mask
 
     def get_config(self):
-        return OwlViTConfig.from_text_vision_configs(self.text_config, self.vision_config, projection_dim=64)
+        return OwlViTConfig(
+            text_config=self.text_config,
+            vision_config=self.vision_config,
+            projection_dim=64,
+        )
 
     def create_and_check_model(self, config, pixel_values, input_ids, attention_mask):
         model = OwlViTForObjectDetection(config).to(torch_device).eval()

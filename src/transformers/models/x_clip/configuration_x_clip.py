@@ -365,17 +365,5 @@ class XCLIPConfig(PretrainedConfig):
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
 
-    @classmethod
-    def from_text_vision_configs(cls, text_config: XCLIPTextConfig, vision_config: XCLIPVisionConfig, **kwargs):
-        r"""
-        Instantiate a [`XCLIPConfig`] (or a derived class) from xclip text model configuration and xclip vision model
-        configuration.
-
-        Returns:
-            [`XCLIPConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
 
 __all__ = ["XCLIPConfig", "XCLIPTextConfig", "XCLIPVisionConfig"]
