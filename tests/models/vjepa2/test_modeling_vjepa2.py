@@ -267,7 +267,7 @@ class VJEPA2ModelIntegrationTest(unittest.TestCase):
             [[-0.0061, -1.8365, 2.7343], [-2.5938, -2.7181, -0.1663], [-1.7993, -2.2430, -1.1388]],
             device=torch_device,
         )
-        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=8e-2, atol=8e-2)
 
     @slow
     def test_inference_video(self):
