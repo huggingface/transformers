@@ -54,36 +54,18 @@ from transformers import AutoProcessor, AutoTokenizer
 model_name = "hfl/rocbert-base"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModel.from_pretrained(model_name)
-
 text = "大家好，无论谁正在阅读这篇文章"
-
-inputs = tokenizer 
-
-
 ```
+
+</hfoption>
+<hfoption id="transformers CLI">
+
+```bash
+echo -e "水在零度时会[MASK]" | transformers-cli run --task fill-mask --model junnyu/roformer_chinese_base --device 0
+```
+
 </hfoption>
 </hfoptions>
-
-
-
-## Overview
-
-The RoCBert model was proposed in [RoCBert: Robust Chinese Bert with Multimodal Contrastive Pretraining](https://aclanthology.org/2022.acl-long.65.pdf)  by HuiSu, WeiweiShi, XiaoyuShen, XiaoZhou, TuoJi, JiaruiFang, JieZhou.
-It's a pretrained Chinese language model that is robust under various forms of adversarial attacks.
-
-The abstract from the paper is the following:
-
-*Large-scale pretrained language models have achieved SOTA results on NLP tasks. However, they have been shown
-vulnerable to adversarial attacks especially for logographic languages like Chinese. In this work, we propose
-ROCBERT: a pretrained Chinese Bert that is robust to various forms of adversarial attacks like word perturbation,
-synonyms, typos, etc. It is pretrained with the contrastive learning objective which maximizes the label consistency
-under different synthesized adversarial examples. The model takes as input multimodal information including the
-semantic, phonetic and visual features. We show all these features are important to the model robustness since the
-attack can be performed in all the three forms. Across 5 Chinese NLU tasks, ROCBERT outperforms strong baselines under
-three blackbox adversarial algorithms without sacrificing the performance on clean testset. It also performs the best
-in the toxic content detection task under human-made attacks.*
-
-This model was contributed by [weiweishi](https://huggingface.co/weiweishi).
 
 ## Resources
 
