@@ -1,6 +1,6 @@
 import types
 import warnings
-from typing import Any, Dict, List, Optional, Tuple, Union, overload
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union, overload
 
 import numpy as np
 
@@ -41,13 +41,15 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
         else:
             raise ValueError("At least one input is required.")
 
+        is_split_into_words = kwargs.get("is_split_into_words", False)
+
         offset_mapping = kwargs.get("offset_mapping")
         if offset_mapping:
             if isinstance(offset_mapping, list) and isinstance(offset_mapping[0], tuple):
                 offset_mapping = [offset_mapping]
             if len(offset_mapping) != batch_size:
                 raise ValueError("offset_mapping should have the same batch size as the input")
-        return inputs, offset_mapping
+        return inputs, is_split_into_words, offset_mapping
 
 
 class AggregationStrategy(ExplicitEnum):
@@ -151,9 +153,11 @@ class TokenClassificationPipeline(ChunkPipeline):
         ignore_subwords: Optional[bool] = None,
         aggregation_strategy: Optional[AggregationStrategy] = None,
         offset_mapping: Optional[List[Tuple[int, int]]] = None,
+        is_split_into_words: Optional[bool] = False,
         stride: Optional[int] = None,
     ):
         preprocess_params = {}
+        preprocess_params["is_split_into_words"] = is_split_into_words
         if offset_mapping is not None:
             preprocess_params["offset_mapping"] = offset_mapping
 
@@ -203,7 +207,7 @@ class TokenClassificationPipeline(ChunkPipeline):
                     f'"{aggregation_strategy}"`, please select another one instead.'
                 )
             else:
-                if self.tokenizer.is_fast:
+                if self.tokenizer.is_fast and not is_split_into_words:
                     tokenizer_params = {
                         "return_overflowing_tokens": True,
                         "padding": True,
@@ -251,15 +255,37 @@ class TokenClassificationPipeline(ChunkPipeline):
               exists if the offsets are available within the tokenizer
         """
 
-        _inputs, offset_mapping = self._args_parser(inputs, **kwargs)
+        _inputs, is_split_into_words, offset_mapping = self._args_parser(inputs, **kwargs)
+        kwargs["is_split_into_words"] = is_split_into_words
+        if is_split_into_words and not all(isinstance(input, list) for input in inputs):
+            return super().__call__([inputs], **kwargs)
         if offset_mapping:
             kwargs["offset_mapping"] = offset_mapping
 
         return super().__call__(inputs, **kwargs)
 
-    def preprocess(self, sentence, offset_mapping=None, **preprocess_params):
+    @overload
+    def preprocess(
+        self, sentence: str, is_split_into_words: bool = False, offset_mapping=None, **preprocess_params
+    ) -> Iterator[Dict]: ...
+
+    @overload
+    def preprocess(
+        self, sentence: List[str], is_split_into_words: bool = True, offset_mapping=None, **preprocess_params
+    ) -> Iterator[Dict]: ...
+
+    def preprocess(self, sentence, is_split_into_words=False, offset_mapping=None, **preprocess_params):
         tokenizer_params = preprocess_params.pop("tokenizer_params", {})
         truncation = True if self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0 else False
+
+        if is_split_into_words:
+            if not isinstance(sentence, list):
+                raise ValueError("When `is_split_into_words=True`, `sentence` must be a list of tokens.")
+            tokenizer_params["is_split_into_words"] = True
+        else:
+            if not isinstance(sentence, str):
+                raise ValueError("When `is_split_into_words=False`, `sentence` must be an untokenized string.")
+
         inputs = self.tokenizer(
             sentence,
             return_tensors=self.framework,
