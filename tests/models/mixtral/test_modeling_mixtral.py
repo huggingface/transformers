@@ -20,7 +20,6 @@ import pytest
 from transformers import MixtralConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    get_device_properties,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -142,14 +141,6 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch
 class MixtralIntegrationTest(unittest.TestCase):
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    device_properties = None
-
-    @classmethod
-    def setUpClass(cls):
-        cls.device_properties = get_device_properties()
-
     @slow
     @require_torch_accelerator
     def test_small_model_logits(self):
