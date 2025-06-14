@@ -95,6 +95,7 @@ if TYPE_CHECKING:
     from .distilbert import *
     from .dit import *
     from .donut import *
+    from .dots1 import *
     from .dpr import *
     from .dpt import *
     from .efficientnet import *
