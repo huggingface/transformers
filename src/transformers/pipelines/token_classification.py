@@ -1,6 +1,6 @@
 import types
 import warnings
-from typing import Any, Dict, List, Optional, Tuple, Union, overload
+from typing import Any, Dict, List, Optional, Tuple, Union, overload, Iterator
 
 import numpy as np
 
@@ -42,11 +42,6 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
             raise ValueError("At least one input is required.")
 
         is_split_into_words = kwargs.get("is_split_into_words", False)
-        if is_split_into_words:
-            if isinstance(inputs, list) and all(isinstance(item, list) for item in inputs):
-                inputs = [" ".join(item) for item in inputs]
-            else:
-                raise ValueError("When is_split_into_words is True, inputs should be a list of lists of words.")
 
         offset_mapping = kwargs.get("offset_mapping")
         if offset_mapping:
@@ -262,17 +257,35 @@ class TokenClassificationPipeline(ChunkPipeline):
 
         _inputs, is_split_into_words, offset_mapping = self._args_parser(inputs, **kwargs)
         kwargs["is_split_into_words"] = is_split_into_words
+        if is_split_into_words:
+            return super().__call__([inputs], **kwargs)
         if offset_mapping:
             kwargs["offset_mapping"] = offset_mapping
 
         return super().__call__(inputs, **kwargs)
+
+    @overload
+    def preprocess(
+        self, sentence: str, is_split_into_words: bool = False, offset_mapping=None, **preprocess_params
+    ) -> Iterator[Dict]: ...
+
+    @overload
+    def preprocess(
+        self, sentence: List[str], is_split_into_words: bool = True, offset_mapping=None, **preprocess_params
+    ) -> Iterator[Dict]: ...
 
     def preprocess(self, sentence, is_split_into_words=False, offset_mapping=None, **preprocess_params):
         tokenizer_params = preprocess_params.pop("tokenizer_params", {})
         truncation = True if self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0 else False
 
         if is_split_into_words:
-            tokenizer_params["is_split_into_words"] = True
+            if not isinstance(sentence, list):
+                raise ValueError("When `is_split_into_words=True`, `sentence` must be a list of tokens.")
+            tokenizer_params['is_split_into_words'] = True
+        else:
+            if not isinstance(sentence, str):
+                raise ValueError("When `is_split_into_words=False`, `sentence` must be an untokenized string.")
+
         inputs = self.tokenizer(
             sentence,
             return_tensors=self.framework,
