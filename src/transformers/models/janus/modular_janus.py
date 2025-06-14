@@ -49,7 +49,6 @@ from ..blip_2.modeling_blip_2 import Blip2VisionModel
 from ..chameleon.configuration_chameleon import ChameleonVQVAEConfig
 from ..chameleon.modeling_chameleon import (
     ChameleonVQVAE,
-    ChameleonVQVAEEncoder,
     ChameleonVQVAEEncoderAttnBlock,
     ChameleonVQVAEEncoderConvDownsample,
     ChameleonVQVAEEncoderResnetBlock,
@@ -656,9 +655,9 @@ class JanusVQVAEMidBlock(nn.Module):
         return hidden_states
 
 
-class JanusVQVAEEncoder(ChameleonVQVAEEncoder, nn.Module):
+class JanusVQVAEEncoder(nn.Module):
     def __init__(self, config):
-        nn.Module.__init__()
+        super().__init__()
 
         self.num_resolutions = len(config.channel_multiplier)
         self.num_res_blocks = config.num_res_blocks
