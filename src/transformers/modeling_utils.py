@@ -3583,6 +3583,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
             if self.can_generate():
                 model_to_save.generation_config.save_pretrained(save_directory)
 
+            # Save remote code to local
+            custom_object_save(self, save_directory)
+
             if _hf_peft_config_loaded:
                 logger.info(
                     "Detected adapters on the model, saving the model in the PEFT format, only adapter weights will be saved."

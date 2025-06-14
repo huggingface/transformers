@@ -437,6 +437,9 @@ class PretrainedConfig(PushToHubMixin):
         self.to_json_file(output_config_file, use_diff=True)
         logger.info(f"Configuration saved in {output_config_file}")
 
+        # Save remote code to local
+        custom_object_save(self, save_directory)
+
         if push_to_hub:
             self._upload_modified_files(
                 save_directory,

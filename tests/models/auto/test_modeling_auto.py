@@ -332,6 +332,11 @@ class AutoModelTest(unittest.TestCase):
         for p1, p2 in zip(model.parameters(), reloaded_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
+        # Test the dynamic module is reloaded and module objects are different.
+        # The module file is not changed after dumping,
+        # but since we're loading from local file - the module code should be reloaded for the new model.
+        self.assertIsNot(model.__class__, reloaded_model.__class__)
+
         # Test the dynamic module is reloaded if we force it.
         reloaded_model = AutoModel.from_pretrained(
             "hf-internal-testing/test_dynamic_model", trust_remote_code=True, force_download=True
@@ -356,6 +361,11 @@ class AutoModelTest(unittest.TestCase):
         self.assertEqual(reloaded_model.__class__.__name__, "NewModel")
         for p1, p2 in zip(model.parameters(), reloaded_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
+
+        # Test the dynamic module is reloaded and module objects are different.
+        # The module file is not changed after dumping,
+        # but since we're loading from local file - the module code should be reloaded for the new model.
+        self.assertIsNot(model.__class__, reloaded_model.__class__)
 
         # Test the dynamic module is reloaded if we force it.
         reloaded_model = AutoModel.from_pretrained(
