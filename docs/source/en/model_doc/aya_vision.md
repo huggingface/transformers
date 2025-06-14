@@ -96,7 +96,7 @@ print(processor.tokenizer.decode(gen_tokens[0][inputs.input_ids.shape[1]:], skip
 
 </hfoptions>
 
-Quantization reduces the memory footprint of large models by representing weights at lower precision. Refer to the [Quantization](https://huggingface.co/docs/transformers/v4.52.3/quantization/overview) overview for supported backends.
+Quantization reduces the memory footprint of large models by representing weights at lower precision. Refer to the [Quantization](../quantization/overview) overview for supported backends.
 ```python
 
 #pip install transformers accelerate bitsandbytes
@@ -270,19 +270,19 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
         print(f"Response {i+1}:\n{response}\n")
     ```
 
-## Aya VisionProcessor
+## AyaVisionProcessor
 
-[[autodoc]] Aya VisionProcessor
+[[autodoc]] AyaVisionProcessor
 
-## Aya VisionConfig
+## AyaVisionConfig
 
-[[autodoc]] Aya VisionConfig
+[[autodoc]] AyaVisionConfig
 
-## Aya VisionModel
+## AyaVisionModel
 
-[[autodoc]] Aya VisionModel
+[[autodoc]] AyaVisionModel
 
-## Aya VisionForConditionalGeneration
+## AyaVisionForConditionalGeneration
 
-[[autodoc]] Aya VisionForConditionalGeneration
+[[autodoc]] AyaVisionForConditionalGeneration
     - forward
