@@ -181,11 +181,18 @@ class CausalLMModelTester:
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
+    @property
+    def config_args(self):
+        return list(signature(self.config_class.__init__).parameters.keys())
+
     def get_config(self):
-        kwarg_names = list(signature(self.config_class.__init__).parameters.keys())
-        kwargs = {
-            k: getattr(self, k) for k in kwarg_names + self.forced_config_args if hasattr(self, k) and k != "self"
-        }
+        kwargs = {}
+        model_name_to_common_name = {v: k for k, v in self.config_class.attribute_map.items()}
+        for k in self.config_args + self.forced_config_args:
+            if hasattr(self, k) and k != "self":
+                kwargs[k] = getattr(self, k)
+            elif k in model_name_to_common_name and hasattr(self, model_name_to_common_name[k]):
+                kwargs[k] = getattr(self, model_name_to_common_name[k])
         return self.config_class(**kwargs)
 
     def create_and_check_model(
