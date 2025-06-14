@@ -47,7 +47,6 @@ from transformers.models.janus.processing_janus import JanusProcessor
 MAPPINGS = {}
 
 
-
 def convert_old_keys_to_new_keys(state_dict):
     keys_as_text = "\n".join(state_dict.keys())
     new_keys_as_text = keys_as_text
