@@ -224,6 +224,7 @@ class DiaProcessor(ProcessorMixin):
 
         data.update({"decoder_input_ids": delayed_decoder_input_ids, "decoder_attention_mask": decoder_attention_mask})
 
+        # TODO: correct 2D shaping of labels
         if output_labels:
             # Base idea is to shift on the sequence dim
             labels = data["decoder_input_ids"].clone()[:, 1:]
