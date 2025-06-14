@@ -114,6 +114,7 @@ print(f"The predicted class label is: {predicted_class_label}")
 
 [[autodoc]] MobileNetV2ImageProcessor
     - preprocess
+    - post_process_semantic_segmentation
 
 ## MobileNetV2ImageProcessorFast
 
