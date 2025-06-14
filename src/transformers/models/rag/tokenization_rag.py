@@ -16,7 +16,7 @@
 
 import os
 import warnings
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
@@ -67,6 +67,28 @@ class RagTokenizer:
 
     def decode(self, *args, **kwargs):
         return self.generator.decode(*args, **kwargs)
+
+    @property
+    def patch_token_id(self) -> Optional[int]:
+        """
+        Returns the patch token ID from the question encoder tokenizer (if available).
+        """
+        return getattr(self.question_encoder, "patch_token_id", None)
+
+    @property
+    def patch_token(self) -> Optional[str]:
+        """
+        Returns the patch token string from the question encoder tokenizer (if available).
+        """
+        return getattr(self.question_encoder, "patch_token", None)
+
+    def encode(self, *args, **kwargs):
+        """
+        Encodes input text(s) using the question encoder tokenizer.
+        This will switch to input mode before encoding.
+        """
+        self._switch_to_input_mode()
+        return self.current_tokenizer.encode(*args, **kwargs)
 
     def _switch_to_input_mode(self):
         self.current_tokenizer = self.question_encoder
