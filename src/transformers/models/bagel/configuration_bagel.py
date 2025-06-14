@@ -103,7 +103,6 @@ class BagelVisionConfig(PretrainedConfig):
 
 
 class BagelVQVAEConfig(PretrainedConfig):
-
     model_type = "bagel_vqvae"
     base_config_key = "vq_config"
 
