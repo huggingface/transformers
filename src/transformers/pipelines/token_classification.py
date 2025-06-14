@@ -1,6 +1,6 @@
 import types
 import warnings
-from typing import Any, Dict, List, Optional, Tuple, Union, overload, Iterator
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union, overload
 
 import numpy as np
 
