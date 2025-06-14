@@ -98,6 +98,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("depth_pro", "DepthProModel"),
         ("deta", "DetaModel"),
         ("detr", "DetrModel"),
+        ("dia", "DiaModel"),
         ("diffllama", "DiffLlamaModel"),
         ("dinat", "DinatModel"),
         ("dinov2", "Dinov2Model"),
@@ -463,6 +464,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("data2vec-text", "Data2VecTextForMaskedLM"),
         ("deberta", "DebertaForMaskedLM"),
         ("deberta-v2", "DebertaV2ForMaskedLM"),
+        ("dia", "DiaForConditionalGeneration"),
         ("distilbert", "DistilBertForMaskedLM"),
         ("electra", "ElectraForMaskedLM"),
         ("encoder-decoder", "EncoderDecoderModel"),
@@ -1044,6 +1046,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
+        ("dia", "DiaForConditionalGeneration"),
         ("granite_speech", "GraniteSpeechForConditionalGeneration"),
         ("moonshine", "MoonshineForConditionalGeneration"),
         ("pop2piano", "Pop2PianoForConditionalGeneration"),
