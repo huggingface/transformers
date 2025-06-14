@@ -855,7 +855,8 @@ class ChameleonPreTrainedModel(PreTrainedModel):
     custom_intro="""
     The VQ-VAE model used in Chameleon for encoding/decoding images into discrete tokens.
     This model follows the "Make-a-scene: Scene-based text-to-image generation with human priors" paper from
-    [ Oran Gafni, Adam Polyak, Oron Ashual, Shelly Sheynin, Devi Parikh, and Yaniv Taigman](https://arxiv.org/abs/2203.13131).
+    [ Oran Gafni, Adam Polyak, Oron Ashual, Shelly Sheynin, Devi Parikh, and Yaniv
+    Taigman](https://huggingface.co/papers/2203.13131).
     """
 )
 class ChameleonVQVAE(ChameleonPreTrainedModel):
@@ -1228,6 +1229,12 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
 
     def get_decoder(self):
         return self.model
+
+    def get_image_tokens(self, pixel_values):
+        return self.model.get_image_tokens(pixel_values)
+
+    def get_image_features(self, pixel_values):
+        return self.model.get_image_features(pixel_values)
 
     @can_return_tuple
     @auto_docstring

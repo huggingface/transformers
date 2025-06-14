@@ -23,14 +23,6 @@
       title: Modular Transformers
     - local: auto_docstring
       title: Document your models
-    - local: task_summary
-      title: What 🤗 Transformers can do
-    - local: tasks_explained
-      title: How 🤗 Transformers solve tasks
-    - local: model_summary
-      title: The Transformer model family
-    - local: attention
-      title: Attention mechanisms
     - local: attention_interface
       title: Customizing attention function
     title: Models
@@ -905,6 +897,8 @@
     - sections:
       - local: model_doc/timesformer
         title: TimeSformer
+      - local: model_doc/vjepa2
+        title: V-JEPA 2
       - local: model_doc/videomae
         title: VideoMAE
       - local: model_doc/vivit

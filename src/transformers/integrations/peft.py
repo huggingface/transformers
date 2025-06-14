@@ -53,7 +53,7 @@ class PeftAdapterMixin:
     that anyone can load, train and run with this mixin class:
     - Low Rank Adapters (LoRA): https://huggingface.co/docs/peft/conceptual_guides/lora
     - IA3: https://huggingface.co/docs/peft/conceptual_guides/ia3
-    - AdaLora: https://arxiv.org/abs/2303.10512
+    - AdaLora: https://huggingface.co/papers/2303.10512
 
     Other PEFT models such as prompt tuning, prompt learning are out of scope as these adapters are not "injectable"
     into a torch module. For using these methods, please refer to the usage guide of PEFT library.
