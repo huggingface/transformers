@@ -1051,7 +1051,8 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
         # Either attention or mamba will be initialized, depending on the layer type.
         self.self_attn = None
-        self.block_sparse_moe = GraniteMoeHybridMoE(config)
+        if config.num_local_experts > 0:
+            self.block_sparse_moe = GraniteMoeHybridMoE(config)
         self.input_layernorm = GraniteMoeHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GraniteMoeHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -1064,6 +1065,9 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         else:
             self.self_attn = GraniteMoeHybridAttention(config, layer_idx)
         self.layer_type = config.layers_block_type[layer_idx]
+
+        # Accept 0 experts: skip MoE if num_local_experts == 0
+        self.has_experts = getattr(config, "num_local_experts", 0) > 0
 
     def forward(
         self,
@@ -1131,9 +1135,14 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        moe_hidden_states, router_logits = self.block_sparse_moe(hidden_states)
 
-        hidden_states = moe_hidden_states + self.shared_mlp(hidden_states)
+        if self.has_experts:
+            moe_hidden_states, router_logits = self.block_sparse_moe(hidden_states)
+            hidden_states = moe_hidden_states + self.shared_mlp(hidden_states)
+        else:
+            hidden_states = self.shared_mlp(hidden_states)
+            router_logits = None
+
         hidden_states = residual + hidden_states * self.residual_multiplier
 
         outputs = (hidden_states,)
