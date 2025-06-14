@@ -380,17 +380,5 @@ class CLIPSegConfig(PretrainedConfig):
         self.initializer_factor = 1.0
         self.use_complex_transposed_convolution = use_complex_transposed_convolution
 
-    @classmethod
-    def from_text_vision_configs(cls, text_config: CLIPSegTextConfig, vision_config: CLIPSegVisionConfig, **kwargs):
-        r"""
-        Instantiate a [`CLIPSegConfig`] (or a derived class) from clipseg text model configuration and clipseg vision
-        model configuration.
-
-        Returns:
-            [`CLIPSegConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
 
 __all__ = ["CLIPSegConfig", "CLIPSegTextConfig", "CLIPSegVisionConfig"]

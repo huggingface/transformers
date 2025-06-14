@@ -459,8 +459,10 @@ class ClapModelTester:
         return config, input_ids, attention_mask, input_features
 
     def get_config(self):
-        return ClapConfig.from_text_audio_configs(
-            self.text_model_tester.get_config(), self.audio_model_tester.get_config(), projection_dim=64
+        return ClapConfig(
+            text_config=self.text_model_tester.get_config(),
+            audio_config=self.audio_model_tester.get_config(),
+            projection_dim=64,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, input_features):

@@ -408,8 +408,10 @@ class AlignModelTester:
         return config, input_ids, token_type_ids, input_mask, pixel_values
 
     def get_config(self):
-        return AlignConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+        return AlignConfig(
+            text_config=self.text_model_tester.get_config(),
+            vision_config=self.vision_model_tester.get_config(),
+            projection_dim=64,
         )
 
     def create_and_check_model(self, config, input_ids, token_type_ids, attention_mask, pixel_values):

@@ -203,7 +203,7 @@ class BridgeTowerModelTester:
         return (config, input_ids, attention_mask, pixel_values, pixel_mask)
 
     def get_config(self):
-        return BridgeTowerConfig.from_text_vision_configs(
+        return BridgeTowerConfig(
             text_config=self.text_model_tester.get_config(),
             vision_config=self.vision_model_tester.get_config(),
             share_cross_modal_transformer_layers=self.share_cross_modal_transformer_layers,

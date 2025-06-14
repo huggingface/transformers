@@ -357,18 +357,6 @@ class GroupViTConfig(PretrainedConfig):
         self.initializer_factor = 1.0
         self.output_segmentation = False
 
-    @classmethod
-    def from_text_vision_configs(cls, text_config: GroupViTTextConfig, vision_config: GroupViTVisionConfig, **kwargs):
-        r"""
-        Instantiate a [`GroupViTConfig`] (or a derived class) from groupvit text model configuration and groupvit
-        vision model configuration.
-
-        Returns:
-            [`GroupViTConfig`]: An instance of a configuration object
-        """
-
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
 
 class GroupViTOnnxConfig(OnnxConfig):
     @property
