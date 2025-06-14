@@ -277,6 +277,7 @@ _import_structure = {
         "VptqConfig",
     ],
     "video_utils": [],
+    "models.x_clip.modeling_x_clip": ["XCLIPVideoFeatureOutput"],
 }
 
 # tokenizers-backed objects
@@ -552,6 +553,7 @@ else:
 if TYPE_CHECKING:
     # All modeling imports
     from .configuration_utils import PretrainedConfig
+    from .models.x_clip.modeling_x_clip import XCLIPVideoFeatureOutput
 
     # Data
     from .data import (
@@ -1011,6 +1013,9 @@ if TYPE_CHECKING:
             FlaxWhisperTimeStampLogitsProcessor,
         )
         from .modeling_flax_utils import FlaxPreTrainedModel
+
+    # XCLIP
+    from .models.x_clip.modeling_x_clip import XCLIPVideoFeatureOutput
 
 else:
     import sys
