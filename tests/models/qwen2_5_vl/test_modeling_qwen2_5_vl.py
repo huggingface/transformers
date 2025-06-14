@@ -368,10 +368,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         super().test_prompt_lookup_decoding_matches_greedy_search()
 
-    @unittest.skip(reason="The base class is LM only and cannot be init with XModelConfig`")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
     # The multimodal base model embeds will not match ids, due to pixel values. We can't change base test
     # because in some models `pixel_values` are required. Will be fixed when we add support for merging `embeds+pixels`
     # TODO: @raushan
