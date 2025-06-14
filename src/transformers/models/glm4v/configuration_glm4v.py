@@ -24,6 +24,58 @@ from ...modeling_rope_utils import rope_config_validation
 
 
 class Glm4vVisionConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Glm4vVisionModel`]. It is used to instantiate an Glm4vVisionModel
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield
+    a similar configuration to that of
+    GLM-4.1V-9B-Thinking [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 1024):
+            Dimensionality of the encoder layers and the pooler layer.
+        num_hidden_layers (`int`, *optional*, defaults to 24):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to add a bias to the queries, keys and values.
+        intermediate_size (`int`, *optional*, defaults to 4096):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` are supported.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout probability for attention weights.
+        projection_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout probability for the projection layer.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
+        image_size (`int` or `list[int]`, *optional*, defaults to `[448, 448]`):
+            The size (resolution) of each image.
+        patch_size (`int` or `list[int]`, *optional*, defaults to `[14, 14]`):
+            The size (resolution) of each patch.
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
+
+    Example:
+
+    ```python
+    >>> from transformers import Glm4vVisionConfig, Glm4vVisionModel
+
+    >>> # Initializing a Glm4vVisionConfig GLM-4.1V-9B style configuration
+    >>> configuration = Glm4vVisionConfig()
+
+    >>> # Initializing a model (with random weights) from the GLM-4.1V-9B configuration
+    >>> model = Glm4vVisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "glm4v"
     base_config_key = "vision_config"
 
@@ -32,6 +84,8 @@ class Glm4vVisionConfig(PretrainedConfig):
         depth=24,
         hidden_size=1536,
         hidden_act="silu",
+        attention_bias=False,
+        attention_dropout=0.0,
         num_heads=12,
         in_channels=3,
         image_size=336,
@@ -59,6 +113,8 @@ class Glm4vVisionConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
+        self.attention_bias = (attention_bias,)
+        self.attention_dropout = attention_dropout
 
 
 class Glm4vTextConfig(PretrainedConfig):
