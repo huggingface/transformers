@@ -67,6 +67,13 @@ echo -e "水在零度时会[MASK]" | transformers-cli run --task fill-mask --mod
 </hfoption>
 </hfoptions>
 
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes](link to quantization method) to only quantize the weights to __.
+
+```py
+
+```
 ## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)
