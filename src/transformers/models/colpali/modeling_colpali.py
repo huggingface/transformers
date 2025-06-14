@@ -101,7 +101,7 @@ class ColPaliForRetrievalOutput(ModelOutput):
     single model that can take into account both the textual and visual content (layout, charts, etc.) of a document.
 
     ColPali is part of the ColVision model family, which was first introduced in the following paper:
-    [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://arxiv.org/abs/2407.01449).
+    [*ColPali: Efficient Document Retrieval with Vision Language Models*](https://huggingface.co/papers/2407.01449).
     """
 )
 class ColPaliForRetrieval(ColPaliPreTrainedModel):
@@ -162,7 +162,8 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         # L2 normalization
         embeddings = embeddings / embeddings.norm(dim=-1, keepdim=True)  # (batch_size, sequence_length, dim)
 
-        embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
+        if attention_mask is not None:
+            embeddings = embeddings * attention_mask.unsqueeze(-1)  # (batch_size, sequence_length, dim)
 
         return ColPaliForRetrievalOutput(
             embeddings=embeddings,

@@ -394,7 +394,7 @@ class JukeboxVQVAEConfig(PretrainedConfig):
             Number of hierarchical levels that used in the VQVAE.
         lmu (`float`, *optional*, defaults to 0.99):
             Used in the codebook update, exponential moving average coefficient. For more detail refer to Appendix A.1
-            of the original [VQVAE paper](https://arxiv.org/pdf/1711.00937v2.pdf)
+            of the original [VQVAE paper](https://huggingface.co/papers/1711.00937v2.pdf)
         multipliers (`List[int]`, *optional*, defaults to `[2, 1, 1]`):
             Depth and width multipliers used for each level. Used on the `res_conv_width` and `res_conv_depth`
         res_conv_depth (`int`, *optional*, defaults to 4):

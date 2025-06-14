@@ -26,7 +26,7 @@ from transformers import AutoVideoProcessor
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -165,7 +165,7 @@ class VideoProcessingTestMixin:
             self.assertIsNotNone(video_processor)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_vision
     def test_can_compile_fast_video_processor(self):
         if self.fast_video_processing_class is None:
@@ -292,6 +292,59 @@ class VideoProcessingTestMixin:
                 tuple(encoded_videos.shape),
                 (self.video_processor_tester.batch_size, *expected_output_video_shape),
             )
+
+    def test_call_sample_frames(self):
+        for video_processing_class in self.video_processor_list:
+            video_processing = video_processing_class(**self.video_processor_dict)
+
+            prev_num_frames = self.video_processor_tester.num_frames
+            self.video_processor_tester.num_frames = 8
+            video_inputs = self.video_processor_tester.prepare_video_inputs(
+                equal_resolution=False,
+                return_tensors="torch",
+            )
+
+            # Force set sampling to False. No sampling is expected even when `num_frames` exists
+            video_processing.do_sample_frames = False
+
+            encoded_videos = video_processing(video_inputs[0], return_tensors="pt", num_frames=3)[self.input_name]
+            encoded_videos_batched = video_processing(video_inputs, return_tensors="pt", num_frames=3)[self.input_name]
+            self.assertEqual(encoded_videos.shape[1], 8)
+            self.assertEqual(encoded_videos_batched.shape[1], 8)
+
+            # Set sampling to True. Video frames should be sampled with `num_frames` in the output
+            video_processing.do_sample_frames = True
+
+            encoded_videos = video_processing(video_inputs[0], return_tensors="pt", num_frames=3)[self.input_name]
+            encoded_videos_batched = video_processing(video_inputs, return_tensors="pt", num_frames=3)[self.input_name]
+            self.assertEqual(encoded_videos.shape[1], 3)
+            self.assertEqual(encoded_videos_batched.shape[1], 3)
+
+            # Sample with `fps` requires metadata to infer number of frames from total duration
+            with self.assertRaises(ValueError):
+                encoded_videos = video_processing(video_inputs[0], return_tensors="pt", fps=3)[self.input_name]
+                encoded_videos_batched = video_processing(video_inputs, return_tensors="pt", fps=3)[self.input_name]
+
+            metadata = [[{"duration": 2.0, "total_num_frames": 8, "fps": 4}]]
+            batched_metadata = metadata * len(video_inputs)
+            encoded_videos = video_processing(video_inputs[0], return_tensors="pt", fps=3, video_metadata=metadata)[
+                self.input_name
+            ]
+            encoded_videos_batched = video_processing(
+                video_inputs, return_tensors="pt", fps=3, video_metadata=batched_metadata
+            )[self.input_name]
+            self.assertEqual(encoded_videos.shape[1], 6)
+            self.assertEqual(encoded_videos_batched.shape[1], 6)
+
+            # We should raise error when asked to sample more frames than there are in input video
+            with self.assertRaises(ValueError):
+                encoded_videos = video_processing(video_inputs[0], return_tensors="pt", num_frames=10)[self.input_name]
+                encoded_videos_batched = video_processing(video_inputs, return_tensors="pt", num_frames=10)[
+                    self.input_name
+                ]
+
+            # Assign back the actual num frames in tester
+            self.video_processor_tester.num_frames = prev_num_frames
 
     def test_nested_input(self):
         """Tests that the processor can work with nested list where each video is a list of arrays"""

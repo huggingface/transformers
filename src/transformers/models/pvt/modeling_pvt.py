@@ -18,7 +18,8 @@
 
 import collections
 import math
-from typing import Iterable, Optional, Tuple, Union
+from collections.abc import Iterable
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -154,7 +155,7 @@ class PvtSelfOutput(nn.Module):
 
 
 class PvtEfficientSelfAttention(nn.Module):
-    """Efficient self-attention mechanism with reduction of the sequence [PvT paper](https://arxiv.org/abs/2102.12122)."""
+    """Efficient self-attention mechanism with reduction of the sequence [PvT paper](https://huggingface.co/papers/2102.12122)."""
 
     def __init__(
         self, config: PvtConfig, hidden_size: int, num_attention_heads: int, sequences_reduction_ratio: float

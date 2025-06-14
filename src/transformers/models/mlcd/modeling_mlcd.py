@@ -225,9 +225,9 @@ class MLCDAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper
     Multi-headed attention with RoPE. Refer to papers:
         - Attention is all you need:
-            https://arxiv.org/abs/1706.03762
+            https://huggingface.co/papers/1706.03762
         - RoFormer: Enhanced Transformer with Rotary Position Embedding:
-            https://arxiv.org/abs/2104.09864
+            https://huggingface.co/papers/2104.09864
     """
 
     def __init__(self, config: MLCDVisionConfig):

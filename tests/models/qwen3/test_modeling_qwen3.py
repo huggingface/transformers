@@ -22,6 +22,7 @@ from packaging import version
 from transformers import AutoTokenizer, Qwen3Config, is_torch_available, set_seed
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
+    Expectations,
     backend_empty_cache,
     require_bitsandbytes,
     require_flash_attn,
@@ -31,7 +32,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils.import_utils import is_torch_greater_or_equal
 
 
 if is_torch_available():
@@ -240,18 +240,25 @@ class Qwen3IntegrationTest(unittest.TestCase):
 
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
-            convert_and_export_with_cache,
         )
 
         qwen_model = "Qwen/Qwen3-0.6B-Base"
 
         tokenizer = AutoTokenizer.from_pretrained(qwen_model, pad_token="</s>", padding_side="right")
-        if is_torch_greater_or_equal("2.7.0"):
+        if version.parse(torch.__version__) == version.parse("2.7.0"):
             strict = False  # Due to https://github.com/pytorch/pytorch/issues/150994
-            EXPECTED_TEXT_COMPLETION = ["My favourite condiment is 100% plain, unsalted, unsweetened, and unflavored."]
+            cuda_expectation = ["My favourite condiment is 100% plain, unflavoured, and unadulterated."]
         else:
             strict = True
-            EXPECTED_TEXT_COMPLETION = ["My favourite condiment is 100% plain, unflavoured, and unadulterated. It is"]
+            cuda_expectation = ["My favourite condiment is 100% plain, unflavoured, and unadulterated. It is"]
+
+        expected_text_completions = Expectations(
+            {
+                ("rocm", (9, 5)): ["My favourite condiment is 100% plain, unflavoured, and unadulterated."],
+                ("cuda", None): cuda_expectation,
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = expected_text_completions.get_expectation()
 
         max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
             "input_ids"
@@ -285,7 +292,10 @@ class Qwen3IntegrationTest(unittest.TestCase):
         max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
 
         # Static Cache + export
-        exported_program = convert_and_export_with_cache(model, strict=strict)
+        from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
+
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
+        exported_program = exportable_module.export(strict=strict)
         ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
             exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
         )

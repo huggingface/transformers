@@ -82,7 +82,7 @@ class Wav2Vec2ForPreTrainingOutput(ModelOutput):
     Args:
         loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
             Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
-            paper](https://arxiv.org/pdf/2006.11477.pdf) . (classification) loss.
+            paper](https://huggingface.co/papers/2006.11477) . (classification) loss.
         projected_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.proj_codevector_dim)`):
             Hidden-states of the model projected to *config.proj_codevector_dim* that can be used to predict the masked
             projected quantized states.
@@ -101,9 +101,9 @@ class Wav2Vec2ForPreTrainingOutput(ModelOutput):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
         contrastive_loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
-            The contrastive loss (L_m) as stated in the [official paper](https://arxiv.org/pdf/2006.11477.pdf) .
+            The contrastive loss (L_m) as stated in the [official paper](https://huggingface.co/papers/2006.11477) .
         diversity_loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
-            The diversity loss (L_d) as stated in the [official paper](https://arxiv.org/pdf/2006.11477.pdf) .
+            The diversity loss (L_d) as stated in the [official paper](https://huggingface.co/papers/2006.11477) .
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -125,7 +125,7 @@ def _compute_mask_indices(
 ) -> np.ndarray:
     """
     Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
-    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
+    ASR](https://huggingface.co/papers/1904.08779). Note that this method is not optimized to run on TPU and should be run on
     CPU as part of the preprocessing during training.
 
     Args:
@@ -772,7 +772,7 @@ class Wav2Vec2Encoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
@@ -875,7 +875,7 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
@@ -941,7 +941,7 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
 class Wav2Vec2GumbelVectorQuantizer(nn.Module):
     """
     Vector quantization using gumbel softmax. See `[CATEGORICAL REPARAMETERIZATION WITH
-    GUMBEL-SOFTMAX](https://arxiv.org/pdf/1611.01144.pdf) for more information.
+    GUMBEL-SOFTMAX](https://huggingface.co/papers/1611.01144) for more information.
     """
 
     def __init__(self, config):
@@ -1322,7 +1322,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
                 state_dict = safe_load_file(weight_path)
 
-            except EnvironmentError:
+            except OSError:
                 if use_safetensors:
                     # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
                     # to the original exception.
@@ -1331,7 +1331,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
             except Exception:
                 # For any other exception, we throw a generic error.
                 if use_safetensors:
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Can't load the model for '{model_path_or_id}'. If you were trying to load it"
                         " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                         f" same name. Otherwise, make sure '{model_path_or_id}' is the correct path to a"
@@ -1362,7 +1362,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
                     weights_only=True,
                 )
 
-            except EnvironmentError:
+            except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
                 # to the original exception.
                 raise
@@ -1372,7 +1372,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
             except Exception:
                 # For any other exception, we throw a generic error.
-                raise EnvironmentError(
+                raise OSError(
                     f"Can't load the model for '{model_path_or_id}'. If you were trying to load it"
                     " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                     f" same name. Otherwise, make sure '{model_path_or_id}' is the correct path to a"
@@ -1453,7 +1453,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
     ):
         """
         Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://arxiv.org/abs/1904.08779).
+        [SpecAugment](https://huggingface.co/papers/1904.08779).
         """
 
         # `config.apply_spec_augment` can set masking to False
@@ -1730,7 +1730,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             ).permute(2, 0, 1, 3)
 
             # 4. compute logits, corresponding to `logs = sim(c_t, [q_t, \sim{q}_t]) / \kappa`
-            # of equation (3) in https://arxiv.org/pdf/2006.11477.pdf
+            # of equation (3) in https://huggingface.co/papers/2006.11477
             logits = self.compute_contrastive_logits(
                 quantized_features[None, :],
                 negative_quantized_features,

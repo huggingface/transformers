@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.from typing import List, Union
-from typing import List, Union
+from typing import Any, Dict, List, Union, overload
 
 from ..generation import GenerationConfig
 from ..utils import is_torch_available
@@ -173,7 +173,15 @@ class TextToAudioPipeline(Pipeline):
 
         return output
 
-    def __call__(self, text_inputs: Union[str, List[str]], **forward_params):
+    @overload
+    def __call__(self, text_inputs: str, **forward_params: Any) -> Dict[str, Any]: ...
+
+    @overload
+    def __call__(self, text_inputs: List[str], **forward_params: Any) -> List[Dict[str, Any]]: ...
+
+    def __call__(
+        self, text_inputs: Union[str, List[str]], **forward_params
+    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """
         Generates speech/audio from the inputs. See the [`TextToAudioPipeline`] documentation for more information.
 
