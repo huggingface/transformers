@@ -133,25 +133,25 @@ accelerate launch run_wav2vec2_pretraining_no_trainer.py \
 	--dataset_name=librispeech_asr \
 	--dataset_config_names clean clean other \
 	--dataset_split_names train.100 train.360 train.500 \
-	--output_dir=./test \
-	--max_train_steps=200000 \
-	--num_warmup_steps=32000 \
-	--gradient_accumulation_steps=8 \
-	--learning_rate=0.001 \
-	--weight_decay=0.01 \
-	--max_duration_in_seconds=20.0 \
-	--min_duration_in_seconds=2.0 \
-	--model_name_or_path=./ 
-	--logging_steps=1 \
-	--saving_steps=10000 \
-	--per_device_train_batch_size=2 \
-	--per_device_eval_batch_size=4 \
-	--adam_beta1=0.9 \
-	--adam_beta2=0.98 \
-	--adam_epsilon=1e-06 \
+	--output_dir="./test" \
+	--max_train_steps="200000" \
+	--num_warmup_steps="32000" \
+	--gradient_accumulation_steps="8" \
+	--learning_rate="0.001" \
+	--weight_decay="0.01" \
+	--max_duration_in_seconds="20.0" \
+	--min_duration_in_seconds="2.0" \
+	--model_name_or_path="./" 
+	--logging_steps="1" \
+	--saving_steps="10000" \
+	--per_device_train_batch_size="2" \
+	--per_device_eval_batch_size="4" \
+	--adam_beta1="0.9" \
+	--adam_beta2="0.98" \
+	--adam_epsilon="1e-06" \
 	--gradient_checkpointing \
-	--mask_time_prob=0.65 \
-	--mask_time_length=10
+	--mask_time_prob="0.65" \
+	--mask_time_length="10"
 ```
 
 The experiment was run on 8 GPU V100 (16 GB RAM each) for 7 days. 
