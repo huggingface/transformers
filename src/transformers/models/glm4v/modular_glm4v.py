@@ -32,10 +32,7 @@ from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLMLP,
     Qwen2_5_VLModelOutputWithPast,
     Qwen2_5_VLPreTrainedModel,
-    Qwen2_5_VLVisionAttention,
-    Qwen2_5_VLVisionBlock,
-    Qwen2_5_VLVisionFlashAttention2,
-    Qwen2_5_VLVisionSdpaAttention,
+    apply_rotary_pos_emb_vision,
 )
 from transformers.models.qwen2_5_vl.processing_qwen2_5_vl import (
     Qwen2_5_VLProcessor,
@@ -153,7 +150,7 @@ class Glm4vVisionConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
-        self.attention_bias = (attention_bias,)
+        self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
 
 
@@ -571,44 +568,90 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     return q_embed, k_embed
 
 
-class Glm4vVisionFlashAttention2(Qwen2_5_VLVisionFlashAttention2):
-    def __init__(self, dim: int, num_heads: int = 12) -> None:
-        super().__init__(dim=dim, num_heads=num_heads)
-        self.num_heads = num_heads
-        self.qkv = nn.Linear(dim, dim * 3, bias=False)
-        self.proj = nn.Linear(dim, dim, bias=False)
+class Glm4vVisionAttention(nn.Module):
+    def __init__(self, config: Glm4vVisionConfig) -> None:
+        super().__init__()
+        self.config = config
+        self.num_heads = config.num_heads
+        self.head_dim = config.hidden_size // self.num_heads
+        self.scale = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.attention_bias)
+        self.proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        rotary_pos_emb: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> torch.Tensor:
+        seq_length = hidden_states.shape[0]
+        q, k, v = self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
+        if position_embeddings is None:
+            logger.warning_once(
+                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
+                "through `rotary_pos_emb` (2D tensor of RoPE theta values), to using externally computed "
+                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.54 `rotary_pos_emb` will be "
+                "removed and `position_embeddings` will be mandatory."
+            )
+            emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+            cos = emb.cos()
+            sin = emb.sin()
+        else:
+            cos, sin = position_embeddings
+        q, k = apply_rotary_pos_emb_vision(q, k, cos, sin)
+
+        attention_mask = torch.zeros([1, seq_length, seq_length], device=q.device, dtype=torch.bool)
+        for i in range(1, len(cu_seqlens)):
+            attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = True
+
+        q = q.transpose(0, 1).unsqueeze(0)
+        k = k.transpose(0, 1).unsqueeze(0)
+        v = v.transpose(0, 1).unsqueeze(0)
+        attention_mask = attention_mask.unsqueeze(1)
+        attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attn_output, _ = attention_interface(
+            self,
+            q,
+            k,
+            v,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scale,
+            is_causal=False,
+            **kwargs,
+        )
+        attn_output = attn_output.squeeze(0)
+        attn_output = attn_output.reshape(seq_length, -1).contiguous()
+        attn_output = self.proj(attn_output)
+        return attn_output
 
 
-class Glm4vVisionAttention(Qwen2_5_VLVisionAttention):
-    def __init__(self, dim: int, num_heads: int = 12) -> None:
-        super().__init__(dim=dim, num_heads=num_heads)
-        self.num_heads = num_heads
-        self.qkv = nn.Linear(dim, dim * 3, bias=False)
-        self.proj = nn.Linear(dim, dim, bias=False)
-
-
-class Glm4vVisionSdpaAttention(Qwen2_5_VLVisionSdpaAttention):
-    def __init__(self, dim: int, num_heads: int = 12) -> None:
-        super().__init__(dim=dim, num_heads=num_heads)
-        self.num_heads = num_heads
-        self.qkv = nn.Linear(dim, dim * 3, bias=False)
-        self.proj = nn.Linear(dim, dim, bias=False)
-
-
-GLM4V_VISION_ATTENTION_CLASSES = {
-    "eager": Glm4vVisionAttention,
-    "flash_attention_2": Glm4vVisionFlashAttention2,
-    "sdpa": Glm4vVisionSdpaAttention,
-}
-
-
-class Glm4vVisionBlock(Qwen2_5_VLVisionBlock):
-    def __init__(self, config, attn_implementation: str = "sdpa") -> None:
+class Glm4vVisionBlock(nn.Module):
+    def __init__(self, config) -> None:
         super().__init__()
         self.norm1 = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.norm2 = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attn = GLM4V_VISION_ATTENTION_CLASSES[attn_implementation](config.hidden_size, num_heads=config.num_heads)
+        self.attn = Glm4vVisionAttention(config)
         self.mlp = Glm4VisionMlp(config, bias=False)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        rotary_pos_emb: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    ) -> torch.Tensor:
+        hidden_states = hidden_states + self.attn(
+            self.norm1(hidden_states),
+            cu_seqlens=cu_seqlens,
+            rotary_pos_emb=rotary_pos_emb,
+            position_embeddings=position_embeddings,
+        )
+        hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
+        return hidden_states
 
 
 class Glm4vTextDecoderLayer(GradientCheckpointingLayer):
@@ -734,9 +777,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         head_dim = config.hidden_size // config.num_heads
         self.rotary_pos_emb = Glm4vVisionRotaryEmbedding(head_dim // 2)
 
-        self.blocks = nn.ModuleList(
-            [Glm4vVisionBlock(config, config._attn_implementation) for _ in range(config.depth)]
-        )
+        self.blocks = nn.ModuleList([Glm4vVisionBlock(config) for _ in range(config.depth)])
         self.merger = Glm4vPatchMerger(
             dim=config.out_hidden_size, context_dim=config.intermediate_size, hidden_act=config.hidden_act
         )

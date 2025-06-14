@@ -113,7 +113,7 @@ class Glm4vVisionConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
-        self.attention_bias = (attention_bias,)
+        self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
 
 
