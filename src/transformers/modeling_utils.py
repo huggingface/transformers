@@ -3901,7 +3901,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
             # Since HQQLinear stores some tensors in the 'meta' attribute,
             # it's necessary to manually call the `cuda` method on HQQLinear layers.
-            self = super().cuda(*args, **kwargs)
+            super().cuda(*args, **kwargs)
             for module in self.modules():
                 if isinstance(module, HQQLinear):
                     if len(args) > 0:
@@ -3923,8 +3923,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     "Calling `cuda()` is not supported for `4-bit` quantized models with the installed version of bitsandbytes. "
                     f"The current device is `{self.device}`. If you intended to move the model, please install bitsandbytes >= 0.43.2."
                 )
-        else:
-            return super().cuda(*args, **kwargs)
+        return super().cuda(*args, **kwargs)
 
     @wraps(torch.nn.Module.to)
     def to(self, *args, **kwargs):
@@ -3943,11 +3942,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
 
             # Since HQQLinear stores some tensors in the 'meta' attribute, we must
             # explicitly move the parameters to the target device for each HQQLinear layer after `to`.
-            self = super().to(*args, **kwargs)
+            super().to(*args, **kwargs)
             for module in self.modules():
                 if isinstance(module, HQQLinear):
+                    if "device" in kwargs:
+                        device = kwargs["device"]
+                    else:
+                        device = args[0]
                     if "dtype" in kwargs:
-                        dtype = kwargs.get("dtype", None)
+                        dtype = kwargs["dtype"]
                     elif dtype_present_in_args:
                         dtype = arg
                     else:
@@ -3955,8 +3958,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
                     # Due to the current messy implementation of HQQLinear, updating `compute_dtype`
                     # followed by calling the `cuda` method achieves the intended behavior of `to`,
                     # even when the target device is CPU.
-                    module.compute_dtype = dtype or module.compute_dtype
-                    module.cuda(kwargs.get("device", None) or args[0])
+                    if dtype is not None:
+                        module.compute_dtype = dtype
+                    module.cuda(device)
             return self
 
         if dtype_present_in_args and getattr(self, "quantization_method", None) == QuantizationMethod.QUARK:
