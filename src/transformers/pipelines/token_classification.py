@@ -281,7 +281,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         if is_split_into_words:
             if not isinstance(sentence, list):
                 raise ValueError("When `is_split_into_words=True`, `sentence` must be a list of tokens.")
-            tokenizer_params['is_split_into_words'] = True
+            tokenizer_params["is_split_into_words"] = True
         else:
             if not isinstance(sentence, str):
                 raise ValueError("When `is_split_into_words=False`, `sentence` must be an untokenized string.")
