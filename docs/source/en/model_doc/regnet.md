@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The RegNet model was proposed in [Designing Network Design Spaces](https://arxiv.org/abs/2003.13678) by Ilija Radosavovic, Raj Prateek Kosaraju, Ross Girshick, Kaiming He, Piotr Dollár.
+The RegNet model was proposed in [Designing Network Design Spaces](https://huggingface.co/papers/2003.13678) by Ilija Radosavovic, Raj Prateek Kosaraju, Ross Girshick, Kaiming He, Piotr Dollár.
 
 The authors design search spaces to perform Neural Architecture Search (NAS). They first start from a high dimensional search space and iteratively reduce the search space by empirically applying constraints based on the best-performing models sampled by the current search space.
 
@@ -37,7 +37,7 @@ This model was contributed by [Francesco](https://huggingface.co/Francesco). The
 was contributed by [sayakpaul](https://huggingface.co/sayakpaul) and [ariG23498](https://huggingface.co/ariG23498).
 The original code can be found [here](https://github.com/facebookresearch/pycls).
 
-The huge 10B model from [Self-supervised Pretraining of Visual Features in the Wild](https://arxiv.org/abs/2103.01988), 
+The huge 10B model from [Self-supervised Pretraining of Visual Features in the Wild](https://huggingface.co/papers/2103.01988), 
 trained on  one billion Instagram images, is available on the [hub](https://huggingface.co/facebook/regnet-y-10b-seer)
 
 ## Resources

@@ -90,7 +90,7 @@ def _split_into_blocks(x: jnp.ndarray, block_len: int, axis: int) -> jnp.ndarray
 
 def _concatenate_3_blocks(x: jnp.ndarray, block_axis: int, sequence_axis: int, pad_value: int = 0) -> jnp.ndarray:
     """Concatenate three consecutive blocks for each input block for local attentiont.
-    For more information, see: https://arxiv.org/pdf/2112.07916.pdf.
+    For more information, see: https://huggingface.co/papers/2112.07916.
     """
     num_blocks = x.shape[block_axis]
 
@@ -145,7 +145,7 @@ def _get_local_attention_mask(attention_mask: np.ndarray, block_len: int) -> jnp
 def _make_global_fixed_block_ids(attention_mask: np.ndarray, global_block_size: int) -> Tuple[jnp.ndarray, np.ndarray]:
     """Obtain the "fixed block" global id corresponding to each input token.
 
-    This implementation is a simlified version of the original Flaxformr implementation adopted from:
+    This implementation is a simplified version of the original Flaxformr implementation adopted from:
     https://github.com/google/flaxformer/blob/main/flaxformer/architectures/longt5/long_attention.py.
 
     In our scenario, as we use this strategy only for a decoder, orphan tokens, i.e. those tokens which do not make for
@@ -1587,7 +1587,7 @@ LONGT5_DECODE_INPUTS_DOCSTRING = r"""
             be used by default.
 
             If you want to change padding behavior, you should modify to your needs. See diagram 1 in [the
-            paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+            paper](https://huggingface.co/papers/1910.13461) for more information on the default strategy.
         past_key_values (`Dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
             Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
             auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
@@ -1731,7 +1731,7 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1816,7 +1816,7 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         r"""
@@ -1872,12 +1872,12 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         encoder_outputs,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
-        past_key_values: dict = None,
+        past_key_values: Optional[dict] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         r"""
@@ -1970,7 +1970,7 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
 
 LONGT5_START_DOCSTRING = r"""
     The LongT5 model was proposed in [LongT5: Efficient Text-To-Text Transformer for Long
-    Sequences](https://arxiv.org/abs/2112.07916) by Mandy Guo, Joshua Ainslie, David Uthus, Santiago Ontanon, Jianmo
+    Sequences](https://huggingface.co/papers/2112.07916) by Mandy Guo, Joshua Ainslie, David Uthus, Santiago Ontanon, Jianmo
     Ni, Yun-Hsuan Sung and Yinfei Yang. It's an encoder-decoder transformer pre-trained in a text-to-text denoising
     generative setting. LongT5 model is an extension of T5 model, and it enables using one of the two different
     efficient attention mechanisms - (1) Local attention, or (2) Transient-Global attention.
@@ -2260,12 +2260,12 @@ class FlaxLongT5ForConditionalGeneration(FlaxLongT5PreTrainedModel):
         encoder_outputs,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
-        past_key_values: dict = None,
+        past_key_values: Optional[dict] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         r"""

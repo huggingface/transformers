@@ -22,7 +22,7 @@ from PIL import Image
 from transformers import is_torch_available
 from transformers.testing_utils import (
     cleanup,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -35,7 +35,7 @@ if is_torch_available():
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 # @require_read_token
 class ShieldGemma2IntegrationTest(unittest.TestCase):
     def tearDown(self):
@@ -49,9 +49,9 @@ class ShieldGemma2IntegrationTest(unittest.TestCase):
         response = requests.get(url)
         image = Image.open(BytesIO(response.content))
 
-        model = ShieldGemma2ForImageClassification.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16
-        ).to(torch_device)
+        model = ShieldGemma2ForImageClassification.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(
+            torch_device
+        )
 
         inputs = processor(images=[image]).to(torch_device)
         output = model(**inputs)

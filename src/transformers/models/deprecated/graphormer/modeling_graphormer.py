@@ -15,7 +15,8 @@
 """PyTorch Graphormer model."""
 
 import math
-from typing import Iterable, Iterator, List, Optional, Tuple, Union
+from collections.abc import Iterable, Iterator
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -134,7 +135,7 @@ class LayerDropModuleList(nn.ModuleList):
     From:
     https://github.com/facebookresearch/fairseq/blob/dd0079bde7f678b0cd0715cbd0ae68d661b7226d/fairseq/modules/layer_drop.py
     A LayerDrop implementation based on [`torch.nn.ModuleList`]. LayerDrop as described in
-    https://arxiv.org/abs/1909.11556.
+    https://huggingface.co/papers/1909.11556.
 
     We refresh the choice of which layers to drop every time we iterate over the LayerDropModuleList instance. During
     evaluation we always iterate over all layers.
@@ -740,7 +741,7 @@ class GraphormerPreTrainedModel(PreTrainedModel):
         Initialize the weights
         """
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # We might be missing part of the Linear init, dependant on the layer num
+            # We might be missing part of the Linear init, dependent on the layer num
             module.weight.data.normal_(mean=0.0, std=0.02)
             if module.bias is not None:
                 module.bias.data.zero_()

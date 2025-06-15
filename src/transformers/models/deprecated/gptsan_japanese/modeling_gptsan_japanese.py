@@ -49,7 +49,7 @@ def router_z_loss_func(router_logits: torch.Tensor) -> float:
     r"""
     Compute the router z-loss implemented in PyTorch.
 
-    The router z-loss was introduced in [Designing Effective Sparse Expert Models](https://arxiv.org/abs/2202.08906).
+    The router z-loss was introduced in [Designing Effective Sparse Expert Models](https://huggingface.co/papers/2202.08906).
     It encourages router logits to remain small in an effort to improve stability.
 
     Args:
@@ -69,7 +69,7 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
-    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
     function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
     experts is too unbalanced.
 
@@ -142,8 +142,8 @@ class GPTSanJapaneseTop1Router(nn.Module):
     """
     Router using tokens choose top-1 experts assignment.
 
-    This router uses the same mechanism as in Switch Transformer (https://arxiv.org/abs/2101.03961) and V-MoE
-    (https://arxiv.org/abs/2106.05974): tokens choose their top experts. Items are sorted by router_probs and then
+    This router uses the same mechanism as in Switch Transformer (https://huggingface.co/papers/2101.03961) and V-MoE
+    (https://huggingface.co/papers/2106.05974): tokens choose their top experts. Items are sorted by router_probs and then
     routed to their choice of expert until the expert's expert_capacity is reached. **There is no guarantee that each
     token is processed by an expert**, or that each expert receives at least one token.
 
@@ -174,7 +174,7 @@ class GPTSanJapaneseTop1Router(nn.Module):
                 This is used later for computing router z-loss.
         """
         # float32 is used to ensure stability. See the discussion of "selective precision" in
-        # https://arxiv.org/abs/2101.03961.
+        # https://huggingface.co/papers/2101.03961.
         # We also store the previous dtype to cast back the output to the previous dtype
         self.input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(self.dtype)
@@ -258,12 +258,12 @@ class GPTSanJapaneseSparseMLP(nn.Module):
         expert the corresponding hidden states.
 
         """
-        # Step 1: Get the router_mask from the router as wel as the probabilities
+        # Step 1: Get the router_mask from the router as well as the probabilities
         router_mask, router_probs, router_logits = self.router(hidden_states)
         expert_index = torch.argmax(router_mask, dim=-1)
 
         # The routers introduced might not always map all the tokens, to a router, which means that some hidden states
-        # can be unchanged from one layer to another. That is why the hidden states are cloned before updating only the seleced ones.
+        # can be unchanged from one layer to another. That is why the hidden states are cloned before updating only the selected ones.
 
         next_states = hidden_states.clone()
         for idx, expert in enumerate(self.experts.values()):
@@ -905,7 +905,7 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
 
         Returns:
             `MoEModelOutputWithPastAndCrossAttentions` or `tuple` if `return_dict` returns
-            MoEModelOutputWithPastAndCrossAttentions insted of tuple
+            MoEModelOutputWithPastAndCrossAttentions instead of tuple
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         device = self.position_embeddings.weight.device
@@ -1006,7 +1006,7 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
         if token_type_ids is not None:
             token_type_ids = token_type_ids.unsqueeze(1).unsqueeze(2)
             prefix_lm_mask = ((prefix_lm_mask + token_type_ids) > 0).float()
-        # Marge prefix_lm_mask and attention_mask
+        # Merge prefix_lm_mask and attention_mask
         extended_attention_mask = prefix_lm_mask * attention_mask.unsqueeze(1).unsqueeze(2)
 
         # Prepare head mask if needed
@@ -1130,7 +1130,7 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
             labels in `[0, ..., config.vocab_size]`
 
         Returns:
-            `MoECausalLMOutputWithPast` or `tuple` if `return_dict` returns MoECausalLMOutputWithPast insted of tuple
+            `MoECausalLMOutputWithPast` or `tuple` if `return_dict` returns MoECausalLMOutputWithPast instead of tuple
 
         Example:
 

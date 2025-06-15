@@ -147,6 +147,9 @@ class GraniteSpeechConfig(PretrainedConfig):
     ```"""
 
     model_type = "granite_speech"
+    attribute_map = {
+        "audio_token_id": "audio_token_index",
+    }
     sub_configs = {
         "text_config": AutoConfig,
         "encoder_config": GraniteSpeechEncoderConfig,

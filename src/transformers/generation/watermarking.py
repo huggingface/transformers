@@ -77,7 +77,7 @@ class WatermarkDetector:
     the correct device that was used during text generation, the correct watermarking arguments and the correct tokenizer vocab size.
     The code was based on the [original repo](https://github.com/jwkirchenbauer/lm-watermarking/tree/main).
 
-    See [the paper](https://arxiv.org/abs/2306.04634) for more information.
+    See [the paper](https://huggingface.co/papers/2306.04634) for more information.
 
     Args:
         model_config (`PretrainedConfig`):
@@ -538,7 +538,7 @@ class SynthIDTextWatermarkDetector:
         context_repetition_mask = self.logits_processor.compute_context_repetition_mask(
             input_ids=tokenized_outputs,
         )
-        # context repitition mask shape [batch_size, output_len - (ngram_len - 1)]
+        # context repetition mask shape [batch_size, output_len - (ngram_len - 1)]
 
         combined_mask = context_repetition_mask * eos_token_mask
 

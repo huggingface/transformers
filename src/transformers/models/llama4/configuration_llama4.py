@@ -15,7 +15,7 @@
 # limitations under the License.
 
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...utils import logging
 
 
@@ -224,14 +224,22 @@ class Llama4TextConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
             <TODO>
             <TODO>
-        no_rope_layers (`int`, *optional*): TODO
-        no_rope_layer_interval (`int`, *optional*, defaults to 4): TODO
+        no_rope_layers (`List[int]`, *optional*):
+            List with at least the same length as the number of layers in the model.
+            A `1` at an index position indicates that the corresponding layer will use RoPE,
+            while a `0` indicates that it's a NoPE layer.
+        no_rope_layer_interval (`int`, *optional*, defaults to 4):
+            If `no_rope_layers` is `None`, it will be created using a NoPE layer every
+            `no_rope_layer_interval` layers.
         attention_chunk_size (`int`, *optional*, defaults to 8192):
             <TODO>
-        attn_temperature_tuning (`int`, *optional*, defaults to 4): TODO
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
+        attn_temperature_tuning (`bool`, *optional*, defaults to `True`):
+            Whether to dynamically scale the attention temperature for each query token based on sequence length.
+            Recommended for long sequences (e.g., >32k tokens) to maintain stable output results.
         floor_scale (`int`, *optional*, defaults to 8192): TODO
         attn_scale (`int`, *optional*, defaults to 0.1): TODO
-        cache_implementation (`<fill_type>`, *optional*, defaults to `"hybrid"`): <fill_docstring>
 
     Example:
     """
@@ -291,10 +299,10 @@ class Llama4TextConfig(PretrainedConfig):
         no_rope_layers=None,
         no_rope_layer_interval=4,
         attention_chunk_size=8192,
-        attn_temperature_tuning=4,
+        layer_types=None,
+        attn_temperature_tuning=True,
         floor_scale=8192,
         attn_scale=0.1,
-        cache_implementation="hybrid",
         **kwargs,
     ):
         super().__init__(
@@ -316,7 +324,6 @@ class Llama4TextConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.rope_scaling = rope_scaling
         self.attention_bias = False
-        self.cache_implementation = cache_implementation
         # for backward compatibility
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
@@ -337,11 +344,15 @@ class Llama4TextConfig(PretrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
+
+        # Backwards compatibility
+        if no_rope_layers == []:
+            no_rope_layers = None
+
         default_no_rope_layers = [
             int((layer_idx + 1) % no_rope_layer_interval != 0) for layer_idx in range(self.num_hidden_layers)
         ]
 
-        # no_rope_layers == [] is invalid as we cannot have 0 layers
         self.no_rope_layers = no_rope_layers if no_rope_layers else default_no_rope_layers
 
         self.interleave_moe_layer_step = interleave_moe_layer_step
@@ -351,6 +362,13 @@ class Llama4TextConfig(PretrainedConfig):
             else list(range(interleave_moe_layer_step - 1, num_hidden_layers, interleave_moe_layer_step))
         )
         self.attention_chunk_size = attention_chunk_size
+
+        self.layer_types = layer_types
+        if layer_types is None:
+            self.layer_types = [
+                "chunked_attention" if no_rope else "full_attention" for no_rope in self.no_rope_layers
+            ]
+        layer_type_validation(self.layer_types)
 
 
 class Llama4Config(PretrainedConfig):
@@ -393,6 +411,11 @@ class Llama4Config(PretrainedConfig):
     ```"""
 
     model_type = "llama4"
+    attribute_map = {
+        "image_token_id": "image_token_index",
+        "boi_token_id": "boi_token_index",
+        "eoi_token_id": "eoi_token_index",
+    }
     sub_configs = {"text_config": Llama4TextConfig, "vision_config": Llama4VisionConfig}
     base_model_tp_plan = {
         "multi_modal_projector.linear_1": "colwise_rep",

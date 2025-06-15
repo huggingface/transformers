@@ -19,7 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import rope_config_validation
 
 
@@ -52,8 +52,8 @@ class Cohere2Config(PretrainedConfig):
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            by meanpooling all the original heads within that group. For more details, check out [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to
             `num_attention_heads`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
@@ -119,9 +119,8 @@ class Cohere2Config(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         sliding_window (`int`, *optional*, defaults to 4096):
             Size of the sliding window attention context.
-        sliding_window_pattern (`int`, *optional*, defaults to 4):
-            Pattern for the sliding window attention.
-        cache_implementation (`str`, *optional*, defaults to `"hybrid"`): the cache type to be used with `generate`.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
 
     ```python
     >>> from transformers import Cohere2Model, Cohere2Config
@@ -177,8 +176,7 @@ class Cohere2Config(PretrainedConfig):
         attention_bias=False,
         attention_dropout=0.0,
         sliding_window=4096,
-        sliding_window_pattern=4,
-        cache_implementation="hybrid",
+        layer_types=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -203,10 +201,9 @@ class Cohere2Config(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.sliding_window = sliding_window
-        self.sliding_window_pattern = sliding_window_pattern
+        self.layer_types = layer_types
         # Need to specify head_dim in the config so it can be used in the attention forward functions
         self.head_dim = hidden_size // num_attention_heads
-        self.cache_implementation = cache_implementation
 
         # Validate the correctness of rotary position embeddings parameters
         rope_config_validation(self)
@@ -218,6 +215,15 @@ class Cohere2Config(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+        if self.layer_types is None:
+            # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
+            sliding_window_pattern = getattr(self, "sliding_window_pattern", 4)
+            self.layer_types = [
+                "sliding_attention" if bool((i + 1) % sliding_window_pattern) else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types)
 
 
 __all__ = ["Cohere2Config"]

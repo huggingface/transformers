@@ -143,12 +143,27 @@ IGNORE_NON_TESTED = (
         "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
         "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
         "Qwen2_5_VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5_VLForConditionalGeneration.
+        "Qwen2_5OmniForConditionalGeneration",  # Not a regular model. Testted in Qwen2_5OmniModelIntergrationTest
+        "Qwen2_5OmniTalkerForConditionalGeneration",  #  Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
+        "Qwen2_5OmniTalkerModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
+        "Qwen2_5OmniThinkerTextModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
+        "Qwen2_5OmniToken2WavModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
+        "Qwen2_5OmniToken2WavDiTModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
+        "Qwen2_5OmniToken2WavBigVGANModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
         "MllamaTextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "MllamaVisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Llama4TextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Llama4VisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "Emu3VQVAE",  # Building part of bigger (tested) model
         "Emu3TextModel",  # Building part of bigger (tested) model
+        "Qwen2VLTextModel",  # Building part of bigger (tested) model
+        "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
+        "InternVLVisionModel",  # Building part of bigger (tested) model
+        "JanusVisionModel",  # Building part of bigger (tested) model
+        "TimesFmModel",  # Building part of bigger (tested) model
+        "CsmDepthDecoderForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
+        "CsmDepthDecoderModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
+        "CsmBackboneModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
     ]
 )
 
@@ -225,6 +240,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "JukeboxVQVAE",
     "JukeboxPrior",
     "SamModel",
+    "SamHQModel",
     "DPTForDepthEstimation",
     "DecisionTransformerGPT2Model",
     "GLPNForDepthEstimation",
@@ -348,6 +364,19 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "MoshiForConditionalGeneration",  # no auto class for speech-to-speech
     "Emu3VQVAE",  # no autoclass for VQ-VAE models
     "Emu3TextModel",  # Building part of bigger (tested) model
+    "JanusVQVAE",  # no autoclass for VQ-VAE models
+    "JanusVisionModel",  # Building part of bigger (tested) model
+    "Qwen2_5OmniTalkerForConditionalGeneration",  # Building part of a bigger model
+    "Qwen2_5OmniTalkerModel",  # Building part of a bigger model
+    "Qwen2_5OmniThinkerForConditionalGeneration",  # Building part of a bigger model
+    "Qwen2_5OmniThinkerTextModel",  # Building part of a bigger model
+    "Qwen2_5OmniToken2WavModel",  # Building part of a bigger model
+    "Qwen2_5OmniToken2WavBigVGANModel",  # Building part of a bigger model
+    "Qwen2_5OmniToken2WavDiTModel",  # Building part of a bigger model
+    "CsmBackboneModel",  # Building part of a bigger model
+    "CsmDepthDecoderModel",  # Building part of a bigger model
+    "CsmDepthDecoderForCausalLM",  # Building part of a bigger model
+    "CsmForConditionalGeneration",  # Building part of a bigger model
 ]
 
 # DO NOT edit this list!
@@ -653,7 +682,9 @@ def check_all_models_are_tested():
         # Matches a module to its test file.
         test_file = [file for file in test_files if f"test_{module.__name__.split('.')[-1]}.py" in file]
         if len(test_file) == 0:
-            failures.append(f"{module.__name__} does not have its corresponding test file {test_file}.")
+            # We do not test TF or Flax models anymore because they're deprecated.
+            if not ("modeling_tf" in module.__name__ or "modeling_flax" in module.__name__):
+                failures.append(f"{module.__name__} does not have its corresponding test file {test_file}.")
         elif len(test_file) > 1:
             failures.append(f"{module.__name__} has several test files: {test_file}.")
         else:
@@ -1021,6 +1052,7 @@ UNDOCUMENTED_OBJECTS = [
     "VitPoseBackbone",  # Internal module
     "VitPoseBackboneConfig",  # Internal module
     "get_values",  # Internal object
+    "SinkCache",  # Moved to a custom_generate repository, to be deleted from transformers in v4.59.0
 ]
 
 # This list should be empty. Objects in it should get their own doc page.

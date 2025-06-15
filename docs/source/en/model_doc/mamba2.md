@@ -14,82 +14,108 @@ rendered properly in your Markdown viewer.
 
 -->
 
+<div style="float: right;">
+  <div class="flex flex-wrap space-x-1">
+    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+  </div>
+
 # Mamba 2
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+[Mamba 2](https://huggingface.co/papers/2405.21060) is based on the state space duality (SSD) framework which connects structured state space models (SSMs) and attention variants. It uses a more efficient SSD algorithm that is 2-8x faster than Mamba and modifies the architecture to enable tensor parallelism and a grouped-value attention (GVA) head structure.
 
-## Overview
+You can find all the original Mamba 2 checkpoints under the [State Space Models](https://huggingface.co/state-spaces) organization, but the examples shown below use [mistralai/Mamba-Codestral-7B-v0.1](https://huggingface.co/mistralai/Mamba-Codestral-7B-v0.1) because a Hugging Face implementation isn't supported yet for the original checkpoints.
 
-The Mamba2 model was proposed in [Transformers are SSMs: Generalized Models and Efficient Algorithms Through Structured State Space Duality](https://arxiv.org/abs/2405.21060) by Tri Dao and Albert Gu. It is a State Space Model similar to Mamba 1, with better performances in a simplified architecture. 
+> [!TIP]
+> Click on the Mamba models in the right sidebar for more examples of how to apply Mamba to different language tasks.
 
+The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line.
 
-The abstract from the paper is the following:
+hfoptions id="usage">
+<hfoption id="Pipeline">
 
-*While Transformers have been the main architecture behind deep learning's success in language modeling, state-space models (SSMs) such as Mamba have recently been shown to match or outperform Transformers at small to medium scale. We show that these families of models are actually quite closely related, and develop a rich framework of theoretical connections between SSMs and variants of attention, connected through various decompositions of a well-studied class of structured semiseparable matrices. Our state space duality (SSD) framework allows us to design a new architecture (Mamba-2) whose core layer is an a refinement of Mamba's selective SSM that is 2-8X faster, while continuing to be competitive with Transformers on language modeling.*
-
-Tips:
-
-This version should support all implementations of Mamba 2, and in particular [Mamba-2 codestral](https://huggingface.co/mistralai/Mamba-Codestral-7B-v0.1) from Mistral AI. In particular, mamba 2 codestral was released with a number of `groups` equal to 8, which can be thought intuitively as similar to the number of kv heads in an attention-based model. 
-This model has two different forward passes, `torch_forward` or `cuda_kernels_forward`. The latter uses the original cuda kernels if they are found in your environment, and is slower on the prefill i.e. requires a "warmup run" due to high cpu overhead, see [here](https://github.com/state-spaces/mamba/issues/389#issuecomment-2171755306) and [also here](https://github.com/state-spaces/mamba/issues/355#issuecomment-2147597457). Without compilation, the `torch_forward` implementation is faster by a factor 3 to 4. Further, there are no positional embeddings in this model, but there is an `attention_mask` and a specific logic to mask out hidden states in two places in the case of batched generation, see [here](https://github.com/state-spaces/mamba/issues/66#issuecomment-1863563829) as well. Due to this, in addition to the reimplementation of mamba2 kernels, batched generation and cached generation are expected to have slight discrepancies. Further, the results given by the cuda kernels or the torch forward are expected to be slightly different. The SSM algorithm heavily relies on tensor contractions, which have matmul equivalents but the order of operations is slightly different, making the difference greater at smaller precisions. 
-Another note, shutdown of hidden states corresponding to padding tokens is done in 2 places and mostly has been tested with left-padding. Right-padding will propagate noise down the line and is not guaranteed to yield satisfactory results. `tokenizer.padding_side = "left"` ensures you are using the correct padding side.
-
-This model was contributed by [Molbap](https://huggingface.co/Molbap), with tremendous help from [Anton Vlasjuk](https://github.com/vasqu).
-The original code can be found [here](https://github.com/state-spaces/mamba).
-
-
-# Usage
-
-### A simple generation example: 
-```python 
-from transformers import Mamba2Config, Mamba2ForCausalLM, AutoTokenizer
+```python
 import torch
-model_id = 'mistralai/Mamba-Codestral-7B-v0.1'
-tokenizer = AutoTokenizer.from_pretrained(model_id, revision='refs/pr/9', from_slow=True, legacy=False)
-model = Mamba2ForCausalLM.from_pretrained(model_id, revision='refs/pr/9')
-input_ids = tokenizer("Hey how are you doing?", return_tensors= "pt")["input_ids"]
+from transformers import pipeline
 
-out = model.generate(input_ids, max_new_tokens=10)
-print(tokenizer.batch_decode(out))
+pipeline = pipeline(
+    task="text-generation",
+    model="mistralai/Mamba-Codestral-7B-v0.1",
+    torch_dtype=torch.bfloat16,
+    device=0
+)
+pipeline("Plants create energy through a process known as")
 ```
 
-Here's a draft script for finetuning: 
-```python 
-from trl import SFTTrainer
-from peft import LoraConfig
-from transformers import AutoTokenizer, Mamba2ForCausalLM, TrainingArguments
-model_id = 'mistralai/Mamba-Codestral-7B-v0.1'
-tokenizer = AutoTokenizer.from_pretrained(model_id, revision='refs/pr/9', from_slow=True, legacy=False)
-tokenizer.pad_token = tokenizer.eos_token
-tokenizer.padding_side = "left" #enforce padding side left
+</hfoption>
+<hfoption id="AutoModel">
 
-model = Mamba2ForCausalLM.from_pretrained(model_id, revision='refs/pr/9')
+```python
+import torch  
+from transformers import AutoModelForCausalLM, AutoTokenizer  
+
+tokenizer = AutoTokenizer.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1")
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1", torch_dtype=torch.bfloat16, device_map="auto")  
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")  
+
+output = model.generate(**input_ids)  
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+</hfoption>
+<hfoption id="transformers CLI">
+
+```bash
+echo -e "Plants create energy through a process known as" | transformers-cli run --task text-generation --model mistralai/Mamba-Codestral-7B-v0.1 --device 0
+```
+
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
+
+The example below uses [torchao](../quantization/torchao) to only quantize the weights to 4-bit integers.
+
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+
+quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
+tokenizer = AutoTokenizer.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1")
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1", torch_dtype=torch.bfloat16, quantization_config=quantization_config, device_map="auto")
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to("cuda")
+
+output = model.generate(**input_ids)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+## Notes
+
+- Codestral Mamba has `groups=8` which are similar to the number of kv heads in an attention-based model.
+- Codestral Mamba has two different forward passes, `torch_forward` or `cuda_kernels_forward`, and their results are expected to be slightly different.
+  - `torch_forward` without compilation is 3-4x faster than `cuda_kernels_forward`.
+  - `cuda_kernels_forward` uses the original CUDA kernels if they're available in your environment. It is slower during prefill because it requires a "warmup run" due to the higher CPU overhead (see [these](https://github.com/state-spaces/mamba/issues/389#issuecomment-2171755306) [comments](https://github.com/state-spaces/mamba/issues/355#issuecomment-2147597457) for more details).
+
+- There are no positional embeddings in this model, but there is an `attention_mask` and a specific logic to mask out hidden states in two places in the case of batched generation (see this [comment](https://github.com/state-spaces/mamba/issues/66#issuecomment-1863563829) for more details). This (and the addition of the reimplemented Mamba 2 kernels) results in a slight discrepancy between batched and cached generation.
+ 
+- The SSM algorithm heavily relies on tensor contractions, which have matmul equivalents but the order of operations is slightly different. This makes the difference greater at smaller precisions. 
+
+- Hidden states that correspond to padding tokens is shutdown in 2 places and is mostly tested with left-padding. Right-padding propagates noise down the line and is not guaranteed to yield satisfactory results. `tokenizer.padding_side = "left"` ensures you are using the correct padding side.
+
+- The example below demonstrates how to fine-tune Mamba 2 with [PEFT](https://huggingface.co/docs/peft).
+
+```python 
+from datasets import load_dataset
+from peft import LoraConfig
+from trl import SFTConfig, SFTTrainer
+
+model_id = "mistralai/Mamba-Codestral-7B-v0.1"
 dataset = load_dataset("Abirate/english_quotes", split="train")
-# Without CUDA kernels, batch size of 2 occupies one 80GB device
-# but precision can be reduced.
-# Experiments and trials welcome!
-training_args = TrainingArguments(
-    output_dir="./results",
-    num_train_epochs=3,
-    per_device_train_batch_size=2,
-    logging_dir='./logs',
-    logging_steps=10,
-    learning_rate=2e-3
-)
-lora_config =  LoraConfig(
-        r=8,
-        target_modules=["embeddings", "in_proj", "out_proj"],
-        task_type="CAUSAL_LM",
-        bias="none"
-)
+training_args = SFTConfig(dataset_text_field="quote", gradient_checkpointing=True, per_device_train_batch_size=4)
+lora_config =  LoraConfig(target_modules=["x_proj", "embeddings", "in_proj", "out_proj"])
 trainer = SFTTrainer(
-    model=model,
-    tokenizer=tokenizer,
+    model=model_id,
     args=training_args,
-    peft_config=lora_config,
     train_dataset=dataset,
-    dataset_text_field="quote",
+    peft_config=lora_config,
 )
 trainer.train()
 ```

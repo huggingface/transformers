@@ -848,7 +848,7 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
                 f"Unable to load weights from TF checkpoint file for '{resolved_archive_file}' "
                 f"at '{resolved_archive_file}'. "
                 "If you tried to load a TF model from a sharded checkpoint, you should try converting the model "
-                "by loading it in pytorch and saving it locally. A convertion script should be released soon."
+                "by loading it in pytorch and saving it locally. A conversion script should be released soon."
             )
 
 
@@ -980,10 +980,10 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
                 for symbolic_weight in symbolic_weights:
                     # TF names always start with the model name so we ignore it
                     if _prefix is not None:
-                        delimeter = len(_prefix.split("/"))
+                        delimiter = len(_prefix.split("/"))
                         symbolic_weight_name = "/".join(
-                            symbolic_weight.name.split("/")[:delimeter]
-                            + symbolic_weight.name.split("/")[delimeter + 1 :]
+                            symbolic_weight.name.split("/")[:delimiter]
+                            + symbolic_weight.name.split("/")[delimiter + 1 :]
                         )
                     else:
                         symbolic_weight_name = "/".join(symbolic_weight.name.split("/")[1:])
@@ -1199,6 +1199,10 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         self.name_or_path = config.name_or_path
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
         self._set_save_spec(self.input_signature)
+        logger.warning_once(
+            "TensorFlow and JAX classes are deprecated and will be removed in Transformers v5. We "
+            "recommend migrating to PyTorch classes or pinning your version of Transformers."
+        )
 
     def get_config(self):
         return self.config.to_dict()
@@ -2042,7 +2046,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         return model_embeds
 
     def _get_word_embedding_weight(model, embedding_layer):
-        # TODO (joao): flagged for delection due to embeddings refactor
+        # TODO (joao): flagged for detection due to embeddings refactor
 
         # If the variable holds the weights themselves, return them
         if isinstance(embedding_layer, tf.Tensor):
@@ -2760,7 +2764,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
 
                 # At this stage we don't have a weight file so we will raise an error.
                 elif use_safetensors:
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Error no file named {SAFE_WEIGHTS_NAME} or {SAFE_WEIGHTS_INDEX_NAME} found in directory {pretrained_model_name_or_path}. "
                         f"Please make sure that the model has been saved with `safe_serialization=True` or do not "
                         f"set `use_safetensors=True`."
@@ -2768,13 +2772,13 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                 elif os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)) or os.path.isfile(
                     os.path.join(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME)
                 ):
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Error no file named {TF2_WEIGHTS_NAME} or {SAFE_WEIGHTS_NAME} found in directory {pretrained_model_name_or_path} "
                         "but there is a file for PyTorch weights. Use `from_pt=True` to load this model from those "
                         "weights."
                     )
                 else:
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Error no file named {TF2_WEIGHTS_NAME}, {SAFE_WEIGHTS_NAME} or {WEIGHTS_NAME} found in directory "
                         f"{pretrained_model_name_or_path}."
                     )
@@ -2850,25 +2854,25 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
                         if has_file(pretrained_model_name_or_path, SAFE_WEIGHTS_INDEX_NAME, **has_file_kwargs):
                             is_sharded = True
                         elif has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {TF2_WEIGHTS_NAME} but there is a file for PyTorch weights. Use `from_pt=True` to"
                                 " load this model from those weights."
                             )
                         else:
-                            raise EnvironmentError(
+                            raise OSError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named {WEIGHTS_NAME},"
                                 f" {TF2_WEIGHTS_NAME} or {TF_WEIGHTS_NAME}"
                             )
 
-                except EnvironmentError:
+                except OSError:
                     # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
                     # to the original exception.
                     raise
                 except Exception:
                     # For any other exception, we throw a generic error.
 
-                    raise EnvironmentError(
+                    raise OSError(
                         f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it"
                         " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                         f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
@@ -3229,11 +3233,7 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
         Register this class with a given auto class. This should only be used for custom models as the ones in the
         library are already mapped with an auto class.
 
-        <Tip warning={true}>
 
-        This API is experimental and may have some slight breaking changes in the next releases.
-
-        </Tip>
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"TFAutoModel"`):
@@ -3312,7 +3312,7 @@ class TFSharedEmbeddings(keras.layers.Layer):
             Additional keyword arguments passed along to the `__init__` of `keras.layers.Layer`.
     """
 
-    # TODO (joao): flagged for delection due to embeddings refactor
+    # TODO (joao): flagged for detection due to embeddings refactor
 
     def __init__(self, vocab_size: int, hidden_size: int, initializer_range: Optional[float] = None, **kwargs):
         super().__init__(**kwargs)

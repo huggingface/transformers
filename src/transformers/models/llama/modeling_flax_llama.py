@@ -104,12 +104,12 @@ LLAMA_INPUTS_DOCSTRING = r"""
             `past_key_values`).
 
             If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-        position_ids (`numpy.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
+        position_ids (`numpy.ndarray` of shape `(batch_size, input_ids_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.n_positions - 1]`.
 
@@ -467,8 +467,8 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         input_ids,
         attention_mask=None,
         position_ids=None,
-        params: dict = None,
-        past_key_values: dict = None,
+        params: Optional[dict] = None,
+        past_key_values: Optional[dict] = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,

@@ -980,7 +980,7 @@ class TFLxmertPreTrainedModel(TFPreTrainedModel):
 LXMERT_START_DOCSTRING = r"""
 
     The LXMERT model was proposed in [LXMERT: Learning Cross-Modality Encoder Representations from
-    Transformers](https://arxiv.org/abs/1908.07490) by Hao Tan and Mohit Bansal. It's a vision and language transformer
+    Transformers](https://huggingface.co/papers/1908.07490) by Hao Tan and Mohit Bansal. It's a vision and language transformer
     model, pre-trained on a variety of multi-modal datasets comprising of GQA, VQAv2.0, MCSCOCO captions, and Visual
     genome, using a combination of masked language modeling, region of interest feature regression, cross entropy loss
     for question answering attribute prediction, and object tag prediction.
@@ -1036,8 +1036,8 @@ LXMERT_INPUTS_DOCSTRING = r"""
 
             These are currently not provided by the transformers library.
         visual_pos (`tf.Tensor` of shape `(batch_size, num_visual_features, visual_feat_dim)`):
-            This input represents spacial features corresponding to their relative (via index) visual features. The
-            pre-trained LXMERT model expects these spacial features to be normalized bounding boxes on a scale of 0 to
+            This input represents spatial features corresponding to their relative (via index) visual features. The
+            pre-trained LXMERT model expects these spatial features to be normalized bounding boxes on a scale of 0 to
             1.
 
             These are currently not provided by the transformers library.
