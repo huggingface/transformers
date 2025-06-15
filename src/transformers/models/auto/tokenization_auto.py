@@ -53,6 +53,7 @@ else:
 
 logger = logging.get_logger(__name__)
 
+
 # Explicit rather than inferred generics to significantly improves completion suggestion performance for language servers.
 TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
     [
@@ -635,6 +636,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, tuple[Optional[str], Optional[str]]](
                 "XLNetTokenizerFast" if is_tokenizers_available() else None,
             ),
         ),
+        ("xlstm", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
         (
             "xmod",
             (
