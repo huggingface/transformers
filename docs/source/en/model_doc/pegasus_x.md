@@ -117,7 +117,7 @@ These ingredients are then transformed into glucose, a type of sugar that serves
 This energy reserve allows them to grow, develop leaves, produce flowers, bear fruit, and carry out various physiological processes throughout their lifecycle."""
 input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 
-output = model.generate(**input_ids)
+output = model.generate(**input_ids, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
