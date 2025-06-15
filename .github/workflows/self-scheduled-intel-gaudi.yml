@@ -38,6 +38,7 @@ jobs:
     outputs:
       slice_ids: ${{ steps.set-matrix.outputs.slice_ids }}
       folder_slices: ${{ steps.set-matrix.outputs.folder_slices }}
+      quantization_matrix: ${{ steps.set-matrix.outputs.quantization_matrix }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -61,6 +62,13 @@ jobs:
             echo "folder_slices=[['trainer'], ['fsdp']]" >> $GITHUB_OUTPUT
             echo "slice_ids=[0, 1]" >> $GITHUB_OUTPUT
           fi
+
+      - id: set-matrix-quantization
+        if: ${{ inputs.job == 'run_quantization_torch_gpu' }}
+        name: Identify quantization method to test
+        working-directory: tests
+        run: |
+          echo "quantization_matrix=$(python3 -c 'import os; tests = os.getcwd(); quantization_tests = os.listdir(os.path.join(tests, "quantization")); d = sorted(list(filter(os.path.isdir, [f"quantization/{x}" for x in quantization_tests]))) ;  print(d)')" >> $GITHUB_OUTPUT
 
   run_models_gpu:
     if: ${{ inputs.job == 'run_models_gpu' }}
@@ -324,6 +332,7 @@ jobs:
       setup_status: ${{ needs.setup.result }}
       slack_report_channel: ${{ inputs.slack_report_channel }}
       # This would be an empty string if `setup` is skipped.
+      quantization_matrix: ${{ needs.setup.outputs.quantization_matrix }}
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
       report_repo_id: ${{ inputs.report_repo_id }}
       ci_event: ${{ inputs.ci_event }}
