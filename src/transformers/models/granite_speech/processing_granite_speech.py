@@ -87,7 +87,7 @@ class GraniteSpeechProcessor(ProcessorMixin):
             prompt_strings = [sample.replace("<placeholder>", self.audio_token) for sample in prompt_strings]
         else:
             audio_inputs = {}
-        
+
         if "padding" not in kwargs:
             kwargs["padding"] = True
         text_inputs = self.tokenizer(prompt_strings, **kwargs)
