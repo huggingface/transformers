@@ -274,7 +274,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         self, sentence: List[str], is_split_into_words: bool = True, offset_mapping=None, **preprocess_params
     ) -> Iterator[Dict]: ...
 
-    def preprocess(self, sentence, is_split_into_words=False, offset_mapping=None, **preprocess_params):
+    def preprocess(self, sentence, is_split_into_words, offset_mapping=None, **preprocess_params):
         tokenizer_params = preprocess_params.pop("tokenizer_params", {})
         truncation = True if self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0 else False
 

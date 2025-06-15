@@ -953,19 +953,19 @@ class TokenClassificationArgumentHandlerTestCase(unittest.TestCase):
     def test_simple(self):
         string = "This is a simple input"
 
-        inputs, offset_mapping = self.args_parser(string)
+        inputs, is_split_into_words, offset_mapping = self.args_parser(string)
         self.assertEqual(inputs, [string])
         self.assertEqual(offset_mapping, None)
 
-        inputs, offset_mapping = self.args_parser([string, string])
+        inputs, is_split_into_words, offset_mapping = self.args_parser([string, string])
         self.assertEqual(inputs, [string, string])
         self.assertEqual(offset_mapping, None)
 
-        inputs, offset_mapping = self.args_parser(string, offset_mapping=[(0, 1), (1, 2)])
+        inputs, is_split_into_words, offset_mapping = self.args_parser(string, offset_mapping=[(0, 1), (1, 2)])
         self.assertEqual(inputs, [string])
         self.assertEqual(offset_mapping, [[(0, 1), (1, 2)]])
 
-        inputs, offset_mapping = self.args_parser(
+        inputs, is_split_into_words, offset_mapping = self.args_parser(
             [string, string], offset_mapping=[[(0, 1), (1, 2)], [(0, 2), (2, 3)]]
         )
         self.assertEqual(inputs, [string, string])
