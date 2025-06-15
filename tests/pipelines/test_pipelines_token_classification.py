@@ -976,24 +976,24 @@ class TokenClassificationArgumentHandlerTestCase(unittest.TestCase):
 
         # 2 sentences, 1 offset_mapping, args
         with self.assertRaises(TypeError):
-            self.args_parser(string, string, is_split_into_words=False, offset_mapping=[[(0, 1), (1, 2)]])
+            self.args_parser(string, string, offset_mapping=[[(0, 1), (1, 2)]])
 
         # 2 sentences, 1 offset_mapping, args
         with self.assertRaises(TypeError):
-            self.args_parser(string, string, is_split_into_words=False, offset_mapping=[(0, 1), (1, 2)])
+            self.args_parser(string, string, offset_mapping=[(0, 1), (1, 2)])
 
         # 2 sentences, 1 offset_mapping, input_list
         with self.assertRaises(ValueError):
-            self.args_parser([string, string], is_split_into_words=False, offset_mapping=[[(0, 1), (1, 2)]])
+            self.args_parser([string, string], offset_mapping=[[(0, 1), (1, 2)]])
 
         # 2 sentences, 1 offset_mapping, input_list
         with self.assertRaises(ValueError):
-            self.args_parser([string, string], is_split_into_words=False, offset_mapping=[(0, 1), (1, 2)])
+            self.args_parser([string, string], offset_mapping=[(0, 1), (1, 2)])
 
         # 1 sentences, 2 offset_mapping
         with self.assertRaises(ValueError):
-            self.args_parser(string, is_split_into_words=False, offset_mapping=[[(0, 1), (1, 2)], [(0, 2), (2, 3)]])
+            self.args_parser(string, offset_mapping=[[(0, 1), (1, 2)], [(0, 2), (2, 3)]])
 
         # 0 sentences, 1 offset_mapping
         with self.assertRaises(TypeError):
-            self.args_parser(is_split_into_words=False, offset_mapping=[[(0, 1), (1, 2)]])
+            self.args_parser(offset_mapping=[[(0, 1), (1, 2)]])
