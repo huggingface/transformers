@@ -2293,7 +2293,7 @@ class GenerationMixin(ContinuousMixin):
                 `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
                 on the batch ID `batch_id` and the previously generated tokens `inputs_ids`. This argument is useful
                 for constrained generation conditioned on the prefix, as described in [Autoregressive Entity
-                Retrieval](https://arxiv.org/abs/2010.00904).
+                Retrieval](https://huggingface.co/papers/2010.00904).
             synced_gpus (`bool`, *optional*):
                 Whether to continue running the while loop until max_length. Unless overridden, this flag will be set
                 to `True` if using `FullyShardedDataParallel` or DeepSpeed ZeRO Stage 3 with multiple GPUs to avoid
@@ -2883,7 +2883,7 @@ class GenerationMixin(ContinuousMixin):
         Generates sequences of token ids for models with a language modeling head using **dola decoding** and can be
         used for decoder-only text models.
         The method is based on the paper "DoLa: Decoding by Contrasting Layers Improves Factuality in Large Language
-        Models" (https://arxiv.org/abs/2309.03883) in ICLR 2024.
+        Models" (https://huggingface.co/papers/2309.03883) in ICLR 2024.
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -4905,7 +4905,7 @@ class GenerationMixin(ContinuousMixin):
 
             # 3. Select the accepted tokens. There are two possible cases:
             # Case 1: `do_sample=True` and we have logits for the candidates (originally from speculative decoding)
-            # 👉 Apply algorithm 1 from the speculative decoding paper (https://arxiv.org/pdf/2211.17192.pdf).
+            # 👉 Apply algorithm 1 from the speculative decoding paper (https://huggingface.co/papers/2211.17192).
             if do_sample and candidate_logits is not None:
                 valid_tokens, n_matches = _speculative_sampling(
                     candidate_input_ids,
@@ -5094,7 +5094,7 @@ def _speculative_sampling(
     is_done_candidate,
 ):
     """
-    Applies sampling as in the speculative decoding paper (https://arxiv.org/pdf/2211.17192.pdf, algorithm 1). Returns
+    Applies sampling as in the speculative decoding paper (https://huggingface.co/papers/2211.17192, algorithm 1). Returns
     the selected tokens, as well as the number of candidate matches.
 
     NOTE: Unless otherwise stated, the variable names match those in the paper.

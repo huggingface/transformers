@@ -73,7 +73,7 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
 class Conv1dSubsampler(nn.Module):
     """
     Convolutional subsampler: a stack of 1D convolution (along temporal dimension) followed by non-linear activation
-    via gated linear units (https://arxiv.org/abs/1911.08460)
+    via gated linear units (https://huggingface.co/papers/1911.08460)
     """
 
     def __init__(self, config):
@@ -683,7 +683,7 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
             if self.training:
                 dropout_probability = torch.rand([])
@@ -931,7 +931,7 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
                     f" {head_mask.size()[0]}."
                 )
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             if self.training:
@@ -1141,7 +1141,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
 
             If you want to change padding behavior, you should read
             [`modeling_speech_to_text._prepare_decoder_attention_mask`] and modify to your needs. See diagram 1 in [the
-            paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+            paper](https://huggingface.co/papers/1910.13461) for more information on the default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
 
@@ -1303,7 +1303,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel, Generation
 
             If you want to change padding behavior, you should read
             [`modeling_speech_to_text._prepare_decoder_attention_mask`] and modify to your needs. See diagram 1 in [the
-            paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+            paper](https://huggingface.co/papers/1910.13461) for more information on the default strategy.
         cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
 

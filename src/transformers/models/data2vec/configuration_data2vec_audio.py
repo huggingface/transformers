@@ -60,7 +60,7 @@ class Data2VecAudioConfig(PretrainedConfig):
         final_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the final projection layer of [`Data2VecAudioForCTC`].
         layerdrop (`float`, *optional*, defaults to 0.1):
-            The LayerDrop probability. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556) for more
+            The LayerDrop probability. See the [LayerDrop paper](see https://huggingface.co/papers/1909.11556) for more
             details.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -252,7 +252,7 @@ class Data2VecAudioConfig(PretrainedConfig):
                 f" `len(config.conv_kernel) = {len(self.conv_kernel)}`."
             )
 
-        # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
+        # fine-tuning config parameters for SpecAugment: https://huggingface.co/papers/1904.08779
         self.mask_time_prob = mask_time_prob
         self.mask_time_length = mask_time_length
         self.mask_time_min_masks = mask_time_min_masks
