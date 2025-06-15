@@ -317,7 +317,7 @@ jobs:
         run_trainer_and_fsdp_gpu,
       ]
     if: ${{ always() }}
-    uses: ./.github/workflows/slack-report.yml@main
+    uses: ./.github/workflows/slack-report.yml
     with:
       job: ${{ inputs.job }}
       # This would be `skipped` if `setup` is skipped.
