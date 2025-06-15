@@ -10,107 +10,79 @@ rendered properly in your Markdown viewer.
 -->
 
 # Phi4 Multimodal
+<div style="float: right;">
+  <div class="flex flex-wrap space-x-1">
+    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-EE4C2C?logo=pytorch&logoColor=white&style=flat">
+    <img alt="TensorFlow" src="https://img.shields.io/badge/TensorFlow-FF6F00?logo=tensorflow&logoColor=white&style=flat">
+    <img alt="Pillow" src="https://img.shields.io/badge/Pillow-DA70D6?style=flat&logo=python&logoColor=white">
+    <img alt="soundfile" src="https://img.shields.io/badge/soundfile-ff9900?style=flat&logo=python&logoColor=white">
+    <img alt="Accelerate" src="https://img.shields.io/badge/Accelerate-0052CC?style=flat&logo=python&logoColor=white">
+    <img alt="Flash-Attention" src="https://img.shields.io/badge/Flash--Attention-000000?style=flat&logo=nvidia&logoColor=white">
+  </div>
+</div>
 
-## Overview
+## Phi4 Multimodal
 
-Phi4 Multimodal is a lightweight open multimodal foundation model that leverages the language, vision, and speech research and datasets used for Phi-3.5 and 4.0 models. The model processes text, image, and audio inputs, generating text outputs, and comes with 128K token context length. The model underwent an enhancement process, incorporating both supervised fine-tuning, direct preference optimization and RLHF (Reinforcement Learning from Human Feedback) to support precise instruction adherence and safety measures. The languages that each modal supports are the following:
+[Phi4 Multimodal](https://arxiv.org/pdf/2503.01743) is a small, efficient AI model from Microsoft that can understand and respond to text, images, and audio together. It’s part of the Phi family of models, which focus on being lightweight but still highly capable.Designed to run without requiring huge GPUs or high-end servers, making it more accessible for developers and researchers.Microsoft used only safe and filtered data for training
 
-- Text: Arabic, Chinese, Czech, Danish, Dutch, English, Finnish, French, German, Hebrew, Hungarian, Italian, Japanese, Korean, Norwegian, Polish, Portuguese, Russian, Spanish, Swedish, Thai, Turkish, Ukrainian
-- Vision: English
-- Audio: English, Chinese, German, French, Italian, Japanese, Spanish, Portuguese
+You can find all the original Phi4 Multimodal checkpoints under the [Phi4 Multimodal](https://huggingface.co/microsoft/Phi-4-multimodal-instruct) collection.
 
-This model was contributed by [Cyril Vallez](https://huggingface.co/cyrilvallez). The most recent code can be
-found [here](https://github.com/huggingface/transformers/blob/main/src/transformers/models/phi4_multimodal/modeling_phi4_multimodal.py).
+> [!TIP]
+> Click on the Phi-4 Multimodal in the right sidebar for more examples of how to apply Phi-4 Multimodal to different language tasks.
 
+The example below demonstrates how to generate text based on an image with [`Pipeline`], [`AutoModel`] class and from the command line.
 
-## Usage tips
-
-`Phi4-multimodal-instruct` can be found on the [Huggingface Hub](https://huggingface.co/microsoft/Phi-4-multimodal-instruct)
-
-In the following, we demonstrate how to use it for inference depending on the input modalities (text, image, audio).
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
 ```python
-import torch
-from transformers import AutoModelForCausalLM, AutoProcessor, GenerationConfig
+from transformers import pipeline
+generator = pipeline("text-generation", model="microsoft/Phi-4-multimodal-instruct", torch_dtype="auto", device=0)
 
+# Your input text prompt
+prompt = "Explain the concept of multimodal AI in simple terms."
 
-# Define model path
-model_path = "microsoft/Phi-4-multimodal-instruct"
-device = "cuda:0"
-
-# Load model and processor
-processor = AutoProcessor.from_pretrained(model_path)
-model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device,  torch_dtype=torch.float16)
-
-# Optional: load the adapters (note that without them, the base model will very likely not work well)
-model.load_adapter(model_path, adapter_name="speech", device_map=device, adapter_kwargs={"subfolder": 'speech-lora'})
-model.load_adapter(model_path, adapter_name="vision", device_map=device, adapter_kwargs={"subfolder": 'vision-lora'})
-
-# Part : Image Processing
-messages = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
-            {"type": "text", "text": "What is shown in this image?"},
-        ],
-    },
-]
-
-model.set_adapter("vision") # if loaded, activate the vision adapter
-inputs = processor.apply_chat_template(
-    messages,
-    add_generation_prompt=True,
-    tokenize=True,
-    return_dict=True,
-    return_tensors="pt",
-).to(device)
-
-# Generate response
-generate_ids = model.generate(
-    **inputs,
-    max_new_tokens=1000,
-    do_sample=False,
-)
-generate_ids = generate_ids[:, inputs['input_ids'].shape[1]:]
-response = processor.batch_decode(
-    generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
-)[0]
-print(f'>>> Response\n{response}')
-
-
-# Part 2: Audio Processing
-model.set_adapter("speech") # if loaded, activate the speech adapter
-audio_url = "https://upload.wikimedia.org/wikipedia/commons/b/b0/Barbara_Sahakian_BBC_Radio4_The_Life_Scientific_29_May_2012_b01j5j24.flac"
-messages = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "audio", "url": audio_url},
-            {"type": "text", "text": "Transcribe the audio to text, and then translate the audio to French. Use <sep> as a separator between the origina transcript and the translation."},
-        ],
-    },
-]
-
-inputs = processor.apply_chat_template(
-    messages,
-    add_generation_prompt=True,
-    tokenize=True,
-    return_dict=True,
-    return_tensors="pt",
-).to(device)
-
-generate_ids = model.generate(
-    **inputs,
-    max_new_tokens=1000,
-    do_sample=False,
-)
-generate_ids = generate_ids[:, inputs['input_ids'].shape[1]:]
-response = processor.batch_decode(
-    generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
-)[0]
-print(f'>>> Response\n{response}')
+# Generate output
+result = generator(prompt, max_length=50)
+print(result[0]['generated_text'])
 ```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+from transformers import AutoProcessor, AutoModelForCausalLM
+from PIL import Image
+import torch
+
+tokenizer = AutoProcessor.from_pretrained("microsoft/Phi-4-multimodal-instruct")
+model = AutoModelForCausalLM.from_pretrained("microsoft/Phi-4-multimodal-instruct", torch_dtype=torch.bfloat16).to("cuda")
+
+# Load image
+image = Image.open("your_image.png")
+
+# Prepare inputs
+inputs = tokenizer(text="Describe this image:", images=image, return_tensors="pt").to("cuda")
+
+# Generate output
+outputs = model.generate(**inputs, max_length=200)
+
+# Decode output
+generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+print(generated_text)
+```
+
+</hfoption>
+<hfoption id="transformers-cli">
+
+```python
+echo -e "The future of coding is" | transformers-cli run --task text-generation --model microsoft/Phi-4-multimodal-instruct --device 0
+```
+
+</hfoption>
+</hfoptions>
+
+## Notes
 
 ## Phi4MultimodalFeatureExtractor
 
