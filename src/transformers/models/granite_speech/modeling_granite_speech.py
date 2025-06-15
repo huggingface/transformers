@@ -92,7 +92,7 @@ class GraniteSpeechEncoderProjector(nn.Module):
         hidden_states = hidden_states.view(batch_size * nblocks, self.window_size, dim)
 
         query_output = self.qformer(
-            query_embeds=self.query.data,
+            query_embeds=self.query,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=None,
             return_dict=True,
