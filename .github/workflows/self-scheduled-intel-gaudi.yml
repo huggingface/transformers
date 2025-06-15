@@ -20,15 +20,13 @@ on:
         type: string
 
 env:
+  RUN_SLOW: yes
   HF_HOME: /mnt/cache
   PT_HPU_LAZY_MODE: 0
   TRANSFORMERS_IS_CI: yes
   HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
-  OMP_NUM_THREADS: 8
-  MKL_NUM_THREADS: 8
   NUM_SLICES: 2
-  RUN_SLOW: yes
 
 jobs:
   setup:
