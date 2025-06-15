@@ -319,6 +319,7 @@ jobs:
     needs:
       [
         setup,
+        run_models_gpu,
         run_examples_gpu,
         run_pipelines_gpu,
         run_deepspeed_gpu,
