@@ -50,6 +50,7 @@ class GraniteSpeechFeatureExtractor(FeatureExtractionMixin):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.sampling_rate = sampling_rate
         self.melspec_kwargs = {
             "sample_rate": sampling_rate,
             "n_fft": n_fft,
