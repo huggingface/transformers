@@ -86,12 +86,12 @@ jobs:
       - name: Set `machine_type` for report and artifact names
         shell: bash
         run: |
-          if [ "${{ matrix.machine_type }}" = "1gaudi" ]; then
+          if [ "${{ inputs.machine_type }}" = "1gaudi" ]; then
             machine_type=single-gaudi
-          elif [ "${{ matrix.machine_type }}" = "2gaudi" ]; then
+          elif [ "${{ inputs.machine_type }}" = "2gaudi" ]; then
             machine_type=multi-gaudi
           else
-            machine_type=${{ matrix.machine_type }}
+            machine_type=${{ inputs.machine_type }}
           fi
           echo "machine_type=$machine_type" >> $GITHUB_ENV
 
