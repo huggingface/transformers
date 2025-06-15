@@ -796,8 +796,8 @@ def is_torch_hpu_available():
     ):
         return False
 
-    torch_hpu_min_version = "1.5.0"
-    if _accelerate_available and version.parse(_accelerate_version) < version.parse(torch_hpu_min_version):
+    torch_hpu_min_accelerate_version = "1.5.0"
+    if _accelerate_available and version.parse(_accelerate_version) < version.parse(torch_hpu_min_accelerate_version):
         return False
 
     import torch
@@ -830,6 +830,16 @@ def is_torch_hpu_available():
                 original_masked_fill_(self, mask, value)
 
         torch.Tensor.masked_fill_ = patched_masked_fill_
+
+    # Patch torch.compile to use the HPU backend by default.
+    original_compile = torch.compile
+
+    def hpu_backend_compile(*args, **kwargs):
+        if "backend" not in kwargs:
+            kwargs["backend"] = "hpu_backend"
+        return original_compile(*args, **kwargs)
+
+    torch.compile = hpu_backend_compile
 
     return True
 
