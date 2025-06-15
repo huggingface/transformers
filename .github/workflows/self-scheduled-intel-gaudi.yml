@@ -62,28 +62,29 @@ jobs:
             echo "slice_ids=[0, 1]" >> $GITHUB_OUTPUT
           fi
 
-  # TODO: enable later
-  # run_models_gpu:
-  #   if: ${{ inputs.job == 'run_models_gpu' }}
-  #   name: " "
-  #   needs: setup
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       machine_type: [1gaudi, 2gaudi]
-  #       slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
-  #   uses: ./.github/workflows/model_jobs_intel_gaudi.yml
-  #   with:
-  #     slice_id: ${{ matrix.slice_id }}
-  #     machine_type: ${{ matrix.machine_type }}
-  #     folder_slices: ${{ needs.setup.outputs.folder_slices }}
-  #     runner: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
-  #     report_name_prefix: run_models_gpu
-  #   secrets: inherit
+  run_models_gpu:
+    if: ${{ inputs.job == 'run_models_gpu' }}
+    name: " "
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        machine_type: [1gaudi, 2gaudi]
+        slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
+    uses: ./.github/workflows/model_jobs_intel_gaudi.yml
+    with:
+      slice_id: ${{ matrix.slice_id }}
+      machine_type: ${{ matrix.machine_type }}
+      folder_slices: ${{ needs.setup.outputs.folder_slices }}
+      runner: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
+      report_name_prefix: run_models_gpu
+
+    secrets: inherit
 
   run_trainer_and_fsdp_gpu:
     if: ${{ inputs.job == 'run_trainer_and_fsdp_gpu' }}
-    name: Trainer and FSDP tests
+    name: " "
+    needs: setup
     strategy:
       fail-fast: false
       matrix:
@@ -96,6 +97,7 @@ jobs:
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
       runner: ${{ inputs.runner_scale_set }}-${{ matrix.machine_type }}
       report_name_prefix: run_trainer_and_fsdp_gpu
+
     secrets: inherit
 
   run_pipelines_gpu:
@@ -315,7 +317,7 @@ jobs:
         run_trainer_and_fsdp_gpu,
       ]
     if: ${{ always() }}
-    uses: huggingface/transformers/.github/workflows/slack-report.yml@main
+    uses: ./.github/workflows/slack-report.yml@main
     with:
       job: ${{ inputs.job }}
       # This would be `skipped` if `setup` is skipped.
@@ -323,7 +325,6 @@ jobs:
       slack_report_channel: ${{ inputs.slack_report_channel }}
       # This would be an empty string if `setup` is skipped.
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
-      quantization_matrix: ${{ needs.setup.outputs.quantization_matrix }}
       report_repo_id: ${{ inputs.report_repo_id }}
       ci_event: ${{ inputs.ci_event }}
 
