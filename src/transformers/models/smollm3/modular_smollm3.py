@@ -30,11 +30,11 @@ from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
-    LlamaModel,
     LlamaPreTrainedModel,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..qwen2.modeling_qwen2 import Qwen2Model
 
 
 logger = logging.get_logger(__name__)
@@ -332,7 +332,7 @@ class SmolLM3PreTrainedModel(LlamaPreTrainedModel):
     pass
 
 
-class SmolLM3Model(LlamaModel):
+class SmolLM3Model(Qwen2Model):
     pass
 
 
