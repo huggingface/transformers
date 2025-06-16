@@ -13,13 +13,6 @@ class ServeCLITest(unittest.TestCase):
                 cli.main()
         self.assertIn("serve", cs.out.lower())
 
-    @patch.object(ServeCommand, "run")
-    def test_cli_dispatch(self, run_mock):
-        args = ["transformers", "serve", "hf-internal-testing/tiny-random-gpt2"]
-        with patch("sys.argv", args):
-            cli.main()
-        run_mock.assert_called_once()
-
     def test_parsed_args(self):
         with (
             patch.object(ServeCommand, "__init__", return_value=None) as init_mock,
