@@ -1,4 +1,5 @@
 import os
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -44,8 +45,12 @@ class ChatCLITest(unittest.TestCase):
 
 
 class ChatUtilitiesTest(unittest.TestCase):
-    def test_save_and_clear_chat(self, tmp_path):
-        args = ChatArguments(model_name_or_path_or_address="test-model", save_folder=str(tmp_path))
+    def test_save_and_clear_chat(self):
+        tmp_path = tempfile.mkdtemp()
+
+        args = ChatArguments(save_folder=str(tmp_path))
+        args.model_name_or_path_or_address = "test-model"
+
         chat_history = [{"role": "user", "content": "hi"}]
         filename = ChatCommand.save_chat(chat_history, args)
         self.assertTrue(os.path.isfile(filename))
