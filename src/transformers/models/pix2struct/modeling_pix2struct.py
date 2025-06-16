@@ -1167,12 +1167,8 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
 
         batch_size, seq_length = input_shape
 
-        if self.is_decoder and use_cache and past_key_values is None:
+        if use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
-        elif not self.is_decoder:
-            # do not pass cache object down the line for encoder stack
-            # it messes indexing later in decoder-stack because cache object is modified in-place
-            past_key_values = None
 
         past_key_values_length = 0
         if cache_position is not None:

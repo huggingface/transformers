@@ -315,7 +315,8 @@ class WhisperAttention(nn.Module):
         query_states = query_states.view(*q_input_shape)
         query_states = query_states.transpose(1, 2).contiguous()
 
-        if past_key_value is not None:
+        # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
+        if past_key_value is not None and isinstance(past_key_value, EncoderDecoderCache):
             is_updated = past_key_value.is_updated.get(self.layer_idx)
             if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
