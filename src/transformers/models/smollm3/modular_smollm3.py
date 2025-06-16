@@ -16,7 +16,6 @@
 from typing import Callable, Optional, Tuple
 
 import torch
-from torch import nn
 
 from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
@@ -27,16 +26,12 @@ from ...processing_utils import Unpack
 from ...utils import logging
 from ..llama.modeling_llama import (
     LlamaAttention,
-    LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
-    LlamaMLP,
     LlamaModel,
     LlamaPreTrainedModel,
-    LlamaRMSNorm,
-    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -275,14 +270,6 @@ class SmolLM3Config(PretrainedConfig):
         )
 
 
-class SmolLM3RMSNorm(LlamaRMSNorm):
-    pass
-
-
-class SmolLM3MLP(LlamaMLP):
-    pass
-
-
 class SmolLM3Attention(LlamaAttention):
     def __init__(self, config: SmolLM3Config, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -349,54 +336,28 @@ class SmolLM3Attention(LlamaAttention):
         return attn_output, attn_weights
 
 
-class SmolLM3DecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: SmolLM3Config, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.self_attn = SmolLM3Attention(config=config, layer_idx=layer_idx)
-
-
-class SmolLM3RotaryEmbedding(LlamaRotaryEmbedding):
-    pass
-
-
 class SmolLM3PreTrainedModel(LlamaPreTrainedModel):
     pass
 
 
 class SmolLM3Model(LlamaModel):
-    def __init__(self, config: SmolLM3Config):
-        super().__init__(config)
-        self.layers = nn.ModuleList(
-            [SmolLM3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
+    pass
 
 
 class SmolLM3ForCausalLM(LlamaForCausalLM):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = SmolLM3Model(config)
-        self.post_init()
+    pass
 
 
 class SmolLM3ForSequenceClassification(LlamaForSequenceClassification):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = SmolLM3Model(config)
-        self.post_init()
+    pass
 
 
 class SmolLM3ForTokenClassification(LlamaForTokenClassification):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = SmolLM3Model(config)
-        self.post_init()
+    pass
 
 
 class SmolLM3ForQuestionAnswering(LlamaForQuestionAnswering):
-    def __init__(self, config):
-        super().__init__(config)
-        self.transformer = SmolLM3Model(config)
-        self.post_init()
+    pass
 
 
 __all__ = [
