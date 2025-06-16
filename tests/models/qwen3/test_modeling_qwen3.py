@@ -19,7 +19,6 @@ import unittest
 import pytest
 from packaging import version
 
-from examples.pytorch.context_parallel import dtype
 from transformers import AutoTokenizer, Qwen3Config, is_torch_available, set_seed
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
