@@ -299,8 +299,6 @@ class BLTAttention(nn.Module):
         return output
 
 
-
-
 class BLTMLP(nn.Module):
     def __init__(
         self,
@@ -570,14 +568,12 @@ def process_patch_lengths(patch_lengths: torch.Tensor, max_patch_length: int) ->
 
     return padded
 
-class LocalModelBase(nn.Module):
+class BLTLocalModelBase(nn.Module):
     def __init__(self, config: BLTConfig, component_type: str = "encoder"):
         super().__init__()
 
-        # Store config for later use
         self.config = config
 
-        # Use component-specific dimensions
         if component_type == "encoder":
             self.dim = config.dim_local_encoder
             self.n_layers = config.n_layers_local_encoder
@@ -683,9 +679,7 @@ class LocalModelBase(nn.Module):
             return self.tok_embeddings(tokens)
 
 
-
-
-class LocalEncoder(LocalModelBase):
+class BLTLocalEncoder(BLTLocalModelBase):
     def __init__(self, config: BLTConfig):
         super().__init__(config, component_type="encoder")
 
@@ -798,7 +792,7 @@ class LocalEncoder(LocalModelBase):
         return reduced_embs
 
 
-class LocalDecoder(LocalModelBase):
+class BLTLocalDecoder(BLTLocalModelBase):
     def __init__(self, config: BLTConfig):
         super().__init__(config, component_type="decoder")
 
@@ -886,11 +880,6 @@ class LocalDecoder(LocalModelBase):
 
 
 class BLTCrossAttention(nn.Module):
-    """
-    BLTCrossAttention block to attend to the encoder states from the decoder.
-    Rope is not supported.
-    """
-
     def __init__(
         self,
         dim: int,
@@ -978,9 +967,7 @@ class BLTCrossAttention(nn.Module):
         return x + output
 
 
-
-
-class GlobalTransformer(nn.Module):
+class BLTGlobalTransformer(nn.Module):
     def __init__(self, config):
         super().__init__()
 
@@ -1057,8 +1044,6 @@ class GlobalTransformer(nn.Module):
         return h, cache
 
 
-
-
 def compute_hash_embeddings(
     local_encoder_tokens: torch.Tensor,
     local_encoder,
@@ -1107,7 +1092,7 @@ class BLTPreTrainedModel(PreTrainedModel):
     config_class = BLTConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["BLTTransformerLayer", "LocalEncoder", "LocalDecoder", "GlobalTransformer"]
+    _no_split_modules = ["BLTTransformerLayer", "BLTLocalEncoder", "BLTLocalDecoder", "BLTGlobalTransformer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = False  # BLT uses its own attention implementation
     _supports_sdpa = True
@@ -1157,14 +1142,14 @@ class BLTPreTrainedModel(PreTrainedModel):
                 for emb in module.encoder_hash_tok_embedding:
                     emb._custom_std = emb_std
                     
-        elif isinstance(module, (LocalEncoder, LocalDecoder)):
+        elif isinstance(module, (BLTLocalEncoder, BLTLocalDecoder)):
             if module.token_embedding_projection is not None:
                 module.token_embedding_projection._custom_std = module.dim ** (-0.5)
                 
             if module.patch_embedding_projection is not None:
                 module.patch_embedding_projection._custom_std = module.dim_patch_emb ** (-0.5)
                 
-        elif isinstance(module, GlobalTransformer):
+        elif isinstance(module, BLTGlobalTransformer):
             if module.token_embedding_projection is not None:
                 module.token_embedding_projection._custom_std = module.dim_token_emb ** (-0.5)
                 
@@ -1179,9 +1164,9 @@ class BLTModel(BLTPreTrainedModel):
         super().__init__(config)
 
         self.config = config
-        self.local_encoder = LocalEncoder(config)
-        self.global_transformer = GlobalTransformer(config)
-        self.local_decoder = LocalDecoder(config)
+        self.local_encoder = BLTLocalEncoder(config)
+        self.global_transformer = BLTGlobalTransformer(config)
+        self.local_decoder = BLTLocalDecoder(config)
 
         self.encoder_hash_tok_embedding = init_hash_embeddings(
             config,
@@ -1236,9 +1221,7 @@ class BLTModel(BLTPreTrainedModel):
 
                 patch_lengths = process_patch_lengths(patch_lengths, self.config.max_patch_length)
 
-  
         #assert torch.min(patch_lengths) >= 0
-
         # Generate patch IDs from patch_lengths
         patch_ids = self._patch_ids_from_lengths(patch_lengths, local_encoder_tokens.shape[-1])
         # assert torch.max(patch_ids) + 1 <= torch.max((patch_lengths != 0).sum(dim=-1)), (
@@ -1334,7 +1317,6 @@ class BLTModel(BLTPreTrainedModel):
     def _patch_ids_from_lengths(self, patch_lengths: torch.Tensor, seq_len: int) -> torch.Tensor:
         """
         Convert patch lengths to patch IDs for each token position.
-
         For each token position in the sequence, determines which patch it belongs to.
 
         Args:
@@ -1607,7 +1589,7 @@ __all__ = [
     "BLTPreTrainedModel",
     "BLTModel",
     "BLTPatcher",
-    "LocalEncoder",
-    "LocalDecoder",
-    "GlobalTransformer",
+    "BLTLocalEncoder",
+    "BLTLocalDecoder",
+    "BLTGlobalTransformer",
 ]
