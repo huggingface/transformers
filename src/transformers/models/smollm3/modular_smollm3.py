@@ -142,8 +142,6 @@ class SmolLM3Config(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        mlp_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
 
     ```python
     >>> from transformers import SmolLM3Model, SmolLM3Config
@@ -201,7 +199,6 @@ class SmolLM3Config(PretrainedConfig):
         layer_types=None,
         attention_bias=False,
         attention_dropout=0.0,
-        mlp_bias=False,
         **kwargs,
     ):
         super().__init__(
@@ -232,7 +229,6 @@ class SmolLM3Config(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.mlp_bias = mlp_bias
 
         if no_rope_layers is None:
             self.no_rope_layers = [
