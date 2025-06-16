@@ -73,17 +73,17 @@ def verify_model_outputs(model, device):
 
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"posenc.Wr": r"positional_encoder.projector",
-    r"self_attn.(\d+).Wqkv": r"transformer_layers.\1.self_attention_block.Wqkv",
-    r"self_attn.(\d+).out_proj": r"transformer_layers.\1.self_attention_block.attention.o_proj",
-    r"self_attn.(\d+).ffn.0": r"transformer_layers.\1.self_attention_block.mlp.fc1",
-    r"self_attn.(\d+).ffn.1": r"transformer_layers.\1.self_attention_block.mlp.layer_norm",
-    r"self_attn.(\d+).ffn.3": r"transformer_layers.\1.self_attention_block.mlp.fc2",
-    r"cross_attn.(\d+).to_qk": r"transformer_layers.\1.cross_attention_block.to_qk",
-    r"cross_attn.(\d+).to_v": r"transformer_layers.\1.cross_attention_block.attention.v_proj",
-    r"cross_attn.(\d+).to_out": r"transformer_layers.\1.cross_attention_block.attention.o_proj",
-    r"cross_attn.(\d+).ffn.0": r"transformer_layers.\1.cross_attention_block.mlp.fc1",
-    r"cross_attn.(\d+).ffn.1": r"transformer_layers.\1.cross_attention_block.mlp.layer_norm",
-    r"cross_attn.(\d+).ffn.3": r"transformer_layers.\1.cross_attention_block.mlp.fc2",
+    r"self_attn.(\d+).Wqkv": r"transformer_layers.\1.self_attention.Wqkv",
+    r"self_attn.(\d+).out_proj": r"transformer_layers.\1.self_attention.o_proj",
+    r"self_attn.(\d+).ffn.0": r"transformer_layers.\1.self_mlp.fc1",
+    r"self_attn.(\d+).ffn.1": r"transformer_layers.\1.self_mlp.layer_norm",
+    r"self_attn.(\d+).ffn.3": r"transformer_layers.\1.self_mlp.fc2",
+    r"cross_attn.(\d+).to_qk": r"transformer_layers.\1.cross_attention.to_qk",
+    r"cross_attn.(\d+).to_v": r"transformer_layers.\1.cross_attention.v_proj",
+    r"cross_attn.(\d+).to_out": r"transformer_layers.\1.cross_attention.o_proj",
+    r"cross_attn.(\d+).ffn.0": r"transformer_layers.\1.cross_mlp.fc1",
+    r"cross_attn.(\d+).ffn.1": r"transformer_layers.\1.cross_mlp.layer_norm",
+    r"cross_attn.(\d+).ffn.3": r"transformer_layers.\1.cross_mlp.fc2",
     r"log_assignment.(\d+).matchability": r"match_assignment_layers.\1.matchability",
     r"log_assignment.(\d+).final_proj": r"match_assignment_layers.\1.final_projection",
     r"token_confidence.(\d+).token.0": r"token_confidence.\1.token",
@@ -123,25 +123,25 @@ def split_weights(state_dict):
         if state_dict.get(log_assignment_r_key, None) is not None:
             state_dict.pop(log_assignment_r_key)
 
-        Wqkv_weight = state_dict.pop(f"transformer_layers.{i}.self_attention_block.Wqkv.weight")
-        Wqkv_bias = state_dict.pop(f"transformer_layers.{i}.self_attention_block.Wqkv.bias")
+        Wqkv_weight = state_dict.pop(f"transformer_layers.{i}.self_attention.Wqkv.weight")
+        Wqkv_bias = state_dict.pop(f"transformer_layers.{i}.self_attention.Wqkv.bias")
         Wqkv_weight = Wqkv_weight.reshape(256, 3, 256)
         Wqkv_bias = Wqkv_bias.reshape(256, 3)
         query_weight, key_weight, value_weight = Wqkv_weight[:, 0], Wqkv_weight[:, 1], Wqkv_weight[:, 2]
         query_bias, key_bias, value_bias = Wqkv_bias[:, 0], Wqkv_bias[:, 1], Wqkv_bias[:, 2]
-        state_dict[f"transformer_layers.{i}.self_attention_block.attention.q_proj.weight"] = query_weight
-        state_dict[f"transformer_layers.{i}.self_attention_block.attention.k_proj.weight"] = key_weight
-        state_dict[f"transformer_layers.{i}.self_attention_block.attention.v_proj.weight"] = value_weight
-        state_dict[f"transformer_layers.{i}.self_attention_block.attention.q_proj.bias"] = query_bias
-        state_dict[f"transformer_layers.{i}.self_attention_block.attention.k_proj.bias"] = key_bias
-        state_dict[f"transformer_layers.{i}.self_attention_block.attention.v_proj.bias"] = value_bias
+        state_dict[f"transformer_layers.{i}.self_attention.q_proj.weight"] = query_weight
+        state_dict[f"transformer_layers.{i}.self_attention.k_proj.weight"] = key_weight
+        state_dict[f"transformer_layers.{i}.self_attention.v_proj.weight"] = value_weight
+        state_dict[f"transformer_layers.{i}.self_attention.q_proj.bias"] = query_bias
+        state_dict[f"transformer_layers.{i}.self_attention.k_proj.bias"] = key_bias
+        state_dict[f"transformer_layers.{i}.self_attention.v_proj.bias"] = value_bias
 
-        to_qk_weight = state_dict.pop(f"transformer_layers.{i}.cross_attention_block.to_qk.weight")
-        to_qk_bias = state_dict.pop(f"transformer_layers.{i}.cross_attention_block.to_qk.bias")
-        state_dict[f"transformer_layers.{i}.cross_attention_block.attention.q_proj.weight"] = to_qk_weight
-        state_dict[f"transformer_layers.{i}.cross_attention_block.attention.q_proj.bias"] = to_qk_bias
-        state_dict[f"transformer_layers.{i}.cross_attention_block.attention.k_proj.weight"] = to_qk_weight
-        state_dict[f"transformer_layers.{i}.cross_attention_block.attention.k_proj.bias"] = to_qk_bias
+        to_qk_weight = state_dict.pop(f"transformer_layers.{i}.cross_attention.to_qk.weight")
+        to_qk_bias = state_dict.pop(f"transformer_layers.{i}.cross_attention.to_qk.bias")
+        state_dict[f"transformer_layers.{i}.cross_attention.q_proj.weight"] = to_qk_weight
+        state_dict[f"transformer_layers.{i}.cross_attention.q_proj.bias"] = to_qk_bias
+        state_dict[f"transformer_layers.{i}.cross_attention.k_proj.weight"] = to_qk_weight
+        state_dict[f"transformer_layers.{i}.cross_attention.k_proj.bias"] = to_qk_bias
 
     return state_dict
 

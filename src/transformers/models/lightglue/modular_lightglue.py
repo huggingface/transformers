@@ -385,47 +385,13 @@ class LightGlueMLP(CLIPMLP):
         return hidden_states
 
 
-class LightGlueAttentionBlock(nn.Module):
-    def __init__(self, config: LightGlueConfig, layer_idx: int):
-        super().__init__()
-        self.attention = LightGlueAttention(config, layer_idx)
-        self.mlp = LightGlueMLP(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        output_hidden_states: bool = False,
-        output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]], Optional[torch.Tensor]]:
-        all_hidden_states = () if output_hidden_states else None
-        attention_output, attention_probs = self.attention(
-            hidden_states,
-            position_embeddings=position_embeddings,
-            attention_mask=attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            output_attentions=output_attentions,
-        )
-        intermediate_states = torch.cat([hidden_states, attention_output], dim=-1)
-        output_states = self.mlp(intermediate_states)
-        hidden_states = hidden_states + output_states
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (intermediate_states, output_states)
-
-        outputs = (hidden_states, all_hidden_states, attention_probs)
-        return outputs
-
-
 class LightGlueTransformerLayer(nn.Module):
     def __init__(self, config: LightGlueConfig, layer_idx: int):
         super().__init__()
-        self.self_attention_block = LightGlueAttentionBlock(config, layer_idx)
-        self.cross_attention_block = LightGlueAttentionBlock(config, layer_idx)
+        self.self_attention = LightGlueAttention(config, layer_idx)
+        self.self_mlp = LightGlueMLP(config)
+        self.cross_attention = LightGlueAttention(config, layer_idx)
+        self.cross_mlp = LightGlueMLP(config)
 
     def forward(
         self,
@@ -442,13 +408,20 @@ class LightGlueTransformerLayer(nn.Module):
             all_hidden_states = all_hidden_states + (descriptors,)
 
         batch_size, num_keypoints, descriptor_dim = descriptors.shape
-        self_attention_descriptors, self_attention_hidden_states, self_attentions = self.self_attention_block(
+        
+        # Self attention block
+        attention_output, self_attentions = self.self_attention(
             descriptors,
             position_embeddings=keypoints,
             attention_mask=attention_mask,
-            output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
         )
+        intermediate_states = torch.cat([descriptors, attention_output], dim=-1)
+        output_states = self.self_mlp(intermediate_states)
+        self_attention_descriptors = descriptors + output_states
+
+        if output_hidden_states:
+            self_attention_hidden_states = (intermediate_states, output_states)
 
         # Reshape hidden_states to group by image_pairs :
         #   (batch_size, num_keypoints, descriptor_dim) -> (batch_size, 2, num_keypoints, descriptor_dim)
@@ -468,15 +441,19 @@ class LightGlueTransformerLayer(nn.Module):
             else None
         )
 
-        descriptors, cross_attention_hidden_states, cross_attentions = self.cross_attention_block(
+        # Cross attention block
+        cross_attention_output, cross_attentions = self.cross_attention(
             self_attention_descriptors,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
         )
+        cross_intermediate_states = torch.cat([self_attention_descriptors, cross_attention_output], dim=-1)
+        cross_output_states = self.cross_mlp(cross_intermediate_states)
+        descriptors = self_attention_descriptors + cross_output_states
 
         if output_hidden_states:
+            cross_attention_hidden_states = (cross_intermediate_states, cross_output_states)
             all_hidden_states = (
                 all_hidden_states
                 + (self_attention_descriptors.reshape(batch_size, num_keypoints, descriptor_dim),)
