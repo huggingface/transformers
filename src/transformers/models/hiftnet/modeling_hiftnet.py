@@ -195,7 +195,7 @@ class HiFTNetGeneratorLayer(nn.Module):
         # TODO: @eustlb, remove comment
         # -> source downs in original code
         self.noise_conv = nn.Conv1d(
-            config.gen_istft_n_fft + 2,
+            config.n_fft + 2,
             c_cur,
             kernel_size=noise_conv_kernel_size,
             stride=noise_conv_stride,
@@ -291,11 +291,11 @@ class HiFTNetModel(HiFTNetPreTrainedModel):
 
         self.num_kernels = len(config.resblock_kernel_sizes)
         self.num_upsamples = len(config.upsample_rates)
-        self.n_fft = config.gen_istft_n_fft
-        self.hop_length = config.gen_istft_hop_size
-        self.win_length = config.gen_istft_n_fft
-        self.window = torch.hann_window(config.gen_istft_n_fft)
-        self.scale_factor = math.prod(config.upsample_rates) * config.gen_istft_hop_size
+        self.n_fft = config.n_fft
+        self.hop_length = config.hop_size
+        self.win_length = config.n_fft
+        self.window = torch.hann_window(config.n_fft)
+        self.scale_factor = math.prod(config.upsample_rates) * config.hop_size
 
         # TODO: @eustlb, use config parameters
         self.conv_pre = nn.Conv1d(80, config.upsample_initial_channel, 7, 1, padding=3)
@@ -316,7 +316,7 @@ class HiFTNetModel(HiFTNetPreTrainedModel):
 
         self.conv_post = nn.Conv1d(
             config.upsample_initial_channel // (2 ** (len(config.upsample_rates))),
-            config.gen_istft_n_fft + 2,
+            config.n_fft + 2,
             7,
             padding=3,
         )
@@ -369,6 +369,9 @@ class HiFTNetModel(HiFTNetPreTrainedModel):
         hidden_states = hidden_states.transpose(1, 2)
         spec = torch.exp(hidden_states[:, : self.n_fft // 2 + 1, :])
         phase = torch.sin(hidden_states[:, self.n_fft // 2 + 1 :, :])
+
+        return spec, phase, har_source_lengths
+    
         inverse_transform = torch.istft(
             spec * torch.exp(phase * 1j),
             self.n_fft,
@@ -385,6 +388,73 @@ class HiFTNetModel(HiFTNetPreTrainedModel):
             inverse_transform = inverse_transform * mask
 
         return inverse_transform, har_source_lengths
+
+
+#TODO: @eustlb, check if this naming convention is the best regarding Transformers
+class HiFTNetFundamentalFrequencyPredictor(HiFTNetPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.condnet = nn.Sequential(
+            nn.Conv1d(config.num_mel_bins, config.hidden_size, kernel_size=3, padding=1),
+            nn.ELU(),
+            nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=3, padding=1),
+            nn.ELU(),
+            nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=3, padding=1),
+            nn.ELU(),
+            nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=3, padding=1),
+            nn.ELU(),
+            nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=3, padding=1),
+            nn.ELU(),
+        )
+
+        # apply weight norm
+        for layer in self.condnet:
+            if isinstance(layer, nn.Conv1d):
+                nn.utils.parametrizations.weight_norm(layer)
+
+        self.linear = nn.Linear(in_features=config.hidden_size, out_features=1)
+
+    def forward(self, input_features: torch.Tensor, input_lengths=None) -> torch.Tensor:
+        hidden_states = self.condnet(input_features)
+        hidden_states = self.linear(hidden_states.transpose(1, 2))
+        f0 = torch.abs(hidden_states.squeeze(-1))
+        if input_lengths is not None:
+            f0 = _mask_hidden_states(f0, input_lengths)
+        return f0
+
+
+class HiFTNetVocoder(HiFTNetPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.fundamental_frequency_predictor = HiFTNetFundamentalFrequencyPredictor(config)
+        self.model = HiFTNetModel(config)
+        self.window = torch.hann_window(config.n_fft)
+
+        # TODO: @eustlb, a bit strange diff naming convention
+        self.win_length = config.n_fft
+        self.hop_length = config.hop_size
+
+    def forward(self, input_features, input_lengths=None):
+        fundamental_frequency = self.fundamental_frequency_predictor(input_features)
+        spec, phase, har_source_lengths = self.model(input_features, fundamental_frequency, input_lengths)
+
+        waveform = torch.istft(
+            spec * torch.exp(phase * 1j),
+            self.n_fft,
+            self.hop_length,
+            self.win_length,
+            window=self.window.to(spec.device),
+        )
+
+        if har_source_lengths is not None:
+            mask = (
+                torch.arange(waveform.size(1), device=waveform.device)[None, :]
+                < torch.tensor(har_source_lengths, device=waveform.device)[:, None]
+            )
+            waveform = waveform * mask
+
+        return waveform, har_source_lengths, fundamental_frequency
 
 
 def _mask_hidden_states(hidden_states: torch.FloatTensor, lengths: Optional[List[int]] = None) -> torch.FloatTensor:
@@ -417,7 +487,6 @@ def _mask_hidden_states(hidden_states: torch.FloatTensor, lengths: Optional[List
 
 __all__ = [
     "HiFTNetModel",
-    "HiFTNetHarmonicNoiseSourceFilter",
-    "HiFTNetResBlock",
-    "HiFTNetResBlockLayer",
+    "HiFTNetFundamentalFrequencyPredictor",
+    "HiFTNetVocoder",
 ]

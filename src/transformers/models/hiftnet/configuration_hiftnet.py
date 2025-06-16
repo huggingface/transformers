@@ -29,25 +29,27 @@ class HiFTNetConfig(PretrainedConfig):
         self,
         hidden_size=512,
         vocab_size=178,
+        num_mel_bins=80,
         resblock_kernel_sizes=[3, 7, 11],
         upsample_rates=[8, 5, 3],
         upsample_initial_channel=512,
         resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
         upsample_kernel_sizes=[16, 11, 7],  # TODO: is it better with a
-        gen_istft_n_fft=16,
-        gen_istft_hop_size=5,
+        n_fft=16,
+        hop_size=5,
         sampling_rate=24000,
         **kwargs,
     ):
         self.hidden_size = hidden_size
         self.vocab_size = vocab_size
+        self.num_mel_bins = num_mel_bins
         self.resblock_kernel_sizes = resblock_kernel_sizes
         self.upsample_rates = upsample_rates
         self.upsample_initial_channel = upsample_initial_channel
         self.resblock_dilation_sizes = resblock_dilation_sizes
         self.upsample_kernel_sizes = upsample_kernel_sizes
-        self.gen_istft_n_fft = gen_istft_n_fft
-        self.gen_istft_hop_size = gen_istft_hop_size
+        self.n_fft = n_fft
+        self.hop_size = hop_size
         self.sampling_rate = sampling_rate
 
         super().__init__(**kwargs)

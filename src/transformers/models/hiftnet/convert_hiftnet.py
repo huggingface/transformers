@@ -21,26 +21,32 @@ from safetensors.torch import load_file
 
 from transformers import (
     HiFTNetConfig,
-    HiFTNetModel,
+    HiFTNetVocoder,
 )
 from transformers.utils.hub import cached_file
 
 
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
-    r"^source_downs\.(\d+)\.(weight|bias)$":                        r"layers.\1.noise_conv.\2",
-    r"^ups\.(\d+)\.(.+)$":                                          r"layers.\1.up.\2",
+    r"^f0_predictor\.(.+)$":                                        r"fundamental_frequency_predictor.\1",
 
-    r"^source_resblocks\.(\d+)\.convs([12])\.(\d+)":                lambda match: f"layers.{match.group(1)}.noise_res.layers.{match.group(3)}.conv{match.group(2)}",
-    r"^source_resblocks\.(\d+)\.activations([12]).([012])\.alpha$": lambda match: f"layers.{match.group(1)}.noise_res.layers.{match.group(3)}.alpha{match.group(2)}",
+    r"^ups\.(\d+)\.(.+)$":                                          r"model.layers.\1.up.\2",
+    r"^source_downs\.(\d+)\.(weight|bias)$":                        r"model.layers.\1.noise_conv.\2",
 
-    r"resblocks\.(\d+)\.convs([12])\.(\d+)":                        lambda match: f"layers.{int(match.group(1)) // 3}.resblocks.{int(match.group(1)) % 3}.layers.{match.group(3)}.conv{match.group(2)}",
-    r"resblocks\.(\d+)\.activations([12]).([012])\.alpha$":         lambda match: f"layers.{int(match.group(1)) // 3}.resblocks.{int(match.group(1)) % 3}.layers.{match.group(3)}.alpha{match.group(2)}",
+    r"conv_pre":                                                    r"model.conv_pre",
+    r"conv_post":                                                   r"model.conv_post",
+    r"m_source":                                                    r"model.m_source",
+    r"classifier":                                                  r"linear",
+
+    r"^source_resblocks\.(\d+)\.convs([12])\.(\d+)":                lambda match: f"model.layers.{match.group(1)}.noise_res.layers.{match.group(3)}.conv{match.group(2)}",
+    r"^source_resblocks\.(\d+)\.activations([12]).([012])\.alpha$": lambda match: f"model.layers.{match.group(1)}.noise_res.layers.{match.group(3)}.alpha{match.group(2)}",
+
+    r"resblocks\.(\d+)\.convs([12])\.(\d+)":                        lambda match: f"model.layers.{int(match.group(1)) // 3}.resblocks.{int(match.group(1)) % 3}.layers.{match.group(3)}.conv{match.group(2)}",
+    r"resblocks\.(\d+)\.activations([12]).([012])\.alpha$":         lambda match: f"model.layers.{int(match.group(1)) // 3}.resblocks.{int(match.group(1)) % 3}.layers.{match.group(3)}.alpha{match.group(2)}",
 }
 # fmt: on
 
 STATE_DICT_PREFIX = "mel2wav"
-TO_SKIP_PREFIX = "f0_predictor"
 
 
 def convert_key(key, mapping):
@@ -76,7 +82,7 @@ def write_model(
     state_dict = {
         convert_key(k[len(STATE_DICT_PREFIX) + 1 :], ORIGINAL_TO_CONVERTED_KEY_MAPPING): v
         for k, v in loaded.items()
-        if k.startswith(STATE_DICT_PREFIX) and not k[len(STATE_DICT_PREFIX) + 1 :].startswith(TO_SKIP_PREFIX)
+        if k.startswith(STATE_DICT_PREFIX)
     }
 
     # -------------------------
@@ -84,7 +90,7 @@ def write_model(
     # -------------------------
 
     # Initialize the HiFTNet model with the configuration
-    model = HiFTNetModel(config)
+    model = HiFTNetVocoder(config)
 
     # Load the state dictionary into the model
     model.load_state_dict(state_dict, strict=True)
@@ -97,7 +103,7 @@ def write_model(
 
     # Safety check: reload the converted model
     print("Reloading the model to check if it's saved correctly.")
-    HiFTNetModel.from_pretrained(output_dir)
+    HiFTNetVocoder.from_pretrained(output_dir)
     print("Model reloaded successfully.")
 
 
