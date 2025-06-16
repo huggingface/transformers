@@ -177,12 +177,6 @@ class FlavaForPreTrainingOutput(ModelOutput):
             the tokens masked.
     itm_logits (`torch.FloatTensor` of shape `(batch_size, 2)`, *optional*, returned when `input_ids_masked` and `pixel_values` are present):
         The logits for ITM loss. Note that ITM loss is calculated on masked pairs in FLAVA.
-    mmm_image_logits (`torch.FloatTensor` of shape `(batch_size, num_image_patches, image_vocab_size)` or of shape`(total_masked_patches, image_vocab_size)`, *optional*, returned when `pixel_values` and `input_ids_masked` are present):
-        The logits for MMM image multimodal loss. Uses `book_masked_pos` to get masked patches. The flattened
-            output is returned when `bool_masked_pos` has some of the patches masked.
-    mmm_text_logits (`torch.FloatTensor` of shape `(batch_size, text_seq_length, text_vocab_size)` or of shape `(`(total_masked_seq_length, text_vocab_size)`), *optional*, returned when `pixel_values` and `input_ids_masked` are present):
-        The logits for MMM text multimodal loss. The flattened output is returned when `input_ids_masked` has
-            some of the tokens masked.
     contrastive_logits_per_image (`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
         The scaled dot product scores between `image_embeddings` and `text_embeddings` but passed through FLAVA's
         `image_projection` and `text_projection` layers respectively. This represents the image-text similarity
@@ -191,6 +185,12 @@ class FlavaForPreTrainingOutput(ModelOutput):
         The scaled dot product scores between `text_embeddings` and `image_embeddings` but passed through FLAVA's
         `text_projection` and `image_projection` layers respectively. This is calculated on unmasked images and
         texts.
+    mmm_image_logits (`torch.FloatTensor` of shape `(batch_size, num_image_patches, image_vocab_size)` or of shape`(total_masked_patches, image_vocab_size)`, *optional*, returned when `pixel_values` and `input_ids_masked` are present):
+        The logits for MMM image multimodal loss. Uses `book_masked_pos` to get masked patches. The flattened
+            output is returned when `bool_masked_pos` has some of the patches masked.
+    mmm_text_logits (`torch.FloatTensor` of shape `(batch_size, text_seq_length, text_vocab_size)` or of shape `(`(total_masked_seq_length, text_vocab_size)`), *optional*, returned when `pixel_values` and `input_ids_masked` are present):
+        The logits for MMM text multimodal loss. The flattened output is returned when `input_ids_masked` has
+            some of the tokens masked.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -1220,12 +1220,12 @@ class FlavaModel(FlavaPreTrainedModel):
             [What are token type IDs?](../glossary#token-type-ids)
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, image_num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-        skip_multimodal_encoder (*bool*, *optional*):
-            Skip any calculations for multimodal encoder. Useful if multimodal encoding is not going to be used.
         image_attention_mask (`torch.Tensor` of shape `(batch_size, image_num_patches)`, *optional*):
             Mask to avoid performing attention on padding pixel values for image inputs. Mask values selected in `[0, 1]`:
             - 1 for pixel values that are real (i.e., **not masked**),
             - 0 for pixel values that are padding (i.e., **masked**).
+        skip_multimodal_encoder (*bool*, *optional*):
+            Skip any calculations for multimodal encoder. Useful if multimodal encoding is not going to be used.
 
         Examples:
 
@@ -1694,6 +1694,8 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
             to be used with MLM. Indices can be obtained using [`AutoTokenizer`] along with
             [`DataCollatorForMaskedLanguageModeling`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details. [What are input IDs?](../glossary#input-ids)
+        codebook_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_image_patches, patch_size, patch_size, 3)`, *optional*):
+            Pixel values for image patches that are used to compute the image codebook labels for masked image modeling.
         token_type_ids (`torch.LongTensor` of shape `(batch_size, text_seq_len)`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
             1]`:
@@ -1727,8 +1729,6 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
             The pairs with 0 will be skipped for calculation of MMM and global contrastive losses as well.
         return_loss (`bool`, *optional*, default to None):
             Whether to return calculated loss or not.
-        codebook_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_image_patches, patch_size, patch_size, 3)`, *optional*):
-            Pixel values for image patches that are used to compute the image codebook labels for masked image modeling.
 
         Examples:
         ```python

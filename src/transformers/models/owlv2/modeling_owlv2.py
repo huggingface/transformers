@@ -225,6 +225,12 @@ class Owlv2ImageGuidedObjectDetectionOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, num_patches, num_queries)`):
         Classification logits (including no-object) for all queries.
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
+        Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes
+        image embeddings for each patch.
+    query_image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
+        Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes
+        image embeddings for each patch.
     target_pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_patches, 4)`):
         Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
         values are normalized in [0, 1], relative to the size of each individual target image in the batch
@@ -235,12 +241,6 @@ class Owlv2ImageGuidedObjectDetectionOutput(ModelOutput):
         values are normalized in [0, 1], relative to the size of each individual query image in the batch
         (disregarding possible padding). You can use [`~Owlv2ImageProcessor.post_process_object_detection`] to
         retrieve the unnormalized bounding boxes.
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
-        Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes
-        image embeddings for each patch.
-    query_image_embeds (`torch.FloatTensor` of shape `(batch_size, patch_size, patch_size, output_dim`):
-        Pooled output of [`Owlv2VisionModel`]. OWLv2 represents images as a set of image patches and computes
-        image embeddings for each patch.
     class_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`):
         Class embeddings of all image patches. OWLv2 represents images as a set of image patches where the total
         number of patches is (image_size / patch_size)**2.

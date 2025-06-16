@@ -76,8 +76,6 @@ class FastSpeech2ConformerModelOutput(ModelOutput):
 )
 class FastSpeech2ConformerWithHifiGanOutput(FastSpeech2ConformerModelOutput):
     r"""
-    waveform (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
-        Speech output as a result of passing the predicted mel spectrogram through the vocoder.
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Spectrogram generation loss.
     spectrogram (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_bins)`):
@@ -90,6 +88,8 @@ class FastSpeech2ConformerWithHifiGanOutput(FastSpeech2ConformerModelOutput):
         Outputs of the pitch predictor.
     energy_outputs (`torch.FloatTensor` of shape `(batch_size, max_text_length + 1, 1)`, *optional*):
         Outputs of the energy predictor.
+    waveform (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
+        Speech output as a result of passing the predicted mel spectrogram through the vocoder.
     """
 
     waveform: Optional[torch.FloatTensor] = None

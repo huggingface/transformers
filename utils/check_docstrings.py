@@ -41,6 +41,7 @@ import inspect
 import operator as op
 import os
 import re
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Optional, Tuple, Union
 
@@ -1152,22 +1153,32 @@ def generate_new_docstring_for_signature(
                 "type": "<fill_type>",
                 "optional": False,
                 "shape": None,
-                "description": "    <fill_docstring>",
+                "description": "\n    <fill_docstring>",
                 "default": None,
                 "additional_info": None,
             }
+    # Handle docstring of inherited args (for dataclasses)
+    ordered_args_docstring_dict = OrderedDict(
+        (arg, args_docstring_dict[arg]) for arg in args_docstring_dict if arg not in args_in_signature
+    )
+    # Add args in the order of the signature
+    ordered_args_docstring_dict.update(
+        (arg, args_docstring_dict[arg]) for arg in args_in_signature if arg in args_docstring_dict
+    )
     # Build new docstring
     new_docstring = ""
-    if len(args_docstring_dict) > 0 or remaining_docstring:
+    if len(ordered_args_docstring_dict) > 0 or remaining_docstring:
         new_docstring += 'r"""\n'
-        for arg in args_docstring_dict:
-            additional_info = args_docstring_dict[arg]["additional_info"] or ""
-            custom_arg_description = args_docstring_dict[arg]["description"]
+        for arg in ordered_args_docstring_dict:
+            additional_info = ordered_args_docstring_dict[arg]["additional_info"] or ""
+            custom_arg_description = ordered_args_docstring_dict[arg]["description"]
             if "<fill_docstring>" in custom_arg_description and arg not in missing_docstring_args:
                 fill_docstring_args.append(arg)
             if custom_arg_description.endswith('"""'):
                 custom_arg_description = "\n".join(custom_arg_description.split("\n")[:-1])
-            new_docstring += f"{arg} ({args_docstring_dict[arg]['type']}{additional_info}):{custom_arg_description}\n"
+            new_docstring += (
+                f"{arg} ({ordered_args_docstring_dict[arg]['type']}{additional_info}):{custom_arg_description}\n"
+            )
         close_docstring = True
         if remaining_docstring:
             if remaining_docstring.endswith('"""'):

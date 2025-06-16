@@ -731,14 +731,14 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
 )
 class DecisionTransformerOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the model.
     state_preds (`torch.FloatTensor` of shape `(batch_size, sequence_length, state_dim)`):
         Environment state predictions
     action_preds (`torch.FloatTensor` of shape `(batch_size, sequence_length, action_dim)`):
         Model action predictions
     return_preds (`torch.FloatTensor` of shape `(batch_size, sequence_length, 1)`):
         Predicted returns for each state
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Sequence of hidden-states at the output of the last layer of the model.
     """
 
     state_preds: Optional[torch.FloatTensor] = None

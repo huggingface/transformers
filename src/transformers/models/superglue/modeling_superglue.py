@@ -160,14 +160,14 @@ class KeypointMatchingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
         Loss computed during training.
-    mask (`torch.IntTensor` of shape `(batch_size, num_keypoints)`):
-        Mask indicating which values in matches and matching_scores are keypoint matching information.
     matches (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
         Index of keypoint matched in the other image.
     matching_scores (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
         Scores of predicted matches.
     keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
         Absolute (x, y) coordinates of predicted keypoints in a given image.
+    mask (`torch.IntTensor` of shape `(batch_size, num_keypoints)`):
+        Mask indicating which values in matches and matching_scores are keypoint matching information.
     hidden_states (`Tuple[torch.FloatTensor, ...]`, *optional*):
         Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, 2, num_channels,
         num_keypoints)`, returned when `output_hidden_states=True` is passed or when

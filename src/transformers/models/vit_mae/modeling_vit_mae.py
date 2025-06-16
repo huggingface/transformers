@@ -673,11 +673,11 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, ViTMAEModelOutput]:
         r"""
+        noise (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mainly used for testing purposes to control randomness and maintain the reproducibility
         interpolate_pos_encoding (`bool`, *optional*, default `False`):
             Whether to interpolate the pre-trained position encodings. This is mainly used to use the model on higher
             resolution images.
-        noise (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mainly used for testing purposes to control randomness and maintain the reproducibility
 
         Examples:
 
@@ -1035,11 +1035,11 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, ViTMAEForPreTrainingOutput]:
         r"""
+        noise (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mainly used for testing purposes to control randomness and maintain the reproducibility
         interpolate_pos_encoding (`bool`, *optional*, default `False`):
             Whether to interpolate the pre-trained position encodings. This is mainly used to use the model on higher
             resolution images.
-        noise (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mainly used for testing purposes to control randomness and maintain the reproducibility
 
         Examples:
 

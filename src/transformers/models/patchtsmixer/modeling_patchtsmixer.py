@@ -1354,14 +1354,14 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
 )
 class PatchTSMixerForPreTrainingOutput(ModelOutput):
     r"""
-    prediction_outputs (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, patch_length)`):
-        Prediction output from the pretrain head.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-        Hidden-states of the model at the output of each layer.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
-        Backbone embeddings before passing through the head.
     loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
         Total loss
+    prediction_outputs (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, patch_length)`):
+        Prediction output from the pretrain head.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
+        Backbone embeddings before passing through the head.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+        Hidden-states of the model at the output of each layer.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -1467,14 +1467,14 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
 )
 class PatchTSMixerForPredictionOutput(ModelOutput):
     r"""
+    loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
+        Total loss.
     prediction_outputs (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_input_channels)`):
         Prediction output from the forecast head.
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
         Backbone embeddings before passing through the head.
     hidden_states (`tuple(torch.FloatTensor)`, *optional*):
         Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-    loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
-        Total loss.
     loc (`torch.FloatTensor`, *optional* of shape `(batch_size, 1, num_input_channels)`):
         Input mean
     scale (`torch.FloatTensor`, *optional* of shape `(batch_size, 1, num_input_channels)`):
@@ -1776,14 +1776,14 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
 )
 class PatchTSMixerForTimeSeriesClassificationOutput(ModelOutput):
     r"""
+    loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
+        Total loss.
     prediction_outputs (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
         Prediction output from the classification head.
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
         Backbone embeddings before passing through the head.
     hidden_states (`tuple(torch.FloatTensor)`, *optional*):
         Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-    loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
-        Total loss.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -1910,14 +1910,14 @@ class PatchTSMixerForTimeSeriesClassification(PatchTSMixerPreTrainedModel):
 )
 class PatchTSMixerForRegressionOutput(ModelOutput):
     r"""
+    loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
+        Total loss.
     regression_outputs (`torch.FloatTensor` of shape `(batch_size, num_targets)`):
         Prediction output from the regression head.
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_input_channels, num_patches, d_model)`):
         Backbone embeddings before passing through the head.
     hidden_states (`tuple(torch.FloatTensor)`, *optional*):
         Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-    loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
-        Total loss.
     """
 
     loss: Optional[torch.FloatTensor] = None

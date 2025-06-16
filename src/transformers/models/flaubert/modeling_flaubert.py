@@ -816,6 +816,14 @@ class FlaubertModel(FlaubertPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
+        langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
+            languages ids which can be obtained from the language names by using two conversion mappings provided in
+            the configuration of the model (only provided for multilingual models). More precisely, the *language name
+            to language id* mapping is in `model.config.lang2id` (which is a dictionary string to int) and the
+            *language id to language name* mapping is in `model.config.id2lang` (dictionary int to string).
+
+            See usage examples detailed in the [multilingual documentation](../multilingual).
         lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use `attention_mask` for the same result (see above), kept here for compatibility. Indices selected in
@@ -825,14 +833,6 @@ class FlaubertModel(FlaubertPreTrainedModel):
             attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
             decoding. The dictionary object will be modified in-place during the forward pass to add newly computed
             hidden-states.
-        langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
-            languages ids which can be obtained from the language names by using two conversion mappings provided in
-            the configuration of the model (only provided for multilingual models). More precisely, the *language name
-            to language id* mapping is in `model.config.lang2id` (which is a dictionary string to int) and the
-            *language id to language name* mapping is in `model.config.id2lang` (dictionary int to string).
-
-            See usage examples detailed in the [multilingual documentation](../multilingual).
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1041,6 +1041,14 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MaskedLMOutput]:
         r"""
+        langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
+            languages ids which can be obtained from the language names by using two conversion mappings provided in
+            the configuration of the model (only provided for multilingual models). More precisely, the *language name
+            to language id* mapping is in `model.config.lang2id` (which is a dictionary string to int) and the
+            *language id to language name* mapping is in `model.config.id2lang` (dictionary int to string).
+
+            See usage examples detailed in the [multilingual documentation](../multilingual).
         lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
             also use `attention_mask` for the same result (see above), kept here for compatibility. Indices selected in
@@ -1054,14 +1062,6 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel, GenerationMixin):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
-        langs (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
-            languages ids which can be obtained from the language names by using two conversion mappings provided in
-            the configuration of the model (only provided for multilingual models). More precisely, the *language name
-            to language id* mapping is in `model.config.lang2id` (which is a dictionary string to int) and the
-            *language id to language name* mapping is in `model.config.id2lang` (dictionary int to string).
-
-            See usage examples detailed in the [multilingual documentation](../multilingual).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
