@@ -39,6 +39,8 @@ if is_cv2_available():
 
 
 class FastImageProcessingTester(unittest.TestCase):
+    # satisfy error of unittest.TestCase.__hash__ for pytest collection
+    _testMethodName = None
     def __init__(
         self,
         parent,
