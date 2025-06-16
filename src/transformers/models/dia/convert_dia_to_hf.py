@@ -23,8 +23,8 @@ from huggingface_hub import snapshot_download
 from safetensors.torch import load_file
 
 from transformers import (
-    DacFeatureExtractor,
     DiaConfig,
+    DiaFeatureExtractor,
     DiaForConditionalGeneration,
     DiaProcessor,
     DiaTokenizer,
@@ -220,7 +220,7 @@ if __name__ == "__main__":
             print(e)
         else:
             # TODO: :)
-            processor = DiaProcessor(DacFeatureExtractor(), DiaTokenizer())
+            processor = DiaProcessor(DiaFeatureExtractor(sampling_rate=44100, hop_length=1), DiaTokenizer())
             processor.save_pretrained(args.pytorch_dump_folder_path)
 
     model.save_pretrained(args.pytorch_dump_folder_path)

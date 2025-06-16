@@ -19,23 +19,33 @@ import tempfile
 import unittest
 
 import numpy as np
+from parameterized import parameterized
 
-from transformers import DacFeatureExtractor, DiaProcessor, DiaTokenizer
+from transformers import DacModel, DiaFeatureExtractor, DiaProcessor, DiaTokenizer
 from transformers.testing_utils import require_torch
+from transformers.utils import is_torch_available
+
+
+if is_torch_available:
+    import torch
 
 
 @require_torch
 class DiaProcessorTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint = "nari-labs/Dia-1.6B"
-        self.dac_checkpoint = "descript/dac_44khz"
+        # TODO: checkpoints + save/load pretrained with audio tokenizer
+        self.checkpoint = "AntonV/Dia-1.6B"
+        self.audio_tokenizer_checkpoint = "descript/dac_44khz"  # imo should be within the processor as ref
         self.tmpdirname = tempfile.mkdtemp()
 
     def get_tokenizer(self, **kwargs):
         return DiaTokenizer.from_pretrained(self.checkpoint, **kwargs)
 
+    def get_audio_tokenizer(self, **kwargs):
+        return DacModel.from_pretrained(self.audio_tokenizer_checkpoint, **kwargs)
+
     def get_feature_extractor(self, **kwargs):
-        return DacFeatureExtractor.from_pretrained(self.dac_checkpoint, **kwargs)
+        return DiaFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -53,7 +63,7 @@ class DiaProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, DiaTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, DacFeatureExtractor)
+        self.assertIsInstance(processor.feature_extractor, DiaFeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
         processor = DiaProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
@@ -68,8 +78,9 @@ class DiaProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, DiaTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, DacFeatureExtractor)
+        self.assertIsInstance(processor.feature_extractor, DiaFeatureExtractor)
 
+    # TODO: not valid anymore since we do more than just feat extract
     def test_feature_extractor(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
@@ -84,6 +95,7 @@ class DiaProcessorTest(unittest.TestCase):
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
+    # TODO: decode will be the audio tokenizer
     def test_tokenizer_decode(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
@@ -108,3 +120,60 @@ class DiaProcessorTest(unittest.TestCase):
             feature_extractor.model_input_names,
             msg="`processor` and `feature_extractor` model input names do not match",
         )
+
+    @require_torch
+    @parameterized.expand([(1, 2, [0, 1, 4]), (2, 4, [1, 3, 2]), (4, 8, [0, 5, 7])])
+    def test_audio_delay(self, bsz, seq_len, delay_pattern):
+        # static functions which are crucial, hence we also test them here
+        build_indices_fn = DiaProcessor.build_indices
+        delay_fn = DiaProcessor.apply_audio_delay
+
+        bos, pad = -2, -1
+        num_channels = len(delay_pattern)
+
+        audio_input = torch.arange(bsz * seq_len * num_channels).view(bsz, seq_len, num_channels)
+        # imitate a delay mask with zeroes
+        audio_input = torch.cat([audio_input, torch.zeros(size=(bsz, max(delay_pattern), num_channels))], dim=1)
+
+        precomputed_idx = build_indices_fn(
+            bsz=bsz,
+            seq_len=seq_len + max(delay_pattern),
+            num_channels=num_channels,
+            delay_pattern=delay_pattern,
+            revert=False,
+        )
+        delayed_audio_out = delay_fn(
+            audio=audio_input,
+            pad_token_id=pad,
+            bos_token_id=bos,
+            precomputed_idx=precomputed_idx,
+        )
+
+        # every channel idx is shifted by delay_pattern[idx]
+        delayed_audio_res = audio_input.clone()
+        for idx, delay in enumerate(delay_pattern):
+            delayed_audio_res[:, :delay, idx] = bos
+            remaining_input = seq_len + max(delay_pattern) - delay
+            delayed_audio_res[:, delay:, idx] = audio_input[:, :remaining_input, idx]
+
+        self.assertTrue((delayed_audio_out == delayed_audio_res).all())
+
+        # we should get back to the original audio we had (when removing the delay pad)
+        bsz, new_seq_len, num_channels = delayed_audio_out.shape
+        precomputed_idx = build_indices_fn(
+            bsz=bsz,
+            seq_len=new_seq_len,
+            num_channels=num_channels,
+            delay_pattern=delay_pattern,
+            revert=True,
+        )
+        reverted_audio_out = delay_fn(
+            audio=delayed_audio_out,
+            pad_token_id=pad,
+            bos_token_id=bos,
+            precomputed_idx=precomputed_idx,
+        )
+
+        reverted_audio_res = audio_input.clone()[:, :seq_len]
+
+        self.assertTrue((reverted_audio_out[:, :seq_len] == reverted_audio_res).all())
