@@ -562,53 +562,86 @@ def load_video(
             return default_sample_indices_fn(metadata, num_frames=num_frames, fps=fps, **fn_kwargs)
 
         sample_indices_fn = sample_indices_fn_func
+    
+    # if isinstance(video, VideoInput):
+    #     return process_video_object(
+    #         video)
+    # else:
+    if isinstance(video, str):
+        # video is a path to a file or a URL, you need to actually load it
 
-    if urlparse(video).netloc in ["www.youtube.com", "youtube.com"]:
-        if not is_yt_dlp_available():
-            raise ImportError("To load a video from YouTube url you have  to install `yt_dlp` first.")
-        # Lazy import from yt_dlp
-        requires_backends(load_video, ["yt_dlp"])
-        from yt_dlp import YoutubeDL
+        if urlparse(video).netloc in ["www.youtube.com", "youtube.com"]:
+            if not is_yt_dlp_available():
+                raise ImportError("To load a video from YouTube url you have  to install `yt_dlp` first.")
+            # Lazy import from yt_dlp
+            requires_backends(load_video, ["yt_dlp"])
+            from yt_dlp import YoutubeDL
 
-        buffer = BytesIO()
-        with redirect_stdout(buffer), YoutubeDL() as f:
-            f.download([video])
-        bytes_obj = buffer.getvalue()
-        file_obj = BytesIO(bytes_obj)
-    elif video.startswith("http://") or video.startswith("https://"):
-        file_obj = BytesIO(requests.get(video).content)
-    elif os.path.isfile(video):
-        file_obj = video
-    elif is_valid_image(video) or (isinstance(video, (list, tuple)) and is_valid_image(video[0])):
-        file_obj = None
+            buffer = BytesIO()
+            with redirect_stdout(buffer), YoutubeDL() as f:
+                f.download([video])
+            bytes_obj = buffer.getvalue()
+            file_obj = BytesIO(bytes_obj)
+        elif video.startswith("http://") or video.startswith("https://"):
+            file_obj = BytesIO(requests.get(video).content)
+        elif os.path.isfile(video):
+            file_obj = video
+        else:
+            raise TypeError("Video is a string but it is not a local path or URL")
+
+        # can also load with decord, but not cv2/torchvision
+        # both will fail in case of url links
+        video_is_url = video.startswith("http://") or video.startswith("https://")
+        if video_is_url and backend in ["opencv", "torchvision"]:
+            raise ValueError(
+                "If you are trying to load a video from URL, you can decode the video only with `pyav` or `decord` as backend"
+            )
+
+        if file_obj is None:
+            return video
+
+        if (
+            (not is_decord_available() and backend == "decord")
+            or (not is_av_available() and backend == "pyav")
+            or (not is_cv2_available() and backend == "opencv")
+            or (not is_torchvision_available() and backend == "torchvision")
+        ):
+            raise ImportError(
+                f"You chose backend={backend} for loading the video but the required library is not found in your environment "
+                f"Make sure to install {backend} before loading the video."
+            )
+
+        video_decoder = VIDEO_DECODERS[backend]
+        video, metadata = video_decoder(file_obj, sample_indices_fn, **kwargs)
     else:
-        raise TypeError("Incorrect format used for video. Should be an url linking to an video or a local path.")
+        # video is a list of frames or a numpy array, we assume it is already loaded
+        if not valid_videos(video):
+            raise ValueError(
+                f"Invalid video input. Expected either a list of video frames or an input of 4 or 5 dimensions, but got"
+                f" type {type(video)}."
+            )
 
-    # can also load with decord, but not cv2/torchvision
-    # both will fail in case of url links
-    video_is_url = video.startswith("http://") or video.startswith("https://")
-    if video_is_url and backend in ["opencv", "torchvision"]:
-        raise ValueError(
-            "If you are trying to load a video from URL, you can decode the video only with `pyav`, `decord` or `torchcodec` as backend"
+        # If the video is a list of frames, convert it to a numpy array
+        if isinstance(video, (list, tuple)):
+            video = make_batched_videos(video)
+
+        # If the video is a numpy array or torch tensor, we assume it is already in the right format
+        if is_numpy_array(video) or is_torch_tensor(video):
+            if video.ndim == 5:
+                # Batched video
+                video = np.array([video[i] for i in range(video.shape[0])])
+            elif video.ndim == 4:
+                # Single video
+                video = np.array(video)
+            else:
+                raise ValueError(f"Invalid video shape: {video.shape}")
+
+        metadata = VideoMetadata(
+            total_num_frames=video.shape[0],
+            fps=fps if fps is not None else 30.0,
+            duration=video.shape[0] / (fps if fps is not None else 30.0),
+            video_backend="numpy",
         )
-
-    if file_obj is None:
-        return video
-
-    if (
-        (not is_decord_available() and backend == "decord")
-        or (not is_av_available() and backend == "pyav")
-        or (not is_cv2_available() and backend == "opencv")
-        or (not is_torchvision_available() and backend == "torchvision")
-        or (not is_torchcodec_available() and backend == "torchcodec")
-    ):
-        raise ImportError(
-            f"You chose backend={backend} for loading the video but the required library is not found in your environment "
-            f"Make sure to install {backend} before loading the video."
-        )
-
-    video_decoder = VIDEO_DECODERS[backend]
-    video, metadata = video_decoder(file_obj, sample_indices_fn, **kwargs)
     return video, metadata
 
 
