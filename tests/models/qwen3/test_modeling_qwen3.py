@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen3 model."""
 
-import gc
 import unittest
 
 import pytest
@@ -109,7 +108,6 @@ class Qwen3ModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch
 class Qwen3IntegrationTest(unittest.TestCase):
-
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
 
@@ -124,12 +122,11 @@ class Qwen3IntegrationTest(unittest.TestCase):
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-1.3789,  1.3029,  3.8262,  3.4637,  2.8796,  1.8357,  2.1290,  2.1814]])
+        EXPECTED_MEAN = torch.tensor([[-1.3789, 1.3029, 3.8262, 3.4637, 2.8796, 1.8357, 2.1290, 2.1814]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-3, atol=1e-3)
         # slicing logits[0, 0, 0:30]
         EXPECTED_SLICE = torch.tensor([4.6905, 4.9243, 4.7101, 3.2052, 2.2683, 1.6576, 3.6529, 3.9800, 3.2605, 2.6475, 3.0468, 4.2296, 5.7443, 4.8940, 4.4883, 6.0323, 7.4057, 7.3710, 6.8373, 6.6323, 6.7114, 6.3069, 6.1751, 6.0416, 6.0793, 4.6975, 2.3286, 3.6387, 2.0757, 1.9813])  # fmt: skip
 
-        breakpoint()
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
 
     @slow
@@ -180,7 +177,6 @@ class Qwen3IntegrationTest(unittest.TestCase):
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
 
-        breakpoint()
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
         # Assisted generation
@@ -189,7 +185,6 @@ class Qwen3IntegrationTest(unittest.TestCase):
         assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
         generated_ids = assistant_model.generate(input_ids, max_new_tokens=4, temperature=0)
 
-        breakpoint()
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
         del assistant_model
@@ -206,15 +201,20 @@ class Qwen3IntegrationTest(unittest.TestCase):
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 
-        breakpoint()
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
     def test_speculative_generation(self):
         EXPECTED_TEXT_COMPLETIONS = Expectations(
             {
-                ("cuda", 7): "My favourite condiment is 100% natural. It's a little spicy and a little sweet, but it's the",
-                ("cuda", 8): "My favourite condiment is 100% peanut butter. I love it so much that I can't help but use it",
+                (
+                    "cuda",
+                    7,
+                ): "My favourite condiment is 100% natural. It's a little spicy and a little sweet, but it's the",
+                (
+                    "cuda",
+                    8,
+                ): "My favourite condiment is 100% peanut butter. I love it so much that I can't help but use it",
             }
         )
         EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETIONS.get_expectation()
@@ -234,7 +234,6 @@ class Qwen3IntegrationTest(unittest.TestCase):
         )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 
-        breakpoint()
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
