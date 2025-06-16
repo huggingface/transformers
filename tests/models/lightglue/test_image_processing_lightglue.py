@@ -40,6 +40,8 @@ def random_tensor(size):
 
 
 class LightGlueImageProcessingTester(SuperGlueImageProcessingTester):
+    """Tester for LightGlueImageProcessor"""
+
     def __init__(
         self,
         parent,
@@ -88,3 +90,7 @@ class LightGlueImageProcessingTester(SuperGlueImageProcessingTester):
 @require_vision
 class LightGlueImageProcessingTest(SuperGlueImageProcessingTest, unittest.TestCase):
     image_processing_class = LightGlueImageProcessor if is_vision_available() else None
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.image_processor_tester = LightGlueImageProcessingTester(self)
