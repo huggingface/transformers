@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from ...configuration_utils import PretrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..superpoint import SuperPointConfig
@@ -28,7 +29,7 @@ class LightGlueConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`LightGlueForKeypointMatching`]. It is used to
     instantiate a LightGlue model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the LightGlue
-    [stevenbucaille/lightglue_superpoint](https://huggingface.co/stevenbucaille/lightglue_superpoint) architecture.
+    [ETH-CVG/lightglue_superpoint](https://huggingface.co/ETH-CVG/lightglue_superpoint) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

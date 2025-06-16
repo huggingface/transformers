@@ -265,7 +265,7 @@ class LightGlueModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        from_pretrained_ids = ["stevenbucaille/lightglue_superpoint"]
+        from_pretrained_ids = ["ETH-CVG/lightglue_superpoint"]
         for model_name in from_pretrained_ids:
             model = LightGlueForKeypointMatching.from_pretrained(model_name)
             self.assertIsNotNone(model)

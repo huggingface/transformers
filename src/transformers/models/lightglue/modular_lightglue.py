@@ -36,7 +36,7 @@ from ..superpoint import SuperPointConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC_ = "LightGlueConfig"
-_CHECKPOINT_FOR_DOC_ = "stevenbucaille/lightglue_superpoint"
+_CHECKPOINT_FOR_DOC_ = "ETH-CVG/lightglue_superpoint"
 
 
 class LightGlueConfig(PretrainedConfig):
@@ -44,7 +44,7 @@ class LightGlueConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`LightGlueForKeypointMatching`]. It is used to
     instantiate a LightGlue model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the LightGlue
-    [stevenbucaille/lightglue_superpoint](https://huggingface.co/stevenbucaille/lightglue_superpoint) architecture.
+    [ETH-CVG/lightglue_superpoint](https://huggingface.co/ETH-CVG/lightglue_superpoint) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
