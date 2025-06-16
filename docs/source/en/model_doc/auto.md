@@ -16,13 +16,12 @@ rendered properly in your Markdown viewer.
 
 # Auto Classes
 
-In many cases, the architecture you want to use can be guessed from the name or the path of the pretrained model you
-are supplying to the `from_pretrained()` method. AutoClasses are here to do this job for you so that you
-automatically retrieve the relevant model given the name/path to the pretrained weights/config/vocabulary.
+In many cases, the architecture you want to use can be guessed from the name or the path of the pretrained model you are supplying to the `from_pretrained()` method. AutoClasses are here to do this job for you so that you automatically retrieve the relevant model given the name/path to the pretrained weights/config/vocabulary.
 
-Instantiating one of [`AutoConfig`], [`AutoModel`], and
-[`AutoTokenizer`] will directly create a class of the relevant architecture. For instance
+Instantiating one of [`AutoConfig`], [`AutoModel`], and [`AutoTokenizer`] will directly create a class of the relevant architecture. For instance:
 
+<hfoptions id="usage">
+<hfoption id="AutoModel">
 
 ```python
 model = AutoModel.from_pretrained("google-bert/bert-base-cased")
@@ -30,13 +29,28 @@ model = AutoModel.from_pretrained("google-bert/bert-base-cased")
 
 will create a model that is an instance of [`BertModel`].
 
+</hfoption>
+<hfoption id="AutoTokenizer">
+
+```python
+tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
+```
+
+</hfoption>
+<hfoption id="AutoConfig">
+
+```python
+config = AutoConfig.from_pretrained("google-bert/bert-base-cased")
+```
+
+</hfoption>
+</hfoptions>
+
 There is one class of `AutoModel` for each task, and for each backend (PyTorch, TensorFlow, or Flax).
 
 ## Extending the Auto Classes
 
-Each of the auto classes has a method to be extended with your custom classes. For instance, if you have defined a
-custom class of model `NewModel`, make sure you have a `NewModelConfig` then you can add those to the auto
-classes like this:
+Each of the auto classes has a method to be extended with your custom classes. For instance, if you have defined a custom class of model `NewModel`, make sure you have a `NewModelConfig` then you can add those to the auto classes like this:
 
 ```python
 from transformers import AutoConfig, AutoModel
@@ -49,14 +63,28 @@ You will then be able to use the auto classes like you would usually do!
 
 <Tip warning={true}>
 
-If your `NewModelConfig` is a subclass of [`~transformers.PretrainedConfig`], make sure its
-`model_type` attribute is set to the same key you use when registering the config (here `"new-model"`).
+If your `NewModelConfig` is a subclass of [`~transformers.PretrainedConfig`], make sure its `model_type` attribute is set to the same key you use when registering the config (here `"new-model"`).
 
-Likewise, if your `NewModel` is a subclass of [`PreTrainedModel`], make sure its
-`config_class` attribute is set to the same class you use when registering the model (here
-`NewModelConfig`).
+Likewise, if your `NewModel` is a subclass of [`PreTrainedModel`], make sure its `config_class` attribute is set to the same class you use when registering the model (here `NewModelConfig`).
 
 </Tip>
+
+## Notes
+
+- Each of the auto classes has a method to be extended with your custom classes. If you have defined a custom class of model `NewModel`, make sure you have a `NewModelConfig` then you can add those to the auto classes:
+
+  ```python
+  from transformers import AutoConfig, AutoModel
+
+  AutoConfig.register("new-model", NewModelConfig)
+  AutoModel.register(NewModelConfig, NewModel)
+  ```
+
+  You will then be able to use the auto classes like you would usually do!
+
+- If your `NewModelConfig` is a subclass of [`~transformers.PretrainedConfig`], make sure its `model_type` attribute is set to the same key you use when registering the config (here `"new-model"`).
+
+- If your `NewModel` is a subclass of [`PreTrainedModel`], make sure its `config_class` attribute is set to the same class you use when registering the model (here `NewModelConfig`).
 
 ## AutoConfig
 
