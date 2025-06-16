@@ -223,12 +223,15 @@ class InternVLProcessor(ProcessorMixin):
             image_num_patches_indices = np.cumsum(image_num_patches)
         if videos is not None:
             videos = make_batched_videos(videos)
-            num_frames_per_video = [len(video) for video in videos]
-            video_patch_indices = np.cumsum(num_frames_per_video)
             video_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
+            video_pixel_values = video_inputs.pop("pixel_values_videos")
+
+            # Obtain per frame information first and then flatten to (BS * T, ...)
+            num_frames_per_video = [len(video) for video in video_pixel_values]
             video_num_patches = [1 for frames in num_frames_per_video for _ in range(frames)]
-            video_pixel_values = video_inputs.pop("pixel_values_videos").flatten(0, 1)
+            video_patch_indices = np.cumsum(num_frames_per_video)
             video_num_patches_indices = np.cumsum(video_num_patches)
+            video_pixel_values = video_pixel_values.flatten(0, 1)
 
         if images is not None or videos is not None:
             text, image_video_patches, image_index, video_index = self._insert_media_placeholders(
