@@ -48,9 +48,11 @@ config = AutoConfig.from_pretrained("google-bert/bert-base-cased")
 
 There is one class of `AutoModel` for each task, and for each backend (PyTorch, TensorFlow, or Flax).
 
-## Extending the Auto Classes
+## Notes
 
-Each of the auto classes has a method to be extended with your custom classes. For instance, if you have defined a custom class of model `NewModel`, make sure you have a `NewModelConfig` then you can add those to the auto classes like this:
+### Extending the Auto Classes
+
+Each of the auto classes has a method to be extended with your custom classes. If you have defined a custom class of model `NewModel`, make sure you have a `NewModelConfig` then you can add those to the auto classes:
 
 ```python
 from transformers import AutoConfig, AutoModel
@@ -68,23 +70,6 @@ If your `NewModelConfig` is a subclass of [`~transformers.PretrainedConfig`], ma
 Likewise, if your `NewModel` is a subclass of [`PreTrainedModel`], make sure its `config_class` attribute is set to the same class you use when registering the model (here `NewModelConfig`).
 
 </Tip>
-
-## Notes
-
-- Each of the auto classes has a method to be extended with your custom classes. If you have defined a custom class of model `NewModel`, make sure you have a `NewModelConfig` then you can add those to the auto classes:
-
-  ```python
-  from transformers import AutoConfig, AutoModel
-
-  AutoConfig.register("new-model", NewModelConfig)
-  AutoModel.register(NewModelConfig, NewModel)
-  ```
-
-  You will then be able to use the auto classes like you would usually do!
-
-- If your `NewModelConfig` is a subclass of [`~transformers.PretrainedConfig`], make sure its `model_type` attribute is set to the same key you use when registering the config (here `"new-model"`).
-
-- If your `NewModel` is a subclass of [`PreTrainedModel`], make sure its `config_class` attribute is set to the same class you use when registering the model (here `NewModelConfig`).
 
 ## AutoConfig
 
