@@ -1,8 +1,8 @@
-[![Secret Leaks](https://github.com/nodoubtz/2lit-formers/actions/workflows/trufflehog.yml/badge.svg?branch=Nodoubtz)](https://github.com/nodoubtz/2lit-formers/actions/workflows/trufflehog.yml)
+# 2lit-formers
+
+[![Badge indicating the status of the Secret Leaks workflow on GitHub Actions, showing the branch Nodoubtz](https://github.com/nodoubtz/2lit-formers/actions/workflows/trufflehog.yml/badge.svg?branch=Nodoubtz)](https://github.com/nodoubtz/2lit-formers/actions/workflows/trufflehog.yml)
 
 [![Deploy static content to Pages](https://github.com/nodoubtz/2lit-formers/actions/workflows/static.yml/badge.svg)](https://github.com/nodoubtz/2lit-formers/actions/workflows/static.yml)
-
-# 2lit-formers
 
 [![Homepage](https://img.shields.io/badge/docs-website-blue)](https://nodoubtz.github.io/2lit-formers/)
 [![GitHub](https://img.shields.io/badge/source-GitHub-green)](https://github.com/nodoubtz/2lit-formers)
