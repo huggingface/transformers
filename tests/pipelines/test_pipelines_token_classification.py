@@ -955,14 +955,17 @@ class TokenClassificationArgumentHandlerTestCase(unittest.TestCase):
 
         inputs, is_split_into_words, offset_mapping = self.args_parser(string)
         self.assertEqual(inputs, [string])
+        self.assertFalse(is_split_into_words)
         self.assertEqual(offset_mapping, None)
 
         inputs, is_split_into_words, offset_mapping = self.args_parser([string, string])
         self.assertEqual(inputs, [string, string])
+        self.assertFalse(is_split_into_words)
         self.assertEqual(offset_mapping, None)
 
         inputs, is_split_into_words, offset_mapping = self.args_parser(string, offset_mapping=[(0, 1), (1, 2)])
         self.assertEqual(inputs, [string])
+        self.assertFalse(is_split_into_words)
         self.assertEqual(offset_mapping, [[(0, 1), (1, 2)]])
 
         inputs, is_split_into_words, offset_mapping = self.args_parser(
