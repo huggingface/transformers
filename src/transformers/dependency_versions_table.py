@@ -71,7 +71,7 @@ deps = {
     "ruff": "ruff==0.11.2",
     "sacrebleu": "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses": "sacremoses",
-    "safetensors": "safetensors==0.6.0rc0",
+    "safetensors": "safetensors==0.6.0.dev0",
     "sagemaker": "sagemaker>=2.31.0",
     "schedulefree": "schedulefree>=1.2.6",
     "scikit-learn": "scikit-learn",
