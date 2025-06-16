@@ -22,77 +22,69 @@ rendered properly in your Markdown viewer.
 
 # RoCBert
 
-[RoCBert] is a BERT model that is specifically designed for the Chinese language. It is built to resist tricks and attacks, like misspellings or similar-looking words, that usually confuse language models.
+[RoCBert](https://aclanthology.org/2022.acl-long.65.pdf) is a pretrained Chinese [BERT](./bert) model designed against adversarial attacks like typos and synonyms. It is pretrained with a contrastive learning objective to align normal and adversarial text examples. The examples include different semantic, phonetic, and visual features of Chinese. This makes RoCBert more robust against manipulation.
 
-You can find all the original [Model name] checkpoints under the [RoCBert](link) collection.
+You can find all the original RoCBert checkpoints under the [weiweishi](https://huggingface.co/weiweishi) profile.
 
 > [!TIP]
-> Click on the RoCBert models in the right sidebar for more examples of how to apply RoCBert to different chinese NLP tasks.
+> This model was contributed by [weiweishi](https://huggingface.co/weiweishi).
+>
+> Click on the RoCBert models in the right sidebar for more examples of how to apply RoCBert to different Chinese language tasks.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
 ```py
+import torch
 from transformers import pipeline
 
 pipeline = pipeline(
-    task="text-classification",
-    model="hfl/rocbert-base"
+    task="fill-mask",
+    model="weiweishi/roc-bert-base-zh",
+    torch_dtype=torch.float16,
+    device=0
 )
-pipeline("称呼") #Example Chinese input
+pipeline("這家餐廳的拉麵是我[MASK]過的最好的拉麵之")
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
 ```py
-# pip install datasets
 import torch
-from datasets import load_dataset
-from transformers import AutoProcessor, AutoTokenizer
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-model_name = "hfl/rocbert-base"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModel.from_pretrained(model_name)
-text = "大家好，无论谁正在阅读这篇文章"
+tokenizer = AutoTokenizer.from_pretrained(
+    "weiweishi/roc-bert-base-zh",
+)
+model = AutoModelForMaskedLM.from_pretrained(
+    "weiweishi/roc-bert-base-zh",
+    torch_dtype=torch.float16,
+    device_map="auto",
+)
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+inputs = tokenizer("這家餐廳的拉麵是我[MASK]過的最好的拉麵之", return_tensors="pt").to("cuda")
+
+with torch.no_grad():
+    outputs = model(**inputs)
+    predictions = outputs.logits
+
+masked_index = torch.where(inputs['input_ids'] == tokenizer.mask_token_id)[1]
+predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
+predicted_token = tokenizer.decode(predicted_token_id)
+
+print(f"The predicted token is: {predicted_token}")
 ```
 
 </hfoption>
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "水在零度时会[MASK]" | transformers-cli run --task fill-mask --model junnyu/roformer_chinese_base --device 0
+echo -e "這家餐廳的拉麵是我[MASK]過的最好的拉麵之" | transformers-cli run --task fill-mask --model weiweishi/roc-bert-base-zh --device 0
 ```
 
 </hfoption>
 </hfoptions>
-
-Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
-
-The example below uses [bitsandbytes](https://huggingface.co/docs/bitsandbytes/en/index) to only quantize the weights to 8 bits.
-
-```py
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, BitsAndBytesConfig
-
-model_id = "hfl/rocbert-base"  # or checkpoint for RoCBERT
-bnb_config = BitsAndBytesConfig(load_in_8bit=True)  # Or load_in_4bit=True
-
-model = AutoModelForSequenceClassification.from_pretrained(
-    model_id,
-    quantization_config=bnb_config,
-    device_map="auto"
-)
-tokenizer = AutoTokenizer.from_pretrained(model_id)
-```
-
-## Resources
-
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Causal language modeling task guide](../tasks/language_modeling)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
 
 ## RoCBertConfig
 
