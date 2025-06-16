@@ -28,6 +28,7 @@ from ..utils import (
     is_torch_available,
     logging,
 )
+from ..modeling_utils import VLMS
 
 
 if is_torch_available():
@@ -151,6 +152,8 @@ class PeftAdapterMixin:
         # peft only supports low_cpu_mem_usage starting from v0.13.0
         peft_load_kwargs = {}
         key_mapping = adapter_kwargs.pop("key_mapping", None) if adapter_kwargs is not None else None
+        if key_mapping is None and any(allowed_name in self.__class__.__name__.lower() for allowed_name in VLMS):
+            key_mapping = self._checkpoint_conversion_mapping
         if low_cpu_mem_usage:
             min_version_lcmu = "0.13.0"
             if version.parse(importlib.metadata.version("peft")) >= version.parse(min_version_lcmu):
