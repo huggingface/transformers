@@ -18,15 +18,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from typing import Callable, Optional, Tuple, Union
 
 import torch
 from torch import nn
 
-from transformers.activations import ACT2FN
 from transformers.utils import auto_docstring, logging
 
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
@@ -50,10 +49,24 @@ from .configuration_arcee import ArceeConfig
 logger = logging.get_logger(__name__)
 
 
+class ArceeMLP(nn.Module):
+    """Arcee MLP with configurable activation function (typically relu2)"""
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        return self.down_proj(self.act_fn(self.up_proj(x)))
+
+
 @use_kernel_forward_from_hub("RMSNorm")
 class ArceeRMSNorm(nn.Module):
-    """ArceeRMSNorm is identical to LlamaRMSNorm"""
-
     def __init__(self, hidden_size, eps=1e-6):
         """
         ArceeRMSNorm is equivalent to T5LayerNorm
@@ -73,21 +86,72 @@ class ArceeRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class ArceeMLP(nn.Module):
-    """Arcee MLP with configurable activation function (typically relu2)"""
+@auto_docstring
+class ArceePreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
 
-    def __init__(self, config):
+    config_class = ArceeConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["ArceeDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_cache_class = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
+    _supports_attention_backend = True
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, ArceeRMSNorm):
+            module.weight.data.fill_(1.0)
+
+
+class ArceeRotaryEmbedding(nn.Module):
+    def __init__(self, config: ArceeConfig, device=None):
         super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
 
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.up_proj(x)))
-        return down_proj
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 def rotate_half(x):
@@ -163,8 +227,7 @@ def eager_attention_forward(
 
 
 class ArceeAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper
-    Multi-headed attention for Arcee - identical to Llama attention"""
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: ArceeConfig, layer_idx: int):
         super().__init__()
@@ -234,14 +297,12 @@ class ArceeAttention(nn.Module):
 
 
 class ArceeDecoderLayer(GradientCheckpointingLayer):
-    """Arcee decoder layer with custom MLP"""
-
     def __init__(self, config: ArceeConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 
         self.self_attn = ArceeAttention(config=config, layer_idx=layer_idx)
-        # Replace the Llama MLP with Arcee MLP to use the correct activation
+
         self.mlp = ArceeMLP(config)
         self.input_layernorm = ArceeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = ArceeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -289,74 +350,6 @@ class ArceeDecoderLayer(GradientCheckpointingLayer):
 
 
 @auto_docstring
-class ArceePreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = ArceeConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["ArceeDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
-    _supports_attention_backend = True
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, ArceeRMSNorm):
-            module.weight.data.fill_(1.0)
-
-
-class ArceeRotaryEmbedding(nn.Module):
-    def __init__(self, config: ArceeConfig, device=None):
-        super().__init__()
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-@auto_docstring
 class ArceeModel(ArceePreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`ArceeDecoderLayer`]
@@ -371,7 +364,6 @@ class ArceeModel(ArceePreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        # The parent init handles most setup, we just need to ensure our decoder layers are used
         self.layers = nn.ModuleList(
             [ArceeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -502,8 +494,6 @@ class ArceeForCausalLM(ArceePreTrainedModel, GenerationMixin):
 
     def __init__(self, config):
         super().__init__(config)
-        # We need to set config_class before calling super().__init__
-        self.config_class = ArceeConfig
         self.model = ArceeModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -613,7 +603,6 @@ class ArceeForSequenceClassification(ArceePreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.config_class = ArceeConfig
         self.num_labels = config.num_labels
         self.model = ArceeModel(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
@@ -707,8 +696,6 @@ class ArceeForQuestionAnswering(ArceePreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.config_class = ArceeConfig
-        # Note: LlamaForQuestionAnswering uses self.transformer, not self.model
         self.transformer = ArceeModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
 
@@ -774,7 +761,6 @@ class ArceeForTokenClassification(ArceePreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.config_class = ArceeConfig
         self.num_labels = config.num_labels
         self.model = ArceeModel(config)
         if getattr(config, "classifier_dropout", None) is not None:

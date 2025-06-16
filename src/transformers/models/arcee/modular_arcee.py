@@ -14,24 +14,19 @@
 # limitations under the License.
 """PyTorch Arcee model."""
 
-from torch import nn
-
-from transformers.activations import ACT2FN
 from transformers.modeling_rope_utils import rope_config_validation
 from transformers.utils import auto_docstring, logging
 
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
-    LlamaAttention,
-    LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
     LlamaModel,
     LlamaPreTrainedModel,
-    LlamaRMSNorm,
 )
+from ..nemotron.modeling_nemotron import NemotronMLP
 
 
 logger = logging.get_logger(__name__)
@@ -201,42 +196,10 @@ class ArceeConfig(LlamaConfig):
         rope_config_validation(self)
 
 
-class ArceeRMSNorm(LlamaRMSNorm):
-    """ArceeRMSNorm is identical to LlamaRMSNorm"""
-
-    pass
-
-
-class ArceeMLP(nn.Module):
+class ArceeMLP(NemotronMLP):
     """Arcee MLP with configurable activation function (typically relu2)"""
 
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.up_proj(x)))
-        return down_proj
-
-
-class ArceeAttention(LlamaAttention):
-    """Multi-headed attention for Arcee - identical to Llama attention"""
-
     pass
-
-
-class ArceeDecoderLayer(LlamaDecoderLayer):
-    """Arcee decoder layer with custom MLP"""
-
-    def __init__(self, config: ArceeConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        # Replace the Llama MLP with Arcee MLP to use the correct activation
-        self.mlp = ArceeMLP(config)
 
 
 class ArceePreTrainedModel(LlamaPreTrainedModel):
@@ -245,7 +208,7 @@ class ArceePreTrainedModel(LlamaPreTrainedModel):
     models.
     """
 
-    config_class = ArceeConfig
+    pass
 
 
 class ArceeModel(LlamaModel):
@@ -256,26 +219,13 @@ class ArceeModel(LlamaModel):
         config: ArceeConfig
     """
 
-    def __init__(self, config: ArceeConfig):
-        super().__init__(config)
-        # The parent init handles most setup, we just need to ensure our decoder layers are used
-        self.layers = nn.ModuleList(
-            [ArceeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        # Initialize weights and apply final processing
-        self.post_init()
+    pass
 
 
 class ArceeForCausalLM(LlamaForCausalLM):
     """Arcee Model transformer with a language modeling head on top (linear layer with weights tied to the input embeddings)."""
 
-    def __init__(self, config):
-        # We need to set config_class before calling super().__init__
-        self.config_class = ArceeConfig
-        super().__init__(config)
-        self.model = ArceeModel(config)
-        # Initialize weights and apply final processing
-        self.post_init()
+    pass
 
 
 @auto_docstring(checkpoint="arcee-ai/AFM-4.5B")
@@ -284,12 +234,7 @@ class ArceeForSequenceClassification(LlamaForSequenceClassification):
     The Arcee Model transformer with a sequence classification head on top (linear layer).
     """
 
-    def __init__(self, config):
-        self.config_class = ArceeConfig
-        super().__init__(config)
-        self.model = ArceeModel(config)
-        # Initialize weights and apply final processing
-        self.post_init()
+    pass
 
 
 @auto_docstring(checkpoint="arcee-ai/AFM-4.5B")
@@ -298,13 +243,7 @@ class ArceeForQuestionAnswering(LlamaForQuestionAnswering):
     The Arcee Model transformer with a span classification head on top for extractive question-answering tasks.
     """
 
-    def __init__(self, config):
-        self.config_class = ArceeConfig
-        super().__init__(config)
-        # Note: LlamaForQuestionAnswering uses self.transformer, not self.model
-        self.transformer = ArceeModel(config)
-        # Initialize weights and apply final processing
-        self.post_init()
+    pass
 
 
 @auto_docstring(checkpoint="arcee-ai/AFM-4.5B")
@@ -313,12 +252,7 @@ class ArceeForTokenClassification(LlamaForTokenClassification):
     The Arcee Model transformer with a token classification head on top.
     """
 
-    def __init__(self, config):
-        self.config_class = ArceeConfig
-        super().__init__(config)
-        self.model = ArceeModel(config)
-        # Initialize weights and apply final processing
-        self.post_init()
+    pass
 
 
 __all__ = [
