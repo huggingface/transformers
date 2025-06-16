@@ -69,11 +69,22 @@ echo -e "水在零度时会[MASK]" | transformers-cli run --task fill-mask --mod
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [bitsandbytes](link to quantization method) to only quantize the weights to __.
+The example below uses [bitsandbytes](https://huggingface.co/docs/bitsandbytes/en/index) to only quantize the weights to 8 bits.
 
 ```py
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, BitsAndBytesConfig
 
+model_id = "hfl/rocbert-base"  # or checkpoint for RoCBERT
+bnb_config = BitsAndBytesConfig(load_in_8bit=True)  # Or load_in_4bit=True
+
+model = AutoModelForSequenceClassification.from_pretrained(
+    model_id,
+    quantization_config=bnb_config,
+    device_map="auto"
+)
+tokenizer = AutoTokenizer.from_pretrained(model_id)
 ```
+
 ## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)
