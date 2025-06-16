@@ -169,7 +169,7 @@ class TFFunnelAttentionStructure:
         For the relative shift attention, it returns all possible vectors R used in the paper, appendix A.2.1, final
         formula.
 
-        Paper link: https://arxiv.org/abs/2006.03236
+        Paper link: https://huggingface.co/papers/2006.03236
         """
         if self.attention_type == "factorized":
             # Notations from the paper, appending A.2.2, final formula.
@@ -443,7 +443,7 @@ class TFFunnelRelMultiheadAttention(keras.layers.Layer):
         """Relative attention score for the positional encodings"""
         # q_head has shape batch_size x sea_len x n_head x d_head
         if self.attention_type == "factorized":
-            # Notations from the paper, appending A.2.2, final formula (https://arxiv.org/abs/2006.03236)
+            # Notations from the paper, appending A.2.2, final formula (https://huggingface.co/papers/2006.03236)
             # phi and pi have shape seq_len x d_model, psi and omega have shape context_len x d_model
             phi, pi, psi, omega = position_embeds
             # Shape n_head x d_head
@@ -461,7 +461,7 @@ class TFFunnelRelMultiheadAttention(keras.layers.Layer):
                 "bind,jd->bnij", q_r_attention_2, omega
             )
         else:
-            # Notations from the paper, appending A.2.1, final formula (https://arxiv.org/abs/2006.03236)
+            # Notations from the paper, appending A.2.1, final formula (https://huggingface.co/papers/2006.03236)
             # Grab the proper positional encoding, shape max_rel_len x d_model
             if shape_list(q_head)[1] != context_len:
                 shift = 2
@@ -1112,7 +1112,7 @@ class TFFunnelForPreTrainingOutput(ModelOutput):
 FUNNEL_START_DOCSTRING = r"""
 
     The Funnel Transformer model was proposed in [Funnel-Transformer: Filtering out Sequential Redundancy for Efficient
-    Language Processing](https://arxiv.org/abs/2006.03236) by Zihang Dai, Guokun Lai, Yiming Yang, Quoc V. Le.
+    Language Processing](https://huggingface.co/papers/2006.03236) by Zihang Dai, Guokun Lai, Yiming Yang, Quoc V. Le.
 
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads

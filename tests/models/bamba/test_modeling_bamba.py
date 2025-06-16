@@ -27,6 +27,7 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    DeviceProperties,
     Expectations,
     get_device_properties,
     require_deterministic_for_xpu,
@@ -594,7 +595,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
     tokenizer = None
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
     # Depending on the hardware we get different logits / generations
-    device_properties = None
+    device_properties: DeviceProperties = (None, None, None)
 
     @classmethod
     def setUpClass(cls):
@@ -637,7 +638,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output_sentence, expected)
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.device_properties == ("cuda", 8):
+        if self.device_properties[0] == "cuda" and self.device_properties[1] == 8:
             with torch.no_grad():
                 logits = self.model(input_ids=input_ids, logits_to_keep=40).logits
 
@@ -690,7 +691,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output_sentences[1], EXPECTED_TEXT[1])
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
-        if self.device_properties == ("cuda", 8):
+        if self.device_properties[0] == "cuda" and self.device_properties[1] == 8:
             with torch.no_grad():
                 logits = self.model(input_ids=inputs["input_ids"]).logits
 

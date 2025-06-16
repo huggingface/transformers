@@ -2871,7 +2871,7 @@ class SqueezeExcitationRes2NetBlock(nn.Module):
 class ECAPA_TimeDelayNet(torch.nn.Module):
     """An implementation of the speaker embedding model in a paper.
     "ECAPA-TDNN: Emphasized Channel Attention, Propagation and Aggregation in
-    TDNN Based Speaker Verification" (https://arxiv.org/abs/2005.07143).
+    TDNN Based Speaker Verification" (https://huggingface.co/papers/2005.07143).
     """
 
     def __init__(self, config: Qwen2_5OmniDiTConfig):
@@ -3236,7 +3236,7 @@ class SnakeBeta(nn.Module):
         - beta - trainable parameter that controls magnitude
     References:
         - This activation function is a modified version based on this paper by Liu Ziyin, Tilman Hartwig, Masahito Ueda:
-        https://arxiv.org/abs/2006.08195
+        https://huggingface.co/papers/2006.08195
     """
 
     def __init__(self, in_features, alpha=1.0):
