@@ -61,35 +61,23 @@ class Glm4vVisionText2TextModelTester:
         num_channels=3,
         ignore_index=-100,
         image_size=14,
-        bos_token_id=0,
-        eos_token_id=1,
-        pad_token_id=2,
         vision_start_token_id=3,
         image_token_id=4,
         video_token_id=5,
-        hidden_act="silu",
-        hidden_size=32,
-        vocab_size=99,
-        intermediate_size=37,
-        max_position_embeddings=512,
-        max_window_layers=3,
-        model_type="glm4v",
-        num_attention_heads=4,
-        num_hidden_layers=4,
-        num_key_value_heads=2,
-        rope_theta=10000,
-        tie_word_embeddings=True,
         is_training=True,
         text_config={
-            "model_type": "cohere2",
             "vocab_size": 99,
-            "hidden_size": 128,
+            "hidden_size": 32,
             "intermediate_size": 37,
             "num_hidden_layers": 4,
             "num_attention_heads": 4,
+            "num_key_value_heads": 2,
             "output_channels": 64,
             "hidden_act": "silu",
             "max_position_embeddings": 512,
+            "rope_scaling": {"type": "mrope", "mrope_section": [2, 1, 1]},
+            "max_window_layers": 3,
+            "rope_theta": 10000,
             "tie_word_embeddings": True,
             "bos_token_id": 0,
             "eos_token_id": 0,
@@ -106,35 +94,22 @@ class Glm4vVisionText2TextModelTester:
             "spatial_merge_size": 1,
             "temporal_patch_size": 2,
         },
-        rope_scaling={"type": "mrope", "mrope_section": [2, 1, 1]},
     ):
         self.parent = parent
         self.ignore_index = ignore_index
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
+        self.bos_token_id = text_config["bos_token_id"]
+        self.eos_token_id = text_config["eos_token_id"]
+        self.pad_token_id = text_config["pad_token_id"]
         self.vision_start_token_id = vision_start_token_id
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
-        self.hidden_act = hidden_act
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.max_position_embeddings = max_position_embeddings
-        self.max_window_layers = max_window_layers
-        self.model_type = model_type
-        self.num_attention_heads = num_attention_heads
-        self.num_hidden_layers = num_hidden_layers
-        self.num_key_value_heads = num_key_value_heads
-        self.rope_theta = rope_theta
-        self.tie_word_embeddings = tie_word_embeddings
         self.text_config = text_config
         self.vision_config = vision_config
-        self.rope_scaling = rope_scaling
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
         self.is_training = is_training
-        self.vocab_size = vocab_size
+        self.vocab_size = text_config["vocab_size"]
         self.num_image_tokens = 32
         self.seq_length = seq_length + self.num_image_tokens
 
@@ -142,19 +117,21 @@ class Glm4vVisionText2TextModelTester:
         return Glm4vConfig(
             text_config=self.text_config,
             vision_config=self.vision_config,
-            model_type=self.model_type,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
-            pad_token_id=self.pad_token_id,
             vision_start_token_id=self.vision_start_token_id,
             image_token_id=self.image_token_id,
             video_token_id=self.video_token_id,
-            vocab_size=self.vocab_size,
         )
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        patch_size = config.vision_config.patch_size
+        temporal_patch_size = config.vision_config.temporal_patch_size
+        pixel_values = floats_tensor(
+            [
+                self.batch_size * (self.image_size**2) // (patch_size**2),
+                self.num_channels * (patch_size**2) * temporal_patch_size,
+            ]
+        )
 
         return config, pixel_values
 
@@ -164,8 +141,14 @@ class Glm4vVisionText2TextModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
 
+        input_ids[input_ids == self.video_token_id] = self.pad_token_id
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
+        input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
+        input_ids[:, self.num_image_tokens] = self.image_token_id
+
         inputs_dict = {
             "pixel_values": pixel_values,
+            "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
