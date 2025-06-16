@@ -3,7 +3,7 @@ import os
 
 import torch
 
-from transformers.models.blt_wip.modeling_blt_wip import BLTModel
+from transformers.models.blt_wip.modeling_blt import BLTModel
 from transformers.models.blt_wip.tokenization_blt import BLTTokenizer
 
 
