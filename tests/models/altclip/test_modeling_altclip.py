@@ -377,8 +377,8 @@ class AltCLIPModelTester:
 
     def get_config(self):
         return AltCLIPConfig(
-            text_config=self.text_model_tester.get_config(),
-            vision_config=self.vision_model_tester.get_config(),
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
             projection_dim=64,
         )
 

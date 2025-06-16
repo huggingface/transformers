@@ -429,8 +429,8 @@ class SiglipModelTester:
 
     def get_config(self):
         return SiglipConfig(
-            text_config=self.text_model_tester.get_config(),
-            vision_config=self.vision_model_tester.get_config(),
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):

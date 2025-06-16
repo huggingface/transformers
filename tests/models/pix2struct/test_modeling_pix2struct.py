@@ -384,8 +384,8 @@ class Pix2StructModelTester:
 
     def get_config(self, text_config, vision_config):
         return Pix2StructConfig(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
+            text_config=self.text_model_tester.get_config().to_dict(),
+            vision_config=self.vision_model_tester.get_config().to_dict(),
             projection_dim=64,
         )
 

@@ -460,8 +460,8 @@ class ClapModelTester:
 
     def get_config(self):
         return ClapConfig(
-            text_config=self.text_model_tester.get_config(),
-            audio_config=self.audio_model_tester.get_config(),
+            text_config=self.text_model_tester.get_config().to_dict(),
+            audio_config=self.audio_model_tester.get_config().to_dict(),
             projection_dim=64,
         )
 
