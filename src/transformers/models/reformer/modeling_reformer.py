@@ -1840,7 +1840,7 @@ class ReformerModelOutput(ModelOutput):
 )
 class ReformerModelWithLMHeadOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape *(1,)*, *optional*, returned when `labels` is provided)
+    loss (`torch.FloatTensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, num_predict, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).

@@ -102,11 +102,18 @@ class CLIPSegDecoderOutput(ModelOutput):
 @auto_docstring
 class CLIPSegImageSegmentationOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-        Contrastive loss for image-text similarity.
-    ...
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Binary cross entropy loss for segmentation.
+    logits (`torch.FloatTensor` of shape `(batch_size, height, width)`):
+        Classification scores for each pixel.
+    conditional_embeddings (`torch.FloatTensor` of shape `(batch_size, projection_dim)`):
+        Conditional embeddings used for segmentation.
+    pooled_output (`torch.FloatTensor` of shape `(batch_size, embed_dim)`):
+        Pooled output of the [`CLIPSegVisionModel`].
     vision_model_output (`BaseModelOutputWithPooling`):
         The output of the [`CLIPSegVisionModel`].
+    decoder_output (`CLIPSegDecoderOutput`):
+        The output of the [`CLIPSegDecoder`].
     """
 
     loss: Optional[torch.FloatTensor] = None

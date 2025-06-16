@@ -448,9 +448,13 @@ class DFineModelOutput(ModelOutput):
         Stacked intermediate logits (logits of each layer of the decoder).
     intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate reference points (reference points of each layer of the decoder).
+    intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
+    initial_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+        Initial reference points used for the first decoder layer.
     encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
         Sequence of hidden-states at the output of the last layer of the encoder of the model.
-    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+    init_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
         Initial reference points sent through the Transformer decoder.
     enc_topk_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
         Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
@@ -465,7 +469,7 @@ class DFineModelOutput(ModelOutput):
     enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
         Logits of predicted bounding boxes coordinates in the first stage.
     denoising_meta_values (`dict`):
-        Extra dictionary for the denoising related values
+        Extra dictionary for the denoising related values.
     """
 
     last_hidden_state: Optional[torch.FloatTensor] = None

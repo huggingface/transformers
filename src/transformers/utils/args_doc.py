@@ -989,8 +989,10 @@ def parse_docstring(docstring, max_indent_level=0, return_intro=False):
     Parse the docstring to extract the Args section and return it as a dictionary.
     The docstring is expected to be in the format:
     Args:
-        arg1 (type): Description of arg1.
-        arg2 (type): Description of arg2.
+        arg1 (type):
+            Description of arg1.
+        arg2 (type):
+            Description of arg2.
 
     # This function will also return the remaining part of the docstring after the Args section.
     Returns:/Example:
@@ -1021,7 +1023,6 @@ def parse_docstring(docstring, max_indent_level=0, return_intro=False):
     if args_section.split("\n")[0].strip() == 'r"""' or args_section.split("\n")[0].strip() == '"""':
         args_section = "\n".join(args_section.split("\n")[1:])
     args_section = set_min_indent(args_section, 0)
-
     params = {}
     if args_section:
         param_pattern = re.compile(
@@ -1144,7 +1145,7 @@ def format_args_docstring(args, model_name):
     return args
 
 
-def source_args_doc(args_classes: Union[object, List[object]]) -> dict:
+def get_args_doc_from_source(args_classes: Union[object, List[object]]) -> dict:
     if isinstance(args_classes, (list, tuple)):
         args_classes_dict = {}
         for args_class in args_classes:
@@ -1341,7 +1342,7 @@ def _process_regular_parameters(
     """
     docstring = ""
     source_args_dict = (
-        source_args_doc([ModelArgs, ImageProcessorArgs]) if source_args_dict is None else source_args_dict
+        get_args_doc_from_source([ModelArgs, ImageProcessorArgs]) if source_args_dict is None else source_args_dict
     )
     missing_args = {}
 
@@ -1434,7 +1435,7 @@ def _process_kwargs_parameters(
         undocumented_parameters (`list`): List to append undocumented parameters to
     """
     docstring = ""
-    source_args_dict = source_args_doc(ImageProcessorArgs)
+    source_args_dict = get_args_doc_from_source(ImageProcessorArgs)
 
     # Check if we need to add typed kwargs description to the docstring
     unroll_kwargs = func.__name__ in UNROLL_KWARGS_METHODS
@@ -1707,6 +1708,8 @@ def auto_method_docstring(
     # Add intro to the docstring before args description if needed
     if custom_intro is not None:
         docstring = set_min_indent(custom_intro, indent_level + 4)
+        if not docstring.strip().endswith("\n"):
+            docstring += "\n"
     else:
         docstring = add_intro_docstring(
             func, class_name=class_name, parent_class=parent_class, indent_level=indent_level
@@ -1761,7 +1764,10 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         if custom_args is None and doc_class:
             custom_args = doc_class
         docstring_args = auto_method_docstring(
-            cls.__init__, parent_class=cls, custom_args=custom_args, source_args_dict=source_args_doc(ModelOutputArgs)
+            cls.__init__,
+            parent_class=cls,
+            custom_args=custom_args,
+            source_args_dict=get_args_doc_from_source(ModelOutputArgs),
         ).__doc__
     indent_level = get_indent_level(cls)
     model_name_lowercase = get_model_name(cls)
@@ -1798,7 +1804,7 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
         elif is_dataclass:
             # No init function, we have a data class
             docstring += "\nArgs:\n" if not docstring_args else docstring_args
-            source_args_dict = source_args_doc(ModelOutputArgs)
+            source_args_dict = get_args_doc_from_source(ModelOutputArgs)
             doc_class = cls.__doc__ if cls.__doc__ else ""
             documented_kwargs, _ = parse_docstring(doc_class)
             for param_name, param_type_annotation in cls.__annotations__.items():

@@ -501,6 +501,10 @@ class RTDetrV2ModelOutput(ModelOutput):
         Stacked intermediate logits (logits of each layer of the decoder).
     intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
         Stacked intermediate reference points (reference points of each layer of the decoder).
+    intermediate_predicted_corners (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate predicted corners (predicted corners of each layer of the decoder).
+    initial_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+        Initial reference points used for the first decoder layer.
     encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
         Sequence of hidden-states at the output of the last layer of the encoder of the model.
     init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):

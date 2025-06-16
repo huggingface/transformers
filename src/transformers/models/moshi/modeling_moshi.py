@@ -83,13 +83,10 @@ class MoshiConditionalGenerationGenerateOutput(ModelOutput):
         Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
         `torch.FloatTensor` of shape `(batch_size*num_beams*num_return_sequences, generated_length, hidden_size)`.
     past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True`):
-
-
-
-            Returns the model cache, used to speed up decoding. Different models have a different cache format, check
-            the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
-        audio_codes (`torch.LongTensor` of shape `(batch_size*num_return_sequences, num_codeooks, sequence_length)`, *optional*):
-            The generated audio codes. Returned if `return_audio_codes=True`. Intermediate audio "tokens" which transforms to `audio_sequences` once passed through the audio decoder.
+        Contains the model cache, used to speed up decoding. Different models have a different cache format, check
+        the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
+    audio_codes (`torch.LongTensor` of shape `(batch_size*num_return_sequences, num_codeooks, sequence_length)`, *optional*):
+        The generated audio codes. Returned if `return_audio_codes=True`. Intermediate audio "tokens" which transforms to `audio_sequences` once passed through the audio decoder.
     """
 
     audio_sequences: Optional[torch.Tensor] = None

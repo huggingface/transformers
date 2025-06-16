@@ -51,7 +51,7 @@ class MimiOutput(ModelOutput):
     r"""
     audio_codes (`torch.LongTensor`  of shape `(batch_size, num_quantizers, codes_length)`, *optional*):
         Discret code embeddings computed using `model.encode`.
-    audio_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*)
+    audio_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
         Decoded audio values, obtained using the decoder part of Mimi.
     encoder_past_key_values (`Cache`, *optional*):
         Pre-computed hidden-states (key and values in the self-attention blocks) that can be used to speed up sequential decoding of the encoder transformer.

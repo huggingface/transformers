@@ -77,7 +77,7 @@ class OmDetTurboDecoderOutput(ModelOutput):
         The predicted classes of the objects.
     encoder_coord_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
         The predicted coordinates of the objects from the encoder.
-    encoder_class_logits (`Tuple[torch.FloatTensor]`) of shape `(batch_size, num_queries, num_classes)`:
+    encoder_class_logits (`Tuple[torch.FloatTensor]` of shape `(batch_size, num_queries, num_classes)`):
         The predicted class of the objects from the encoder.
     init_reference_points (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
         The initial reference points.

@@ -2184,6 +2184,9 @@ class Qwen2_5OmniTalkerCausalLMOutputWithPast(ModelOutput):
         `past_key_values` input) to speed up sequential decoding.
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
+    thinker_reply_part (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Hidden states from the thinker model that are used as input for the talker model. These represent the encoded
+        response that the talker model will use to generate speech tokens.
     """
 
     loss: Optional[torch.FloatTensor] = None

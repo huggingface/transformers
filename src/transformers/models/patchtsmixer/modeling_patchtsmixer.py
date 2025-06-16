@@ -1226,12 +1226,12 @@ class PatchTSMixerModelOutput(ModelOutput):
         Hidden-states of the model at the output of each layer.
     patch_input (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, patch_length)`):
         Patched input data to the model.
-    mask: (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches)`,*optional*):
+    mask (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches)`, *optional*):
         Bool Tensor indicating True in masked patches and False otherwise.
-    loc: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`,*optional*):
+    loc (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`, *optional*):
         Gives the mean of the context window per channel. Used for revin denorm outside the model, if revin
         enabled.
-    scale: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`,*optional*):
+    scale (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`, *optional*):
         Gives the std dev of the context window per channel. Used for revin denorm outside the model, if revin
         enabled.
     """

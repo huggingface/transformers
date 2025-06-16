@@ -49,7 +49,7 @@ logger = logging.get_logger(__name__)
 )
 class BaseModelOutputWithIntermediateActivations(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    last_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
     intermediate_activations (`tuple(torch.FloatTensor)`, *optional*):
         Intermediate activations that can be used to compute hidden states of the model at various layers.

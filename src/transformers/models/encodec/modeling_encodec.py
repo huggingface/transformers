@@ -43,6 +43,8 @@ class EncodecOutput(ModelOutput):
     r"""
     audio_codes (`torch.LongTensor`  of shape `(batch_size, nb_chunks, chunk_length)`, *optional*):
         Discret code embeddings computed using `model.encode`.
+    audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
+        Decoded audio values, obtained using the decoder part of Encodec.
     """
 
     audio_codes: Optional[torch.LongTensor] = None

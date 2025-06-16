@@ -48,7 +48,14 @@ from check_repo import ignore_undocumented
 from git import Repo
 
 from transformers.utils import direct_transformers_import
-from transformers.utils.args_doc import ImageProcessorArgs, ModelArgs, parse_docstring, set_min_indent, source_args_doc
+from transformers.utils.args_doc import (
+    ImageProcessorArgs,
+    ModelArgs,
+    ModelOutputArgs,
+    get_args_doc_from_source,
+    parse_docstring,
+    set_min_indent,
+)
 
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
@@ -1080,7 +1087,9 @@ def generate_new_docstring_for_signature(
     sig_end_line,
     docstring_line,
     arg_indent="    ",
+    output_docstring_indent=8,
     custom_args_dict={},
+    source_args_doc=[ModelArgs, ImageProcessorArgs],
 ):
     """
     Generalized docstring generator for a function or class signature.
@@ -1097,13 +1106,6 @@ def generate_new_docstring_for_signature(
     missing_docstring_args = []
     fill_docstring_args = []
 
-    signature_content = lines[sig_start_line:sig_end_line]
-    signature_content = [line.split("#")[0] for line in signature_content]
-    signature_content = "".join(signature_content)
-    signature_content = "".join(signature_content.split(")")[:-1])
-    args_in_signature = re.findall(r"[,(]\s*(\w+)\s*(?=:|=|,|\))", signature_content)
-    if "self" in args_in_signature:
-        args_in_signature.remove("self")
     # Parse docstring if present
     args_docstring_dict = {}
     remaining_docstring = ""
@@ -1117,11 +1119,32 @@ def generate_new_docstring_for_signature(
         docstring_content = lines[docstring_line : docstring_end + 1]
         parsed_docstring, remaining_docstring = parse_docstring("\n".join(docstring_content))
         args_docstring_dict.update(parsed_docstring)
+
+    if ModelOutputArgs not in source_args_doc:
+        signature_content = lines[sig_start_line:sig_end_line]
+        signature_content = [line.split("#")[0] for line in signature_content]
+        signature_content = "".join(signature_content)
+        signature_content = "".join(signature_content.split(")")[:-1])
+        args_in_signature = re.findall(r"[,(]\s*(\w+)\s*(?=:|=|,|\))", signature_content)
+    else:
+        model_output_class_start = docstring_end + 1
+        model_output_class_end = model_output_class_start
+        while model_output_class_end < len(lines) and (
+            lines[model_output_class_end].startswith("    ") or lines[model_output_class_end] == ""
+        ):
+            model_output_class_end += 1
+        signature_content = lines[model_output_class_start : model_output_class_end - 1]
+        signature_content = [line.split("#")[0] for line in signature_content]
+        signature_content = "\n".join(signature_content)
+        args_in_signature = re.findall(r"^    (\w+)(?:\s*:|\s*=|\s*$)", signature_content, re.MULTILINE)
+    if "self" in args_in_signature:
+        args_in_signature.remove("self")
+
     # Fill missing args
     for arg in args_in_signature:
         if (
             arg not in args_docstring_dict
-            and arg not in source_args_doc([ModelArgs, ImageProcessorArgs])
+            and arg not in get_args_doc_from_source(source_args_doc)
             and arg not in custom_args_dict
         ):
             missing_docstring_args.append(arg)
@@ -1129,7 +1152,7 @@ def generate_new_docstring_for_signature(
                 "type": "<fill_type>",
                 "optional": False,
                 "shape": None,
-                "description": f"\n{arg_indent}    <fill_docstring>",
+                "description": "    <fill_docstring>",
                 "default": None,
                 "additional_info": None,
             }
@@ -1153,7 +1176,7 @@ def generate_new_docstring_for_signature(
             new_docstring += f"{set_min_indent(remaining_docstring, 0)}{end_docstring}"
         if close_docstring:
             new_docstring += '"""'
-        new_docstring = set_min_indent(new_docstring, 8)
+        new_docstring = set_min_indent(new_docstring, output_docstring_indent)
     return new_docstring, sig_end_line, docstring_end, missing_docstring_args, fill_docstring_args
 
 
@@ -1180,6 +1203,7 @@ def generate_new_docstring_for_class(lines, current_line_end, custom_args_dict):
     """
     init_method_line = current_line_end
     found_init_method = False
+    found_model_output = False
     while init_method_line < len(lines) - 1 and not found_init_method:
         init_method_line += 1
         if "    def __init__" in lines[init_method_line]:
@@ -1187,8 +1211,15 @@ def generate_new_docstring_for_class(lines, current_line_end, custom_args_dict):
         elif lines[init_method_line].startswith("class "):
             break
     if not found_init_method:
-        return "", None, None, None, [], []
-    init_method_sig_line_end = _find_sig_line(lines, init_method_line)
+        if "ModelOutput" in lines[current_line_end]:
+            found_model_output = True
+            init_method_line = current_line_end
+        else:
+            return "", None, None, None, [], []
+    if not found_model_output:
+        init_method_sig_line_end = _find_sig_line(lines, init_method_line)
+    else:
+        init_method_sig_line_end = init_method_line + 1
     docstring_line = init_method_sig_line_end if '"""' in lines[init_method_sig_line_end] else None
     new_docstring, _, init_method_docstring_end, missing_docstring_args, fill_docstring_args = (
         generate_new_docstring_for_signature(
@@ -1198,8 +1229,12 @@ def generate_new_docstring_for_class(lines, current_line_end, custom_args_dict):
             docstring_line,
             arg_indent="",
             custom_args_dict=custom_args_dict,
+            output_docstring_indent=4 if found_model_output else 8,
+            source_args_doc=[ModelArgs, ImageProcessorArgs] if not found_model_output else [ModelOutputArgs],
         )
     )
+    if missing_docstring_args:
+        print("missing_docstring_args", missing_docstring_args)
     return (
         new_docstring,
         init_method_line,
@@ -1418,9 +1453,6 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
             hard_failures.append(name)
             continue
         if old_doc != new_doc:
-            print("name", name)
-            print("old_doc", old_doc)
-            print("new_doc", new_doc)
             if overwrite:
                 fix_docstring(obj, old_doc, new_doc)
             else:

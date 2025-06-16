@@ -43,15 +43,11 @@ class TimmWrapperModelOutput(ModelOutput):
         The last hidden state of the model, output before applying the classification head.
     pooler_output (`torch.FloatTensor`, *optional*):
         The pooled output derived from the last hidden state, if applicable.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned if `output_hidden_states=True` is set or if `config.output_hidden_states=True`):
         A tuple containing the intermediate hidden states of the model at the output of each layer or specified layers.
-
-
-            Returned if `output_hidden_states=True` is set or if `config.output_hidden_states=True`.
-        attentions (`tuple(torch.FloatTensor)`, *optional*):
-            A tuple containing the intermediate attention weights of the model at the output of each layer.
-            Returned if `output_attentions=True` is set or if `config.output_attentions=True`.
-            Note: Currently, Timm models do not support attentions output.
+    attentions (`tuple(torch.FloatTensor)`, *optional*, returned if `output_attentions=True` is set or if `config.output_attentions=True`.):
+        A tuple containing the intermediate attention weights of the model at the output of each layer.
+        Note: Currently, Timm models do not support attentions output.
     """
 
     last_hidden_state: torch.FloatTensor

@@ -785,11 +785,11 @@ class PatchTSTModelOutput(ModelOutput):
         Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
         one for the output of each layer) of shape `(batch_size, num_channels, height, width)`. Hidden-states of
         the model at the output of each layer plus the optional initial embedding outputs.
-    mask: (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches)`, *optional*)
+    mask (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches)`, *optional*):
         Bool masked tensor indicating which patches are masked
-    loc: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`, *optional*)
+    loc (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`, *optional*):
         Mean of the input data (batch_size, sequence_length, num_channels) over the sequence_length
-    scale: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`, *optional*)
+    scale (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`, *optional*):
         Std of the input data (batch_size, sequence_length, num_channels) over the sequence_length
     patch_input (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, patch_length)`):
         Patched input to the Transformer
@@ -814,7 +814,7 @@ class PatchTSTForPretrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
         MSE loss.
-    prediction_outputs (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    prediction_output (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction outputs of the time series modeling heads.
     """
 

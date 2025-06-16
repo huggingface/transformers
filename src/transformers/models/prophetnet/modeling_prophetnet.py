@@ -252,7 +252,7 @@ class ProphetNetDecoderModelOutput(ModelOutput):
 
         Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
         used (see `past_key_values` input) to speed up sequential decoding.
-    ngram_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+    hidden_states_ngram (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
         Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
         shape `(batch_size, ngram * decoder_sequence_length, hidden_size)`.
 
@@ -310,6 +310,12 @@ class ProphetNetDecoderLMOutput(ModelOutput):
 
         Attentions weights of the predict stream of the decoder, after the attention softmax, used to compute the
         weighted average in the
+    hidden_states_ngram (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+        shape `(batch_size, ngram * decoder_sequence_length, hidden_size)`.
+
+        Hidden-states of the predict stream of the decoder at the output of each layer plus the initial embedding
+        outputs.
     """
 
     loss: Optional[torch.FloatTensor] = None

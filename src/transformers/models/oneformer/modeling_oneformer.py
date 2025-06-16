@@ -738,7 +738,7 @@ class OneFormerLoss(nn.Module):
 )
 class OneFormerTransformerDecoderOutput(BaseModelOutput):
     r"""
-    object_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_dim)`):
+    object_queries (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_dim)`):
         Queries representation for the region proposals.
     contrastive_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_dim)`):
         Queries representation for the contrastive loss.
@@ -829,19 +829,19 @@ class OneFormerModelOutput(ModelOutput):
         Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
         shape `(batch_size, sequence_length, hidden_size)`. Hidden-states (also called feature maps) of the
         transformer decoder at the output of each stage.
-    transformer_decoder_object_queries (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_dim)`)
+    transformer_decoder_object_queries (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_dim)`):
         Output object queries from the last layer in the transformer decoder.
-    transformer_decoder_contrastive_queries (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_dim)`)
+    transformer_decoder_contrastive_queries (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_dim)`):
         Contrastive queries from the transformer decoder.
-    transformer_decoder_mask_predictions (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`)
+    transformer_decoder_mask_predictions (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`):
         Mask Predictions from the last layer in the transformer decoder.
     transformer_decoder_class_predictions (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes+1)`):
         Class Predictions from the last layer in the transformer decoder.
     transformer_decoder_auxiliary_predictions (Tuple of Dict of `str, torch.FloatTensor`, *optional*):
         Tuple of class and mask predictions from each layer of the transformer decoder.
-    text_queries (`torch.FloatTensor`, *optional* of shape `(batch_size, num_queries, hidden_dim)`)
+    text_queries (`torch.FloatTensor`, *optional* of shape `(batch_size, num_queries, hidden_dim)`):
         Text queries derived from the input text list used for calculating contrastive loss during training.
-    task_token (`torch.FloatTensor` of shape `(batch_size, hidden_dim)`)
+    task_token (`torch.FloatTensor` of shape `(batch_size, hidden_dim)`):
         1D task token to condition the queries.
     attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
         Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
@@ -896,19 +896,19 @@ class OneFormerForUniversalSegmentationOutput(ModelOutput):
         Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
         shape `(batch_size, sequence_length, hidden_size)`. Hidden-states (also called feature maps) of the
         transformer decoder at the output of each stage.
-    transformer_decoder_object_queries (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_dim)`)
+    transformer_decoder_object_queries (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_dim)`):
         Output object queries from the last layer in the transformer decoder.
-    transformer_decoder_contrastive_queries (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_dim)`)
+    transformer_decoder_contrastive_queries (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_dim)`):
         Contrastive queries from the transformer decoder.
-    transformer_decoder_mask_predictions (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`)
+    transformer_decoder_mask_predictions (`torch.FloatTensor` of shape `(batch_size, num_queries, height, width)`):
         Mask Predictions from the last layer in the transformer decoder.
     transformer_decoder_class_predictions (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes+1)`):
         Class Predictions from the last layer in the transformer decoder.
     transformer_decoder_auxiliary_predictions (List of Dict of `str, torch.FloatTensor`, *optional*):
         List of class and mask predictions from each layer of the transformer decoder.
-    text_queries (`torch.FloatTensor`, *optional* of shape `(batch_size, num_queries, hidden_dim)`)
+    text_queries (`torch.FloatTensor`, *optional* of shape `(batch_size, num_queries, hidden_dim)`):
         Text queries derived from the input text list used for calculating contrastive loss during training.
-    task_token (`torch.FloatTensor` of shape `(batch_size, hidden_dim)`)
+    task_token (`torch.FloatTensor` of shape `(batch_size, hidden_dim)`):
         1D task token to condition the queries.
     attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
         Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,

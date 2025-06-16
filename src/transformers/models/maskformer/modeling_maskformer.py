@@ -189,6 +189,8 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
     masks_queries_logits (`torch.FloatTensor`):
         A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
         query.
+    auxiliary_logits (`Dict[str, torch.FloatTensor]`, *optional*, returned when `output_auxiliary_logits=True`):
+        Dictionary containing auxiliary predictions for each decoder layer when auxiliary losses are enabled.
     encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
         Last hidden states (final feature map) of the last stage of the encoder model (backbone).
     pixel_decoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
