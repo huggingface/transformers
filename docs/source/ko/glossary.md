@@ -95,7 +95,7 @@ rendered properly in your Markdown viewer.
 
 컬러 이미지는 빨간색(R), 초록색(G), 파란색(B)의 세 채널 값을 조합하여 구성되며, 흑백 이미지는 단일 채널만을 가집니다. 🤗 Transformers에서는 이미지 텐서의 채널이 첫 번째 또는 마지막 차원에 위치할 수 있습니다:[`n_channels`, `height`, `width`] 또는 [`height`, `width`, `n_channels`]와 같은 형식입니다.
 
-### 연결 시간분류(connectionist temporal classification) 
+### 연결 시간분류(connectionist temporal classification, CTC) 
 
 입력과 출력의 정렬 상태를 정확히 몰라도 모델이 학습할 수 있도록 돕는 알고리즘입니다. CTC는 주어진 입력에 대해 가능한 모든 출력의 확률 분포를 계산하고, 그중 가장 가능성이 높은 출력을 선택합니다. CTC는 말하는 속도의 차이 등 여러 이유로 음성과 텍스트가 항상 정확하게 일치하지 않기 때문에 음성 인식 작업에서 자주 사용됩니다.
 
