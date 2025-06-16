@@ -17,7 +17,6 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ... import is_torch_available, is_vision_available
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
@@ -29,7 +28,9 @@ from ...image_utils import (
     infer_channel_dimension_format,
     is_pil_image,
     is_scaled_image,
+    is_torch_available,
     is_valid_image,
+    is_vision_available,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
