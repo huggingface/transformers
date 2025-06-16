@@ -4251,11 +4251,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMi
         device_mesh = kwargs.pop("device_mesh", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
 
-        # Load models with hardcoded key mapping on class for VLMs only,  to keep BC and standardize model
-        if any(allowed_name in cls.__name__.lower() for allowed_name in VLMS):
-            key_mapping = kwargs.pop("key_mapping", cls._checkpoint_conversion_mapping)
-        else:
-            key_mapping = kwargs.pop("key_mapping", None)
+        key_mapping = kwargs.pop("key_mapping", None)
+        # Load models with hardcoded key mapping on class for VLMs only, to keep BC and standardize model
+        if key_mapping is None and any(allowed_name in cls.__name__.lower() for allowed_name in VLMS):
+            key_mapping = cls._checkpoint_conversion_mapping
 
         # Not used anymore -- remove them from the kwargs
         _ = kwargs.pop("resume_download", None)

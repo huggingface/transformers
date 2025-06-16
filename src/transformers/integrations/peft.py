@@ -44,6 +44,26 @@ MIN_PEFT_VERSION = "0.5.0"
 logger = logging.get_logger(__name__)
 
 
+# DO NOT MODIFY, KEPT FOR BC ONLY
+VLMS = [
+    "aria",
+    "ayavision",
+    "emu3",
+    "fuyu",
+    "gotocr2",
+    "gemma3",
+    "internvl",
+    "llava",  # all llava prefixed models fall under this check
+    "mistral3",
+    "mllama",
+    "paligemma",
+    "qwen2vl",
+    "qwen2_5_vl",
+    "videollava",
+    "vipllava",
+]
+
+
 class PeftAdapterMixin:
     """
     A class containing all functions for loading and using adapters weights that are supported in PEFT library. For
@@ -151,6 +171,8 @@ class PeftAdapterMixin:
         # peft only supports low_cpu_mem_usage starting from v0.13.0
         peft_load_kwargs = {}
         key_mapping = adapter_kwargs.pop("key_mapping", None) if adapter_kwargs is not None else None
+        if key_mapping is None and any(allowed_name in self.__class__.__name__.lower() for allowed_name in VLMS):
+            key_mapping = self._checkpoint_conversion_mapping
         if low_cpu_mem_usage:
             min_version_lcmu = "0.13.0"
             if version.parse(importlib.metadata.version("peft")) >= version.parse(min_version_lcmu):
