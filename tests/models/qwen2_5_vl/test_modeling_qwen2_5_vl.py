@@ -14,7 +14,6 @@
 """Testing suite for the PyTorch Qwen2.5-VL model."""
 
 import copy
-import gc
 import tempfile
 import unittest
 
@@ -29,7 +28,6 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
-    backend_empty_cache,
     cleanup,
     is_flaky,
     require_cv2,
@@ -423,7 +421,6 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text], images=[self.image], return_tensors="pt")
 
-        # breakpoint()
         expected_input_ids = [151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 151652, 151655, 151655]  # fmt: skip
         torch.testing.assert_close(expected_input_ids, inputs.input_ids[0].tolist()[:17])
 
@@ -445,7 +442,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         inputs = inputs.to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = 'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in'
+        EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in"
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -470,7 +467,6 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
             'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
         ]  # fmt: skip
 
-        # breakpoint()
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -492,7 +488,6 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
             'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
         ]  # fmt: skip
 
-        # breakpoint()
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -521,7 +516,6 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
             'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\n addCriterion',
         ]  # fmt: skip
 
-        # breakpoint()
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -546,11 +540,10 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is',
+            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in",
+            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is",
         ]
 
-        # breakpoint()
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
