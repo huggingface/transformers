@@ -27,6 +27,8 @@ rendered properly in your Markdown viewer.
 You can find all the original Aya Vision checkpoints under the [Aya Vision](https://huggingface.co/collections/CohereLabs/cohere-labs-aya-vision-67c4ccd395ca064308ee1484) collection.
 
 > [!TIP]
+> This model was contributed by [saurabhdash](https://huggingface.co/saurabhdash) and [yonigozlan](https://huggingface.co/yonigozlan).
+> 
 > Click on the Aya Vision models in the right sidebar for more examples of how to apply Aya Vision to different image-to-text tasks.
 
 The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
@@ -50,7 +52,6 @@ messages = [
 outputs = pipe(text=messages, max_new_tokens=300, return_full_text=False)
 
 print(outputs)
-
 ```
 
 </hfoption>
@@ -89,17 +90,16 @@ gen_tokens = model.generate(
 )
 
 print(processor.tokenizer.decode(gen_tokens[0][inputs.input_ids.shape[1]:], skip_special_tokens=True))
-
 ```
 
 </hfoption>
-
 </hfoptions>
 
 Quantization reduces the memory footprint of large models by representing weights at lower precision. Refer to the [Quantization](../quantization/overview) overview for supported backends.
-```python
 
-#pip install transformers accelerate bitsandbytes
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
+
+```python
 import torch
 from transformers import (
     AutoProcessor,
@@ -107,26 +107,20 @@ from transformers import (
     BitsAndBytesConfig
 )
 
-model_id = "CohereLabs/aya-vision-32b"
-device = "cuda"  # or "cuda:0"
-
-# Define your 4‑bit quantization config
 bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,                    # enable 4‑bit loading
-    bnb_4bit_quant_type="nf4",            # use NormalFloat4 quantization
-    bnb_4bit_compute_dtype=torch.bfloat16,# computation dtype (bfloat16 or float16)
-    bnb_4bit_use_double_quant=True        # double-quantization for better accuracy
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.bfloat16,
+    bnb_4bit_use_double_quant=True
 )
 
-# Load processor and quantized model
-processor = AutoProcessor.from_pretrained(model_id, use_fast=True)
+processor = AutoProcessor.from_pretrained("CohereLabs/aya-vision-32b", use_fast=True)
 model = AutoModelForImageTextToText.from_pretrained(
-    model_id,
+    "CohereLabs/aya-vision-32b",
     quantization_config=bnb_config,
-    device_map="auto"   # auto-assign layers to devices
+    device_map="auto"
 )
 
-# Quick inference check
 inputs = processor.apply_chat_template(
     [
     {"role": "user", "content": [
@@ -138,7 +132,7 @@ inputs = processor.apply_chat_template(
     add_generation_prompt=True,
     tokenize=True,
     return_tensors="pt"
-).to(model.device)
+).to("cuda")
 
 generated = model.generate(**inputs, max_new_tokens=50)
 print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
@@ -151,18 +145,16 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
 - Use the [`~ProcessorMixin.apply_chat_template`] method to correctly format inputs.
 
 - The example below demonstrates inference with multiple images.
+  
     ```py
-        from transformers import AutoProcessor, AutoModelForImageTextToText
+    from transformers import AutoProcessor, AutoModelForImageTextToText
     import torch
-    
-    model_id = "CohereForAI/aya-vision-8b"
-    
-    processor = AutoProcessor.from_pretrained(model_id)
+        
+    processor = AutoProcessor.from_pretrained("CohereForAI/aya-vision-8b")
     model = AutoModelForImageTextToText.from_pretrained(
-        model_id, device_map="cuda:0", torch_dtype=torch.float16
+        "CohereForAI/aya-vision-8b", device_map="cuda", torch_dtype=torch.float16
     )
     
-    # Example with multiple images in a single message
     messages = [
         {
             "role": "user",
@@ -185,7 +177,7 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
     
     inputs = processor.apply_chat_template(
         messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
-    ).to(model.device)
+    ).to("cuda")
     
     gen_tokens = model.generate(
         **inputs, 
@@ -197,21 +189,19 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
     gen_text = processor.tokenizer.decode(gen_tokens[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
     print(gen_text)
     ```
+
 - The example below demonstrates inference with batched inputs.
+  
     ```py
     from transformers import AutoProcessor, AutoModelForImageTextToText
     import torch
-    
-    model_id = "CohereForAI/aya-vision-8b"
-    
+        
     processor = AutoProcessor.from_pretrained(model_id)
     model = AutoModelForImageTextToText.from_pretrained(
-        model_id, device_map="cuda:0", torch_dtype=torch.float16
+        "CohereForAI/aya-vision-8b", device_map="cuda", torch_dtype=torch.float16
     )
     
-    # Prepare two different conversations
     batch_messages = [
-        # First conversation with a single image
         [
             {
                 "role": "user",
@@ -221,7 +211,6 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
                 ],
             },
         ],
-        # Second conversation with multiple images
         [
             {
                 "role": "user",
@@ -243,7 +232,6 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
         ],
     ]
     
-    # Process each conversation separately and combine into a batch
     batch_inputs = processor.apply_chat_template(
         batch_messages, 
         padding=True, 
@@ -253,7 +241,6 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
         return_tensors="pt"
     ).to(model.device)
     
-    # Generate responses for the batch
     batch_outputs = model.generate(
         **batch_inputs,
         max_new_tokens=300,
@@ -261,7 +248,6 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
         temperature=0.3,
     )
     
-    # Decode the generated responses
     for i, output in enumerate(batch_outputs):
         response = processor.tokenizer.decode(
             output[batch_inputs.input_ids.shape[1]:], 
