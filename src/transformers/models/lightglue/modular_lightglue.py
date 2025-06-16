@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dataclasses import dataclass
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -20,16 +20,18 @@ from torch import nn
 from torch.nn.utils.rnn import pad_sequence
 
 from ...configuration_utils import PretrainedConfig
+from ...image_utils import ImageInput, to_numpy_array
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, auto_docstring, logging
+from ...utils import ModelOutput, TensorType, auto_docstring, is_matplotlib_available, logging
 from ...utils.generic import can_return_tuple
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from ..clip.modeling_clip import CLIPMLP
 from ..cohere.modeling_cohere import apply_rotary_pos_emb
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
+from ..superglue.image_processing_superglue import SuperGlueImageProcessor
 from ..superpoint import SuperPointConfig
 
 
@@ -248,6 +250,62 @@ class LightGlueKeypointMatchingOutput(ModelOutput):
     mask: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+class LightGlueImageProcessor(SuperGlueImageProcessor):
+    def post_process_keypoint_matching(
+        self,
+        outputs: LightGlueKeypointMatchingOutput,
+        target_sizes: Union[TensorType, List[Tuple]],
+        threshold: float = 0.0,
+    ) -> List[Dict[str, torch.Tensor]]:
+        return super().post_process_keypoint_matching(outputs, target_sizes, threshold)
+
+    def plot_keypoint_matching(self, images: ImageInput, keypoint_matching_output: LightGlueKeypointMatchingOutput):
+        """
+        Plots the image pairs side by side with the detected keypoints as well as the matching between them. Requires
+        matplotlib to be installed.
+
+        Args:
+            images (`ImageInput`):
+                Image pairs to plot. Same as `LightGlueImageProcessor.preprocess`. Expects either a list of 2 images or
+                a list of list of 2 images list with pixel values ranging from 0 to 255.
+            outputs ([`LightGlueKeypointMatchingOutput`]):
+                Raw outputs of the model.
+        """
+        if is_matplotlib_available():
+            import matplotlib.pyplot as plt
+        else:
+            raise ImportError("Please install matplotlib to use `plot_keypoint_matching` method")
+
+        images = validate_and_format_image_pairs(images)
+        images = [to_numpy_array(image) for image in images]
+        image_pairs = [images[i : i + 2] for i in range(0, len(images), 2)]
+
+        for image_pair, pair_output in zip(image_pairs, keypoint_matching_output):
+            height0, width0 = image_pair[0].shape[:2]
+            height1, width1 = image_pair[1].shape[:2]
+            plot_image = np.zeros((max(height0, height1), width0 + width1, 3))
+            plot_image[:height0, :width0] = image_pair[0] / 255.0
+            plot_image[:height1, width0:] = image_pair[1] / 255.0
+            plt.imshow(plot_image)
+            plt.axis("off")
+
+            keypoints0_x, keypoints0_y = pair_output["keypoints0"].unbind(1)
+            keypoints1_x, keypoints1_y = pair_output["keypoints1"].unbind(1)
+            for keypoint0_x, keypoint0_y, keypoint1_x, keypoint1_y, matching_score in zip(
+                keypoints0_x, keypoints0_y, keypoints1_x, keypoints1_y, pair_output["matching_scores"]
+            ):
+                plt.plot(
+                    [keypoint0_x, keypoint1_x + width0],
+                    [keypoint0_y, keypoint1_y],
+                    color=plt.get_cmap("RdYlGn")(matching_score.item()),
+                    alpha=0.9,
+                    linewidth=0.5,
+                )
+                plt.scatter(keypoint0_x, keypoint0_y, c="black", s=2)
+                plt.scatter(keypoint1_x + width0, keypoint1_y, c="black", s=2)
+            plt.show()
 
 
 class LightGluePositionalEncoder(nn.Module):
