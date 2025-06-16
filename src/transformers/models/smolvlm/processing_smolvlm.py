@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from ...tokenization_utils_base import PreTokenizedInput
 
 logger = logging.get_logger(__name__)
+logger.setLevel(logging.INFO)
 
 
 if is_num2words_available():
@@ -159,6 +160,7 @@ class SmolVLMProcessor(ProcessorMixin):
         chat_template: Optional[str] = None,
         **kwargs,
     ):
+        logger.info(f'Instantiating {self.__class__.__name__} parameters: {image_processor}, {tokenizer}, {video_processor}, {image_seq_len}, {chat_template}, {kwargs}')
         self.fake_image_token = getattr(tokenizer, "fake_image_token", "<fake_token_around_image>")
         self.image_token = getattr(tokenizer, "image_token", "<image>")
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
@@ -393,6 +395,7 @@ class SmolVLMProcessor(ProcessorMixin):
         chat_template: Optional[str] = None,
         **kwargs: Unpack[AllKwargsForChatTemplate],
     ) -> str:
+        logger.info(f'calling apply_chat_template with conversation: {conversation}, chat_template: {chat_template}, kwargs: {kwargs}')
         """
         Similar to the `apply_chat_template` method on tokenizers, this method applies a Jinja template to input
         conversations to turn them into a single tokenizable string.
