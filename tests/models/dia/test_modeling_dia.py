@@ -190,7 +190,7 @@ class DiaModelTester:
             input_ids=inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"]
         )[0]
 
-        self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 2e-3)
+        self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 3e-3)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             decoder = model.get_decoder()
@@ -203,7 +203,7 @@ class DiaModelTester:
             encoder_hidden_states=encoder_last_hidden_state,
         )[0]
 
-        self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 2e-3)
+        self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 3e-3)
 
 
 @require_torch

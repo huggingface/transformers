@@ -17,12 +17,15 @@
 import math
 from typing import List, Optional, Tuple, Union
 
-import torch
-
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...utils import is_torch_available
 from ..auto import AutoModel
+
+
+if is_torch_available:
+    import torch
 
 
 class DiaAudioKwargs(AudioKwargs, total=False):
@@ -199,11 +202,12 @@ class DiaProcessor(ProcessorMixin):
         # prepare shift indices per delay
         max_seq_len = decoder_attention_mask.shape[-1]
         max_audio_len = max_seq_len - max_delay
-        delay_precomp = self.build_delay_indices(
-            B=batch_size,
-            T=max_seq_len,
-            C=num_channels,
+        precomputed_idx = self.build_indices(
+            bsz=batch_size,
+            seq_len=max_seq_len,
+            num_channels=num_channels,
             delay_pattern=delay_pattern,
+            revert=False,
         )
 
         # create delay pattern input
@@ -216,15 +220,14 @@ class DiaProcessor(ProcessorMixin):
         prefill[:, :max_audio_len] = decoder_input_ids
 
         delayed_decoder_input_ids = self.apply_audio_delay(
-            audio_BxTxC=prefill,
-            pad_value=audio_pad_token_id,
-            bos_value=audio_bos_token_id,
-            precomp=delay_precomp,
+            audio=prefill,
+            pad_token_id=audio_pad_token_id,
+            bos_token_id=audio_bos_token_id,
+            precomputed_idx=precomputed_idx,
         )
 
         data.update({"decoder_input_ids": delayed_decoder_input_ids, "decoder_attention_mask": decoder_attention_mask})
 
-        # TODO: correct 2D shaping of labels
         if output_labels:
             # Base idea is to shift on the sequence dim
             labels = data["decoder_input_ids"].clone()[:, 1:]
@@ -232,7 +235,7 @@ class DiaProcessor(ProcessorMixin):
             # TODO: is this correct? this is based on that the delay doesn't need to predict
             labels[labels == audio_bos_token_id] = -100
 
-            data["labels"] = labels
+            data["labels"] = labels.transpose(1, 2).reshape(batch_size * num_channels, -1)
             data["decoder_input_ids"] = data["decoder_input_ids"][:, :-1]
             data["decoder_attention_mask"] = data["decoder_attention_mask"][:, :-1]
 
@@ -251,18 +254,21 @@ class DiaProcessor(ProcessorMixin):
 
         # revert delay
         bsz, seq_len, num_channels = input_ids.shape
-        revert_precomp = self.build_revert_indices(
-            B=bsz,
-            T=seq_len,
-            C=num_channels,
+        precomputed_idx = self.build_indices(
+            bsz=bsz,
+            seq_len=seq_len,
+            num_channels=num_channels,
             delay_pattern=delay_pattern,
+            revert=True,
         )
 
-        output_sequences = self.revert_audio_delay(
-            audio_BxTxC=input_ids,
-            pad_value=-1,
-            precomp=revert_precomp,
-            T=seq_len,
+        output_sequences = self.apply_audio_delay(
+            audio=input_ids,
+            # We do not care about these values as we cut them out
+            # with `start_of_generation_idx` and `end_of_generation_idx`
+            pad_token_id=-1,
+            bos_token_id=-1,
+            precomputed_idx=precomputed_idx,
         ).transpose(1, 2)
 
         # retrieve the correct sequences each
@@ -277,168 +283,77 @@ class DiaProcessor(ProcessorMixin):
 
         return audios
 
-    # TODO: rewrite with better namings
     @staticmethod
-    def build_delay_indices(B: int, T: int, C: int, delay_pattern: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
+    def build_indices(
+        bsz: int,
+        seq_len: int,
+        num_channels: int,
+        delay_pattern: List[int],
+        revert: bool = False,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Precompute (t_idx_BxTxC, indices_BTCx3) so that out[t, c] = in[t - delay[c], c].
-        Negative t_idx => BOS; t_idx >= T => PAD.
+        Precompute (sequence_idx, all_idx) so that out[seq, channel] = in[seq - delay[channel], channel]
+        or in[seq, channel] = out[seq + delay[channel], channel] if `revert`.
+        Negative sequence_idx => BOS; sequence_idx >= seq_len => PAD.
         """
-        delay_arr = torch.tensor(delay_pattern, dtype=torch.int32)
+        delay_array = torch.tensor(delay_pattern, dtype=torch.int32)
 
-        t_idx_BxT = torch.broadcast_to(
-            torch.arange(T, dtype=torch.int32)[None, :],
-            [B, T],
-        )
-        t_idx_BxTx1 = t_idx_BxT[..., None]
-        t_idx_BxTxC = t_idx_BxTx1 - delay_arr.view(1, 1, C)
+        # (0..seq_len-1)
+        sequence_idx = torch.arange(seq_len, dtype=torch.int32)[None, :].expand(bsz, seq_len)[..., None]
+        # + or - delay depending if we delay or revert the delay
+        if not revert:
+            sequence_idx = sequence_idx - delay_array[None, None, :]
+        else:
+            sequence_idx = sequence_idx + delay_array[None, None, :]
+        # if delay goes over the range we clamp back to valid values
+        valid_sequence_idx = torch.clamp(sequence_idx, 0, seq_len - 1)
 
-        b_idx_BxTxC = torch.broadcast_to(
-            torch.arange(B, dtype=torch.int32).view(B, 1, 1),
-            [B, T, C],
-        )
-        c_idx_BxTxC = torch.broadcast_to(
-            torch.arange(C, dtype=torch.int32).view(1, 1, C),
-            [B, T, C],
-        )
+        batch_idx = torch.arange(bsz, dtype=torch.int32)[:, None, None].expand(bsz, seq_len, num_channels)
+        channel_idx = torch.arange(num_channels, dtype=torch.int32)[None, None, :].expand(bsz, seq_len, num_channels)
 
-        # We must clamp time indices to [0..T-1] so gather_nd equivalent won't fail
-        t_clamped_BxTxC = torch.clamp(t_idx_BxTxC, 0, T - 1)
-
-        indices_BTCx3 = torch.stack(
-            [
-                b_idx_BxTxC.reshape(-1),
-                t_clamped_BxTxC.reshape(-1),
-                c_idx_BxTxC.reshape(-1),
-            ],
+        all_idx = torch.stack(
+            [batch_idx.reshape(-1), valid_sequence_idx.reshape(-1), channel_idx.reshape(-1)],
             dim=1,
-        ).long()  # Ensure indices are long type for indexing
+        ).long()
 
-        return t_idx_BxTxC, indices_BTCx3
+        return sequence_idx, all_idx
 
     @staticmethod
     def apply_audio_delay(
-        audio_BxTxC: torch.Tensor,
-        pad_value: int,
-        bos_value: int,
-        precomp: Tuple[torch.Tensor, torch.Tensor],
+        audio: torch.Tensor,
+        pad_token_id: int,
+        bos_token_id: int,
+        precomputed_idx: Tuple[torch.Tensor, torch.Tensor],
     ) -> torch.Tensor:
         """
-        Applies the delay pattern to batched audio tokens using precomputed indices,
-        inserting BOS where t_idx < 0 and PAD where t_idx >= T.
+        Applies or reverts the delay pattern to batched audio tokens using precomputed indices,
+        inserting BOS where sequence_idx < 0 and PAD where sequence_idx >= seq_len.
 
         Args:
-            audio_BxTxC: [B, T, C] int16 audio tokens (or int32/float)
-            pad_value: the padding token
-            bos_value: the BOS token
-            precomp:  (t_idx_BxTxC, indices_BTCx3) from build_delay_indices
+            audio: audio tokens of shape [bsz, seq_len, num_channels]
+            pad_token_id: the PAD token
+            bos_token_id: the BOS token
+            precomputed_idx: from `build_indices`
 
         Returns:
-            result_BxTxC: [B, T, C] delayed audio tokens
+            final_audio: delayed or reverted audio tokens of shape [bsz, seq_len, num_channels]
         """
-        device = audio_BxTxC.device  # Get device from input tensor
-        t_idx_BxTxC, indices_BTCx3 = precomp
-        t_idx_BxTxC = t_idx_BxTxC.to(device)  # Move precomputed indices to device
-        indices_BTCx3 = indices_BTCx3.to(device)
+        # Move everything to the same device
+        device = audio.device
+        sequence_idx, all_idx = precomputed_idx
+        sequence_idx = sequence_idx.to(device)
+        all_idx = all_idx.to(device)
 
-        # Equivalent of tf.gather_nd using advanced indexing
-        # Ensure indices are long type if not already (build_delay_indices should handle this)
-        gathered_flat = audio_BxTxC[indices_BTCx3[:, 0], indices_BTCx3[:, 1], indices_BTCx3[:, 2]]
-        gathered_BxTxC = gathered_flat.view(audio_BxTxC.shape)
+        # Gather per precomputed indices
+        batch_idx, valid_sequence_idx, channel_idx = torch.unbind(all_idx, dim=-1)
+        gathered_audio = audio[batch_idx, valid_sequence_idx, channel_idx].view(audio.size())
 
-        # Create masks on the correct device
-        mask_bos = t_idx_BxTxC < 0  # => place bos_value
-        mask_pad = t_idx_BxTxC >= audio_BxTxC.shape[1]  # => place pad_value
+        # Mask according to negative sequence_idx => BOS; sequence_idx >= seq_len => PAD
+        mask_bos = sequence_idx < 0
+        mask_pad = sequence_idx >= audio.shape[1]
+        final_audio = torch.where(mask_bos, bos_token_id, torch.where(mask_pad, pad_token_id, gathered_audio))
 
-        # Create scalar tensors on the correct device
-        bos_tensor = torch.tensor(bos_value, dtype=audio_BxTxC.dtype, device=device)
-        pad_tensor = torch.tensor(pad_value, dtype=audio_BxTxC.dtype, device=device)
-
-        # If mask_bos, BOS; else if mask_pad, PAD; else original gather
-        # All tensors should now be on the same device
-        result_BxTxC = torch.where(mask_bos, bos_tensor, torch.where(mask_pad, pad_tensor, gathered_BxTxC))
-
-        return result_BxTxC
-
-    @staticmethod
-    def build_revert_indices(B: int, T: int, C: int, delay_pattern: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Precompute indices for the revert operation using PyTorch.
-
-        Returns:
-            A tuple (t_idx_BxTxC, indices_BTCx3) where:
-                - t_idx_BxTxC is a tensor of shape [B, T, C] computed as time indices plus the delay.
-                - indices_BTCx3 is a tensor of shape [B*T*C, 3] used for gathering, computed from:
-                    batch indices, clamped time indices, and channel indices.
-        """
-        # Use default device unless specified otherwise; assumes inputs might define device later
-        device = None  # Or determine dynamically if needed, e.g., from a model parameter
-
-        delay_arr = torch.tensor(delay_pattern, dtype=torch.int32, device=device)
-
-        t_idx_BT1 = torch.broadcast_to(torch.arange(T, device=device).unsqueeze(0), [B, T])
-        t_idx_BT1 = t_idx_BT1.unsqueeze(-1)
-
-        t_idx_BxTxC = torch.minimum(
-            t_idx_BT1 + delay_arr.view(1, 1, C),
-            torch.tensor(T - 1, device=device),
-        )
-        b_idx_BxTxC = torch.broadcast_to(torch.arange(B, device=device).view(B, 1, 1), [B, T, C])
-        c_idx_BxTxC = torch.broadcast_to(torch.arange(C, device=device).view(1, 1, C), [B, T, C])
-
-        indices_BTCx3 = torch.stack(
-            [
-                b_idx_BxTxC.reshape(-1),
-                t_idx_BxTxC.reshape(-1),
-                c_idx_BxTxC.reshape(-1),
-            ],
-            axis=1,
-        ).long()  # Ensure indices are long type
-
-        return t_idx_BxTxC, indices_BTCx3
-
-    @staticmethod
-    def revert_audio_delay(
-        audio_BxTxC: torch.Tensor,
-        pad_value: int,
-        precomp: Tuple[torch.Tensor, torch.Tensor],
-        T: int,
-    ) -> torch.Tensor:
-        """
-        Reverts a delay pattern from batched audio tokens using precomputed indices (PyTorch version).
-
-        Args:
-            audio_BxTxC: Input delayed audio tensor
-            pad_value: Padding value for out-of-bounds indices
-            precomp: Precomputed revert indices tuple containing:
-                - t_idx_BxTxC: Time offset indices tensor
-                - indices_BTCx3: Gather indices tensor for original audio
-            T: Original sequence length before padding
-
-        Returns:
-            Reverted audio tensor with same shape as input
-        """
-        t_idx_BxTxC, indices_BTCx3 = precomp
-        device = audio_BxTxC.device  # Get device from input tensor
-
-        # Move precomputed indices to the same device as audio_BxTxC if they aren't already
-        t_idx_BxTxC = t_idx_BxTxC.to(device)
-        indices_BTCx3 = indices_BTCx3.to(device)
-
-        # Using PyTorch advanced indexing (equivalent to tf.gather_nd or np equivalent)
-        gathered_flat = audio_BxTxC[indices_BTCx3[:, 0], indices_BTCx3[:, 1], indices_BTCx3[:, 2]]
-        gathered_BxTxC = gathered_flat.view(audio_BxTxC.size())  # Use .size() for robust reshaping
-
-        # Create pad_tensor on the correct device
-        pad_tensor = torch.tensor(pad_value, dtype=audio_BxTxC.dtype, device=device)
-        # Create T tensor on the correct device for comparison
-        T_tensor = torch.tensor(T, device=device)
-
-        result_BxTxC = torch.where(
-            t_idx_BxTxC >= T_tensor, pad_tensor, gathered_BxTxC
-        )  # Changed np.where to torch.where
-
-        return result_BxTxC
+        return final_audio
 
 
 __all__ = ["DiaProcessor"]
