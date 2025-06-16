@@ -4,7 +4,7 @@ import os
 import torch
 
 from transformers.models.blt_wip.modeling_blt_wip import BLTModel
-from transformers.models.blt_wip.tokenizers.blt_tokenizer import BltTokenizer
+from transformers.models.blt_wip.tokenization_blt import BLTTokenizer
 
 
 logger = logging.getLogger()
@@ -43,7 +43,7 @@ def generate(
     prompts: list[str] | None,
     *,
     model: BLTModel,
-    tokenizer: BltTokenizer,
+    tokenizer: BLTTokenizer,
     max_prompt_len: int = 256,
     max_gen_len: int = 256,
     use_sampling: bool = False,
@@ -101,7 +101,7 @@ def main(prompt: str = "my name is", model_name: str = "blt-1b"):
     blt_repo = "itazap/blt-1b"
 
     model = BLTModel.from_pretrained(blt_repo).to(device)
-    tokenizer = BltTokenizer(vocab_size_unit_1=model.config.vocab_size, add_bos=True, add_eos=True)
+    tokenizer = BLTTokenizer(add_bos_token=True, add_eos_token=True)
 
     prompts = [prompt]
 
