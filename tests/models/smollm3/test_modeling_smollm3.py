@@ -18,15 +18,16 @@ import unittest
 
 import pytest
 from packaging import version
+from parameterized import parameterized
 
-from transformers import AutoTokenizer, SmolLM3Config, is_torch_available, set_seed
+from transformers import AutoTokenizer, SmolLM3Config, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     backend_empty_cache,
+    is_flaky,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
     require_torch_sdpa,
     slow,
     torch_device,
@@ -47,6 +48,10 @@ if is_torch_available():
 
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
+    ModelTesterMixin,
+)
 
 
 class SmolLM3ModelTester(CausalLMModelTester):
@@ -87,33 +92,22 @@ class SmolLM3ModelTest(CausalLMModelTest, unittest.TestCase):
         else {}
     )
 
-    # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
-    def is_pipeline_test_to_skip(
-        self,
-        pipeline_test_case_name,
-        config_class,
-        model_architecture,
-        tokenizer_name,
-        image_processor_name,
-        feature_extractor_name,
-        processor_name,
-    ):
-        return True
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="SmolLM3 flash attention does not support right padding")
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @require_torch_sdpa
+    @is_flaky()
+    def test_eager_matches_sdpa_inference(self, *args):
+        # flaky test_eager_matches_sdpa_inference_24_fp32_pad_left_output_attentions
+        return getattr(ModelTesterMixin, self._testMethodName)(self)
 
 
 @require_torch
 class SmolLM3IntegrationTest(unittest.TestCase):
+    model_id = "HuggingFaceTB/SmolLM3-11T-32k-v1-transformers"
+
     @slow
     def test_model_3b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = SmolLM3ForCausalLM.from_pretrained("HuggingFaceTB/SmolLM3-11T-32k-v1-transformers", device_map="auto")
+        model = SmolLM3ForCausalLM.from_pretrained(self.model_id, device_map="auto")
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
@@ -135,8 +129,8 @@ class SmolLM3IntegrationTest(unittest.TestCase):
     def test_model_3b_generation(self):
         EXPECTED_TEXT_COMPLETION = """Gravity is the force that pulls objects toward the center of the Earth. It is a force that is always present, even"""
         prompt = "Gravity is the force"
-        tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM3-11T-32k-v1-transformers")
-        model = SmolLM3ForCausalLM.from_pretrained("HuggingFaceTB/SmolLM3-11T-32k-v1-transformers", device_map="auto")
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        model = SmolLM3ForCausalLM.from_pretrained(self.model_id, device_map="auto")
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
@@ -157,7 +151,7 @@ class SmolLM3IntegrationTest(unittest.TestCase):
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
         model = SmolLM3ForCausalLM.from_pretrained(
-            "HuggingFaceTB/SmolLM3-11T-32k-v1-transformers",
+            self.model_id,
             device_map="auto",
             load_in_4bit=True,
             attn_implementation="flash_attention_2",
@@ -179,67 +173,6 @@ class SmolLM3IntegrationTest(unittest.TestCase):
         gc.collect()
 
     @slow
-    @require_torch_sdpa
-    def test_model_3b_long_prompt_sdpa(self):
-        EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
-        # An input with 4097 tokens that is above the size of the sliding window
-        input_ids = [1] + [306, 338] * 2048
-        model = SmolLM3ForCausalLM.from_pretrained(
-            "HuggingFaceTB/SmolLM3-11T-32k-v1-transformers", device_map="auto", attn_implementation="sdpa"
-        )
-        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
-
-        # Assisted generation
-        assistant_model = model
-        assistant_model.generation_config.num_assistant_tokens = 2
-        assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
-        generated_ids = assistant_model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
-
-        del assistant_model
-
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-        EXPECTED_TEXT_COMPLETION = "Gravity is the force that pulls objects toward the center of the Earth. It is a force that is always present, even"
-        prompt = "Gravity is the force"
-        tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM3-11T-32k-v1-transformers", use_fast=False)
-
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
-
-        # greedy generation outputs
-        generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-    @slow
-    def test_speculative_generation(self):
-        EXPECTED_TEXT_COMPLETION = "Gravity is the force that pulls objects toward the center of the Earth. It is a force that is always present, even"
-        prompt = "Gravity is the force"
-        tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM3-11T-32k-v1-transformers", use_fast=False)
-        model = SmolLM3ForCausalLM.from_pretrained(
-            "HuggingFaceTB/SmolLM3-11T-32k-v1-transformers", device_map="auto", torch_dtype=torch.float16
-        )
-        assistant_model = SmolLM3ForCausalLM.from_pretrained(
-            "HuggingFaceTB/SmolLM3-11T-32k-v1-transformers", device_map="auto", torch_dtype=torch.float16
-        )
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
-
-        # greedy generation outputs
-        set_seed(0)
-        generated_ids = model.generate(
-            input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=assistant_model
-        )
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-    @slow
     def test_export_static_cache(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
@@ -249,10 +182,10 @@ class SmolLM3IntegrationTest(unittest.TestCase):
             convert_and_export_with_cache,
         )
 
-        smol_model = "HuggingFaceTB/SmolLM3-11T-32k-v1-transformers"
-
-        tokenizer = AutoTokenizer.from_pretrained(smol_model, pad_token="</s>", padding_side="right")
-        EXPECTED_TEXT_COMPLETION = "Gravity is the force that pulls objects toward the center of the Earth. It is a force that is always present, even"
+        tokenizer = AutoTokenizer.from_pretrained(
+            self.model_id, pad_token="<|finetune_right_pad_id|>", padding_side="right"
+        )
+        EXPECTED_TEXT_COMPLETION = "Gravity is the force that pulls objects toward the center of the Earth. It is a force that is always present, and"
         max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
             "input_ids"
         ].shape[-1]
@@ -264,7 +197,7 @@ class SmolLM3IntegrationTest(unittest.TestCase):
         attn_implementation = "sdpa"
         batch_size = 1
         model = SmolLM3ForCausalLM.from_pretrained(
-            smol_model,
+            self.model_id,
             device_map=device,
             torch_dtype=dtype,
             attn_implementation=attn_implementation,

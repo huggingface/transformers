@@ -43,8 +43,9 @@ logger = logging.get_logger(__name__)
 class SmolLM3Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SmolLM3Model`]. It is used to instantiate a
-    SmolLM3 model according to the specified arguments, defining the model architecture. SmolLM3 is based on the
-    Llama architecture but includes NoPE (No Positional Encoding) layers and conditional sliding window attention.
+    SmolLM3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the SmolLM3 3B.
+    e.g. [HuggingFaceTB/SmolLM3-3B](https://huggingface.co/HuggingFaceTB/SmolLM3-3B)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
