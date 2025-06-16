@@ -62,6 +62,12 @@ class SmolLM3Config(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
+        pad_token_id (`int`, *optional*, defaults to 128004):
+            The id of the padding token.
+        bos_token_id (`int`, *optional*, defaults to 128000):
+            The id of the beginning of sentence token.
+        eos_token_id (`int`, *optional*, defaults to 128001):
+            The id of the end of sentence token.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied.
         rope_theta (`float`, *optional*, defaults to 2000000.0):
@@ -105,7 +111,7 @@ class SmolLM3Config(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
         use_sliding_window (`bool`, *optional*, defaults to `False`):
             Whether to use sliding window attention.
-        sliding_window (`int`, *optional*, defaults to `None`):
+        sliding_window (`int`, *optional*):
             Sliding window attention (SWA) window size. If not specified, will default to `None`.
         max_window_layers (`int`, *optional*, defaults to 28):
             The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
@@ -118,6 +124,8 @@ class SmolLM3Config(PretrainedConfig):
             `no_rope_layer_interval` layers.
         layer_types (`list`, *optional*):
             Attention pattern for each layer. Automatically computed based on sliding window and NoPE settings.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         mlp_bias (`bool`, *optional*, defaults to `False`):
@@ -179,6 +187,7 @@ class SmolLM3Config(PretrainedConfig):
         no_rope_layers=None,
         no_rope_layer_interval=4,
         layer_types=None,
+        attention_bias=False,
         attention_dropout=0.0,
         mlp_bias=False,
         **kwargs,
@@ -204,6 +213,7 @@ class SmolLM3Config(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
+        self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
 
