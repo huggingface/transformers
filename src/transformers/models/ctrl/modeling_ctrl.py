@@ -145,7 +145,7 @@ class MultiHeadAttention(nn.Module):
             v = torch.cat((past_value, v), dim=-2)
 
         if use_cache is True:
-            present = torch.stack((k, v))
+            present = (k, v)
         else:
             present = (None,)
 
