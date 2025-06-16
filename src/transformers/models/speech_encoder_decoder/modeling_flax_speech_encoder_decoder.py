@@ -46,11 +46,11 @@ SPEECH_ENCODER_DECODER_START_DOCSTRING = r"""
 
     The effectiveness of initializing sequence-to-sequence models with pretrained checkpoints for sequence generation
     tasks was shown in [Leveraging Pre-trained Checkpoints for Sequence Generation
-    Tasks](https://arxiv.org/abs/1907.12461) by Sascha Rothe, Shashi Narayan, Aliaksei Severyn. Michael Matena, Yanqi
+    Tasks](https://huggingface.co/papers/1907.12461) by Sascha Rothe, Shashi Narayan, Aliaksei Severyn. Michael Matena, Yanqi
     Zhou, Wei Li, Peter J. Liu.
 
     Additionally, in [Large-Scale Self- and Semi-Supervised Learning for Speech
-    Translation](https://arxiv.org/abs/2104.06678) it is shown how leveraging large pretrained speech models for speech
+    Translation](https://huggingface.co/papers/2104.06678) it is shown how leveraging large pretrained speech models for speech
     translation yields a significant performance improvement.
 
     After such an Speech-Encoder Decoder model has been trained/fine-tuned, it can be saved/loaded just like any other
@@ -474,7 +474,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         return_dict: Optional[bool] = None,
         train: bool = False,
         freeze_feature_encoder: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         r"""
@@ -542,12 +542,12 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         decoder_attention_mask: Optional[jnp.ndarray] = None,
         decoder_position_ids: Optional[jnp.ndarray] = None,
-        past_key_values: dict = None,
+        past_key_values: Optional[dict] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         train: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         r"""
@@ -671,7 +671,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         return_dict: Optional[bool] = None,
         train: bool = False,
         freeze_feature_encoder: bool = False,
-        params: dict = None,
+        params: Optional[dict] = None,
         dropout_rng: PRNGKey = None,
     ):
         r"""
@@ -807,7 +807,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
                       [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
 
             model_args (remaining positional arguments, *optional*):
-                All remaning positional arguments will be passed to the underlying model's `__init__` method.
+                All remaining positional arguments will be passed to the underlying model's `__init__` method.
 
             kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,

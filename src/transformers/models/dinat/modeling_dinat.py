@@ -30,12 +30,9 @@ from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_laye
 from ...utils import (
     ModelOutput,
     OptionalDependencyNotAvailable,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    auto_docstring,
     is_natten_available,
     logging,
-    replace_return_docstrings,
     requires_backends,
 )
 from ...utils.backbone_utils import BackboneMixin
@@ -54,17 +51,6 @@ else:
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "DinatConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "shi-labs/dinat-mini-in1k-224"
-_EXPECTED_OUTPUT_SHAPE = [1, 7, 7, 512]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "shi-labs/dinat-mini-in1k-224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 # drop_path and DinatDropPath are from the timm library.
@@ -553,7 +539,7 @@ class DinatEncoder(nn.Module):
         super().__init__()
         self.num_levels = len(config.depths)
         self.config = config
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
         self.levels = nn.ModuleList(
             [
                 DinatStage(
@@ -618,12 +604,8 @@ class DinatEncoder(nn.Module):
         )
 
 
+@auto_docstring
 class DinatPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = DinatConfig
     base_model_prefix = "dinat"
     main_input_name = "pixel_values"
@@ -641,40 +623,13 @@ class DinatPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-DINAT_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`DinatConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-DINAT_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
-            for details.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare Dinat Model transformer outputting raw hidden-states without any specific head on top.",
-    DINAT_START_DOCSTRING,
-)
+@auto_docstring
 class DinatModel(DinatPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
+        r"""
+        add_pooling_layer (bool, *optional*, defaults to `True`):
+            Whether to add a pooling layer
+        """
         super().__init__(config)
 
         requires_backends(self, ["natten"])
@@ -703,14 +658,7 @@ class DinatModel(DinatPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(DINAT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=DinatModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -758,12 +706,11 @@ class DinatModel(DinatPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Dinat Model transformer with an image classification head on top (a linear layer on top of the final hidden state
     of the [CLS] token) e.g. for ImageNet.
-    """,
-    DINAT_START_DOCSTRING,
+    """
 )
 class DinatForImageClassification(DinatPreTrainedModel):
     def __init__(self, config):
@@ -782,13 +729,7 @@ class DinatForImageClassification(DinatPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(DINAT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=DinatImageClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -852,9 +793,10 @@ class DinatForImageClassification(DinatPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    "NAT backbone, to be used with frameworks like DETR and MaskFormer.",
-    DINAT_START_DOCSTRING,
+@auto_docstring(
+    custom_intro="""
+    NAT backbone, to be used with frameworks like DETR and MaskFormer.
+    """
 )
 class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
     def __init__(self, config):
@@ -879,8 +821,7 @@ class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @add_start_docstrings_to_model_forward(DINAT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -888,9 +829,7 @@ class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
-        """
-        Returns:
-
+        r"""
         Examples:
 
         ```python

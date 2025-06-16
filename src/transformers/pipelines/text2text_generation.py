@@ -1,6 +1,8 @@
 import enum
 import warnings
+from typing import Any, Dict, List, Union
 
+from ..generation import GenerationConfig
 from ..tokenization_utils import TruncationStrategy
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
 from .base import Pipeline, build_pipeline_init_args
@@ -26,6 +28,11 @@ class ReturnType(enum.Enum):
 class Text2TextGenerationPipeline(Pipeline):
     """
     Pipeline for text to text generation using seq2seq models.
+
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+    - num_beams: 4
 
     Example:
 
@@ -59,6 +66,13 @@ class Text2TextGenerationPipeline(Pipeline):
     text2text_generator = pipeline("text2text-generation")
     text2text_generator("question: What is 42 ? context: 42 is the answer to life, the universe and everything")
     ```"""
+
+    _pipeline_calls_generate = True
+    # Make sure the docstring is updated when the default generation config is changed (in all pipelines in this file)
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+        num_beams=4,
+    )
 
     # Used in the return key of the pipeline.
     return_name = "generated"
@@ -141,7 +155,7 @@ class Text2TextGenerationPipeline(Pipeline):
             del inputs["token_type_ids"]
         return inputs
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args: Union[str, List[str]], **kwargs: Any) -> List[Dict[str, str]]:
         r"""
         Generate the output text(s) using text(s) given as inputs.
 
@@ -238,6 +252,11 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
     of available parameters, see the [following
     documentation](https://huggingface.co/docs/transformers/en/main_classes/text_generation#transformers.generation.GenerationMixin.generate)
 
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+    - num_beams: 4
+
     Usage:
 
     ```python
@@ -306,6 +325,11 @@ class TranslationPipeline(Text2TextGenerationPipeline):
     up-to-date list of available models on [huggingface.co/models](https://huggingface.co/models?filter=translation).
     For a list of available parameters, see the [following
     documentation](https://huggingface.co/docs/transformers/en/main_classes/text_generation#transformers.generation.GenerationMixin.generate)
+
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
+    - num_beams: 4
 
     Usage:
 

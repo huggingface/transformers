@@ -669,7 +669,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
                 )
 
         if attention_masks_present:
-            # check for zeros(since token_ids are seperated by zero arrays)
+            # check for zeros(since token_ids are separated by zero arrays)
             batch_idx = np.where(feature_extractor_output["attention_mask"][:, 0] == 0)[0]
         else:
             batch_idx = [token_ids.shape[0]]

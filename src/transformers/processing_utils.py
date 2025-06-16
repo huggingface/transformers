@@ -22,8 +22,9 @@ import os
 import sys
 import typing
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TypedDict, Union
+from typing import Any, Dict, Optional, TypedDict, Union
 
 import numpy as np
 import typing_extensions
@@ -31,15 +32,10 @@ from huggingface_hub.errors import EntryNotFoundError
 
 from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
-from .image_utils import (
-    ChannelDimension,
-    ImageInput,
-    VideoInput,
-    is_valid_image,
-    is_vision_available,
-    load_image,
-    load_video,
-)
+from .feature_extraction_utils import BatchFeature
+from .image_utils import ChannelDimension, is_valid_image, is_vision_available, load_image
+from .utils.chat_template_utils import render_jinja_template
+from .video_utils import VideoMetadata, load_video
 
 
 if is_vision_available():
@@ -59,8 +55,6 @@ from .utils import (
     PROCESSOR_NAME,
     PushToHubMixin,
     TensorType,
-    add_model_info_to_auto_map,
-    add_model_info_to_custom_pipelines,
     cached_file,
     copy_func,
     direct_transformers_import,
@@ -70,6 +64,7 @@ from .utils import (
     list_repo_templates,
     logging,
 )
+from .utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
@@ -82,6 +77,7 @@ AUTO_TO_BASE_CLASS_MAPPING = {
     "AutoTokenizer": "PreTrainedTokenizerBase",
     "AutoFeatureExtractor": "FeatureExtractionMixin",
     "AutoImageProcessor": "ImageProcessingMixin",
+    "AutoVideoProcessor": "BaseVideoProcessor",
 }
 
 if sys.version_info >= (3, 11):
@@ -126,6 +122,8 @@ class TextKwargs(TypedDict, total=False):
             Whether or not to print more information and warnings.
         padding_side (`str`, *optional*):
             The side on which padding will be applied.
+        return_mm_token_type_ids (`bool`, *optional*):
+            Whether to return multimodal token type ids indicating mm placeholder token positions.
     """
 
     text_pair: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]]
@@ -146,6 +144,7 @@ class TextKwargs(TypedDict, total=False):
     return_length: Optional[bool]
     verbose: Optional[bool]
     padding_side: Optional[str]
+    return_mm_token_type_ids: Optional[bool]
 
 
 class ImagesKwargs(TypedDict, total=False):
@@ -191,7 +190,7 @@ class ImagesKwargs(TypedDict, total=False):
     do_resize: Optional[bool]
     size: Optional[dict[str, int]]
     size_divisor: Optional[int]
-    crop_size: Optional[dict[str, int]]
+    crop_size: Optional[Dict[str, int]]
     resample: Optional[Union["PILImageResampling", int]]
     do_rescale: Optional[bool]
     rescale_factor: Optional[float]
@@ -211,37 +210,53 @@ class VideosKwargs(TypedDict, total=False):
     Keyword arguments for video processing.
 
     Attributes:
+        do_convert_rgb (`bool`):
+            Whether to convert the video to RGB fromat.
         do_resize (`bool`):
-            Whether to resize the image.
+            Whether to resize the video.
         size (`Dict[str, int]`, *optional*):
             Resize the shorter side of the input to `size["shortest_edge"]`.
+        default_to_square (`bool`, *optional*, defaults to `self.default_to_square`):
+            Whether to default to a square when resizing, if size is an int.
         size_divisor (`int`, *optional*):
             The size by which to make sure both the height and width can be divided.
         resample (`PILImageResampling`, *optional*):
-            Resampling filter to use if resizing the image.
+            Resampling filter to use if resizing the video.
         do_rescale (`bool`, *optional*):
-            Whether to rescale the image by the specified scale `rescale_factor`.
+            Whether to rescale the video by the specified scale `rescale_factor`.
         rescale_factor (`int` or `float`, *optional*):
-            Scale factor to use if rescaling the image.
+            Scale factor to use if rescaling the video.
         do_normalize (`bool`, *optional*):
-            Whether to normalize the image.
+            Whether to normalize the video.
         image_mean (`float` or `List[float]`, *optional*):
-            Mean to use if normalizing the image.
+            Mean to use if normalizing the video.
         image_std (`float` or `List[float]`, *optional*):
-            Standard deviation to use if normalizing the image.
+            Standard deviation to use if normalizing the video.
         do_pad (`bool`, *optional*):
-            Whether to pad the image to the `(max_height, max_width)` of the images in the batch.
+            Whether to pad the video to the `(max_height, max_width)` of the videos in the batch.
         do_center_crop (`bool`, *optional*):
-            Whether to center crop the image.
+            Whether to center crop the video.
+        do_sample_frames (`bool`, *optional*):
+            Whether to sample frames from the video before processing or to process the whole video.
+        video_metadata (`VideoMetadata`, *optional*):
+            Metadata of the video containing information about total duration, fps and total number of frames.
+        num_frames (`int`, *optional*):
+            Maximum number of frames to sample when `do_sample_frames=True`.
+        fps (`int`, *optional*):
+            Target frames to sample per second when `do_sample_frames=True`.
+        crop_size (`Dict[str, int]`, *optional*):
+            Desired output size when applying center-cropping.
         data_format (`ChannelDimension` or `str`, *optional*):
-            The channel dimension format for the output image.
+            The channel dimension format for the output video.
         input_data_format (`ChannelDimension` or `str`, *optional*):
-            The channel dimension format for the input image.
+            The channel dimension format for the input video.
     """
 
+    do_convert_rgb: Optional[bool]
     do_resize: Optional[bool]
     size: Optional[dict[str, int]]
     size_divisor: Optional[int]
+    default_to_square: Optional[bool]
     resample: Optional["PILImageResampling"]
     do_rescale: Optional[bool]
     rescale_factor: Optional[float]
@@ -250,8 +265,14 @@ class VideosKwargs(TypedDict, total=False):
     image_std: Optional[Union[float, list[float]]]
     do_pad: Optional[bool]
     do_center_crop: Optional[bool]
+    crop_size: Optional[Dict[str, int]]
     data_format: Optional[ChannelDimension]
     input_data_format: Optional[Union[str, ChannelDimension]]
+    device: Optional[str]
+    do_sample_frames: Optional[bool]
+    video_metadata: Optional[Union[VideoMetadata, dict]]
+    fps: Optional[int]
+    num_frames: Optional[int]
 
 
 class AudioKwargs(TypedDict, total=False):
@@ -401,9 +422,6 @@ class ChatTemplateLoadKwargs(TypedDict, total=False):
         The backend to use when loading the video which will be used only when there are videos in the conversation.
         Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "pyav" because it is the only backend
         that supports all types of sources to load from.
-    video_fps (`int`, *optional*):
-        Number of frames to sample per second. Should be passed only when `num_frames=None`.
-        If not specified and `num_frames==None`, all frames are sampled.
     sample_indices_fn (`Callable`, *optional*):
             A callable function that will return indices at which the video should be sampled. If the video has to be loaded using
             by a different sampling technique than provided by `num_frames` or `fps` arguments, one should provide their own `sample_indices_fn`.
@@ -416,9 +434,7 @@ class ChatTemplateLoadKwargs(TypedDict, total=False):
                 return np.linspace(start_idx, end_idx, num_frames, dtype=int)
     """
 
-    num_frames: Optional[int] = None
     video_load_backend: Optional[str] = "pyav"
-    video_fps: Optional[int] = None
     sampling_rate: Optional[int] = 16_000
     load_audio_from_video: Optional[bool] = False
 
@@ -451,6 +467,32 @@ class AllKwargsForChatTemplate(
     }
 
 
+@dataclass
+class MultiModalData:
+    """
+    Dataclass that holds extra useful data for processing
+    multimodal data. Processors currently cannot return keys,
+    unless it is used in model's forward. Thus we have helper
+    methods that calculate and return useful data from processing
+    input multimodals (images/videos).
+    Note that this dataclass is aimed to be used only in vLLM
+    and we might change its API in the future.
+    """
+
+    num_image_tokens: list[int] = None
+    num_video_tokens: list[int] = None
+    num_audio_tokens: list[int] = None
+    num_image_patches: list[int] = None
+
+    def __contains__(self, key):
+        return hasattr(self, key) and getattr(self, key) is not None
+
+    def __getitem__(self, key):
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise AttributeError(f"{self.__class__.__name__} has no attribute {key}")
+
+
 class ProcessorMixin(PushToHubMixin):
     """
     This is a mixin used to provide saving/loading functionality for all processor classes.
@@ -463,7 +505,6 @@ class ProcessorMixin(PushToHubMixin):
     feature_extractor_class = None
     tokenizer_class = None
     _auto_class = None
-    valid_kwargs: list[str] = []
 
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
@@ -530,6 +571,8 @@ class ProcessorMixin(PushToHubMixin):
             del output["tokenizer"]
         if "image_processor" in output:
             del output["image_processor"]
+        if "video_processor" in output:
+            del output["video_processor"]
         if "feature_extractor" in output:
             del output["feature_extractor"]
         if "chat_template" in output:
@@ -760,7 +803,7 @@ class ProcessorMixin(PushToHubMixin):
         resolved_additional_chat_template_files = {}
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_processor_file = pretrained_model_name_or_path
-            # cant't load chat-template when given a file as pretrained_model_name_or_path
+            # can't load chat-template when given a file as pretrained_model_name_or_path
             resolved_chat_template_file = None
             resolved_raw_chat_template_file = None
             is_local = True
@@ -930,16 +973,6 @@ class ProcessorMixin(PushToHubMixin):
         if "chat_template" in kwargs:
             processor_dict["chat_template"] = kwargs.pop("chat_template")
 
-        if not is_local:
-            if "auto_map" in processor_dict:
-                processor_dict["auto_map"] = add_model_info_to_auto_map(
-                    processor_dict["auto_map"], pretrained_model_name_or_path
-                )
-            if "custom_pipelines" in processor_dict:
-                processor_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
-                    processor_dict["custom_pipelines"], pretrained_model_name_or_path
-                )
-
         return processor_dict, kwargs
 
     @classmethod
@@ -970,18 +1003,27 @@ class ProcessorMixin(PushToHubMixin):
         if "auto_map" in processor_dict:
             del processor_dict["auto_map"]
 
-        unused_kwargs = cls.validate_init_kwargs(processor_config=processor_dict, valid_kwargs=cls.valid_kwargs)
-        processor = cls(*args, **processor_dict)
+        # override processor_dict with given kwargs
+        processor_dict.update(kwargs)
 
-        # Update processor with kwargs if needed
-        for key in set(kwargs.keys()):
-            if hasattr(processor, key):
-                setattr(processor, key, kwargs.pop(key))
+        # check if there is an overlap between args and processor_dict
+        accepted_args_and_kwargs = cls.__init__.__code__.co_varnames[: cls.__init__.__code__.co_argcount][1:]
 
-        kwargs.update(unused_kwargs)
+        # validate both processor_dict and given kwargs
+        unused_kwargs, valid_kwargs = cls.validate_init_kwargs(
+            processor_config=processor_dict, valid_kwargs=accepted_args_and_kwargs
+        )
+
+        # remove args that are in processor_dict to avoid duplicate arguments
+        args_to_remove = [i for i, arg in enumerate(accepted_args_and_kwargs) if arg in processor_dict]
+        args = [arg for i, arg in enumerate(args) if i not in args_to_remove]
+
+        # instantiate processor with used (and valid) kwargs only
+        processor = cls(*args, **valid_kwargs)
+
         logger.info(f"Processor {processor}")
         if return_unused_kwargs:
-            return processor, kwargs
+            return processor, unused_kwargs
         else:
             return processor
 
@@ -1056,7 +1098,7 @@ class ProcessorMixin(PushToHubMixin):
             # update defaults with arguments from tokenizer init
             for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
                 # init with tokenizer init kwargs if necessary
-                if modality_key in tokenizer_init_kwargs:
+                if tokenizer_init_kwargs is not None and modality_key in tokenizer_init_kwargs:
                     value = (
                         getattr(self.tokenizer, modality_key)
                         if hasattr(self.tokenizer, modality_key)
@@ -1184,11 +1226,7 @@ class ProcessorMixin(PushToHubMixin):
         Register this class with a given auto class. This should only be used for custom feature extractors as the ones
         in the library are already mapped with `AutoProcessor`.
 
-        <Tip warning={true}>
 
-        This API is experimental and may have some slight breaking changes in the next releases.
-
-        </Tip>
 
         Args:
             auto_class (`str` or `type`, *optional*, defaults to `"AutoProcessor"`):
@@ -1246,6 +1284,7 @@ class ProcessorMixin(PushToHubMixin):
             return getattr(transformers_module, module_name)
         lookup_locations = [
             transformers_module.IMAGE_PROCESSOR_MAPPING,
+            transformers_module.VIDEO_PROCESSOR_MAPPING,
             transformers_module.TOKENIZER_MAPPING,
             transformers_module.FEATURE_EXTRACTOR_MAPPING,
         ]
@@ -1271,12 +1310,16 @@ class ProcessorMixin(PushToHubMixin):
 
     @staticmethod
     def validate_init_kwargs(processor_config, valid_kwargs):
-        kwargs_from_config = processor_config.keys()
-        unused_kwargs = {}
-        unused_keys = set(kwargs_from_config) - set(valid_kwargs)
-        if unused_keys:
-            unused_kwargs = {k: processor_config[k] for k in unused_keys}
-        return unused_kwargs
+        kwargs_from_config = set(processor_config.keys())
+        valid_kwargs_set = set(valid_kwargs)
+
+        unused_keys = kwargs_from_config - valid_kwargs_set
+        valid_keys = kwargs_from_config & valid_kwargs_set
+
+        unused_kwargs = {k: processor_config[k] for k in unused_keys} if unused_keys else {}
+        valid_kwargs = {k: processor_config[k] for k in valid_keys} if valid_keys else {}
+
+        return unused_kwargs, valid_kwargs
 
     def prepare_and_validate_optional_call_args(self, *args):
         """
@@ -1336,40 +1379,7 @@ class ProcessorMixin(PushToHubMixin):
             )
         return {arg_name: arg_value for arg_value, arg_name in zip(args, self.optional_call_args)}
 
-    def _process_messages_for_chat_template(
-        self,
-        conversation: List[List[Dict[str, str]]],
-        batch_images: List[ImageInput],
-        batch_videos: List[VideoInput],
-        batch_video_metadata: List[List[Dict[str, any]]],
-        **mm_load_kwargs: Unpack[ChatTemplateLoadKwargs],
-    ):
-        """
-        Used within `apply_chat_template` when a model has a special way to process conversation history. For example,
-        video models might want to specify in the prompt the duration of video or which frame indices at which timestamps
-        were sampled. This information cannot be accessed before the video is loaded.
-
-        For most models it is a no-op, and must be overridden by model processors which require special processing.
-
-        Args:
-            conversation (`List[Dict, str, str]`):
-                The conversation to process. Always comes in batched format.
-            batch_images (`List[List[ImageInput]]`):
-                Batch of images that were loaded from url/path defined in the conversation. The images
-                are ordered in the same way as in the conversation. Comes in nested list format, one list of `PIL` images
-                per batch.
-            batch_videos (`List[List[ImageInput]]`):
-                Batch of videos that were loaded from url/path defined in the conversation. The videos
-                are ordered in the samm way as in the conversation. Comes in nested list format, one list of 4D video arrays
-                per batch.
-            batch_video_metadata (`List[List[Dict[[str, any]]]]`):
-                Batch of metadata returned from loading videos. That includes video fps, duration and total number of framer in original video.
-                Metadata are ordered in the same way as `batch_videos`. Comes in nested list format, one list of 4D video arrays
-                per batch.
-
-        """
-        return conversation
-
+    @deprecate_kwarg("video_fps", version="4.58", new_name="fps")
     def apply_chat_template(
         self,
         conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
@@ -1388,7 +1398,7 @@ class ProcessorMixin(PushToHubMixin):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "image": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
                     {"type": "text", "text": "Please describe this image in detail."},
                 ],
             },
@@ -1401,7 +1411,6 @@ class ProcessorMixin(PushToHubMixin):
                 The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
                 chat template is used.
         """
-
         if chat_template is None:
             if isinstance(self.chat_template, dict) and "default" in self.chat_template:
                 chat_template = self.chat_template["default"]
@@ -1425,9 +1434,16 @@ class ProcessorMixin(PushToHubMixin):
                 # It's a template string, render it directly
                 chat_template = chat_template
 
+        if kwargs.get("continue_final_message", False):
+            if kwargs.get("add_generation_prompt", False):
+                raise ValueError(
+                    "continue_final_message and add_generation_prompt are not compatible. Use continue_final_message when you want the model to continue the final message, and add_generation_prompt when you want to add a header that will prompt it to start a new assistant message instead."
+                )
+            if kwargs.get("return_assistant_tokens_mask", False):
+                raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
+
         # Fill sets of kwargs that should be used by different parts of template
         processed_kwargs = {
-            "processor_kwargs": {},
             "mm_load_kwargs": {},
             "template_kwargs": {},
         }
@@ -1439,6 +1455,9 @@ class ProcessorMixin(PushToHubMixin):
                 value = kwargs.pop(key, default_value)
                 if value is not None and not isinstance(value, dict):
                     processed_kwargs[kwarg_type][key] = value
+
+        # Pass unprocessed custom kwargs
+        processed_kwargs["template_kwargs"].update(kwargs)
 
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
@@ -1500,16 +1519,12 @@ class ProcessorMixin(PushToHubMixin):
                             metadata = None
                             logger.warning(
                                 "When loading the video from list of images, we cannot infer metadata such as `fps` or `duration`. "
-                                "If your model uses this metadata during processing, please load the whole video and let the model sample frames instead."
+                                "If your model requires metadata during processing, please load the whole video and let the processor sample frames instead."
                             )
                         else:
-                            # TODO: raushan, should be `self.video_processor.load_video_for_model` when API is added
-                            video, metadata = self._load_video_for_model(
+                            video, metadata = load_video(
                                 fname,
-                                num_frames=mm_load_kwargs.get("num_frames", None),
-                                fps=mm_load_kwargs.get("video_fps", None),
                                 backend=mm_load_kwargs["video_load_backend"],
-                                **kwargs,
                             )
                         videos.append(video)
                         video_metadata.append(metadata)
@@ -1522,21 +1537,11 @@ class ProcessorMixin(PushToHubMixin):
                     batch_videos.append(videos)
                     batch_video_metadata.append(video_metadata)
 
-            # Process conversation with video/image information if needed. Then convert into a prompt using Jinja template
-            conversations = self._process_messages_for_chat_template(
-                conversations,
-                batch_images=batch_images,
-                batch_videos=batch_videos,
-                batch_video_metadata=batch_video_metadata,
-                **processed_kwargs["mm_load_kwargs"],
-            )
-
-        prompt = self.tokenizer.apply_chat_template(
-            conversations,
+        prompt, generation_indices = render_jinja_template(
+            conversations=conversations,
             chat_template=chat_template,
-            tokenize=False,
-            return_dict=False,
-            **processed_kwargs["template_kwargs"],
+            **processed_kwargs["template_kwargs"],  # different flags such as `return_assistant_mask`
+            **self.tokenizer.special_tokens_map,  # tokenizer special tokens are used by some templates
         )
 
         if not is_batched:
@@ -1551,51 +1556,42 @@ class ProcessorMixin(PushToHubMixin):
             # without actionable solution for users
             single_prompt = prompt[0] if is_batched else prompt
             if self.tokenizer.bos_token is not None and single_prompt.startswith(self.tokenizer.bos_token):
-                processed_kwargs["processor_kwargs"]["add_special_tokens"] = False
+                kwargs["add_special_tokens"] = False
+
+            # Always sample frames by default unless explicitly set to `False` by users. If users do not pass `num_frames`/`video_fps`
+            # sampling should not done for BC.
+            if "do_sample_frames" not in kwargs and ("fps" in kwargs or "num_frames" in kwargs):
+                kwargs["do_sample_frames"] = True
 
             out = self(
                 text=prompt,
                 images=batch_images if batch_images else None,
                 videos=batch_videos if batch_videos else None,
                 audio=batch_audios if batch_audios else None,
-                **processed_kwargs["processor_kwargs"],
+                video_metadata=batch_video_metadata,
+                **kwargs,
             )
             if return_dict:
+                if processed_kwargs["template_kwargs"].get("return_assistant_tokens_mask", False):
+                    assistant_masks = []
+                    input_ids = out["input_ids"]
+                    for i in range(len(input_ids)):
+                        current_mask = [0] * len(input_ids[i])
+                        for assistant_start_char, assistant_end_char in generation_indices[i]:
+                            start_token = out.char_to_token(i, assistant_start_char)
+                            end_token = out.char_to_token(i, assistant_end_char - 1)
+                            if start_token is None:
+                                # start_token is out of bounds maybe due to truncation.
+                                break
+                            for token_id in range(start_token, end_token + 1 if end_token else len(input_ids[i])):
+                                current_mask[token_id] = 1
+                        assistant_masks.append(current_mask)
+                    out["assistant_masks"] = assistant_masks
+                    out.convert_to_tensors(tensor_type=kwargs.get("return_tensors", None))
                 return out
             else:
                 return out["input_ids"]
         return prompt
-
-    # TODO: raushan, has to be public method under `VideoProcessorBase` when API is added
-    # Keep private so we can simply remove when needed
-    def _load_video_for_model(
-        self,
-        video: Union[str, "VideoInput"],
-        num_frames: Optional[int] = None,
-        fps: Optional[int] = None,
-        backend: str = "opencv",
-    ) -> np.array:
-        """
-        Loads `video` to a numpy array.
-
-        Args:
-            video (`str` or `VideoInput`):
-                The video to convert to the numpy array format. Can be a link to video or local path.
-            num_frames (`int`, *optional*):
-                Number of frames to sample uniformly. If not passed, the whole video is loaded.
-            fps (`int`, *optional*):
-                Number of frames to sample per second. Should be passed only when `num_frames=None`.
-                If not specified and `num_frames==None`, all frames are sampled.
-            backend (`str`, *optional*, defaults to `"opencv"`):
-                The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "opencv".
-
-        Returns:
-            Tuple[`np.array`, Dict]: A tuple containing:
-                - Numpy array of frames in RGB (shape: [num_frames, height, width, 3]).
-                - Metadata dictionary.
-        """
-        video, metadata = load_video(video, num_frames, fps=fps, backend=backend)
-        return video, metadata
 
     def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
         """
@@ -1614,6 +1610,23 @@ class ProcessorMixin(PushToHubMixin):
             `List[str]`: The decoded text.
         """
         return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
+
+    def _check_special_mm_tokens(self, text: list[str], text_inputs: "BatchFeature", modalities: list[str]):
+        """
+        Checks that number of special tokens in text and processed text is same. The count can be different
+        if tokenized text was truncated, leading to issues in model code.
+        """
+        for modality in modalities:
+            token_str = getattr(self, f"{modality}_token")
+            token_id = getattr(self, f"{modality}_token_id")
+            ids_count = [list(ids).count(token_id) for ids in text_inputs["input_ids"]]
+            text_count = [sample.count(token_str) for sample in text]
+
+            if ids_count != text_count:
+                raise ValueError(
+                    f"Mismatch in `{modality}` token count between text and `input_ids`. Got ids={ids_count} and text={text_count}. "
+                    "Likely due to `truncation='max_length'`. Please disable truncation or increase `max_length`."
+                )
 
 
 def _validate_images_text_input_order(images, text):

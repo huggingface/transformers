@@ -28,7 +28,7 @@ from ..utils import is_sklearn_available
 if is_sklearn_available():
     from sklearn.metrics import roc_curve
 
-from ..cache_utils import DynamicCache
+from ..cache_utils import Cache
 from ..pytorch_utils import isin_mps_friendly
 from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor, SuppressTokensLogitsProcessor
 
@@ -678,7 +678,7 @@ class AssistantToTargetTranslator:
     Translates token ids and logits between assistant and target model vocabularies. This class is used to handle
     vocabulary mismatches when using different tokenizers for the assistant and target models in speculative decoding,
     as introduced in the paper "Lossless Speculative Decoding Algorithms for Heterogeneous Vocabularies"
-    (https://www.arxiv.org/abs/2502.05202).
+    (https://huggingface.co/papers/2502.05202).
     It maintains mappings between the two vocabularies and handles token/logit conversion.
 
     Args:
@@ -1183,7 +1183,9 @@ class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
 def _crop_past_key_values(model, past_key_values, max_length):
     """Crops the past key values up to a certain maximum length."""
     new_past = []
-    if model.config.is_encoder_decoder:
+    if isinstance(past_key_values, Cache):
+        past_key_values.crop(max_length)
+    elif model.config.is_encoder_decoder:
         for idx in range(len(past_key_values)):
             new_past.append(
                 (
@@ -1204,8 +1206,6 @@ def _crop_past_key_values(model, past_key_values, max_length):
         else:
             for idx in range(len(past_key_values)):
                 past_key_values[idx] = past_key_values[idx][:, :, :max_length, :]
-    elif isinstance(past_key_values, DynamicCache):
-        past_key_values.crop(max_length)
     elif past_key_values is not None:
         for idx in range(len(past_key_values)):
             if past_key_values[idx] != ([], []):

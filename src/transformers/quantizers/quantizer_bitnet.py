@@ -34,7 +34,7 @@ class BitNetHfQuantizer(HfQuantizer):
     1.58-bit quantization from BitNet quantization method:
     Before loading: it converts the linear layers into BitLinear layers during loading.
 
-    Checkout the paper introducing this method : https://arxiv.org/pdf/2402.17764
+    Check out the paper introducing this method: https://huggingface.co/papers/2402.17764
     """
 
     requires_parameters_quantization = False
@@ -110,4 +110,15 @@ class BitNetHfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self) -> bool:
-        return False
+        return (
+            self.quantization_config.linear_class == "autobitlinear"
+            and self.quantization_config.quantization_mode == "online"
+        )
+
+    @property
+    def is_qat_trainable(self) -> bool:
+        """Flag indicating whether the quantized model can carry out quantization aware training"""
+        return (
+            self.quantization_config.linear_class == "autobitlinear"
+            and self.quantization_config.quantization_mode == "online"
+        )

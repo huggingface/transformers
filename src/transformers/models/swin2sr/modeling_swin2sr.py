@@ -27,25 +27,11 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageSuperResolutionOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
-from ...utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_swin2sr import Swin2SRConfig
 
 
 logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "Swin2SRConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "caidas/swin2SR-classical-sr-x2-64"
-_EXPECTED_OUTPUT_SHAPE = [1, 180, 488, 648]
 
 
 @dataclass
@@ -682,7 +668,7 @@ class Swin2SREncoder(nn.Module):
         super().__init__()
         self.num_stages = len(config.depths)
         self.config = config
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
         self.stages = nn.ModuleList(
             [
                 Swin2SRStage(
@@ -748,12 +734,8 @@ class Swin2SREncoder(nn.Module):
         )
 
 
+@auto_docstring
 class Swin2SRPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
     config_class = Swin2SRConfig
     base_model_prefix = "swin2sr"
     main_input_name = "pixel_values"
@@ -770,43 +752,7 @@ class Swin2SRPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-SWIN2SR_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`Swin2SRConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-SWIN2SR_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`Swin2SRImageProcessor.__call__`] for details.
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare Swin2SR Model transformer outputting raw hidden-states without any specific head on top.",
-    SWIN2SR_START_DOCSTRING,
-)
+@auto_docstring
 class Swin2SRModel(Swin2SRPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -857,14 +803,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
 
         return pixel_values
 
-    @add_start_docstrings_to_model_forward(SWIN2SR_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1058,11 +997,10 @@ class PixelShuffleAuxUpsampler(nn.Module):
         return reconstruction, aux
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Swin2SR Model transformer with an upsampler head on top for image super resolution and restoration.
-    """,
-    SWIN2SR_START_DOCSTRING,
+    """
 )
 class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
     def __init__(self, config):
@@ -1091,8 +1029,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(SWIN2SR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ImageSuperResolutionOutput, config_class=_CONFIG_FOR_DOC)
+    @auto_docstring
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1103,8 +1040,6 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, ImageSuperResolutionOutput]:
         r"""
-        Returns:
-
         Example:
          ```python
          >>> import torch

@@ -45,7 +45,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-# See https://arxiv.org/pdf/2212.02499.pdf  at 3.1 Redefining Output Spaces as "Images" - Semantic Segmentation from PAINTER paper
+# See https://huggingface.co/papers/2212.02499  at 3.1 Redefining Output Spaces as "Images" - Semantic Segmentation from PAINTER paper
 # Taken from https://github.com/Abdullah-Meda/Painter/blob/main/Painter/data/coco_semseg/gen_color_coco_panoptic_segm.py#L31
 def build_palette(num_labels: int) -> List[Tuple[int, int]]:
     base = int(num_labels ** (1 / 3)) + 1
@@ -247,7 +247,7 @@ class SegGptImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
@@ -394,7 +394,7 @@ class SegGptImageProcessor(BaseImageProcessor):
         prompt_images: Optional[ImageInput] = None,
         prompt_masks: Optional[ImageInput] = None,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
