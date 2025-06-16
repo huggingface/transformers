@@ -30,6 +30,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     backend_empty_cache,
+    cleanup,
     is_flaky,
     require_cv2,
     require_flash_attn,
@@ -408,9 +409,10 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         url = "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg"
         self.image = Image.open(requests.get(url, stream=True).raw)
 
+        cleanup(torch_device, gc_collect=True)
+
     def tearDown(self):
-        gc.collect()
-        backend_empty_cache(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_small_model_integration_test(self):
@@ -423,7 +425,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
 
         # breakpoint()
         expected_input_ids = [151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 151652, 151655, 151655]  # fmt: skip
-        assert torch.testing.assert_close(expected_input_ids, inputs.input_ids[0].tolist()[:17])
+        torch.testing.assert_close(expected_input_ids, inputs.input_ids[0].tolist()[:17])
 
         expected_pixel_slice = torch.tensor(
             [
