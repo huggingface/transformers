@@ -95,7 +95,6 @@ class DiaGenerationMixin(GenerationMixin):
             )
             merged_processors.insert(0, cfg_processor)
 
-        # TODO: make max len cond optional
         merged_processors.append(
             DiaEOSDelayPatternLogitsProcessor(
                 delay_pattern=self.config.delay_pattern,

@@ -2977,7 +2977,6 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
         return coinflip_prob + coinflip_prob * (1 - coinflip_prob) * (1 - (1 / vocab_size))
 
 
-# TODO: check for correctness esp due to having a different output shape with transpose
 class DiaClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] for classifier free guidance (CFG). Similar to the original
@@ -3158,7 +3157,7 @@ class DiaEOSDelayPatternLogitsProcessor(LogitsProcessor):
         self.active_batches = None
         self.delay_pattern = torch.tensor(delay_pattern, device=device, dtype=torch.int)[None, :]
         self.eos_token_id = eos_token_id
-        self.max_generation_len = max_generation_len - max(delay_pattern)
+        self.max_generation_len = max_generation_len - max(delay_pattern) - 1
         self.device = device
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:

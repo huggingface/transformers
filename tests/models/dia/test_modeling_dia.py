@@ -442,7 +442,7 @@ class DiaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                             self.assertTrue(sub_config._attn_implementation == "sdpa")
 
     @pytest.mark.generate
-    @unittest.skip(reason="Custom processor forces eos token TODO to make it optional.")
+    @unittest.skip(reason="Custom processor `DiaEOSDelayPatternLogitsProcessor` forces eos token.")
     def test_generate_continue_from_past_key_values(self):
         """Only a small change due to the expected shapes"""
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
