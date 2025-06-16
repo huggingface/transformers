@@ -16,6 +16,7 @@ from .configuration_blt import (
     PatchingModeEnum,
 )
 
+
 SEP = " "
 BOS_ID: int = 1
 EOS_ID: int = 2
@@ -190,13 +191,6 @@ class RotaryEmbedding(torch.nn.Module):
             persistent=False,
         )
 
-    def reset_parameters(self):
-        self.freqs_cis[...] = precompute_freqs_cis(
-            dim=self.head_dim,
-            end=self.max_seqlen,
-            theta=self.theta,
-            rope_use_fp32_in_outer_product=self.rope_use_fp32_in_outer_product,
-        )
 
     def forward(self, seqlen: Optional[int] = None, tok_idx: Optional[torch.Tensor] = None):
         """
@@ -315,25 +309,7 @@ class BLTAttention(nn.Module):
 
         return output
 
-    def reset_parameters(self, init_std=None, factor=1.0):
-        init_std = init_std or (self.dim ** (-0.5)) / factor
 
-        for w in [self.wq, self.wk, self.wv]:
-            nn.init.trunc_normal_(
-                w.weight,
-                mean=0.0,
-                std=init_std,
-                a=-3 * init_std,
-                b=3 * init_std,
-            )
-
-        nn.init.trunc_normal_(
-            self.wo.weight,
-            mean=0.0,
-            std=init_std,
-            a=-3 * init_std,
-            b=3 * init_std,
-        )
 
 
 class BLTMLP(nn.Module):
@@ -379,31 +355,7 @@ class BLTMLP(nn.Module):
         output = self.w2(F.silu(x1) * x3)
         return output
 
-    def reset_parameters(self, init_std=None, factor=1.0):
-        in_init_std = init_std or (self.dim ** (-0.5)) / factor
-        out_init_std = init_std or (self.hidden_dim ** (-0.5)) / factor
 
-        nn.init.trunc_normal_(
-            self.w1.weight,
-            mean=0.0,
-            std=in_init_std,
-            a=-3 * in_init_std,
-            b=3 * in_init_std,
-        )
-        nn.init.trunc_normal_(
-            self.w2.weight,
-            mean=0.0,
-            std=out_init_std,
-            a=-3 * out_init_std,
-            b=3 * out_init_std,
-        )
-        nn.init.trunc_normal_(
-            self.w3.weight,
-            mean=0.0,
-            std=in_init_std,
-            a=-3 * in_init_std,
-            b=3 * in_init_std,
-        )
 
 
 class BLTTransformerLayer(nn.Module):
@@ -465,12 +417,7 @@ class BLTTransformerLayer(nn.Module):
         out = h + self.feed_forward(h_norm)
         return out
 
-    def init_weights(self, init_std=None, factor=1.0):
-        self.attention.reset_parameters(init_std, factor)
-        self.attention_norm.reset_parameters()
 
-        self.feed_forward.reset_parameters(init_std, factor)
-        self.ffn_norm.reset_parameters()
 
 
 def rightpad(seq, pad_id, max_len):
@@ -832,65 +779,7 @@ class LocalModelBase(nn.Module):
         else:
             return self.tok_embeddings(tokens)
 
-    def init_weights(self, init_std=None):
-        self.rope.reset_parameters()
-        if hasattr(self, "norm"):
-            self.norm.reset_parameters()
 
-        init_std = init_std or (self.dim ** (-0.5))
-        if hasattr(self, "tok_embeddings"):
-            nn.init.trunc_normal_(
-                self.tok_embeddings.weight,
-                mean=0.0,
-                std=init_std,
-                a=-3 * init_std,
-                b=3 * init_std,
-            )
-        if self.pos_embeddings is not None:
-            nn.init.trunc_normal_(
-                self.pos_embeddings.weight,
-                mean=0.0,
-                std=init_std,
-                a=-3 * init_std,
-                b=3 * init_std,
-            )
-
-        for depth, layer in enumerate(self.layers):
-            factor = self.config.get_init_std_factor(depth)
-            layer.init_weights(self.init_base_std, factor)
-
-        if hasattr(self, "output"):
-            nn.init.trunc_normal_(
-                self.output.weight,
-                mean=0.0,
-                std=init_std,
-                a=-3 * init_std,
-                b=3 * init_std,
-            )
-
-        if self.token_embedding_projection is not None:
-            nn.init.trunc_normal_(
-                self.token_embedding_projection.weight,
-                mean=0.0,
-                std=init_std,
-                a=-3 * init_std,
-                b=3 * init_std,
-            )
-
-        if self.patch_embedding_projection is not None:
-            patch_emb_std = self.dim_patch_emb ** (-0.5)
-            nn.init.trunc_normal_(
-                self.patch_embedding_projection.weight,
-                mean=0.0,
-                std=patch_emb_std,
-                a=-3 * patch_emb_std,
-                b=3 * patch_emb_std,
-            )
-
-        if self.cross_attn_layers is not None:
-            for depth, layer in enumerate(self.cross_attn_layers):
-                factor = self.config.get_init_std_factor(depth)
-                layer.init_weights(None, factor)
 
 
 class LocalEncoder(LocalModelBase):
@@ -1185,42 +1074,7 @@ class BLTCrossAttention(nn.Module):
 
         return x + output
 
-    def init_weights(self, base_std: float, factor: float = 1.0):
-        std = base_std or (self.dim ** (-0.5)) / factor
 
-        nn.init.trunc_normal_(
-            self.wq.weight,
-            mean=0.0,
-            std=std,
-            a=-3 * std,
-            b=3 * std,
-        )
-
-        nn.init.trunc_normal_(
-            self.wk.weight,
-            mean=0.0,
-            std=std,
-            a=-3 * std,
-            b=3 * std,
-        )
-
-        nn.init.trunc_normal_(
-            self.wv.weight,
-            mean=0.0,
-            std=std,
-            a=-3 * std,
-            b=3 * std,
-        )
-
-        nn.init.trunc_normal_(
-            self.wo.weight,
-            mean=0.0,
-            std=std,
-            a=-3 * std,
-            b=3 * std,
-        )
-        self.cross_attn_norm_q.reset_parameters()
-        self.cross_attn_norm_kv.reset_parameters()
 
 
 class GlobalTransformer(nn.Module):
@@ -1309,22 +1163,7 @@ class GlobalTransformer(nn.Module):
 
         return h, cache
 
-    def init_weights(self):
-        self.rope_embeddings.reset_parameters()
-        for depth, layer in enumerate(self.layers):
-            factor = self.config.get_init_std_factor(depth)
-            layer.init_weights(self.init_base_std, factor)
 
-        # GlobalTransformer specific initialization
-        std = self.dim_token_emb ** (-0.5)
-        if self.token_embedding_projection is not None:
-            nn.init.trunc_normal_(
-                self.token_embedding_projection.weight,
-                mean=0.0,
-                std=std,
-                a=-3 * std,
-                b=3 * std,
-            )
 
 
 def compute_hash_embeddings(
@@ -1372,19 +1211,6 @@ def compute_hash_embeddings(
 
 
 class BLTPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    BLT models.
-
-    This class provides the interface for model loading, saving, and weight initialization for all BLT model variants.
-    It inherits from [`PreTrainedModel`] which provides the core functionality for working with HuggingFace models.
-
-    Args:
-        config ([`BLTConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-    """
-
     config_class = BLTConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -1395,19 +1221,67 @@ class BLTPreTrainedModel(PreTrainedModel):
     _supports_cache_class = False
 
     def _init_weights(self, module):
-        """Initialize the weights - this is called by PreTrainedModel but we delegate to our custom init"""
-        # Don't do anything here - we use the custom init_weights method instead
-        pass
+        if isinstance(module, nn.Linear):
+            std = getattr(module, '_custom_std', module.in_features ** (-0.5))
+            
+            nn.init.trunc_normal_(
+                module.weight,
+                mean=0.0,
+                std=std,
+                a=-3 * std,
+                b=3 * std,
+            )
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+                
+        elif isinstance(module, nn.Embedding):
+            std = getattr(module, '_custom_std', module.embedding_dim ** (-0.5))
+            
+            nn.init.trunc_normal_(
+                module.weight,
+                mean=0.0,
+                std=std,
+                a=-3 * std,
+                b=3 * std,
+            )
+            
+        elif isinstance(module, (nn.RMSNorm, nn.LayerNorm)):
+            nn.init.ones_(module.weight)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+                
+        elif isinstance(module, RotaryEmbedding):
+            module.freqs_cis[...] = precompute_freqs_cis(
+                dim=module.head_dim,
+                end=module.max_seqlen,
+                theta=module.theta,
+                rope_use_fp32_in_outer_product=module.rope_use_fp32_in_outer_product,
+            )
+            
+        elif isinstance(module, BLTModel):
+            if module.encoder_hash_tok_embedding is not None:
+                emb_std = module.local_encoder.dim ** (-0.5)
+                for emb in module.encoder_hash_tok_embedding:
+                    emb._custom_std = emb_std
+                    
+        elif isinstance(module, (LocalEncoder, LocalDecoder)):
+            if module.token_embedding_projection is not None:
+                module.token_embedding_projection._custom_std = module.dim ** (-0.5)
+                
+            if module.patch_embedding_projection is not None:
+                module.patch_embedding_projection._custom_std = module.dim_patch_emb ** (-0.5)
+                
+        elif isinstance(module, GlobalTransformer):
+            if module.token_embedding_projection is not None:
+                module.token_embedding_projection._custom_std = module.dim_token_emb ** (-0.5)
+                
+        elif isinstance(module, BLTPatcher):
+            emb_std = module.config.patcher_dim ** (-0.5)
+            module.tok_embeddings._custom_std = emb_std
+            module.output._custom_std = emb_std
 
 
 class BLTModel(BLTPreTrainedModel):
-    """
-    The BLTModel (BLT) is a byte-level language model architecture that processes byte sequences
-    by dynamically segmenting them into patches. It uses a combination of local encoders, global transformers,
-    and local decoders to efficiently encode and decode byte sequences, leveraging patch-based processing for
-    improved performance and inference efficiency.
-    """
-
     def __init__(self, config: BLTConfig):
         super().__init__(config)
 
@@ -1430,24 +1304,7 @@ class BLTModel(BLTPreTrainedModel):
         else:
             self.patcher = None
 
-    def init_weights(self):
-        self.local_encoder.init_weights()
-        self.global_transformer.init_weights()
-        self.local_decoder.init_weights()
 
-        if self.encoder_hash_tok_embedding is not None:
-            emb_std = self.local_encoder.dim ** (-0.5)
-            for emb in self.encoder_hash_tok_embedding:
-                nn.init.trunc_normal_(
-                    emb.weight,
-                    mean=0.0,
-                    std=emb_std,
-                    a=-3 * emb_std,
-                    b=3 * emb_std,
-                )
-
-        if self.patcher is not None:
-            self.patcher.init_weights()
 
     def _patch_ids_from_lengths(self, patch_lengths: torch.Tensor, seq_len: int) -> torch.Tensor:
         """
@@ -1723,7 +1580,6 @@ class BLTPatcher(BLTPreTrainedModel):
             )
 
         # LMTransformer specific attributes
-        self.weight_tying = config.patcher_weight_tying
         self.sliding_window = config.patcher_sliding_window
 
         assert config.patcher_vocab_size > 0
@@ -1833,59 +1689,9 @@ class BLTPatcher(BLTPreTrainedModel):
 
         return concat_entropies, patch_lengths, concat_preds
 
-    def init_weights(self):
-        """Initialize weights for the patcher model"""
-        # Initialize RoPE embeddings
-        self.rope_embeddings.reset_parameters()
 
-        # Initialize norm layer
-        self.norm.reset_parameters()
 
-        # Initialize token embeddings
-        emb_std = self.patcher_dim ** (-0.5)
-        nn.init.trunc_normal_(
-            self.tok_embeddings.weight,
-            mean=0.0,
-            std=emb_std,
-            a=-3 * emb_std,
-            b=3 * emb_std,
-        )
 
-        # Initialize transformer layers
-        for depth, layer in enumerate(self.layers):
-            factor = self.config.get_init_std_factor(depth)
-            layer.init_weights(self.patcher_init_base_std, factor)
-
-        # Initialize output layer if not weight tied
-        if not self.weight_tying:
-            nn.init.trunc_normal_(
-                self.output.weight,
-                mean=0.0,
-                std=emb_std,
-                a=-3 * emb_std,
-                b=3 * emb_std,
-            )
-
-    def _init_weights(self, module):
-        """Initialize weights for a specific module"""
-        if isinstance(module, nn.Linear):
-            nn.init.trunc_normal_(
-                module.weight,
-                mean=0.0,
-                std=self.patcher_init_base_std or (self.patcher_dim ** (-0.5)),
-                a=-3 * (self.patcher_init_base_std or (self.patcher_dim ** (-0.5))),
-                b=3 * (self.patcher_init_base_std or (self.patcher_dim ** (-0.5))),
-            )
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            nn.init.trunc_normal_(
-                module.weight,
-                mean=0.0,
-                std=self.patcher_init_base_std or (self.patcher_dim ** (-0.5)),
-                a=-3 * (self.patcher_init_base_std or (self.patcher_dim ** (-0.5))),
-                b=3 * (self.patcher_init_base_std or (self.patcher_dim ** (-0.5))),
-            )
 
     @staticmethod
     def entropy(scores):
