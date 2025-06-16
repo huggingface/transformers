@@ -10,12 +10,6 @@ from src.adaptive_batch_trainer import AdaptiveBatchSizeTrainer
 
 
 
-import numpy as np
-import torch
-from torch.utils.data import Dataset
-import random
-from typing import Tuple
-
 class DummySegmentationDataset(Dataset):
     """
     Dummy segmentation dataset backed by NumPy, with a few fully-void masks.
